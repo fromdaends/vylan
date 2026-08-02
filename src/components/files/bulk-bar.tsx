@@ -27,6 +27,7 @@ import {
   bulkMoveDocumentsAction,
 } from "@/app/actions/documents";
 import { setDocumentsFolderAction } from "@/app/actions/folders";
+import { bulkSetVisibilityAction } from "@/app/actions/documents";
 import { BROWSE_CATEGORIES, categoryForDocType } from "@/lib/files/axes";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
 import { parseSelectionKey, useFileSelection } from "./file-selection";
@@ -96,6 +97,26 @@ export function BulkBar({
 
   const folderLabel = (id: string) =>
     folders?.find((f) => f.id === id)?.name ?? "";
+
+  function setVisibility(value: string) {
+    if (value !== "client" && value !== "firm") return;
+    startTransition(async () => {
+      const res = await bulkSetVisibilityAction({ targets, visibility: value });
+      selection?.clear();
+      router.refresh();
+      if (res.failed > 0 && res.succeeded > 0) {
+        toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
+      } else if (res.failed > 0) {
+        toast.error(t("action_failed"));
+      } else {
+        toast.success(
+          value === "firm"
+            ? t("bulk_visibility_firm", { count: res.succeeded })
+            : t("bulk_visibility_client", { count: res.succeeded }),
+        );
+      }
+    });
+  }
 
   function fileIntoFolder(value: string) {
     startTransition(async () => {
@@ -202,6 +223,18 @@ export function BulkBar({
             <FolderInput className="size-3.5" aria-hidden />
             {t("action_move")}
           </Button>
+          {/* Client-visible vs firm-only, in bulk. A Select rather than one
+              toggle button because a mixed selection has no single "current"
+              state to flip. */}
+          <Select value="" onValueChange={setVisibility}>
+            <SelectTrigger size="sm" className="w-[9.5rem]" aria-label={t("bulk_visibility")}>
+              <SelectValue placeholder={t("bulk_visibility")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="firm">{t("visibility_firm")}</SelectItem>
+              <SelectItem value="client">{t("visibility_client")}</SelectItem>
+            </SelectContent>
+          </Select>
           {/* Filing into a folder the firm made is a different act from setting
               a document's year and category, so it gets its own control rather
               than a fourth dropdown buried in the Move dialog. */}

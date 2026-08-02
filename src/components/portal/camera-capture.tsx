@@ -17,6 +17,7 @@ import {
   Loader2,
   Flashlight,
   ImageUp,
+  CopyPlus,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useCameraStream, type CameraErrorCode } from "./use-camera-stream";
@@ -24,6 +25,7 @@ import {
   captureVideoFrame,
   captureVideoFrameRectified,
   coverSourceRect,
+  measureCaptureSharpness,
 } from "@/lib/portal/capture-frame";
 import {
   toGrayscale,
@@ -31,10 +33,26 @@ import {
   guidanceFor,
   sharpnessFloorFor,
   normaliseMotion,
+  isReviewBlurry,
   GUIDANCE_THRESHOLDS,
+  REVIEW_SHARPNESS_WIDTH,
   type Gray,
   type Guidance,
 } from "@/lib/portal/frame-metrics";
+import {
+  loadScanEngine,
+  currentScanEngine,
+  getScanEngineStatus,
+  getScanEngineError,
+  subscribeScanEngine,
+} from "@/lib/portal/opencv-loader";
+import { detectQuadCv } from "@/lib/portal/cv-detect";
+import {
+  advanceArm,
+  disarm,
+  ARMED,
+  type ArmState,
+} from "@/lib/portal/capture-arm";
 import {
   advanceShutter,
   INITIAL_SHUTTER,
@@ -64,6 +82,13 @@ const DETECT_WIDTH = 256;
 // assumption this was expensive; it is not, and the slower loop made both the
 // outline and the motion reading worse.
 const ANALYSIS_INTERVAL_MS = 50;
+// ...but the OpenCV detector runs a full Canny + threshold + contour pass in
+// WASM, which is a different order of cost on a phone than the hand-rolled
+// TypeScript one. Detection is throttled to half the rate whenever it is the
+// engine in charge, which is still 4x faster than the outline needs to look
+// live. Everything the loop accumulates is measured in MILLISECONDS, so the
+// shutter behaves identically at either rate.
+const CV_ANALYSIS_INTERVAL_MS = 100;
 // Accumulated DETECTION time before the shutter fires itself. Detection is the
 // only gate (founder: "even if the camera is shaky it still takes a picture").
 //
@@ -103,8 +128,30 @@ const CREDIT_HOLD_MS = 1500;
 // over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
 // reference, quick enough to follow the client moving to a new document.
 const SHARPNESS_PEAK_DECAY = 0.994;
+// Auto-capture debounce after a page is banked with "Add another page". The
+// client is returned to the camera still pointing at the sheet they just
+// shot, so the automatic shutter stays disarmed until at least this long has
+// passed AND the scene visibly changed. See capture-arm.ts.
+const REARM_MIN_DELAY_MS = 1500;
+// Corner movement that counts as "they moved it", in PREVIEW px (converted to
+// detect-canvas px at the call site, like the other outline constants above).
+// The detector jitters a pixel or two frame to frame; 12 is comfortably past
+// that and comfortably under a real page swap.
+const REARM_MOVE_PX = 12;
+// Continuous no-detection that counts as "the document left the frame".
+const REARM_CLEAR_MISS_MS = 500;
+// Charge fraction at which the outline commits from blue to green. The
+// shutter starts accruing credit the instant a document is found, so without
+// a threshold here the blue "detected" state would flash past unseen — the
+// client would never get the two-stage read of lock-on, then commit.
+const LOCK_PROGRESS = 0.4;
 
-type Shot = { file: File; url: string };
+type Shot = {
+  file: File;
+  url: string;
+  /** Advisory only — drives the review screen's "looks blurry" line. */
+  blurry: boolean;
+};
 
 export function CameraCapture({
   onClose,
@@ -112,8 +159,13 @@ export function CameraCapture({
   onChooseFile,
 }: {
   onClose: () => void;
-  /** Hand the finished photo to the caller's existing upload path. */
-  onCapture: (file: File) => void;
+  /**
+   * Hand the finished scan(s) to the caller's existing upload path. An array
+   * because "Add another page" banks pages and hands them over together; the
+   * portal's uploader already loops a File[] onto one checklist item, which is
+   * the same path a client picking several photos at once has always taken.
+   */
+  onCapture: (files: File[]) => void;
   /** Escape hatch offered whenever the camera can't be used. */
   onChooseFile: () => void;
 }) {
@@ -140,6 +192,11 @@ export function CameraCapture({
   const shotCountRef = useRef(0);
   const peakSharpnessRef = useRef(0);
   const capturingRef = useRef(false);
+  // Auto-shutter re-arm gate for the multi-page loop, and the last RAW
+  // detection (detect-canvas coordinates) it compares against.
+  const armRef = useRef<ArmState>(ARMED);
+  const pagesRef = useRef(0);
+  const rawQuadRef = useRef<Quad | null>(null);
   const debugRef = useRef<HTMLPreElement>(null);
   // Opt-in live readout: open the portal with ?scan=debug. Exists because the
   // shutter's gates are invisible from the outside — when it refuses to fire on
@@ -151,16 +208,32 @@ export function CameraCapture({
   // How far down the stage the top controls reach, measured on mount/resize.
   const [controlsBottom, setControlsBottom] = useState(0);
   const [quad, setQuad] = useState<Quad | null>(null);
-  const [guidance, setGuidance] = useState<Guidance>("searching");
   // What the client is actually being told right now — null most of the time.
   const [hint, setHint] = useState<Guidance | null>(null);
   const hintRef = useRef<HintState>(INITIAL_HINT);
   const [shot, setShot] = useState<Shot | null>(null);
+  // Pages banked by "Add another page", uploaded together on Use.
+  const [pages, setPages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   // 0..1 toward the next automatic photo. Always visible — the client should
   // never be looking at a screen that gives no sign anything is happening.
   const [progress, setProgress] = useState(0);
+
+  // OpenCV.js + jscanify: ~13 MB of WASM that nobody who never scans should
+  // pay for. Both live behind dynamic import()s (see opencv-loader), so the
+  // download starts HERE — after the client tapped Scan — and never rides
+  // along with the portal bundle. The camera comes up immediately regardless;
+  // detection runs on the built-in TypeScript detector until (and if) the
+  // engine lands, so a failure is a quieter scanner, never a broken one.
+  const engineStatus = useSyncExternalStore(
+    subscribeScanEngine,
+    getScanEngineStatus,
+    () => "idle" as const,
+  );
+  useEffect(() => {
+    void loadScanEngine();
+  }, []);
 
   // The overlay only ever mounts in response to the client tapping "Scan", so
   // asking here is still inside the gesture that authorised it.
@@ -292,7 +365,17 @@ export function CameraCapture({
       if (!file) file = await captureVideoFrame(video, { view: size });
 
       shotCountRef.current += 1;
-      setShot({ file, url: URL.createObjectURL(file) });
+      // Focus advisory for the review screen. Never blocks and never delays
+      // the picture appearing — a null measurement simply says nothing.
+      const sharpness = await measureCaptureSharpness(
+        file,
+        REVIEW_SHARPNESS_WIDTH,
+      );
+      setShot({
+        file,
+        url: URL.createObjectURL(file),
+        blurry: isReviewBlurry(sharpness),
+      });
     } catch (e) {
       captureFallbackRef.current = (e as Error).message || "failed";
       setCaptureError("capture_failed");
@@ -324,8 +407,10 @@ export function CameraCapture({
     function tick(now: number) {
       if (cancelled) return;
       raf = requestAnimationFrame(tick);
-      if (now - last < ANALYSIS_INTERVAL_MS) return;
-      const elapsedMs = last === 0 ? ANALYSIS_INTERVAL_MS : now - last;
+      const engine = currentScanEngine();
+      const interval = engine ? CV_ANALYSIS_INTERVAL_MS : ANALYSIS_INTERVAL_MS;
+      if (now - last < interval) return;
+      const elapsedMs = last === 0 ? interval : now - last;
       last = now;
 
       const video = videoRef.current;
@@ -379,7 +464,18 @@ export function CameraCapture({
         height: rgba.height,
       });
 
-      const found = detectQuad(gray);
+      // jscanify/OpenCV when the engine is up, the built-in detector when it
+      // is not. Both return the same thing — a plausibility-checked quad in
+      // detect-canvas coordinates, or null — so everything below (outline
+      // hysteresis, the shutter, the hints) is unchanged either way.
+      const found = engine
+        ? detectQuadCv(engine, {
+            data: rgba.data,
+            width: rgba.width,
+            height: rgba.height,
+          })
+        : detectQuad(gray);
+      rawQuadRef.current = found;
       dutyRef.current = dutyRef.current * 0.94 + (found ? 0.06 : 0);
 
       // Hysteresis, not just easing: on a real phone the detector flips
@@ -455,11 +551,11 @@ export function CameraCapture({
           `quad   ${found ? "found" : "NONE"}  duty ${(dutyRef.current * 100).toFixed(0)}%`,
           `hint   ${step.guidance}`,
           `charge ${(step.progress * 100).toFixed(0)}%  (${step.state.detectedMs.toFixed(0)}/${DETECTED_MS_REQUIRED}ms, miss ${step.state.missMs.toFixed(0)})`,
+          `engine ${engine ? "opencv" : getScanEngineStatus() === "loading" ? "loading (builtin)" : "builtin"}  ${armRef.current.armed ? "armed" : "disarmed"}${getScanEngineError() ? `  ERR: ${getScanEngineError()}` : ""}`,
+          `pages  ${pagesRef.current}`,
           `shots  ${shotCountRef.current}${captureFallbackRef.current ? `  LAST ERR: ${captureFallbackRef.current}` : ""}`,
         ].join("\n");
       }
-
-      setGuidance((g) => (g === step.guidance ? g : step.guidance));
 
       const hintStep = advanceHint(hintRef.current, {
         guidance: step.guidance,
@@ -492,7 +588,18 @@ export function CameraCapture({
       // and the ring is a single SVG circle.
       setProgress((p) => (Math.abs(p - step.progress) < 0.01 ? p : step.progress));
 
-      if (step.fire) void capture();
+      // The automatic shutter is disarmed for a beat after a page is banked,
+      // so returning to the camera over the sheet that was just photographed
+      // cannot fire again on it. The manual button is never gated.
+      armRef.current = advanceArm(armRef.current, {
+        quad: found,
+        elapsedMs,
+        minDelayMs: REARM_MIN_DELAY_MS,
+        moveTolerancePx: (REARM_MOVE_PX * canvas.width) / view.width,
+        clearMissMs: REARM_CLEAR_MISS_MS,
+      });
+
+      if (step.fire && armRef.current.armed) void capture();
     }
 
     raf = requestAnimationFrame(tick);
@@ -505,6 +612,9 @@ export function CameraCapture({
     };
   }, [status, shot, capture, debug]);
 
+  // Back to the camera, keeping any banked pages. Deliberately does NOT
+  // disarm the auto-shutter: a client who rejected a shot wants that same
+  // document captured again, right away.
   function retake() {
     setShot(null);
     setCaptureError(null);
@@ -515,12 +625,32 @@ export function CameraCapture({
     setProgress(0);
     quadRef.current = null;
     setQuad(null);
-    setGuidance("searching");
   }
 
+  // Bank the page on screen and go back for the next one. The auto-shutter is
+  // disarmed until the scene changes, because the camera is about to be
+  // pointing at the sheet that was just captured.
+  function addPage() {
+    if (!shot) return;
+    setPages((prev) => {
+      const next = [...prev, shot.file];
+      pagesRef.current = next.length;
+      return next;
+    });
+    armRef.current = disarm(rawQuadRef.current);
+    retake();
+  }
+
+  // Everything banked, plus what is on screen, in the order they were taken.
+  //
+  // One call with every page: the portal's uploader loops a File[] onto this
+  // one checklist item, which is exactly what a client picking several photos
+  // at once has always done. It does NOT stitch them into a single PDF —
+  // nothing in the upload pipeline assembles multi-page documents today, so
+  // the pages arrive as separate files attached to the same item.
   function useShot() {
     if (!shot) return;
-    onCapture(shot.file);
+    onCapture([...pages, shot.file]);
     onClose();
   }
 
@@ -570,7 +700,7 @@ export function CameraCapture({
           <ScanOverlay
             view={view}
             quad={quad}
-            ready={guidance === "ready"}
+            locked={progress >= LOCK_PROGRESS}
             topInset={controlsBottom}
           />
         )}
@@ -597,6 +727,45 @@ export function CameraCapture({
               )}
             >
               {hint ? t(`scan_hint_${hint}`) : "\u00a0"}
+            </p>
+          </div>
+        )}
+
+        {/* The engine downloads in the background while the camera is already
+            live and already detecting on the built-in detector, so this says
+            "getting better", not "wait". It disappears either way. */}
+        {!shot && !failed && engineStatus === "loading" && (
+          <div
+            className="pointer-events-none absolute inset-x-0 flex justify-center px-6"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 4.5rem)" }}
+          >
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[12px] font-medium text-white/90">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              {t("scan_preparing")}
+            </p>
+          </div>
+        )}
+
+        {/* How many pages are already banked. Only ever shown once there is at
+            least one, so the ordinary single-page scan is untouched. */}
+        {pages.length > 0 && (
+          <div
+            className="pointer-events-none absolute inset-x-0 flex justify-center px-6"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 1.35rem)" }}
+          >
+            <p className="rounded-full bg-black/55 px-3 py-1.5 text-[12px] font-medium text-white/90">
+              {t("scan_pages_banked", { count: pages.length })}
+            </p>
+          </div>
+        )}
+
+        {/* Focus advisory. Non-blocking by design: it is a hint next to a
+            Retake button the client can ignore, and the server-side AI check
+            remains the real gate on an unusable file. */}
+        {shot?.blurry && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-6">
+            <p className="rounded-full bg-amber-100 px-3.5 py-1.5 text-[13px] font-medium text-amber-900 shadow-sm ring-1 ring-amber-200">
+              {t("scan_blurry_warning")}
             </p>
           </div>
         )}
@@ -654,26 +823,37 @@ export function CameraCapture({
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}
       >
         {shot ? (
-          <>
-            {/* Retake sizes to its label and the primary takes the rest, so
-                "Use this photo" stays on one line at 375px. */}
-            <button
-              type="button"
-              onClick={retake}
-              className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 px-5 py-3 text-[15px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
-            >
-              <RotateCcw className="size-4" aria-hidden />
-              {t("scan_retake")}
-            </button>
+          // Two rows at 375px: three actions cannot share one line without
+          // truncating "Use this photo", which is the one that must stay
+          // readable. The primary sits alone underneath, full width.
+          <div className="flex w-full flex-col gap-2.5">
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={retake}
+                className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 px-4 py-3 text-[15px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
+              >
+                <RotateCcw className="size-4" aria-hidden />
+                {t("scan_retake")}
+              </button>
+              <button
+                type="button"
+                onClick={addPage}
+                className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 px-4 py-3 text-[15px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
+              >
+                <CopyPlus className="size-4" aria-hidden />
+                {t("scan_add_page")}
+              </button>
+            </div>
             <button
               type="button"
               onClick={useShot}
-              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#1050ed] px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
+              className="inline-flex w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#1050ed] px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
             >
               <Check className="size-4" aria-hidden />
               {t("scan_use")}
             </button>
-          </>
+          </div>
         ) : failed ? (
           <button
             type="button"
@@ -766,12 +946,13 @@ function ShutterRing({ progress }: { progress: number }) {
 function ScanOverlay({
   view,
   quad,
-  ready,
+  locked,
   topInset,
 }: {
   view: { width: number; height: number };
   quad: Quad | null;
-  ready: boolean;
+  /** The shutter has charged past LOCK_PROGRESS — the outline commits. */
+  locked: boolean;
   topInset: number;
 }) {
   if (view.width <= 0 || view.height <= 0) return null;
@@ -816,8 +997,11 @@ function ScanOverlay({
         ))}
       </g>
 
-      {/* Brand blue rather than white: the thing being outlined is a sheet of
-          white paper, so a white stroke all but disappears against it.
+      {/* Two states, and the colour is the whole message. Brand blue while the
+          scanner is TRACKING a document (white would vanish against the paper
+          it is drawn on), green once the shot is COMMITTED and the ring is
+          filling — the client can see the difference between "I can see it"
+          and "I am about to take it" without reading a word.
 
           Rendered the PLAIN way — React writes `points` on every detection
           (~20x a second, eased by smoothQuad). A fancier version interpolated
@@ -831,9 +1015,9 @@ function ScanOverlay({
           className="transition-[fill,stroke,stroke-width] duration-200"
           // Barely-there fill on lock, none before it: a strong wash over the
           // page hides the very thing the client is checking.
-          fill={ready ? "rgba(16,80,237,0.08)" : "none"}
-          stroke={ready ? "#1050ed" : "rgba(16,80,237,0.85)"}
-          strokeWidth={ready ? 3.5 : 2.5}
+          fill={locked ? "rgba(22,163,74,0.10)" : "none"}
+          stroke={locked ? "#16a34a" : "rgba(16,80,237,0.85)"}
+          strokeWidth={locked ? 3.5 : 2.5}
           strokeLinejoin="round"
         />
       )}
