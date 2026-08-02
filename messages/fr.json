@@ -3759,6 +3759,8 @@
     "badge_duplicate": "Doublon",
     "badge_imported": "Importé",
     "badge_firm_only": "Interne",
+    "match_name": "Nom du fichier",
+    "match_content": "Dans le document",
     "action_make_firm_only": "Rendre interne",
     "action_make_client_visible": "Rendre visible au client",
     "visibility_done_firm": "Masqué pour le client.",

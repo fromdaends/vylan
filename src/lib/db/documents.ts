@@ -819,3 +819,66 @@ export async function getClientHeader(clientId: string): Promise<{
     clientType: data.type === "business" ? "business" : "individual",
   };
 }
+
+// ── Content search (Files v2 §5) ─────────────────────────────────────────────
+
+export type ContentHit = {
+  source: DocumentSource;
+  documentId: string;
+  /** ts_headline output: matched words wrapped in <b></b>. NEVER rendered as
+   * HTML — the UI splits on the markers and renders React elements, because
+   * this text ultimately comes from client-uploaded documents. */
+  snippet: string;
+};
+
+/**
+ * Words INSIDE documents, via the search_document_texts function (1170).
+ * SECURITY INVOKER + RLS scope it to the caller's firm; its own join to the
+ * firm_documents view excludes soft-deleted files. Empty (and quiet) until
+ * transcripts exist — capture is forward-only from portal intake.
+ */
+export async function searchDocumentContent(
+  query: string,
+  limit = 40,
+): Promise<{ hits: ContentHit[]; available: boolean }> {
+  const q = query.trim();
+  if (!q) return { hits: [], available: true };
+  const sb = await getServerSupabase();
+  const { data, error } = await sb.rpc("search_document_texts", {
+    p_query: q,
+    p_limit: limit,
+  });
+  if (error) {
+    if (!isFilesSchemaMissing(error)) {
+      console.error("[files] content search failed:", error.message);
+    }
+    return { hits: [], available: !isFilesSchemaMissing(error) };
+  }
+  return {
+    available: true,
+    hits: ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      source: r.source as DocumentSource,
+      documentId: String(r.document_id),
+      snippet: String(r.snippet ?? ""),
+    })),
+  };
+}
+
+/** Fetch specific documents by (source, id) — the content hits that the
+ * name search didn't already return. One .in() read, pair-checked after. */
+export async function listDocumentsByIds(
+  pairs: Array<{ source: DocumentSource; id: string }>,
+): Promise<BrowseDocument[]> {
+  if (pairs.length === 0) return [];
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("firm_documents")
+    .select(VIEW_COLUMNS)
+    .in("id", pairs.map((p) => p.id))
+    .is("deleted_at", null);
+  if (error || !data) return [];
+  const wanted = new Set(pairs.map((p) => `${p.source}|${p.id}`));
+  return (data as ViewRow[])
+    .filter((r) => wanted.has(`${r.source}|${r.id}`))
+    .map(toBrowseDocument);
+}

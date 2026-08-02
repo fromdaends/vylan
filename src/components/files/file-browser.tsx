@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
+import type { SnippetPart } from "@/lib/files/search-snippet";
 import { RowCheckbox } from "./row-checkbox";
 import {
   DraggableFile,
@@ -87,6 +88,10 @@ export type BrowserEntry =
        * within its own table, so selection is keyed on the pair. */
       selectSource?: string;
       selectId?: string;
+      /** Content-search context (Files v2 §5): where the query matched INSIDE
+       * the document. Pre-split — matched words render as <mark> elements,
+       * never as HTML, because this text comes from uploaded documents. */
+      snippet?: SnippetPart[];
     };
 
 // File-type icon, the way a file manager picks one: by what the file IS, not by
@@ -277,6 +282,22 @@ export async function FileBrowser({
                 </Cell>
                 <span className="w-8 shrink-0 text-right">{entry.actions}</span>
               </div>
+              {entry.snippet && entry.snippet.length > 0 && (
+                <p className="-mt-1 truncate px-4 pb-2 pl-[3.75rem] text-xs text-muted-foreground">
+                  {entry.snippet.map((part, i) =>
+                    part.marked ? (
+                      <mark
+                        key={i}
+                        className="rounded-sm bg-accent/20 px-0.5 text-foreground"
+                      >
+                        {part.text}
+                      </mark>
+                    ) : (
+                      <span key={i}>{part.text}</span>
+                    ),
+                  )}
+                </p>
+              )}
               </DraggableFile>
             )}
           </li>
