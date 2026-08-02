@@ -361,6 +361,14 @@ export async function setDocumentVisibilityAction(input: {
   ) {
     return { ok: false, error: "invalid" };
   }
+  // A client's OWN upload can never be hidden from them. Hiding it makes
+  // their portal look like the upload failed (re-uploads, support emails),
+  // and the honest tool for a mistaken upload is Delete — which already
+  // leaves their portal instantly and stays recoverable for the firm.
+  // Founder ruling 2026-08-02. Refused HERE so no UI can reintroduce it.
+  if (input.source === "checklist") {
+    return { ok: false, error: "invalid" };
+  }
   const firm = await getCurrentFirm();
   if (!firm) return { ok: false, error: "error" };
   const sb = await getServerSupabase();
@@ -392,9 +400,14 @@ export async function bulkSetVisibilityAction(input: {
 }): Promise<BulkResult> {
   const targets = validTargets(input.targets);
   if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  // Client uploads are SKIPPED, not failed: a mixed selection is normal, and
+  // "3 changed, 2 skipped" is the honest report — see the checklist refusal
+  // in setDocumentVisibilityAction.
+  const eligible = targets.filter((t) => t.source !== "checklist");
+  const skipped = targets.length - eligible.length;
   let succeeded = 0;
   let failed = 0;
-  for (const t of targets) {
+  for (const t of eligible) {
     const res = await setDocumentVisibilityAction({
       source: t.source,
       id: t.id,
@@ -404,5 +417,5 @@ export async function bulkSetVisibilityAction(input: {
     else failed++;
   }
   revalidatePath("/files");
-  return { ok: failed === 0, succeeded, failed, skipped: 0 };
+  return { ok: failed === 0, succeeded, failed, skipped };
 }

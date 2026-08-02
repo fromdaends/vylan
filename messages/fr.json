@@ -3609,6 +3609,8 @@
     "action_make_client_visible": "Rendre visible au client",
     "visibility_done_firm": "Masqué pour le client.",
     "visibility_done_client": "Maintenant visible pour le client.",
+    "visibility_import_note": "À noter : les clients ne verront pas les fichiers importés tant que le partage depuis Fichiers n'existe pas.",
+    "bulk_visibility_skipped": "{count, plural, one {# téléversement client ignoré} other {# téléversements clients ignorés}} — les clients voient toujours leurs propres fichiers.",
     "bulk_visibility": "Visibilité",
     "visibility_firm": "Interne",
     "visibility_client": "Visible au client",
