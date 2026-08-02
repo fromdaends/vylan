@@ -26,7 +26,6 @@ const PREFIX: Record<(typeof routing.locales)[number], string> = {
 // adding a page later is a one-line change.
 const STATIC_PATHS = [
   { path: "", priority: 1, changeFrequency: "weekly" as const },
-  { path: "/how-it-works", priority: 0.9, changeFrequency: "monthly" as const },
   { path: "/manifesto", priority: 0.5, changeFrequency: "yearly" as const },
   { path: "/terms", priority: 0.3, changeFrequency: "yearly" as const },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" as const },

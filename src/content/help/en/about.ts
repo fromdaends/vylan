@@ -8,6 +8,7 @@ import {
   note,
   warn,
 } from "../types";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 // PLACEHOLDER CONTENT — founder rule, do not fill this in.
 //
@@ -54,9 +55,15 @@ const ourStory: HelpArticle = {
     ),
 
     note(
-      "In the meantime, ",
-      link("/how-it-works", "how it works"),
-      " shows you the product itself, and hello@vylan.app reaches a real person.",
+      ...(HOW_IT_WORKS_PUBLIC
+        ? [
+            "In the meantime, ",
+            link("/how-it-works", "how it works"),
+            " shows you the product itself, and hello@vylan.app reaches a real person.",
+          ]
+        : [
+            "In the meantime, the rest of this help centre covers the product page by page, and hello@vylan.app reaches a real person.",
+          ]),
     ),
   ],
 };

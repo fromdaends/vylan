@@ -18,6 +18,7 @@ import {
   tierAfterSample,
   type MotionTier,
 } from "@/lib/motion/tier";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 export type LandingShellStrings = {
   brand: string;
@@ -475,9 +476,11 @@ export function LandingShell({
               <button className="vy-btn" type="button" onClick={scrollToForm}>
                 {s.ctaBook}
               </button>
-              <Link className="vy-link-btn" href="/how-it-works">
-                {s.ctaHowItWorks}
-              </Link>
+              {HOW_IT_WORKS_PUBLIC ? (
+                <Link className="vy-link-btn" href="/how-it-works">
+                  {s.ctaHowItWorks}
+                </Link>
+              ) : null}
             </div>
           </div>
           <div className="vy-scroll-cue" ref={cueRef} aria-hidden="true">
