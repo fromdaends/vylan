@@ -117,6 +117,71 @@ export function queueHealthScopes(
   return open.some((r) => !r.clientId) ? [...ids, undefined] : ids;
 }
 
+// ---------------------------------------------------------------------------
+// Queue table sorting (the sortable column headers).
+// ---------------------------------------------------------------------------
+
+// How many columns the queue table renders, shared so the expanded detail
+// row's colSpan can never drift from the header. It lives HERE, in a plain
+// module, because both the client shell and the SERVER-rendered rows read it —
+// exporting it from a "use client" file would hand the server a client
+// reference instead of the number (the #959 lesson).
+export const QUEUE_COLUMN_COUNT = 7;
+
+export type QueueSortKey = "client" | "document" | "amount" | "status";
+export type QueueSortDir = "asc" | "desc";
+
+// What a row sorts on. Built server-side, one per rendered row, parallel to
+// the children handed to the queue shell.
+export type QueueSortMeta = {
+  client: string;
+  document: string;
+  amount: number | null;
+  bucket: QueueBucket;
+};
+
+// PURE comparator for the queue table.
+//
+// Rows with no amount sink to the bottom in BOTH directions: an unknown value
+// isn't "the smallest", and flipping the arrow shouldn't parade the blanks to
+// the top of the page.
+export function compareQueueSort(
+  a: QueueSortMeta,
+  b: QueueSortMeta,
+  key: QueueSortKey,
+  dir: QueueSortDir,
+): number {
+  const flip = dir === "asc" ? 1 : -1;
+  if (key === "amount") {
+    if (a.amount == null && b.amount == null) return 0;
+    if (a.amount == null) return 1;
+    if (b.amount == null) return -1;
+    return (a.amount - b.amount) * flip;
+  }
+  if (key === "status") {
+    return (bucketRank(a.bucket) - bucketRank(b.bucket)) * flip;
+  }
+  const av = key === "client" ? a.client : a.document;
+  const bv = key === "client" ? b.client : b.document;
+  // localeCompare so "Sébastien" sorts where a reader expects it rather than
+  // after Z, and so case never decides the order.
+  return av.localeCompare(bv, undefined, { sensitivity: "base" }) * flip;
+}
+
+// The row positions in display order. No chosen column = the server's own
+// priority order (needs-input first), untouched.
+export function sortedQueueIndexes(
+  meta: QueueSortMeta[],
+  sort: { key: QueueSortKey; dir: QueueSortDir } | null,
+): number[] {
+  const idx = meta.map((_, i) => i);
+  if (!sort) return idx;
+  // Array#sort is stable, so ties keep that same server ordering underneath.
+  return idx.sort((x, y) =>
+    compareQueueSort(meta[x]!, meta[y]!, sort.key, sort.dir),
+  );
+}
+
 export type QueueCounts = Record<QueueBucket, number> & { total: number };
 
 // Count how many drafts fall in each bucket (over the WHOLE set, so the toolbar
