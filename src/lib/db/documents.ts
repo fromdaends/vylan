@@ -60,6 +60,8 @@ export type BrowseDocument = {
   docTypeIsManual: boolean;
   year: number | null;
   category: BrowseCategory | null;
+  /** The custom folder this document is filed in; null = the derived view. */
+  folderId: string | null;
   /** Null for deliverables and imports — they have nothing to approve. */
   reviewStatus: ReviewStatus | null;
   isDuplicate: boolean;
@@ -103,6 +105,7 @@ type ViewRow = {
   manual_doc_type: string | null;
   browse_year: number | null;
   browse_category: string | null;
+  folder_id: string | null;
   review_status: string | null;
   is_duplicate: boolean | null;
   deleted_at: string | null;
@@ -110,7 +113,7 @@ type ViewRow = {
 };
 
 const VIEW_COLUMNS =
-  "source, id, client_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, ai_doc_type, ai_confidence, manual_doc_type, browse_year, browse_category, review_status, is_duplicate, deleted_at, created_at";
+  "source, id, client_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, ai_doc_type, ai_confidence, manual_doc_type, browse_year, browse_category, folder_id, review_status, is_duplicate, deleted_at, created_at";
 
 /**
  * Is the AI still reading this document right now?
@@ -161,6 +164,7 @@ function toBrowseDocument(row: ViewRow): BrowseDocument {
     docTypeIsManual: resolved.manual,
     year: row.browse_year,
     category: (row.browse_category as BrowseCategory | null) ?? null,
+    folderId: row.folder_id ?? null,
     reviewStatus: (row.review_status as ReviewStatus | null) ?? null,
     isDuplicate: row.is_duplicate === true,
     createdAt: row.created_at,
@@ -267,6 +271,37 @@ export type YearGroup = {
  * the landing page had to worry about. Only three small columns are fetched, so
  * even a heavy client is a few kilobytes.
  */
+/** Head-count of live documents created since `sinceIso`. Feeds the Home
+ * tab's "this month" stat — a count with `head: true` never fetches rows, so
+ * it stays cheap regardless of firm size (and works with PostgREST
+ * aggregates disabled, same trick listDocuments uses). */
+export async function countDocumentsSince(sinceIso: string): Promise<number> {
+  const sb = await getServerSupabase();
+  const { count } = await sb
+    .from("firm_documents")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null)
+    .gte("created_at", sinceIso);
+  return count ?? 0;
+}
+
+/** How many documents the AI is reading RIGHT NOW — the same definition as
+ * isClassificationPending, expressed as one head-count: checklist uploads
+ * with no type yet, still inside the freshness window. Older un-run analyses
+ * are "never ran", not pending, exactly as the engagement page treats them. */
+export async function countPendingAnalysis(now: number = Date.now()): Promise<number> {
+  const sb = await getServerSupabase();
+  const { count } = await sb
+    .from("firm_documents")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "checklist")
+    .is("deleted_at", null)
+    .is("ai_doc_type", null)
+    .is("manual_doc_type", null)
+    .gte("created_at", new Date(now - ANALYSIS_FRESH_MS).toISOString());
+  return count ?? 0;
+}
+
 export async function getClientDocumentTree(clientId: string): Promise<{
   years: YearGroup[];
   total: number;

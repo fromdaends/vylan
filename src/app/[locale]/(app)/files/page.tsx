@@ -16,6 +16,8 @@ import {
   FolderRowMenu,
   NewFolderButton,
 } from "@/components/files/folder-actions";
+import { HomeTab } from "@/components/files/home-tab";
+import { resolveFilesTab, type FilesTab } from "@/lib/files/tabs";
 import {
   folderDocumentCounts,
   listClientFolders as listCustomFolders,
@@ -60,7 +62,9 @@ import type { DocType } from "@/lib/db/templates";
 // paging needs no JavaScript.
 export const dynamic = "force-dynamic";
 
-type Tab = "browse" | "settings";
+// Tab resolution lives in lib/files/tabs.ts: Home is the default for a BARE
+// /files only — every pre-Home deep link (?client=…, ?q=…) still lands on
+// Browse without any link anywhere changing.
 
 export default async function FilesPage({
   params,
@@ -75,9 +79,10 @@ export default async function FilesPage({
   const t = await getTranslations("Files");
   const sp = await searchParams;
 
-  const tab: Tab = sp.tab === "settings" ? "settings" : "browse";
-  const tabs: { id: Tab; label: string; href: string }[] = [
-    { id: "browse", label: t("tab_browse"), href: "/files" },
+  const tab = resolveFilesTab(sp);
+  const tabs: { id: FilesTab; label: string; href: string }[] = [
+    { id: "home", label: t("tab_home"), href: "/files" },
+    { id: "browse", label: t("tab_browse"), href: "/files?tab=browse" },
     { id: "settings", label: t("tab_settings"), href: "/files?tab=settings" },
   ];
 
@@ -120,8 +125,10 @@ export default async function FilesPage({
         <div className="max-w-4xl">
           <FilingPanel />
         </div>
-      ) : (
+      ) : tab === "browse" ? (
         <BrowseTab locale={locale} sp={sp} />
+      ) : (
+        <HomeTab locale={locale} />
       )}
     </div>
   );
@@ -187,7 +194,10 @@ async function BrowseTab({
   const hasDocumentFilter = !!docType || !!status;
   // A custom folder shows its own contents directly — it is a real folder
   // holding real documents, not a derived bucket to drill further into.
-  const showFiles = categorySet || hasDocumentFilter || !!search || !!folderId;
+  // An explicit sort also lists files: it is what Home's "View all" links to
+  // (/files?sort=date = the firm's documents, newest first, flat).
+  const showFiles =
+    categorySet || hasDocumentFilter || !!search || !!folderId || !!sp.sort?.trim();
 
   const docTypeOptions = Object.entries(DOC_TYPE_LABELS)
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
