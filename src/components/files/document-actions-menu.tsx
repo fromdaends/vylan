@@ -112,6 +112,12 @@ export function DocumentActionsMenu({
         toast.success(
           next === "firm" ? t("visibility_done_firm") : t("visibility_done_client"),
         );
+        // "Client-visible" on an import is permission, not delivery: no
+        // portal surface lists imports until share-from-Files exists, and
+        // pretending otherwise is a false impression.
+        if (next === "client" && source === "imported") {
+          toast.info(t("visibility_import_note"));
+        }
       } else {
         toast.error(t("action_failed"));
       }
@@ -226,6 +232,7 @@ export function DocumentActionsMenu({
             <Download className="size-4" />
             {t("action_download")}
           </DropdownMenuItem>
+          {source !== "checklist" && (
           <DropdownMenuItem
             className="gap-2"
             onSelect={() => toggleVisibility()}
@@ -239,6 +246,7 @@ export function DocumentActionsMenu({
               ? t("action_make_client_visible")
               : t("action_make_firm_only")}
           </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             className="gap-2"
             onSelect={(e) => {

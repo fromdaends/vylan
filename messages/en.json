@@ -3740,6 +3740,8 @@
     "action_make_client_visible": "Make client-visible",
     "visibility_done_firm": "Hidden from the client.",
     "visibility_done_client": "Now visible to the client.",
+    "visibility_import_note": "Heads up: clients won't actually see imported files until sharing from Files exists.",
+    "bulk_visibility_skipped": "{count, plural, one {# client upload} other {# client uploads}} skipped — clients always see their own files.",
     "bulk_visibility": "Visibility",
     "visibility_firm": "Firm only",
     "visibility_client": "Client-visible",
