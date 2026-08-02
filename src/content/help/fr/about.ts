@@ -8,6 +8,7 @@ import {
   note,
   warn,
 } from "../types";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 // CONTENU PROVISOIRE — règle du fondateur, ne pas remplir.
 //
@@ -61,9 +62,15 @@ const ourStory: HelpArticle = {
     ),
 
     note(
-      "En attendant, ",
-      link("/how-it-works", "comment ça marche"),
-      " vous montre le produit lui-même, et hello@vylan.app rejoint une vraie personne.",
+      ...(HOW_IT_WORKS_PUBLIC
+        ? [
+            "En attendant, ",
+            link("/how-it-works", "comment ça marche"),
+            " vous montre le produit lui-même, et hello@vylan.app rejoint une vraie personne.",
+          ]
+        : [
+            "En attendant, le reste de ce centre d'aide couvre le produit page par page, et hello@vylan.app rejoint une vraie personne.",
+          ]),
     ),
   ],
 };

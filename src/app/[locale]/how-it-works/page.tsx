@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 import { socialMetadata } from "@/lib/og/metadata";
 import {
   schibsted,
@@ -34,6 +36,10 @@ export default async function HowItWorksPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // Hidden from the public (see HOW_IT_WORKS_PUBLIC). Everything below still
+  // exists and still builds — it is simply unreachable until the flag flips.
+  if (!HOW_IT_WORKS_PUBLIC) notFound();
+
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
