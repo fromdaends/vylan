@@ -3006,6 +3006,10 @@
     "filing_desc": "File approved documents into Google Drive, SharePoint, Dropbox or SmartVault."
   },
   "Quickbooks": {
+    "queue_col_client": "Client",
+    "queue_col_document": "Document",
+    "queue_col_amount": "Amount",
+    "queue_col_status": "Status",
     "draft_title": "QuickBooks draft",
     "draft_title_xero": "Xero draft",
     "draft_kicker": "QuickBooks",
