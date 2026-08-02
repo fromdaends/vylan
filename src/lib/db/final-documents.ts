@@ -153,6 +153,9 @@ export async function listFinalDocumentsForEngagementSR(
     .from("final_documents")
     .select(COLUMNS)
     .eq("engagement_id", engagementId)
+    // SR = the client portal's read: firm-only deliverables (1160) stay off
+    // every client surface, enforced in the query.
+    .eq("visibility", "client")
     .order("created_at", { ascending: true });
   if (error) {
     if (!isMissingSchema(error)) {

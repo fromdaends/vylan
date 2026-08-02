@@ -62,6 +62,8 @@ export type BrowseDocument = {
   category: BrowseCategory | null;
   /** The custom folder this document is filed in; null = the derived view. */
   folderId: string | null;
+  /** 'firm' = never shown to the client, enforced in the portal queries. */
+  visibility: "client" | "firm";
   /** Null for deliverables and imports — they have nothing to approve. */
   reviewStatus: ReviewStatus | null;
   isDuplicate: boolean;
@@ -107,13 +109,14 @@ type ViewRow = {
   browse_category: string | null;
   folder_id: string | null;
   review_status: string | null;
+  visibility: string | null;
   is_duplicate: boolean | null;
   deleted_at: string | null;
   created_at: string;
 };
 
 const VIEW_COLUMNS =
-  "source, id, client_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, ai_doc_type, ai_confidence, manual_doc_type, browse_year, browse_category, folder_id, review_status, is_duplicate, deleted_at, created_at";
+  "source, id, client_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, ai_doc_type, ai_confidence, manual_doc_type, browse_year, browse_category, folder_id, review_status, is_duplicate, deleted_at, created_at, visibility";
 
 /**
  * Is the AI still reading this document right now?
@@ -165,6 +168,7 @@ function toBrowseDocument(row: ViewRow): BrowseDocument {
     year: row.browse_year,
     category: (row.browse_category as BrowseCategory | null) ?? null,
     folderId: row.folder_id ?? null,
+    visibility: row.visibility === "firm" ? "firm" : "client",
     reviewStatus: (row.review_status as ReviewStatus | null) ?? null,
     isDuplicate: row.is_duplicate === true,
     createdAt: row.created_at,

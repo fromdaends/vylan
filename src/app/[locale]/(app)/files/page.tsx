@@ -703,6 +703,7 @@ async function FileList({
         // would land on top of the person's. An imported or never-analysed
         // document is always movable — hand-sorting is the whole point of them.
         canMove={!doc.classificationPending}
+        visibility={doc.visibility}
         locale={locale}
       />
     ),
@@ -771,6 +772,10 @@ function fileBadges(
   // In firm-wide results the row has to say WHOSE file this is; inside a folder
   // that would be the same value on every row and is left off.
   if (clientName) badges.push({ label: clientName, tone: "secondary" });
+  // The one badge every surface shows for a hidden-from-client file.
+  if (doc.visibility === "firm") {
+    badges.push({ label: t("badge_firm_only"), tone: "secondary" });
+  }
   if (doc.isDuplicate) badges.push({ label: t("badge_duplicate"), tone: "outline" });
   // Only the EXCEPTIONS get a badge. Approved is the resting state of a filed
   // document — badging it would put a coloured pill on almost every row and the
