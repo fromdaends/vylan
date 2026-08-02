@@ -45,6 +45,16 @@ export const XERO_SCOPES = [
   "accounting.contacts",
   "accounting.settings.read",
   "accounting.attachments",
+  // Bank reconciliation on the close board reads the BankSummary report, which
+  // is gated behind this scope (and, on Xero's side, the user's "reports" role
+  // — a Standard user without it gets a 403 no scope can fix).
+  //
+  // ⚠️ EXISTING CONNECTIONS DO NOT GAIN IT. A token issued before this line
+  // was added carries the old scope set, so BankSummary 403s until that client
+  // reconnects. fetchXeroBankSummary treats that as "balance unreadable"
+  // rather than an error, so the close board says it cannot read the books
+  // instead of breaking — but the fix is a reconnect.
+  "accounting.reports.read",
 ].join(" ");
 
 // The client-list IMPORT flow only READS contacts + the organisation and is
