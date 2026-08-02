@@ -35,10 +35,13 @@ import {
   listClientFolders,
   listDeletedDocuments,
   listDocuments,
+  listDocumentsByIds,
+  searchDocumentContent,
   type BrowseDocument,
   type DocumentSort,
   type ReviewStatus,
 } from "@/lib/db/documents";
+import { splitSnippet } from "@/lib/files/search-snippet";
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
 
@@ -661,7 +664,32 @@ async function FileList({
   const result = await listDocuments(filters);
   if (!result.available) return <Dormant message={t("unavailable")} />;
 
-  const documents = await attachEngagementContext(result.documents);
+  // Content search (Files v2 §5): when there is a query, also look INSIDE
+  // documents. Hits the name search already returned get their snippet
+  // attached; hits it missed are fetched and appended (page 1 only, so the
+  // same document never appears on two pages). Both kinds are labeled — a
+  // result that says WHY it matched is the difference between search and
+  // guesswork.
+  const searchQ = filters.search?.trim() ?? "";
+  const snippetByKey = new Map<string, string>();
+  let contentOnly: BrowseDocument[] = [];
+  if (searchQ) {
+    const { hits } = await searchDocumentContent(searchQ);
+    for (const h of hits) snippetByKey.set(`${h.source}|${h.documentId}`, h.snippet);
+    if (result.page === 1 && hits.length > 0) {
+      const have = new Set(result.documents.map((d) => `${d.source}|${d.id}`));
+      const missing = hits
+        .filter((h) => !have.has(`${h.source}|${h.documentId}`))
+        .map((h) => ({ source: h.source, id: h.documentId }));
+      contentOnly = await listDocumentsByIds(missing);
+    }
+  }
+  const contentOnlyKeys = new Set(contentOnly.map((d) => `${d.source}|${d.id}`));
+
+  const documents = await attachEngagementContext([
+    ...result.documents,
+    ...contentOnly,
+  ]);
 
   // Client names, only for firm-wide results where rows span clients. One query
   // for the page's clients — the view carries ids, and joining names into it
@@ -690,7 +718,21 @@ async function FileList({
     from: fileSource(doc, t),
     selectSource: doc.source,
     selectId: doc.id,
-    badges: fileBadges(doc, t, showClient ? clientNames?.get(doc.clientId) : null),
+    badges: [
+      ...fileBadges(doc, t, showClient ? clientNames?.get(doc.clientId) : null),
+      // With a query active, every row says WHY it is here.
+      ...(searchQ
+        ? [
+            contentOnlyKeys.has(`${doc.source}|${doc.id}`)
+              ? { label: t("match_content"), tone: "outline" as const }
+              : { label: t("match_name"), tone: "outline" as const },
+          ]
+        : []),
+    ],
+    snippet: (() => {
+      const raw = snippetByKey.get(`${doc.source}|${doc.id}`);
+      return raw ? splitSnippet(raw) : undefined;
+    })(),
     actions: (
       <DocumentActionsMenu
         source={doc.source}

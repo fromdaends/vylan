@@ -3759,6 +3759,8 @@
     "badge_duplicate": "Duplicate",
     "badge_imported": "Imported",
     "badge_firm_only": "Firm only",
+    "match_name": "Name match",
+    "match_content": "Content match",
     "action_make_firm_only": "Make firm-only",
     "action_make_client_visible": "Make client-visible",
     "visibility_done_firm": "Hidden from the client.",
