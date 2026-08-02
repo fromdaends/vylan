@@ -403,6 +403,7 @@ export default async function QuickbooksDraftsPage({
       <Header
         title={t("queue_title")}
         missingReceiptsLabel={t("gaps_title")}
+        uncategorizedLabel={t("uncat_title")}
         subtitle={t("summary_drafts", { count: counts.total })}
       />
       {health === "reconnect_required" && (
@@ -481,10 +482,12 @@ function Header({
   title,
   subtitle,
   missingReceiptsLabel,
+  uncategorizedLabel,
 }: {
   title: string;
   subtitle: string;
   missingReceiptsLabel: string;
+  uncategorizedLabel: string;
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
@@ -495,15 +498,25 @@ function Header({
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
       </div>
-      {/* The other direction. This page is documents becoming entries; that one
-          is entries with no document behind them. A quiet link rather than a
-          nav item or a button — it belongs beside its sibling, not shouted. */}
-      <Link
-        href="/quickbooks/receipts"
-        className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-      >
-        {missingReceiptsLabel}
-      </Link>
+      {/* The other direction. This page is documents becoming entries; those two
+          read the entries themselves — one for the ones with no document behind
+          them, one for the ones with no category on them. Quiet links rather
+          than nav items or buttons: they belong beside their sibling, not
+          shouted. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link
+          href="/quickbooks/receipts"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {missingReceiptsLabel}
+        </Link>
+        <Link
+          href="/quickbooks/uncategorized"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {uncategorizedLabel}
+        </Link>
+      </div>
     </header>
   );
 }
