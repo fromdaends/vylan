@@ -847,7 +847,13 @@ export function CameraCapture({
                 onClick={() => void capture()}
                 disabled={status !== "ready" || busy}
                 aria-label={t("scan_capture")}
-                className="inline-flex size-[62px] cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-[0_2px_12px_rgba(0,0,0,0.45)] ring-[3px] ring-white/90 transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-white disabled:cursor-default disabled:bg-white/25 disabled:text-white/60 disabled:ring-white/40 motion-safe:active:scale-95"
+                // No ring of its own. The button used to carry a 3px white
+                // ring whose OUTER edge landed exactly on the progress track's
+                // INNER edge — two rings touching with no gap, which over a
+                // dark scene merged into one thick grey doughnut instead of
+                // reading as a camera shutter. The only ring now is the one
+                // the SVG draws, with real space between it and the button.
+                className="inline-flex size-[58px] cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-[0_2px_10px_rgba(0,0,0,0.5)] transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 disabled:cursor-default disabled:bg-white/25 disabled:text-white/60 motion-safe:active:scale-95"
               >
                 {busy ? (
                   <Loader2 className="size-6 animate-spin" aria-hidden />
@@ -957,7 +963,10 @@ export function CameraCapture({
  * second the scanner produces.
  */
 function ShutterRing({ progress }: { progress: number }) {
-  const R = 35.5;
+  // 35 leaves ~4.5px of clear space between the button's edge (r=29) and the
+  // ring's inner edge — the gap is what makes it read as a ring rather than a
+  // halo bleeding off the button.
+  const R = 35;
   const C = 2 * Math.PI * R;
   const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
   return (
@@ -966,16 +975,15 @@ function ShutterRing({ progress }: { progress: number }) {
       viewBox="0 0 76 76"
       aria-hidden
     >
-      {/* Track. Barely-there white rather than pale blue: over a live camera
-          the old tint read as a glow bleeding off the button, not as a ring
-          waiting to be filled. */}
+      {/* Track. Crisp rather than barely-there: at 0.28 it was too faint to
+          read as a deliberate ring and just muddied the button's edge. */}
       <circle
         cx="38"
         cy="38"
         r={R}
         fill="none"
-        stroke="rgba(255,255,255,0.28)"
-        strokeWidth={3}
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth={2.5}
       />
       {/* Fill. Green, matching the outline's locked state, so one colour means
           one thing across the whole screen: the shot is being taken. */}
@@ -985,7 +993,7 @@ function ShutterRing({ progress }: { progress: number }) {
         r={R}
         fill="none"
         stroke="#22c55e"
-        strokeWidth={3}
+        strokeWidth={2.5}
         strokeLinecap="round"
         strokeDasharray={C}
         strokeDashoffset={C * (1 - p)}
@@ -1228,11 +1236,22 @@ export function apertureFor(
   const height = Math.max(1, Math.round(Math.min(wanted, room)));
   const width = Math.max(1, Math.round(Math.min(height / APERTURE_RATIO, maxWidth)));
 
-  // Nudged above centre: the eye reads the frame as balanced when the gap
-  // below it (which carries the hint) is a little larger than the gap above.
-  const centred = Math.round((view.height - height) / 2 - view.height * 0.03);
-  const lowest = view.height - height - bottomClearance;
-  const y = Math.max(topClearance, Math.min(centred, Math.max(topClearance, lowest)));
+  // Centred in the space that is actually FREE — between the top controls and
+  // whatever the bottom reserves — rather than in the whole viewport.
+  //
+  // The old version centred against the full height and then nudged 3% upward,
+  // which was right when a solid control bar sat BELOW the stage: the only
+  // thing under the window was the hint line, so a slightly larger gap there
+  // read as balanced. Now the camera runs full-bleed with the shutter floating
+  // inside it, and that same nudge put 96px above the frame against 126px
+  // below — which is precisely what read as "too much dead space under the
+  // frame". Centring in the band makes the two visible gaps equal instead.
+  const bandTop = topClearance;
+  const bandBottom = Math.max(bandTop + 1, view.height - bottomClearance);
+  const y = Math.max(
+    bandTop,
+    Math.round(bandTop + (bandBottom - bandTop - height) / 2),
+  );
 
   return {
     x: Math.round((view.width - width) / 2),
