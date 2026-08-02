@@ -142,3 +142,30 @@ export async function removeClientMember(input: {
     throw error;
   }
 }
+
+/**
+ * Which clients this person is on the team of.
+ *
+ * The reverse of listClientMembers, and the reason it exists: a teammate's
+ * profile used to derive their client list from `assigned_user_id` alone, so
+ * the page showed one answer while their actual access followed another. After
+ * slice 3 the wrong one would have been the louder of the two.
+ */
+export async function listClientIdsForMember(
+  userId: string,
+): Promise<Set<string>> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("client_members")
+    .select("client_id")
+    .eq("user_id", userId);
+  if (error) {
+    if (isMissingSchema(error)) return new Set();
+    throw error;
+  }
+  return new Set(
+    (data ?? [])
+      .map((r) => (r as { client_id?: unknown }).client_id)
+      .filter((v): v is string => typeof v === "string"),
+  );
+}

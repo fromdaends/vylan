@@ -15,7 +15,7 @@ import {
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
-import { ClientTeam } from "@/components/clients/client-team";
+import { ClientAccess } from "@/components/clients/client-access";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
@@ -157,6 +157,11 @@ export default async function ClientDetailPage({
       name: nameOf.get(m.userId)!,
       position: m.position,
     }));
+  // Owners see every client, membership or not — so any panel claiming to
+  // answer "who can see this" has to include them or it is simply wrong.
+  const firmOwners = firmUsers
+    .filter((u) => u.role === "owner" && !u.deactivated_at)
+    .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
   const castIds = new Set(cast.map((m) => m.userId));
   const castCandidates = assignableMembers.filter((u) => !castIds.has(u.id));
   const connectedAccountId = firm?.stripe_connect_account_id ?? null;
@@ -379,9 +384,35 @@ export default async function ClientDetailPage({
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
-      {/* ── Left rail: reference, not action ─────────────────────────────── */}
-      <div className="space-y-4">
-      <Panel title={t("contact_info")}>
+      {/* ── Left rail: reference, and who can see this ───────────────────
+          It used to hold five panels including the two most action-heavy ones
+          on the page (connect QuickBooks, set a portal PIN) under a comment
+          claiming it was "reference, not action". That is what made the page
+          read as a long left column beside an empty right one — founder's
+          words. Contact and About merged (both are label/value reference, and
+          two boxes of it stacked was arbitrary), and the action panels moved
+          across to the work. Sticky, so a long engagements table no longer
+          scrolls the rail away into whitespace. */}
+      <div className="space-y-4 lg:sticky lg:top-6">
+      {/* Who can see this client. First in the rail: on somebody else's client
+          that is the first question, and since slice 2 this list is part of the
+          answer rather than a note beside it. */}
+      {teamEnabled && (
+        <Panel title={t("access_title")}>
+          <ClientAccess
+            clientId={id}
+            isPrivate={client.is_private ?? false}
+            members={cast}
+            owners={firmOwners}
+            assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
+            firmSize={assignableMembers.length}
+            candidates={castCandidates}
+            canEdit={canManageClients}
+          />
+        </Panel>
+      )}
+
+      <Panel title={t("details_title")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
             the "Edit client" dialog in the header. This protects the email
@@ -397,36 +428,7 @@ export default async function ClientDetailPage({
             value={client.external_ref}
             mono
           />
-        </dl>
-      </Panel>
-
-      {/* About — the reference card Canopy carries and Vylan didn't. Every
-          field here already existed on the client and had a label; they were
-          just scattered (type and language sat as badges in the header,
-          industry and province had nowhere to show at all, and Notes was
-          filed under "Contact info", which it is not).
-          Nothing invented: no Spouse, no Dependents, no date of birth. Those
-          are the reference's US-1040 fields and Vylan has no column for any of
-          them — see the PR body.
-          province / industry / timezone come from migration 0220 and may be
-          undefined at runtime until it is applied, so each is read with ?? null
-          and DetailRow renders "Not specified" rather than a blank row. */}
-      {/* Who works on this client. Rail, above About: on somebody else's client
-          the first question is "who is on this", not what industry they are
-          in. Team mode only — a solo firm has no cast to name. */}
-      {teamEnabled && (
-        <Panel title={t("team_title")}>
-          <ClientTeam
-            clientId={id}
-            members={cast}
-            candidates={castCandidates}
-            canEdit={canManageClients}
-          />
-        </Panel>
-      )}
-
-      <Panel title={t("about_title")}>
-        <dl className="space-y-3 text-sm">
+          <li className="!mt-4 border-t border-border/60" aria-hidden />
           <DetailRow
             label={t("field_type")}
             value={
@@ -474,47 +476,7 @@ export default async function ClientDetailPage({
           The code itself is deliberately NOT passed in: the card fetches it
           through an audit-logged action, so it never sits in this page's
           HTML. */}
-      <Panel title={t("portal_access_title")}>
-        <ClientPortalPinCard
-          clientId={client.id}
-          initialEnabled={client.portal_pin_enabled === true}
-        />
-      </Panel>
 
-      {/* Bookkeeping lives on the client's own page: an OWNER can connect this
-          client here (the client is known from context — no name-matching), and
-          once connected everyone sees the status. ONE system per client: once
-          QuickBooks is connected the Xero card hides (and vice versa) — a
-          receipt can only belong in one set of books. Hidden entirely for
-          staff on a not-yet-connected client. */}
-      {(clientQuickbooks.connected ||
-        clientXero.connected ||
-        (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
-        <Panel title={t("bk_section_title")}>
-          {(clientQuickbooks.connected ||
-            (isOwner &&
-              clientQuickbooks.configured &&
-              !clientXero.connected)) && (
-              <ClientQuickbooksCard
-                clientId={client.id}
-                clientName={client.display_name}
-                status={clientQuickbooks}
-                isOwner={isOwner}
-              />
-            )}
-          {(clientXero.connected ||
-            (isOwner &&
-              clientXero.configured &&
-              !clientQuickbooks.connected)) && (
-              <ClientXeroCard
-                clientId={client.id}
-                clientName={client.display_name}
-                status={clientXero}
-                isOwner={isOwner}
-              />
-            )}
-        </Panel>
-      )}
 
       </div>
 
@@ -626,6 +588,53 @@ export default async function ClientDetailPage({
           </div>
         )}
       </Panel>
+
+        {/* Moved out of the rail. Connecting a client's books and setting
+            their portal PIN are ACTIONS on the client, and the rail is
+            reference — the comment above it said so while these two sat in
+            it. They also give the work column something to hold on a client
+            with few engagements, which is what left the right side empty. */}
+        {/* Bookkeeping lives on the client's own page: an OWNER can connect this
+            client here (the client is known from context — no name-matching), and
+            once connected everyone sees the status. ONE system per client: once
+            QuickBooks is connected the Xero card hides (and vice versa) — a
+            receipt can only belong in one set of books. Hidden entirely for
+            staff on a not-yet-connected client. */}
+        {(clientQuickbooks.connected ||
+          clientXero.connected ||
+          (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
+          <Panel title={t("bk_section_title")}>
+            {(clientQuickbooks.connected ||
+              (isOwner &&
+                clientQuickbooks.configured &&
+                !clientXero.connected)) && (
+                <ClientQuickbooksCard
+                  clientId={client.id}
+                  clientName={client.display_name}
+                  status={clientQuickbooks}
+                  isOwner={isOwner}
+                />
+              )}
+            {(clientXero.connected ||
+              (isOwner &&
+                clientXero.configured &&
+                !clientQuickbooks.connected)) && (
+                <ClientXeroCard
+                  clientId={client.id}
+                  clientName={client.display_name}
+                  status={clientXero}
+                  isOwner={isOwner}
+                />
+              )}
+          </Panel>
+        )}
+
+        <Panel title={t("portal_access_title")}>
+          <ClientPortalPinCard
+            clientId={client.id}
+            initialEnabled={client.portal_pin_enabled === true}
+          />
+        </Panel>
 
       {/* Money. A Junior sees the WORK on a client and not what it was billed
           for — the payments history is amounts, dates and status, which is

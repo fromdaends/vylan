@@ -14,6 +14,7 @@ import { scopeForView, selectView, viewLabelKey } from "@/lib/engagements/views"
 import { listClients } from "@/lib/db/clients";
 import { countLiveSeriesByAssignee } from "@/lib/db/recurring";
 import { filterClientsByOwner } from "@/components/clients/owner";
+import { listClientIdsForMember } from "@/lib/db/client-members";
 import { listActivityForFirm } from "@/lib/db/activity";
 import {
   AUDIT_ACTIONS,
@@ -119,9 +120,20 @@ export default async function TeamMemberProfilePage({
   const reassignTargets = members
     .filter((m) => !m.deactivated_at && m.id !== id)
     .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
-  // filterClientsByOwner treats a non-"all"/"mine" value as a member id; the
-  // third arg (current user) is unused for a member-id filter.
-  const clients = filterClientsByOwner(clientsRaw, id, "");
+  // Their clients: the ones assigned to them PLUS the ones they are on the team
+  // of (1210). Assignment alone was the whole answer until membership existed;
+  // leaving it that way would have this page showing one list while their
+  // actual access follows another — two answers to the same question, and after
+  // slice 3 the wrong one would be the louder.
+  const memberClientIds = await listClientIdsForMember(id);
+  const assigned = filterClientsByOwner(clientsRaw, id, "");
+  const assignedIds = new Set(assigned.map((c) => c.id));
+  const clients = [
+    ...assigned,
+    ...clientsRaw.filter(
+      (c) => memberClientIds.has(c.id) && !assignedIds.has(c.id),
+    ),
+  ];
 
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
