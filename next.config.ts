@@ -85,6 +85,21 @@ const nextConfig: NextConfig = {
   // runtime. The route handlers that use it (api/engagements/.../files.zip
   // and api/firm/export.zip) are nodejs-runtime only.
   serverExternalPackages: ["archiver"],
+  turbopack: {
+    resolveAlias: {
+      // OpenCV.js — the portal scanner's document-detection engine, loaded
+      // lazily and only when a client taps Scan — ships as ONE Emscripten
+      // file that serves both Node and the browser. Its Node branch is dead
+      // code in a browser (`if (ENVIRONMENT_IS_NODE)`), but the bundler still
+      // has to RESOLVE the `require("fs")` inside it, and the client build
+      // fails outright without this.
+      //
+      // Scoped to the `browser` condition ON PURPOSE: a bare `fs` alias would
+      // apply to the server build too and break every route handler, cron job
+      // and export that legitimately reads the filesystem.
+      fs: { browser: "./src/lib/empty-module.ts" },
+    },
+  },
   experimental: {
     serverActions: {
       // Default is 1 MB — too small for phone photos (3-8 MB is normal).

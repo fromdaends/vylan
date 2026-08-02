@@ -9,6 +9,15 @@ import {
 import { NextIntlClientProvider } from "next-intl";
 import { CameraCapture, apertureFor } from "./camera-capture";
 import en from "../../../messages/en.json";
+import {
+  __setScanEngineStatusForTests,
+  __resetScanEngineForTests,
+} from "@/lib/portal/opencv-loader";
+
+// Never let the real 13 MB OpenCV package into a unit test — and, more to the
+// point, the status is what this file needs to drive.
+vi.mock("@techstark/opencv-js", () => ({ default: {} }));
+vi.mock("jscanify/client", () => ({ default: class {} }));
 
 // The analysis loop is inert here on purpose: happy-dom's canvas.getContext()
 // returns null, so every pixel path short-circuits. That is exactly why the
@@ -66,10 +75,46 @@ function renderCamera() {
 afterEach(() => {
   cleanup();
   removeCamera();
+  __resetScanEngineForTests();
   vi.unstubAllGlobals();
 });
 
 describe("CameraCapture", () => {
+  it("shows the camera immediately while the scan engine is still downloading — nobody waits on 13 MB of WASM to see a viewfinder", async () => {
+    stubCamera();
+    renderCamera();
+    __setScanEngineStatusForTests("loading");
+    // The shutter is live and the preview is up; the pill only says the
+    // detection is about to get better.
+    await waitFor(() =>
+      expect(screen.getByText(en.Portal.scan_preparing)).toBeTruthy(),
+    );
+    expect(screen.getByLabelText(en.Portal.scan_capture)).toBeTruthy();
+  });
+
+  it("takes the preparing pill down once the engine is ready", async () => {
+    stubCamera();
+    renderCamera();
+    __setScanEngineStatusForTests("loading");
+    await waitFor(() =>
+      expect(screen.getByText(en.Portal.scan_preparing)).toBeTruthy(),
+    );
+    __setScanEngineStatusForTests("ready");
+    await waitFor(() =>
+      expect(screen.queryByText(en.Portal.scan_preparing)).toBeNull(),
+    );
+  });
+
+  it("says nothing at all when the engine failed — the built-in detector is still running and there is nothing to announce", async () => {
+    stubCamera();
+    renderCamera();
+    __setScanEngineStatusForTests("failed");
+    await waitFor(() =>
+      expect(screen.getByLabelText(en.Portal.scan_capture)).toBeTruthy(),
+    );
+    expect(screen.queryByText(en.Portal.scan_preparing)).toBeNull();
+  });
+
   it("renders through a portal on <body>, not inside the checklist row", async () => {
     stubCamera();
     const { container } = renderCamera();
