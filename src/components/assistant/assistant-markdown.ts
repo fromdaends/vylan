@@ -7,30 +7,40 @@
 // renders that tree as React elements, so nothing is ever injected as HTML
 // (no dangerouslySetInnerHTML) and the output is XSS-safe by construction.
 //
-// Deliberately NOT a full markdown engine: headings, tables, links, images,
+// Deliberately NOT a full markdown engine: headings, tables, images,
 // blockquotes, and code fences are stripped or ignored (the prompt forbids
-// them). Only inline **bold**, *italic* / _italic_, `code`, and "- " / "1. "
-// lists are understood. Unclosed markers mid-stream simply render literally
-// until the closing marker arrives.
+// them). Only inline **bold**, *italic* / _italic_, `code`, INTERNAL links,
+// and "- " / "1. " lists are understood. Unclosed markers mid-stream simply
+// render literally until the closing marker arrives.
+//
+// LINKS are deliberately internal-only (Files v2 §4 citations): [text](href)
+// becomes a link ONLY when href starts with a single "/" — no protocol, no
+// host, no "//", which rules out javascript:, data:, and every external URL
+// by construction. Anything else renders as its plain label text.
 
 export type MarkdownSpan =
   | { type: "text"; value: string }
   | { type: "bold"; value: string }
   | { type: "italic"; value: string }
-  | { type: "code"; value: string };
+  | { type: "code"; value: string }
+  | { type: "link"; value: string; href: string };
 
 export type MarkdownBlock =
   | { type: "paragraph"; lines: MarkdownSpan[][] }
   | { type: "bullets"; items: MarkdownSpan[][] }
   | { type: "numbered"; items: MarkdownSpan[][] };
 
-// Bold must be tried before single-asterisk italic, and code is opaque (its
-// contents are never re-parsed). Italic underscores only bind between
-// non-word boundaries so snake_case identifiers survive intact. Numbered
-// groups (not named) to stay within the project's compile target:
-//   1 = **bold**   2 = `code`   3 = *italic*   4 = _italic_
+// Links are tried first (their brackets must not be chewed by emphasis),
+// then bold before single-asterisk italic; code is opaque (its contents are
+// never re-parsed). Italic underscores only bind between non-word boundaries
+// so snake_case identifiers survive intact. Numbered groups (not named) to
+// stay within the project's compile target:
+//   1 = [label   2 = ](href)   3 = **bold**   4 = `code`   5 = *italic*   6 = _italic_
 const INLINE_RE =
-  /\*\*([^\n]+?)\*\*|`([^`\n]+?)`|\*([^*\n]+?)\*|(?<!\w)_([^_\n]+?)_(?!\w)/g;
+  /\[([^\]\n]+?)\]\(([^)\s]+?)\)|\*\*([^\n]+?)\*\*|`([^`\n]+?)`|\*([^*\n]+?)\*|(?<!\w)_([^_\n]+?)_(?!\w)/g;
+
+/** Internal app path: one leading slash, never "//", never a protocol. */
+const SAFE_INTERNAL_HREF = /^\/(?!\/)[^\s]*$/;
 
 export function parseInlineSpans(text: string): MarkdownSpan[] {
   const spans: MarkdownSpan[] = [];
@@ -41,9 +51,17 @@ export function parseInlineSpans(text: string): MarkdownSpan[] {
     if (m.index > last) {
       spans.push({ type: "text", value: text.slice(last, m.index) });
     }
-    if (m[1] !== undefined) spans.push({ type: "bold", value: m[1] });
-    else if (m[2] !== undefined) spans.push({ type: "code", value: m[2] });
-    else spans.push({ type: "italic", value: (m[3] ?? m[4]) as string });
+    if (m[1] !== undefined) {
+      const href = m[2] ?? "";
+      if (SAFE_INTERNAL_HREF.test(href)) {
+        spans.push({ type: "link", value: m[1], href });
+      } else {
+        // External or malformed target: keep the words, drop the link.
+        spans.push({ type: "text", value: m[1] });
+      }
+    } else if (m[3] !== undefined) spans.push({ type: "bold", value: m[3] });
+    else if (m[4] !== undefined) spans.push({ type: "code", value: m[4] });
+    else spans.push({ type: "italic", value: (m[5] ?? m[6]) as string });
     last = m.index + m[0].length;
   }
   if (last < text.length) {

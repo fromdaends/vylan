@@ -75,6 +75,19 @@ function MarkdownSpans({ spans }: { spans: MarkdownSpan[] }) {
   return (
     <>
       {spans.map((span, i) => {
+        if (span.type === "link") {
+          // Parser guarantees internal-only hrefs; a plain anchor is right —
+          // these lead into Browse, and a full navigation there is the point.
+          return (
+            <a
+              key={i}
+              href={span.href}
+              className="text-primary underline underline-offset-4 hover:text-primary/80"
+            >
+              {span.value}
+            </a>
+          );
+        }
         if (span.type === "bold") {
           return (
             <strong key={i} className="font-semibold text-foreground">
