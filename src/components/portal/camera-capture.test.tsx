@@ -398,6 +398,50 @@ describe("apertureFor — clearing the top controls", () => {
       expect(a.y + a.height).toBeLessThanOrEqual(notched.height - SHUTTER);
     });
 
+    // The founder's words on the first full-bleed build were "too much dead
+    // space under the frame". It was not too much space, it was LOPSIDED
+    // space: the old geometry centred against the whole viewport and then
+    // nudged 3% upward, which had been right when a solid control bar sat
+    // below the stage. With the shutter floating inside the preview, the two
+    // visible gaps have to match, so that is what is pinned here rather than
+    // any particular y.
+    it("leaves the same gap above the frame as below it", () => {
+      const a = apertureFor(notched, { top: CONTROLS, bottom: SHUTTER });
+      const above = a.y - CONTROLS;
+      const below = notched.height - SHUTTER - (a.y + a.height);
+      expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
+    });
+
+    it("stays balanced across phone sizes", () => {
+      for (const view of [
+        { width: 375, height: 812 },
+        { width: 393, height: 852 },
+        { width: 430, height: 932 },
+        { width: 360, height: 740 },
+      ]) {
+        const a = apertureFor(view, { top: CONTROLS, bottom: SHUTTER });
+        const above = a.y - CONTROLS;
+        const below = view.height - SHUTTER - (a.y + a.height);
+        expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
+      }
+    });
+
+    // The share is the one number detection was actually tuned against: 0.42
+    // is the largest the guide can be while a normal hand's tilt keeps all
+    // four corners inside the camera frame, and the detector finds nothing
+    // once a corner leaves it. Geometry changes must not drift past it.
+    it("never asks the client to fill more of the frame than detection survives", () => {
+      for (const view of [
+        { width: 375, height: 812 },
+        { width: 393, height: 852 },
+        { width: 430, height: 932 },
+      ]) {
+        const a = apertureFor(view, { top: CONTROLS, bottom: SHUTTER });
+        const share = (a.width * a.height) / (view.width * view.height);
+        expect(share).toBeLessThanOrEqual(0.44);
+      }
+    });
+
     it("still clears the top controls at the same time", () => {
       const a = apertureFor(notched, { top: CONTROLS, bottom: SHUTTER });
       expect(a.y).toBeGreaterThanOrEqual(CONTROLS);
