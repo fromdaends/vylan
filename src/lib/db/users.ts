@@ -23,6 +23,12 @@ export type AppUser = {
   // always has, rather than failing or silently restricting anyone.
   permission_preset?: string | null;
   extra_capabilities?: string[] | null;
+  // Phase 2 profile (migration 1190). OPTIONAL for the same reason as the two
+  // above: undefined until the migration lands, and every reader treats
+  // undefined and null identically — "not recorded". Nobody is assumed to be
+  // full time.
+  job_title?: string | null;
+  weekly_hours?: number | null;
 };
 
 /** Active firm members only (not deactivated) — the valid targets for

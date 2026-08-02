@@ -96,6 +96,17 @@ export const AUDIT_ACTIONS = [
   "folder_renamed",
   "folder_moved",
   "folder_deleted",
+  // Bookkeeping — the ledger-side loop (#1106, #1112, #1115, #1116) and the
+  // roster profile (#1123). Every one of these was being emitted without a
+  // listing here, which is the exact failure the note above records: the audit
+  // page printed the raw action code at the operator.
+  "request_receipts",
+  "ask_about_transactions",
+  "categorize_transaction",
+  "close_month",
+  "reopen_month",
+  "client_answered_question",
+  "update_teammate_profile",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

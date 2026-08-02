@@ -24,6 +24,7 @@ import { HandOverWork } from "@/components/settings/team/hand-over-work";
 import { DeactivateMember } from "@/components/settings/team/deactivate-member";
 import { MemberPermissions } from "@/components/settings/team/member-permissions";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ProfileDetails } from "@/components/settings/team/profile-details";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { formatDate } from "@/lib/format";
@@ -162,6 +163,11 @@ export default async function TeamMemberProfilePage({
               <Badge variant="outline">{t("profile_deactivated")}</Badge>
             )}
           </div>
+          {member.job_title && (
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {member.job_title}
+            </p>
+          )}
         </div>
       </div>
 
@@ -203,6 +209,15 @@ export default async function TeamMemberProfilePage({
               quiet label/value rows, and they are reference, not the point. */}
           <dl className="mt-3 space-y-3 text-sm">
             <ProfileRow label={tClients("col_email")} value={member.email} />
+            {/* What they do and how much of a week they have. The second one is
+                the denominator "9 engagements" has never had — nine simple
+                returns is not nine corporate year-ends. */}
+            <ProfileDetails
+              userId={member.id}
+              jobTitle={member.job_title ?? null}
+              weeklyHours={member.weekly_hours ?? null}
+              canEdit={isOwner && !member.deactivated_at}
+            />
             <ProfileRow
               label={t("profile_stat_engagements")}
               value={String(activeCount)}
