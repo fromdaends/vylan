@@ -31,14 +31,16 @@ import {
   periodEnd,
   shiftPeriod,
 } from "@/lib/close/period";
-import {
-  closeMonthAction,
-  reopenMonthAction,
-} from "@/app/actions/month-close";
+import { closeMonthAction, reopenMonthAction } from "@/app/actions/month-close";
 
 type Row = {
   clientId: string;
   name: string;
+  // Which ledger this client's books live in. What the client owes and the
+  // close itself are provider-agnostic; the two LEDGER numbers are read
+  // through QuickBooks only, so a Xero row reports them as unavailable rather
+  // than as zero — the same reason they start blank instead of at 0.
+  provider: "quickbooks" | "xero";
   openRequests: number;
   closedAt: string | null;
   closedBy: string | null;
@@ -130,7 +132,11 @@ export function CloseBoard(props: {
   // like the feature being broken.
   async function checkAll() {
     setCheckingAll(true);
+    // Xero rows have nothing to scan yet — asking the QuickBooks route about
+    // them would just return "not connected" and dress a missing feature up as
+    // a broken connection.
     for (const row of props.rows) {
+      if (row.provider !== "quickbooks") continue;
       await check(row.clientId);
     }
     setCheckingAll(false);
@@ -202,7 +208,10 @@ export function CloseBoard(props: {
           {t("close_check_all")}
         </Button>
         {pending && (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+          <Loader2
+            className="h-4 w-4 animate-spin text-muted-foreground"
+            aria-hidden
+          />
         )}
       </div>
 
@@ -247,64 +256,81 @@ export function CloseBoard(props: {
                   </td>
 
                   <td className="py-2.5 align-top">
-                    {state.kind === "unchecked" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        onClick={() => check(row.clientId)}
-                      >
-                        {t("close_check")}
-                      </Button>
-                    )}
-                    {state.kind === "checking" && (
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                        {t("close_checking")}
+                    {/* Xero: the ledger scans are QuickBooks-only so far. Say
+                        that, rather than offering a Check that cannot answer
+                        or — far worse — printing a 0 that reads as "clean". */}
+                    {row.provider !== "quickbooks" ? (
+                      <span className="text-muted-foreground">
+                        {t("close_ledger_xero_pending")}
                       </span>
-                    )}
-                    {state.kind === "error" && (
-                      <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        {state.message}
-                      </span>
-                    )}
-                    {state.kind === "checked" &&
-                      (state.uncategorized === 0 &&
-                      state.missingReceipts === 0 ? (
-                        <span className="flex items-center gap-1.5 text-icon-emerald">
-                          <Check className="h-4 w-4 shrink-0" aria-hidden />
-                          {t("close_books_clean")}
-                        </span>
-                      ) : (
-                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          {state.uncategorized > 0 && (
-                            <Link
-                              href={`/quickbooks/drafts?tab=uncategorized&client=${row.clientId}&from=${from}&to=${to}`}
-                              className="underline-offset-4 hover:underline"
-                            >
-                              {t("close_uncategorized", {
-                                count: state.uncategorized,
-                              })}
-                            </Link>
-                          )}
-                          {state.missingReceipts > 0 && (
-                            <Link
-                              href={`/quickbooks/drafts?tab=receipts&client=${row.clientId}&from=${from}&to=${to}`}
-                              className="underline-offset-4 hover:underline"
-                            >
-                              {t("close_missing_receipts", {
-                                count: state.missingReceipts,
-                              })}
-                            </Link>
-                          )}
-                          {state.truncated && (
-                            <span className="text-xs text-amber-600 dark:text-amber-500">
-                              {t("close_truncated")}
+                    ) : (
+                      <>
+                        {state.kind === "unchecked" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => check(row.clientId)}
+                          >
+                            {t("close_check")}
+                          </Button>
+                        )}
+                        {state.kind === "checking" && (
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Loader2
+                              className="h-3.5 w-3.5 animate-spin"
+                              aria-hidden
+                            />
+                            {t("close_checking")}
+                          </span>
+                        )}
+                        {state.kind === "error" && (
+                          <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+                            <AlertTriangle
+                              className="h-3.5 w-3.5 shrink-0"
+                              aria-hidden
+                            />
+                            {state.message}
+                          </span>
+                        )}
+                        {state.kind === "checked" &&
+                          (state.uncategorized === 0 &&
+                          state.missingReceipts === 0 ? (
+                            <span className="flex items-center gap-1.5 text-icon-emerald">
+                              <Check className="h-4 w-4 shrink-0" aria-hidden />
+                              {t("close_books_clean")}
                             </span>
-                          )}
-                        </span>
-                      ))}
+                          ) : (
+                            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              {state.uncategorized > 0 && (
+                                <Link
+                                  href={`/quickbooks/drafts?tab=uncategorized&client=${row.clientId}&from=${from}&to=${to}`}
+                                  className="underline-offset-4 hover:underline"
+                                >
+                                  {t("close_uncategorized", {
+                                    count: state.uncategorized,
+                                  })}
+                                </Link>
+                              )}
+                              {state.missingReceipts > 0 && (
+                                <Link
+                                  href={`/quickbooks/drafts?tab=receipts&client=${row.clientId}&from=${from}&to=${to}`}
+                                  className="underline-offset-4 hover:underline"
+                                >
+                                  {t("close_missing_receipts", {
+                                    count: state.missingReceipts,
+                                  })}
+                                </Link>
+                              )}
+                              {state.truncated && (
+                                <span className="text-xs text-amber-600 dark:text-amber-500">
+                                  {t("close_truncated")}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                      </>
+                    )}
                   </td>
 
                   <td className="py-2.5 align-top">

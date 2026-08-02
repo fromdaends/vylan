@@ -5,7 +5,7 @@
 // books and the checklist. Only "we are done with July" is a decision a human
 // made, so only that is stored.
 //
-// READS DEGRADE, WRITES REFUSE. Before migration 1160 is applied there is no
+// READS DEGRADE, WRITES REFUSE. Before migration 1200 is applied there is no
 // table: a read then truthfully returns "nothing is closed", which is exactly
 // what the board should show, and a write says so instead of failing with a
 // Postgres error nobody can act on. Neither direction can corrupt anything —
@@ -27,7 +27,7 @@ export type MonthClose = {
 export class MonthCloseUnsupportedError extends Error {
   constructor() {
     super(
-      "Closing a month needs database update 1160. Run supabase/migrations/1160_month_end_closes.sql, then try again.",
+      "Closing a month needs database update 1200. Run supabase/migrations/1200_month_end_closes.sql, then try again.",
     );
     this.name = "MonthCloseUnsupportedError";
   }
