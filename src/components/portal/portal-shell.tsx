@@ -23,7 +23,8 @@ import { SignatureItemCard } from "./signature-item-card";
 import { PaymentDueCard } from "./payment-due-card";
 import { PortalFinalDocuments } from "./portal-final-documents";
 import { PortalHub, type HubCardData } from "./portal-hub";
-import { splitPortalItems } from "@/lib/portal/split-items";
+import { splitPortalItems, portalChecklist } from "@/lib/portal/split-items";
+import { QuestionItemCard } from "./question-item-card";
 import {
   summarizeSignatures,
   summarizeDocuments,
@@ -119,8 +120,11 @@ export function PortalShell({
   }, [logOncePerVisit, initialMessagesOpen, messagingReady]);
 
   // Split into the signature group ("To sign") and the document group.
-  const { collection: collectionItems, signatures: signatureItems } =
-    splitPortalItems(items);
+  const { signatures: signatureItems } = splitPortalItems(items);
+  // Documents and questions share one list, in the order the firm asked for
+  // them. A question ("what was this $340 for?") is another thing the client
+  // owes; only its card differs, because a dropzone cannot answer a question.
+  const collectionItems = portalChecklist(items);
   const hasSignatures = signatureItems.length > 0;
   const hasDocuments = collectionItems.length > 0;
   // The hub only appears when there's genuinely both kinds of work. Otherwise
@@ -447,24 +451,39 @@ export function PortalShell({
                 />
               )}
               <section className="animate-in-stagger space-y-3">
-                {collectionItems.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    token={ctx.engagement.magic_token ?? ""}
-                    item={item}
-                    locale={locale}
-                    uploadedCount={uploads[item.id] ?? 0}
-                    files={filesByItem[item.id] ?? []}
-                    rejection={ctx.rejection_summary_by_item[item.id] ?? null}
-                    autoRequestMissingPages={Boolean(
-                      ctx.firm.auto_request_missing_pages,
-                    )}
-                    onUploaded={(f) => handleUploaded(item.id, f)}
-                    onStatusChange={(status) =>
-                      handleItemUpdated(item.id, { status })
-                    }
-                  />
-                ))}
+                {collectionItems.map((item) =>
+                  item.kind === "question" ? (
+                    <QuestionItemCard
+                      key={item.id}
+                      token={ctx.engagement.magic_token ?? ""}
+                      item={item}
+                      locale={locale}
+                      onAnswered={(answer) =>
+                        handleItemUpdated(item.id, {
+                          status: "submitted",
+                          answer_text: answer,
+                        })
+                      }
+                    />
+                  ) : (
+                    <ItemCard
+                      key={item.id}
+                      token={ctx.engagement.magic_token ?? ""}
+                      item={item}
+                      locale={locale}
+                      uploadedCount={uploads[item.id] ?? 0}
+                      files={filesByItem[item.id] ?? []}
+                      rejection={ctx.rejection_summary_by_item[item.id] ?? null}
+                      autoRequestMissingPages={Boolean(
+                        ctx.firm.auto_request_missing_pages,
+                      )}
+                      onUploaded={(f) => handleUploaded(item.id, f)}
+                      onStatusChange={(status) =>
+                        handleItemUpdated(item.id, { status })
+                      }
+                    />
+                  ),
+                )}
               </section>
             </>
           )}

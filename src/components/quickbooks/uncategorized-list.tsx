@@ -76,6 +76,9 @@ export function UncategorizedList(props: {
   scanFailed: boolean;
   parkingAccounts: string[];
   accounts: Account[];
+  engagements: { id: string; title: string }[];
+  /** Transactions already put to the client, with their answer if it has come. */
+  asked: { key: string; answer: string | null }[];
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
@@ -83,6 +86,68 @@ export function UncategorizedList(props: {
 
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [engagementId, setEngagementId] = useState(
+    props.engagements[0]?.id ?? "",
+  );
+  const [asking, setAsking] = useState(false);
+  const [askResult, setAskResult] = useState<string | null>(null);
+  const [askError, setAskError] = useState<string | null>(null);
+
+  const askedMap = useMemo(
+    () => new Map(props.asked.map((a) => [a.key, a.answer])),
+    [props.asked],
+  );
+  // Only offer what has not been put to the client already. Asking the same
+  // question twice is the fastest way to make someone stop reading their portal.
+  const askable = useMemo(
+    () => props.txns.filter((x) => !askedMap.has(keyOf(x))),
+    [props.txns, askedMap],
+  );
+
+  const toggle = (k: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+
+  async function ask() {
+    if (selected.size === 0 || !engagementId) return;
+    setAsking(true);
+    setAskError(null);
+    setAskResult(null);
+    try {
+      const res = await fetch("/api/quickbooks/uncategorized/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: props.selectedClientId,
+          engagementId,
+          from: props.from,
+          to: props.to,
+          keys: [...selected],
+        }),
+      });
+      const body = (await res.json()) as {
+        ok?: boolean;
+        created?: number;
+        detail?: string;
+      };
+      if (!res.ok || !body.ok) {
+        setAskError(body.detail ?? t("uncat_ask_failed"));
+        return;
+      }
+      setAskResult(t("uncat_asked", { count: body.created ?? 0 }));
+      setSelected(new Set());
+      startTransition(() => router.refresh());
+    } catch {
+      setAskError(t("uncat_ask_failed"));
+    } finally {
+      setAsking(false);
+    }
+  }
 
   const setParam = (key: string, value: string) => {
     const url = new URL(window.location.href);
@@ -236,6 +301,22 @@ export function UncategorizedList(props: {
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="w-9 py-2">
+                  <input
+                    type="checkbox"
+                    checked={
+                      askable.length > 0 && selected.size === askable.length
+                    }
+                    aria-label={t("gaps_select_all")}
+                    onChange={(e) =>
+                      setSelected(
+                        e.target.checked
+                          ? new Set(askable.map(keyOf))
+                          : new Set<string>(),
+                      )
+                    }
+                  />
+                </th>
                 <th className="py-2 font-medium">{t("gaps_col_date")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_what")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_parked")}</th>
@@ -251,6 +332,8 @@ export function UncategorizedList(props: {
                 const state = rows[k] ?? { kind: "idle" };
                 const settled = state.kind === "done" || state.kind === "stale";
                 const likely = LIKELY_TYPES[txn.entity];
+                const wasAsked = askedMap.has(k);
+                const answer = askedMap.get(k) ?? null;
                 return (
                   <tr
                     key={k}
@@ -258,6 +341,21 @@ export function UncategorizedList(props: {
                       settled ? "text-muted-foreground" : ""
                     }`}
                   >
+                    <td className="py-2.5 align-top">
+                      {wasAsked ? (
+                        <Check
+                          className="h-4 w-4 text-icon-emerald"
+                          aria-label={t("uncat_already_asked")}
+                        />
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(k)}
+                          onChange={() => toggle(k)}
+                          aria-label={txn.partyName ?? txn.qboId}
+                        />
+                      )}
+                    </td>
                     <td className="py-2.5 align-top tabular-nums text-muted-foreground">
                       {txn.txnDate ?? "—"}
                     </td>
@@ -276,6 +374,18 @@ export function UncategorizedList(props: {
                           {txn.memo}
                         </div>
                       )}
+                      {/* The client's own words, next to the entry they explain
+                          — which is the whole point of asking through the
+                          checklist rather than over a message thread. */}
+                      {answer ? (
+                        <div className="mt-1.5 border-l-2 border-icon-emerald/40 pl-2 text-xs text-foreground/80">
+                          {answer}
+                        </div>
+                      ) : wasAsked ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {t("uncat_waiting_on_client")}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-2.5 align-top text-muted-foreground">
                       {txn.accountName ?? "—"}
@@ -368,6 +478,44 @@ export function UncategorizedList(props: {
           </table>
         </div>
       )}
+
+      {/* The other way to clear a row: when the firm cannot tell what an entry
+          was, only the client can. Appears once something is ticked — nothing
+          to press until there is something to press. */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+          {props.engagements.length === 0 ? (
+            <Note tone="warn">{t("gaps_no_open_engagement")}</Note>
+          ) : (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {t("gaps_ask_on")}
+              </span>
+              <Select value={engagementId} onValueChange={setEngagementId}>
+                <SelectTrigger className="h-8 w-[240px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {props.engagements.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" onClick={ask} disabled={asking}>
+                {asking && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                )}
+                {t("uncat_ask_button", { count: selected.size })}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {askResult && <Note tone="ok">{askResult}</Note>}
+      {askError && <Note tone="warn">{askError}</Note>}
 
       {/* Coded rows stay put rather than vanishing — an accountant working down
           a list needs to see what they have already done. The refresh is theirs

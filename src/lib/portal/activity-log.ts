@@ -12,6 +12,7 @@ export type PortalActivityAction =
   | "client_opened_signatures"
   | "client_opened_messages"
   | "client_opened_signature"
+  | "client_answered_question"
   | "client_downloaded_deliverable";
 
 // Only these metadata fields are read server-side (a bounded string each), so
