@@ -3093,6 +3093,8 @@
     "uncat_already_done": "Déjà catégorisée",
     "uncat_done": "{count, plural, one {# opération catégorisée} other {# opérations catégorisées}} dans QuickBooks.",
     "uncat_refresh": "Actualiser la liste",
+    "sel_selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
+    "sel_clear": "Effacer la sélection",
     "uncat_ask_button": "Demander au client pour {count, plural, one {# opération} other {# opérations}}",
     "uncat_asked": "Question envoyée au client pour {count, plural, one {# opération} other {# opérations}}.",
     "uncat_ask_failed": "Nous n'avons pas pu envoyer cette question. Réessayez.",

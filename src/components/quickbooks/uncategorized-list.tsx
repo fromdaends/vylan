@@ -19,6 +19,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { ReceiptIcon } from "@/components/quickbooks/receipt-icon";
+import { SelectionBar } from "@/components/quickbooks/selection-bar";
 
 type Txn = {
   qboId: string;
@@ -91,8 +93,6 @@ export function UncategorizedList(props: {
     props.engagements[0]?.id ?? "",
   );
   const [asking, setAsking] = useState(false);
-  const [askResult, setAskResult] = useState<string | null>(null);
-  const [askError, setAskError] = useState<string | null>(null);
 
   const askedMap = useMemo(
     () => new Map(props.asked.map((a) => [a.key, a.answer])),
@@ -116,8 +116,6 @@ export function UncategorizedList(props: {
   async function ask() {
     if (selected.size === 0 || !engagementId) return;
     setAsking(true);
-    setAskError(null);
-    setAskResult(null);
     try {
       const res = await fetch("/api/quickbooks/uncategorized/ask", {
         method: "POST",
@@ -136,14 +134,14 @@ export function UncategorizedList(props: {
         detail?: string;
       };
       if (!res.ok || !body.ok) {
-        setAskError(body.detail ?? t("uncat_ask_failed"));
+        toast.error(body.detail ?? t("uncat_ask_failed"));
         return;
       }
-      setAskResult(t("uncat_asked", { count: body.created ?? 0 }));
+      toast.success(t("uncat_asked", { count: body.created ?? 0 }));
       setSelected(new Set());
       startTransition(() => router.refresh());
     } catch {
-      setAskError(t("uncat_ask_failed"));
+      toast.error(t("uncat_ask_failed"));
     } finally {
       setAsking(false);
     }
@@ -480,42 +478,43 @@ export function UncategorizedList(props: {
       )}
 
       {/* The other way to clear a row: when the firm cannot tell what an entry
-          was, only the client can. Appears once something is ticked — nothing
-          to press until there is something to press. */}
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
-          {props.engagements.length === 0 ? (
-            <Note tone="warn">{t("gaps_no_open_engagement")}</Note>
-          ) : (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {t("gaps_ask_on")}
-              </span>
-              <Select value={engagementId} onValueChange={setEngagementId}>
-                <SelectTrigger className="h-8 w-[240px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {props.engagements.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" onClick={ask} disabled={asking}>
-                {asking && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                )}
-                {t("uncat_ask_button", { count: selected.size })}
-              </Button>
-            </>
-          )}
-        </div>
-      )}
-
-      {askResult && <Note tone="ok">{askResult}</Note>}
-      {askError && <Note tone="warn">{askError}</Note>}
+          was, only the client can. FLOATS once something is ticked — under the
+          table it would be below the fold on any list worth acting on. */}
+      <SelectionBar count={selected.size} onClear={() => setSelected(new Set())}>
+        {props.engagements.length === 0 ? (
+          <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            {t("gaps_no_open_engagement")}
+          </span>
+        ) : (
+          <>
+            <span className="text-muted-foreground">{t("gaps_ask_on")}</span>
+            <Select value={engagementId} onValueChange={setEngagementId}>
+              <SelectTrigger className="h-8 w-[200px] rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {props.engagements.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="rounded-full"
+              onClick={ask}
+              disabled={asking}
+            >
+              {asking && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              )}
+              {t("uncat_ask_button", { count: selected.size })}
+            </Button>
+          </>
+        )}
+      </SelectionBar>
 
       {/* Coded rows stay put rather than vanishing — an accountant working down
           a list needs to see what they have already done. The refresh is theirs

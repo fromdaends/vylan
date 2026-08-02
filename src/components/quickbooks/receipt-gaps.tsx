@@ -10,6 +10,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { ReceiptIcon } from "@/components/quickbooks/receipt-icon";
+import { SelectionBar } from "@/components/quickbooks/selection-bar";
 
 type Gap = {
   qboId: string;
@@ -68,8 +70,6 @@ export function ReceiptGaps(props: {
     props.engagements[0]?.id ?? "",
   );
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const setParam = (key: string, value: string) => {
     const url = new URL(window.location.href);
@@ -90,8 +90,6 @@ export function ReceiptGaps(props: {
   async function send() {
     if (selected.size === 0 || !engagementId) return;
     setSending(true);
-    setError(null);
-    setResult(null);
     try {
       const res = await fetch("/api/quickbooks/receipts/chase", {
         method: "POST",
@@ -113,14 +111,14 @@ export function ReceiptGaps(props: {
         error?: string;
       };
       if (!res.ok || !body.ok) {
-        setError(body.detail ?? t("gaps_send_failed"));
+        toast.error(body.detail ?? t("gaps_send_failed"));
         return;
       }
-      setResult(t("gaps_sent", { count: body.created ?? 0 }));
+      toast.success(t("gaps_sent", { count: body.created ?? 0 }));
       setSelected(new Set());
       startTransition(() => router.refresh());
     } catch {
-      setError(t("gaps_send_failed"));
+      toast.error(t("gaps_send_failed"));
     } finally {
       setSending(false);
     }
@@ -280,42 +278,48 @@ export function ReceiptGaps(props: {
         </div>
       )}
 
-      {/* The action sits under the list and only appears once something is
-          selected — nothing to press until there is something to press. */}
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
-          {props.engagements.length === 0 ? (
-            <Note tone="warn">{t("gaps_no_open_engagement")}</Note>
-          ) : (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {t("gaps_ask_on")}
-              </span>
-              <Select value={engagementId} onValueChange={setEngagementId}>
-                <SelectTrigger className="h-8 w-[240px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {props.engagements.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" onClick={send} disabled={sending}>
-                {sending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                )}
-                {t("gaps_ask_button", { count: selected.size })}
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+      {/* The action FLOATS once something is ticked. It used to sit under the
+          table, which put it a thousand pixels below the fold on a real list —
+          so ticking a row answered the click with nothing visible at all. */}
+      <SelectionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+      >
+        {props.engagements.length === 0 ? (
+          <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+            {t("gaps_no_open_engagement")}
+          </span>
+        ) : (
+          <>
+            <span className="text-muted-foreground">{t("gaps_ask_on")}</span>
+            <Select value={engagementId} onValueChange={setEngagementId}>
+              <SelectTrigger className="h-8 w-[200px] rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {props.engagements.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="rounded-full"
+              onClick={send}
+              disabled={sending}
+            >
+              {sending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              )}
+              {t("gaps_ask_button", { count: selected.size })}
+            </Button>
+          </>
+        )}
+      </SelectionBar>
 
-      {result && <Note tone="ok">{result}</Note>}
-      {error && <Note tone="warn">{error}</Note>}
     </div>
   );
 }
