@@ -504,6 +504,9 @@ export async function materializeBucketTargetAction(input: {
 export async function setDocumentsFolderAction(input: {
   targets: { source: string; id: string }[];
   folderId: string | null;
+  /** Set when the move fires from an approved AI Organize suggestion — same
+   * path, same audit event, plus the marker, attributed to the approver. */
+  aiSuggested?: boolean;
 }): Promise<MoveResult> {
   const firm = await getCurrentFirm();
   if (!firm) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
@@ -553,6 +556,7 @@ export async function setDocumentsFolderAction(input: {
       folder_id: input.folderId,
       count: succeeded,
       via: "folder",
+      ai_suggested: input.aiSuggested || undefined,
     });
   }
   revalidatePath("/files");

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildFolderIndex,
   categoryMisfile,
   duplicateSuggestions,
   lunaCandidates,
@@ -118,7 +119,7 @@ describe("proposalsToSuggestions", () => {
 
   it("null doc_type from Luna means NO suggestion — never a guess", () => {
     const out = proposalsToSuggestions(
-      [{ id: "checklist:d1", doc_type: null, year: null, reason: "unclear" }],
+      [{ id: "checklist:d1", doc_type: null, year: null, folder: null, reason: "unclear" }],
       byId,
     );
     expect(out).toEqual([]);
@@ -126,7 +127,7 @@ describe("proposalsToSuggestions", () => {
 
   it("an invented code outside the registry is dropped", () => {
     const out = proposalsToSuggestions(
-      [{ id: "checklist:d1", doc_type: "made_up_code", year: null, reason: "x" }],
+      [{ id: "checklist:d1", doc_type: "made_up_code", year: null, folder: null, reason: "x" }],
       byId,
     );
     expect(out).toEqual([]);
@@ -134,7 +135,7 @@ describe("proposalsToSuggestions", () => {
 
   it("a year alone (no type) becomes a misfile proposal when it differs", () => {
     const out = proposalsToSuggestions(
-      [{ id: "checklist:d1", doc_type: null, year: 2025, reason: "name says 2025" }],
+      [{ id: "checklist:d1", doc_type: null, year: 2025, folder: null, reason: "name says 2025" }],
       byId,
     );
     expect(out).toHaveLength(1);
@@ -144,7 +145,7 @@ describe("proposalsToSuggestions", () => {
 
   it("an absurd year is rejected", () => {
     const out = proposalsToSuggestions(
-      [{ id: "checklist:d1", doc_type: null, year: 224, reason: "typo" }],
+      [{ id: "checklist:d1", doc_type: null, year: 224, folder: null, reason: "typo" }],
       byId,
     );
     expect(out).toEqual([]);
@@ -169,5 +170,72 @@ describe("stateMatches — the staleness fingerprint", () => {
   it("garbage stored state never matches", () => {
     expect(stateMatches(null, row())).toBe(false);
     expect(stateMatches("x", row())).toBe(false);
+  });
+});
+
+describe("folder proposals — organize into folders the firm created", () => {
+  const r = row({ ai_doc_type: null, ai_confidence: null });
+  const filingRow = row({ id: "d9", ai_doc_type: "t4", ai_confidence: 0.95 });
+  const { idByName } = buildFolderIndex([
+    { id: "f-hello", name: "hello" },
+    { id: "f-a", name: "Taxes" },
+    { id: "f-b", name: "taxes" }, // same name, different level → ambiguous
+  ]);
+
+  it("a matched folder alone becomes a filing suggestion", () => {
+    const byId = new Map([[`checklist:${r.id}`, { row: r, bucket: "unprocessed" as const }]]);
+    const out = proposalsToSuggestions(
+      [{ id: "checklist:d1", doc_type: null, year: null, folder: "hello", reason: "name matches" }],
+      byId,
+      idByName,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].bucket).toBe("filing");
+    expect(out[0].proposed_state).toEqual({ folder_id: "f-hello", folder_name: "hello" });
+  });
+
+  it("an ambiguous folder name produces NOTHING", () => {
+    const byId = new Map([[`checklist:${r.id}`, { row: r, bucket: "unprocessed" as const }]]);
+    const out = proposalsToSuggestions(
+      [{ id: "checklist:d1", doc_type: null, year: null, folder: "Taxes", reason: "x" }],
+      byId,
+      idByName,
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a filing-pool row ignores any type Luna offers — its type is settled", () => {
+    const byId = new Map([[`checklist:${filingRow.id}`, { row: filingRow, bucket: "filing" as const }]]);
+    const out = proposalsToSuggestions(
+      [{ id: "checklist:d9", doc_type: "rl1", year: 2020, folder: "hello", reason: "x" }],
+      byId,
+      idByName,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].bucket).toBe("filing");
+    expect(out[0].proposed_state).toEqual({ folder_id: "f-hello", folder_name: "hello" });
+  });
+
+  it("a type proposal carries the matched folder along", () => {
+    const byId = new Map([[`checklist:${r.id}`, { row: r, bucket: "unprocessed" as const }]]);
+    const out = proposalsToSuggestions(
+      [{ id: "checklist:d1", doc_type: "t4", year: 2025, folder: "hello", reason: "x" }],
+      byId,
+      idByName,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].bucket).toBe("unprocessed");
+    expect(out[0].proposed_state).toMatchObject({ doc_type: "t4", folder_id: "f-hello" });
+  });
+
+  it("a folder the file is already in is not a move", () => {
+    const inFolder = row({ folder_id: "f-hello", ai_doc_type: null, ai_confidence: null });
+    const byId = new Map([[`checklist:${inFolder.id}`, { row: inFolder, bucket: "filing" as const }]]);
+    const out = proposalsToSuggestions(
+      [{ id: "checklist:d1", doc_type: null, year: null, folder: "hello", reason: "x" }],
+      byId,
+      idByName,
+    );
+    expect(out).toEqual([]);
   });
 });

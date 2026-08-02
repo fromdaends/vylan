@@ -3589,6 +3589,8 @@
     "organize_dismissed": "Rejeté — vous ne serez plus sollicité pour ce fichier.",
     "organize_expired": "Ce fichier a changé depuis la suggestion; elle a été retirée.",
     "organize_proposed_delete": "Supprimer cette copie (récupérable pendant 30 jours)",
+    "organize_bucket_filing": "Suggestions de classement",
+    "organize_into_folder": "dans « {name} »",
     "organize_bucket_misfile": "Mauvais classements présumés",
     "organize_bucket_duplicate": "Doublons",
     "organize_bucket_low_confidence": "Types incertains",

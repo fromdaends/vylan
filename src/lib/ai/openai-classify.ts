@@ -256,6 +256,9 @@ export type LunaProposal = {
   id: string;
   doc_type: string | null;
   year: number | null;
+  /** One of the provided folder names, or null. Only meaningful when the
+   * caller supplied the client's folder list. */
+  folder: string | null;
   reason: string;
 };
 
@@ -274,9 +277,10 @@ const LUNA_SCHEMA = {
           id: { type: "string" },
           doc_type: { type: ["string", "null"] },
           year: { type: ["integer", "null"] },
+          folder: { type: ["string", "null"] },
           reason: { type: "string" },
         },
-        required: ["id", "doc_type", "year", "reason"],
+        required: ["id", "doc_type", "year", "folder", "reason"],
         additionalProperties: false,
       },
     },
@@ -293,15 +297,22 @@ const LUNA_SCHEMA = {
 export async function organizeWithLuna(opts: {
   files: LunaFile[];
   validDocTypes: string[];
+  /** The client's own folder names, when the batch is for one client. Luna
+   * may match a file to one of THESE names — never to an invented one. */
+  folderNames?: string[];
 }): Promise<{ proposals: LunaProposal[]; usage: { input: number; output: number } | null }> {
   const c = client();
   if (!c || opts.files.length === 0) return { proposals: [], usage: null };
 
+  const folders = opts.folderNames ?? [];
   const system = [
     "You organize documents for Canadian accounting firms using ONLY their file names.",
     "For each file, propose the most likely document type code and, when the name contains one, the 4-digit tax/statement year.",
     `Valid document type codes: ${opts.validDocTypes.join(", ")}.`,
-    "If the name is not clear enough to be confident, return doc_type: null — a wrong label is worse than no label.",
+    folders.length > 0
+      ? `This client's folders: ${folders.map((f) => JSON.stringify(f)).join(", ")}. When a file's name clearly relates to exactly one of these folder names, return that folder name in "folder"; otherwise folder: null. Never invent a folder name.`
+      : "The client has no folders — always return folder: null.",
+    "If the name is not clear enough to be confident, return doc_type: null — a wrong label is worse than no label. The same restraint applies to folder.",
     "reason: one short sentence (max 15 words) explaining the proposal, written in the same language as the file name (French or English).",
     "Never invent codes outside the list. Never infer from anything except the provided name and current labels.",
   ].join("\n");

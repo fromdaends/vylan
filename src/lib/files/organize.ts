@@ -29,7 +29,11 @@ export type OrganizeBucket =
   | "low_confidence"
   | "misfile"
   | "duplicate"
-  | "unprocessed";
+  | "unprocessed"
+  // A file whose NAME matches one of the folders the firm created for that
+  // client ("Hydro bill.pdf" → "Bookkeeping & business"). Founder direction:
+  // organize into created folders too, not just the year/category structure.
+  | "filing";
 
 /** Below this intake confidence a classification counts as "low". */
 export const LOW_CONFIDENCE_THRESHOLD = 0.6;
@@ -185,13 +189,34 @@ export function lunaCandidates(rows: ScanRow[], now = Date.now()) {
   return { unprocessed, lowConfidence };
 }
 
+/** Per-client folder lookup: lowercased name → folder id, or null when two
+ * folders share a name (different levels can) — ambiguity means no proposal. */
+export type FolderIdByName = Map<string, string | null>;
+
+export function buildFolderIndex(
+  folders: Array<{ id: string; name: string }>,
+): { names: string[]; idByName: FolderIdByName } {
+  const idByName: FolderIdByName = new Map();
+  const names: string[] = [];
+  for (const f of folders) {
+    names.push(f.name);
+    const key = f.name.trim().toLowerCase();
+    idByName.set(key, idByName.has(key) ? null : f.id);
+  }
+  return { names, idByName };
+}
+
 /** Turn Luna's answers into suggestion rows. Null doc_type = Luna was not
  * sure = no suggestion, never a guess. A year that contradicts the row's
  * (non-manual, checked by caller) year becomes a misfile suggestion even
- * when the type already matched. */
+ * when the type already matched. A matched FOLDER rides along on any of
+ * them; on its own it becomes a "filing" suggestion — and for filing-pool
+ * rows (already well-typed) the folder is the ONLY thing considered, because
+ * their type is settled and not Luna's to reopen. */
 export function proposalsToSuggestions(
   proposals: LunaProposal[],
   byId: Map<string, { row: ScanRow; bucket: OrganizeBucket }>,
+  folderIdByName: FolderIdByName = new Map(),
 ): SuggestionInsert[] {
   const out: SuggestionInsert[] = [];
   for (const p of proposals) {
@@ -205,6 +230,31 @@ export function proposalsToSuggestions(
     const proposedYear =
       p.year != null && p.year >= 1990 && p.year <= 2100 ? p.year : null;
 
+    // Resolve the folder Luna named, if any: unknown or ambiguous names
+    // resolve to nothing, and a folder the file is already in is not a move.
+    let folderPatch: { folder_id: string; folder_name: string } | null = null;
+    if (p.folder) {
+      const id = folderIdByName.get(p.folder.trim().toLowerCase());
+      if (id && id !== row.folder_id) {
+        folderPatch = { folder_id: id, folder_name: p.folder.trim() };
+      }
+    }
+
+    if (bucket === "filing") {
+      if (!folderPatch) continue;
+      out.push({
+        firm_id: row.firm_id,
+        client_id: row.client_id,
+        source: row.source,
+        document_id: row.id,
+        bucket: "filing",
+        current_state: stateOf(row),
+        proposed_state: folderPatch,
+        reasoning: p.reason?.slice(0, 300) || null,
+      });
+      continue;
+    }
+
     if (validType) {
       out.push({
         firm_id: row.firm_id,
@@ -217,6 +267,7 @@ export function proposalsToSuggestions(
           doc_type: validType,
           category: categoryForDocType(validType) ?? null,
           year: proposedYear ?? row.browse_year,
+          ...(folderPatch ?? {}),
         },
         reasoning: p.reason?.slice(0, 300) || null,
       });
@@ -228,7 +279,18 @@ export function proposalsToSuggestions(
         document_id: row.id,
         bucket: "misfile",
         current_state: stateOf(row),
-        proposed_state: { year: proposedYear },
+        proposed_state: { year: proposedYear, ...(folderPatch ?? {}) },
+        reasoning: p.reason?.slice(0, 300) || null,
+      });
+    } else if (folderPatch) {
+      out.push({
+        firm_id: row.firm_id,
+        client_id: row.client_id,
+        source: row.source,
+        document_id: row.id,
+        bucket: "filing",
+        current_state: stateOf(row),
+        proposed_state: folderPatch,
         reasoning: p.reason?.slice(0, 300) || null,
       });
     }
@@ -255,7 +317,7 @@ export async function runOrganizeScan(opts: { firmId?: string } = {}): Promise<S
   const result: ScanResult = {
     firms: 0,
     scanned: 0,
-    created: { low_confidence: 0, misfile: 0, duplicate: 0, unprocessed: 0 },
+    created: { low_confidence: 0, misfile: 0, duplicate: 0, unprocessed: 0, filing: 0 },
     expired: 0,
     lunaFiles: 0,
     truncated: false,
@@ -356,34 +418,94 @@ export async function runOrganizeScan(opts: { firmId?: string } = {}): Promise<S
 
     candidates.push(...duplicateSuggestions(rows));
 
-    // ── Luna: name-based proposals for the unlabeled ────────────────────
+    // ── Luna: name-based proposals ──────────────────────────────────────
+    // Three pools share the per-run cap: unlabeled files (type proposals),
+    // low-confidence files (second opinions), and — founder direction — any
+    // UNFILED file of a client that has folders, so the folders the firm
+    // created are destinations too. Batches are grouped per client, because
+    // each call carries that client's folder names.
+    const { data: folderRows } = await sb
+      .from("document_folders")
+      .select("id, client_id, name")
+      .eq("firm_id", firmId)
+      .is("deleted_at", null);
+    const foldersByClient = new Map<
+      string,
+      ReturnType<typeof buildFolderIndex>
+    >();
+    {
+      const grouped = new Map<string, Array<{ id: string; name: string }>>();
+      for (const f of (folderRows ?? []) as Array<{
+        id: string;
+        client_id: string;
+        name: string;
+      }>) {
+        const g = grouped.get(f.client_id) ?? [];
+        g.push({ id: f.id, name: f.name });
+        grouped.set(f.client_id, g);
+      }
+      for (const [clientId, fs] of grouped) {
+        foldersByClient.set(clientId, buildFolderIndex(fs));
+      }
+    }
+
     const { unprocessed, lowConfidence } = lunaCandidates(rows);
+    const inTypePools = new Set(
+      [...unprocessed, ...lowConfidence].map((r) => `${r.source}|${r.id}`),
+    );
+    // Well-typed but unfiled, for a client with folders: folder-match only.
+    const filingPool = rows.filter(
+      (r) =>
+        r.folder_id == null &&
+        foldersByClient.has(r.client_id) &&
+        !inTypePools.has(`${r.source}|${r.id}`),
+    );
+
     const lunaPool: Array<{ row: ScanRow; bucket: OrganizeBucket }> = [
       ...unprocessed.map((row) => ({ row, bucket: "unprocessed" as const })),
       ...lowConfidence.map((row) => ({ row, bucket: "low_confidence" as const })),
+      ...filingPool.map((row) => ({ row, bucket: "filing" as const })),
     ].slice(0, MAX_LUNA_FILES_PER_RUN);
-    if (unprocessed.length + lowConfidence.length > lunaPool.length) {
+    if (
+      unprocessed.length + lowConfidence.length + filingPool.length >
+      lunaPool.length
+    ) {
       result.truncated = true;
     }
 
     const byId = new Map(lunaPool.map((c) => [`${c.row.source}:${c.row.id}`, c]));
     const validDocTypes = Object.keys(DOC_TYPE_LABELS);
-    for (let i = 0; i < lunaPool.length; i += LUNA_BATCH) {
-      const batch = lunaPool.slice(i, i + LUNA_BATCH);
-      const files: LunaFile[] = batch.map((c) => ({
-        id: `${c.row.source}:${c.row.id}`,
-        name: c.row.name,
-        currentDocType: c.row.ai_doc_type,
-        currentYear: c.row.browse_year,
-      }));
-      try {
-        const { proposals } = await organizeWithLuna({ files, validDocTypes });
-        result.lunaFiles += files.length;
-        candidates.push(...proposalsToSuggestions(proposals, byId));
-      } catch {
-        // A failed Luna batch skips those files this run; the nightly rerun
-        // is the retry path. Suggestions are advisory — never worth crashing
-        // the whole scan for.
+    const byClient = new Map<string, typeof lunaPool>();
+    for (const c of lunaPool) {
+      const g = byClient.get(c.row.client_id) ?? [];
+      g.push(c);
+      byClient.set(c.row.client_id, g);
+    }
+    for (const [clientId, pool] of byClient) {
+      const folderIndex = foldersByClient.get(clientId);
+      for (let i = 0; i < pool.length; i += LUNA_BATCH) {
+        const batch = pool.slice(i, i + LUNA_BATCH);
+        const files: LunaFile[] = batch.map((c) => ({
+          id: `${c.row.source}:${c.row.id}`,
+          name: c.row.name,
+          currentDocType: c.row.ai_doc_type,
+          currentYear: c.row.browse_year,
+        }));
+        try {
+          const { proposals } = await organizeWithLuna({
+            files,
+            validDocTypes,
+            folderNames: folderIndex?.names,
+          });
+          result.lunaFiles += files.length;
+          candidates.push(
+            ...proposalsToSuggestions(proposals, byId, folderIndex?.idByName),
+          );
+        } catch {
+          // A failed Luna batch skips those files this run; the nightly rerun
+          // is the retry path. Suggestions are advisory — never worth crashing
+          // the whole scan for.
+        }
       }
     }
 
@@ -502,6 +624,7 @@ export async function openSuggestionCounts(): Promise<{
     misfile: 0,
     duplicate: 0,
     unprocessed: 0,
+    filing: 0,
   };
   if (error) return { counts, total: 0, available: false };
   for (const r of (data ?? []) as Array<{ bucket: OrganizeBucket }>) {

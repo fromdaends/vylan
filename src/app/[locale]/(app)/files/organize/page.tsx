@@ -22,6 +22,7 @@ import { isBrowseCategory } from "@/lib/files/axes";
 export const dynamic = "force-dynamic";
 
 const BUCKET_ORDER: OrganizeBucket[] = [
+  "filing",
   "misfile",
   "duplicate",
   "low_confidence",
@@ -72,6 +73,7 @@ export default async function OrganizePage({
       s.currentState.year != null ? String(s.currentState.year) : null,
       categoryLabel(s.currentState.category),
     ]);
+    const folderName = (s.proposedState.folder_name as string | null) ?? null;
     const proposed =
       s.bucket === "duplicate"
         ? t("organize_proposed_delete")
@@ -79,6 +81,7 @@ export default async function OrganizePage({
             typeLabel((s.proposedState.doc_type as string | null) ?? null),
             s.proposedState.year != null ? String(s.proposedState.year) : null,
             categoryLabel((s.proposedState.category as string | null) ?? null),
+            folderName ? t("organize_into_folder", { name: folderName }) : null,
           ]);
     return {
       id: s.id,
