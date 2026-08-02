@@ -14,6 +14,8 @@ import {
 } from "@/lib/engagements/status-pill";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { listClientMembers } from "@/lib/db/client-members";
+import { ClientTeam } from "@/components/clients/client-team";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
@@ -141,6 +143,22 @@ export default async function ClientDetailPage({
   const assignableMembers = firmUsers
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
+
+  // Phase 3 slice 1: who works on this client. Descriptive only — nothing
+  // reads it for access control yet (see 1210_client_members.sql).
+  const castRows = await listClientMembers(id);
+  const nameOf = new Map(firmUsers.map((u) => [u.id, userDisplayLabel(u)]));
+  const cast = castRows
+    // A member whose user row is gone from the roster read has been removed
+    // from the firm; showing an id would be worse than showing nothing.
+    .filter((m) => nameOf.has(m.userId))
+    .map((m) => ({
+      userId: m.userId,
+      name: nameOf.get(m.userId)!,
+      position: m.position,
+    }));
+  const castIds = new Set(cast.map((m) => m.userId));
+  const castCandidates = assignableMembers.filter((u) => !castIds.has(u.id));
   const connectedAccountId = firm?.stripe_connect_account_id ?? null;
   if (connectedAccountId) {
     const pending = await listFirmPaymentsWithNames({ clientId: id });
@@ -393,6 +411,20 @@ export default async function ClientDetailPage({
           province / industry / timezone come from migration 0220 and may be
           undefined at runtime until it is applied, so each is read with ?? null
           and DetailRow renders "Not specified" rather than a blank row. */}
+      {/* Who works on this client. Rail, above About: on somebody else's client
+          the first question is "who is on this", not what industry they are
+          in. Team mode only — a solo firm has no cast to name. */}
+      {teamEnabled && (
+        <Panel title={t("team_title")}>
+          <ClientTeam
+            clientId={id}
+            members={cast}
+            candidates={castCandidates}
+            canEdit={canManageClients}
+          />
+        </Panel>
+      )}
+
       <Panel title={t("about_title")}>
         <dl className="space-y-3 text-sm">
           <DetailRow
