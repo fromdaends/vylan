@@ -357,6 +357,7 @@ export default async function SettingsPage({
         firmLogoUrl={firmLogoUrl}
         email={user.email}
         mfaEnabled={mfaEnabled}
+        invitePolicy={firm.invite_policy === "members" ? "members" : "owner"}
         notifications={notifications}
         focusEventKey={focusEventKey ?? null}
         initialSection={tab}

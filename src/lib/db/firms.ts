@@ -93,6 +93,12 @@ export type Firm = {
   // enabled; owners can leave/disband a one-person team without deleting any
   // firm data, then create the team again later.
   team_enabled: boolean;
+  // Who may invite teammates (migration 1200): 'owner' (the default, and what
+  // every firm did before the setting existed) or 'members'. OPTIONAL at
+  // runtime until 1200 is applied — read it through inviteePolicy() below
+  // rather than directly, so an unapplied migration reads as 'owner' instead
+  // of undefined.
+  invite_policy?: "owner" | "members";
   // When true, new clients default to private (owner-only) and enabling it
   // backfilled existing clients to private (migration 0830). Owner-set from
   // Team > Firm settings. Possibly undefined at runtime until 0830 is applied;
@@ -157,6 +163,7 @@ export async function updateCurrentFirm(
       | "default_reminder_settings"
       | "service_prices"
       | "logo_url"
+      | "invite_policy"
     >
   >,
 ): Promise<Firm> {
@@ -172,4 +179,16 @@ export async function updateCurrentFirm(
     .single();
   if (error) throw error;
   return data as Firm;
+}
+
+// Who may invite, read safely.
+//
+// Anything but the exact string 'members' means owners only — including the
+// undefined a firm row returns before migration 1200 is applied, and including
+// a value some future migration adds that this build has never heard of. A
+// security setting must fail to the TIGHT side when it cannot read itself.
+export function firmAllowsMemberInvites(
+  firm: Pick<Firm, "invite_policy"> | null | undefined,
+): boolean {
+  return firm?.invite_policy === "members";
 }

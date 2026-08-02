@@ -112,6 +112,7 @@ function renderShell(
         firmLogoUrl={null}
         email={EMAIL}
         mfaEnabled={false}
+        invitePolicy="owner"
         initialSection="security"
         {...overrides}
       />

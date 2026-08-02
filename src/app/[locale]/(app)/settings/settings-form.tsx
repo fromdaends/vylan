@@ -18,6 +18,7 @@ import {
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
 import { isOwnerOnlySettingsSection } from "@/lib/settings/owner-sections";
+import { FirmSecuritySection } from "@/components/settings/firm-security-section";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -133,6 +134,7 @@ export function SettingsShell({
   firmLogoUrl,
   email,
   mfaEnabled,
+  invitePolicy,
   notifications,
   focusEventKey,
   initialSection,
@@ -194,6 +196,7 @@ export function SettingsShell({
   firmLogoUrl: string | null;
   email: string;
   mfaEnabled: boolean;
+  invitePolicy: "owner" | "members";
   // The signed-in user's own notification preferences. Not owner-gated: every
   // teammate has their own, unlike the firm-wide tabs around it.
   notifications: NotificationSettingsBundle;
@@ -305,6 +308,10 @@ export function SettingsShell({
         {section === "security" && (
           <div className="space-y-12">
             <MfaSection initialEnabled={mfaEnabled} />
+            {/* Yours above, the firm's below. Owner-only: these settings decide
+                what other people may do, so deciding them cannot be one of the
+                things other people may do. */}
+            {isOwner && <FirmSecuritySection invitePolicy={invitePolicy} />}
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
