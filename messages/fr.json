@@ -3049,6 +3049,7 @@
     "filing_desc": "Classez les documents approuvés vers Google Drive, SharePoint, Dropbox ou SmartVault."
   },
   "Quickbooks": {
+    "close_ledger_xero_pending": "Vérifications Xero à venir",
     "queue_col_client": "Client",
     "queue_col_document": "Document",
     "queue_col_amount": "Montant",
