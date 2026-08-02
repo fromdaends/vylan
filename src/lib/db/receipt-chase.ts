@@ -75,7 +75,7 @@ export function parseLedgerRef(v: unknown): LedgerTxnRef | null {
 export class LedgerRefUnsupportedError extends Error {
   constructor() {
     super(
-      "Receipt chasing needs database update 1120. Run supabase/migrations/1120_request_item_ledger_txn.sql, then try again.",
+      "Receipt chasing needs database update 1121. Run supabase/migrations/1121_request_item_ledger_txn.sql, then try again.",
     );
     this.name = "LedgerRefUnsupportedError";
   }

@@ -27,7 +27,7 @@ export type MonthClose = {
 export class MonthCloseUnsupportedError extends Error {
   constructor() {
     super(
-      "Closing a month needs database update 1200. Run supabase/migrations/1200_month_end_closes.sql, then try again.",
+      "Closing a month needs database update 1201. Run supabase/migrations/1201_month_end_closes.sql, then try again.",
     );
     this.name = "MonthCloseUnsupportedError";
   }
