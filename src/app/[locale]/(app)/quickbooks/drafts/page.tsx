@@ -404,6 +404,7 @@ export default async function QuickbooksDraftsPage({
         title={t("queue_title")}
         missingReceiptsLabel={t("gaps_title")}
         uncategorizedLabel={t("uncat_title")}
+        closeLabel={t("close_title")}
         subtitle={t("summary_drafts", { count: counts.total })}
       />
       {health === "reconnect_required" && (
@@ -483,11 +484,13 @@ function Header({
   subtitle,
   missingReceiptsLabel,
   uncategorizedLabel,
+  closeLabel,
 }: {
   title: string;
   subtitle: string;
   missingReceiptsLabel: string;
   uncategorizedLabel: string;
+  closeLabel: string;
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
@@ -515,6 +518,13 @@ function Header({
           className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           {uncategorizedLabel}
+        </Link>
+        {/* And the screen that reads both of those per client, per month. */}
+        <Link
+          href="/quickbooks/close"
+          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {closeLabel}
         </Link>
       </div>
     </header>
