@@ -39,6 +39,11 @@ import {
 type Row = {
   clientId: string;
   name: string;
+  // Which ledger this client's books live in. What the client owes and the
+  // close itself are provider-agnostic; the two LEDGER numbers are read
+  // through QuickBooks only, so a Xero row reports them as unavailable rather
+  // than as zero — the same reason they start blank instead of at 0.
+  provider: "quickbooks" | "xero";
   openRequests: number;
   closedAt: string | null;
   closedBy: string | null;
@@ -130,7 +135,11 @@ export function CloseBoard(props: {
   // like the feature being broken.
   async function checkAll() {
     setCheckingAll(true);
+    // Xero rows have nothing to scan yet — asking the QuickBooks route about
+    // them would just return "not connected" and dress a missing feature up as
+    // a broken connection.
     for (const row of props.rows) {
+      if (row.provider !== "quickbooks") continue;
       await check(row.clientId);
     }
     setCheckingAll(false);
@@ -247,6 +256,15 @@ export function CloseBoard(props: {
                   </td>
 
                   <td className="py-2.5 align-top">
+                    {/* Xero: the ledger scans are QuickBooks-only so far. Say
+                        that, rather than offering a Check that cannot answer
+                        or — far worse — printing a 0 that reads as "clean". */}
+                    {row.provider !== "quickbooks" ? (
+                      <span className="text-muted-foreground">
+                        {t("close_ledger_xero_pending")}
+                      </span>
+                    ) : (
+                      <>
                     {state.kind === "unchecked" && (
                       <Button
                         size="sm"
@@ -305,6 +323,8 @@ export function CloseBoard(props: {
                           )}
                         </span>
                       ))}
+                      </>
+                    )}
                   </td>
 
                   <td className="py-2.5 align-top">

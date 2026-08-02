@@ -35,6 +35,8 @@ import { cn } from "@/lib/cn";
 import { BookOpenCheck } from "lucide-react";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmQuickbooksConnectedClients } from "@/lib/db/quickbooks";
+import { listFirmXeroConnectedClients } from "@/lib/db/xero";
+import { mergeCloseClients } from "@/lib/close/clients";
 import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import {
   listClosesForPeriod,
@@ -86,10 +88,15 @@ export default async function BookkeepingPage({
     ? sp.period
     : defaultPeriod(new Date().toISOString().slice(0, 10));
 
-  const [firm, connectedClients] = await Promise.all([
+  // BOTH ledgers. The board is "what is left to do this month", and a Xero
+  // client's month is exactly as open as a QuickBooks one's — listing only
+  // QuickBooks made half a mixed firm's clients silently absent from it.
+  const [firm, qboClients, xeroClients] = await Promise.all([
     getCurrentFirm(),
     listFirmQuickbooksConnectedClients(),
+    listFirmXeroConnectedClients(),
   ]);
+  const connectedClients = mergeCloseClients(qboClients, xeroClients);
 
   // The close section's data — database reads only, so it never delays the page
   // on a ledger call.
@@ -155,7 +162,8 @@ export default async function BookkeepingPage({
               const close = closes.get(c.clientId);
               return {
                 clientId: c.clientId,
-                name: c.clientName ?? c.companyName ?? c.clientId,
+                name: c.name,
+                provider: c.provider,
                 openRequests: openRequests.get(c.clientId) ?? 0,
                 closedAt: close?.closedAt ?? null,
                 closedBy: close?.closedBy
