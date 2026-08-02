@@ -15,7 +15,7 @@ import {
 } from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { isCapability, isPreset } from "@/lib/auth/capabilities";
-import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentFirm, firmAllowsMemberInvites } from "@/lib/db/firms";
 import { isOnTrial } from "@/lib/trial";
 import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
@@ -83,7 +83,15 @@ export async function createInvite(
 ): Promise<CreateInviteResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
-  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // Who may invite is now the firm's own setting (migration 1200), not a
+  // hard-coded rank. Owners always may; members may when the firm says so.
+  // Revoking and resending are gated identically on purpose — a person who can
+  // send an invite must be able to take it back, or the only way to undo their
+  // own mistake is to interrupt the owner, which is the friction the setting
+  // exists to remove.
+  if (user.role !== "owner" && !firmAllowsMemberInvites(firm)) {
+    return { ok: false, error: "owner_only" };
+  }
   if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
   // Free-trial firms are owner-only: inviting teammates / adding seats unlocks
   // when they convert to a paid plan. The UI hides the invite control; this is
@@ -194,7 +202,15 @@ export async function revokeInvite(
 ): Promise<InviteMutationResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
-  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // Who may invite is now the firm's own setting (migration 1200), not a
+  // hard-coded rank. Owners always may; members may when the firm says so.
+  // Revoking and resending are gated identically on purpose — a person who can
+  // send an invite must be able to take it back, or the only way to undo their
+  // own mistake is to interrupt the owner, which is the friction the setting
+  // exists to remove.
+  if (user.role !== "owner" && !firmAllowsMemberInvites(firm)) {
+    return { ok: false, error: "owner_only" };
+  }
 
   const admin = getServiceRoleSupabase();
   const { data: updated, error } = await admin
@@ -234,7 +250,15 @@ export async function resendInvite(
 ): Promise<ResendInviteResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
-  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // Who may invite is now the firm's own setting (migration 1200), not a
+  // hard-coded rank. Owners always may; members may when the firm says so.
+  // Revoking and resending are gated identically on purpose — a person who can
+  // send an invite must be able to take it back, or the only way to undo their
+  // own mistake is to interrupt the owner, which is the friction the setting
+  // exists to remove.
+  if (user.role !== "owner" && !firmAllowsMemberInvites(firm)) {
+    return { ok: false, error: "owner_only" };
+  }
 
   const admin = getServiceRoleSupabase();
   const { data: invite } = await admin
@@ -1086,6 +1110,48 @@ export async function setFirmTeamFlag(
   await logUserActivity(firm.id, null, "firm_settings_changed", {
     setting: flag,
     value: enabled,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Who may invite teammates (migration 1200). A string setting rather than a
+// boolean flag, so it gets its own action instead of joining TEAM_FLAGS —
+// which exists precisely to stop a caller writing an arbitrary value into an
+// arbitrary column.
+//
+// Owner-only to CHANGE, always. The setting decides who may invite; deciding
+// who decides is the owner's, or a member could grant themselves the right on
+// the way to using it.
+export async function setInvitePolicy(
+  policy: "owner" | "members",
+): Promise<FirmSettingResult | { ok: false; error: "unavailable" }> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (policy !== "owner" && policy !== "members") {
+    return { ok: false, error: "update_failed" };
+  }
+
+  const admin = getServiceRoleSupabase();
+  const { error } = await admin
+    .from("firms")
+    .update({ invite_policy: policy })
+    .eq("id", firm.id);
+  if (error) {
+    // 1200 not applied yet. Reported as unavailable so the switch can say so
+    // rather than appearing to work — and every read still falls back to
+    // owner-only, which is today's behaviour.
+    if (error.code === "PGRST204" || error.code === "42703") {
+      return { ok: false, error: "unavailable" };
+    }
+    console.error("[team] setInvitePolicy failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "firm_settings_changed", {
+    setting: "invite_policy",
+    value: policy,
   });
   revalidatePath("/", "layout");
   return { ok: true };
