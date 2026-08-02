@@ -1032,6 +1032,67 @@ export async function quickbooksDelete(
   return { id, syncToken };
 }
 
+// UPDATE a transaction that already exists in the client's books.
+//
+// Deliberately NOT keyed on QboTxnEntity. That list is the allowlist of things
+// Vylan may CREATE, and widening it to cover an entity we only ever edit (a
+// Deposit) would quietly grant the posting path a fifth thing to write. The
+// caller names the URL path and the response key instead.
+//
+// FULL UPDATE, NOT SPARSE. Intuit's sparse update replaces the whole Line array
+// with whatever you send, so a "sparse" edit that names one line DELETES every
+// other line on the transaction. The only safe shape is: read the object back,
+// change what you mean to change, send all of it. The caller does the reading,
+// because it is also the caller's job to check the object still says what it
+// said when the firm looked at it.
+//
+// The SyncToken in `body` is QuickBooks' optimistic lock: if anyone edited the
+// transaction since it was read, the write fails rather than overwriting them.
+// That failure is the feature — surfaced as a typed error, never retried blind.
+export async function quickbooksUpdateEntity(
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
+  target: { path: string; responseKey: string },
+  body: Record<string, unknown>,
+): Promise<QboEntityResult> {
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
+    `/${target.path}?operation=update&minorversion=${QBO_MINORVERSION}`;
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "update",
+  );
+  const tid = tidOf(res);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new QuickbooksError(
+      "write_failed",
+      withTid(`QuickBooks update failed (${res.status}): ${truncate(detail)}`, tid),
+      res.status,
+      tid,
+    );
+  }
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  return parseEntityResult(json, target.responseKey, tid);
+}
+
 // Map a file's stored MIME (or its extension) to a type QuickBooks accepts for an
 // attachment. QBO REJECTS application/octet-stream, so a missing/generic type is
 // resolved from the filename extension; an unresolvable type returns null so the
