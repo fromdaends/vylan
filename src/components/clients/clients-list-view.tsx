@@ -7,6 +7,7 @@ import {
   ClientsTable,
   type ClientEngagementRow,
   type ClientEngagementSummary,
+  type ClientRelationshipBadge,
 } from "./clients-table";
 import type { Client } from "@/lib/db/clients";
 import type { SortKey } from "./sort";
@@ -34,11 +35,13 @@ export function ClientsListView({
   sort,
   activeOnly,
   teamEnabled,
+  relationships,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
   engagementsByClient: Record<string, ClientEngagementRow[]>;
   owners: Record<string, ClientOwner>;
+  relationships?: Record<string, ClientRelationshipBadge>;
   currentUserId: string;
   // "all" | "mine" | a specific member id.
   ownerFilter: string;
@@ -93,6 +96,7 @@ export function ClientsListView({
           currentUserId={currentUserId}
           locale={locale}
           teamEnabled={teamEnabled}
+          relationships={relationships}
         />
       )}
     </div>

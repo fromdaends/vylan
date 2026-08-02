@@ -32,6 +32,7 @@ import {
   ChevronRight,
   ArrowUpRight,
   FileText,
+  Link2,
 } from "lucide-react";
 import { ClientFormDialog } from "./client-form-dialog";
 import {
@@ -69,6 +70,11 @@ export type ClientEngagementRow = {
   due_date: string | null;
 };
 
+// Relationships indicator (spec §3): rows with linked clients get a subtle
+// link icon + count in the name cell; the one-line summary rides the native
+// title tooltip. Optional so the table renders unchanged pre-migration.
+export type ClientRelationshipBadge = { count: number; summary: string };
+
 export function ClientsTable({
   clients,
   summaries,
@@ -77,6 +83,7 @@ export function ClientsTable({
   currentUserId,
   locale,
   teamEnabled,
+  relationships,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
@@ -85,6 +92,7 @@ export function ClientsTable({
   currentUserId: string;
   locale: AppLocale;
   teamEnabled: boolean;
+  relationships?: Record<string, ClientRelationshipBadge>;
 }) {
   const t = useTranslations("Clients");
   // Set of expanded client ids. Multi-expand by design — comparing two
@@ -142,6 +150,7 @@ export function ClientsTable({
                 key={c.id}
                 client={c}
                 summary={summaries[c.id]}
+                relationshipBadge={relationships?.[c.id]}
                 engagements={rows}
                 owner={
                   c.assigned_user_id ? owners[c.assigned_user_id] : undefined
@@ -166,6 +175,7 @@ export function ClientsTable({
 function ClientRowWithDrawer({
   client,
   summary,
+  relationshipBadge,
   engagements,
   owner,
   isYou,
@@ -176,6 +186,7 @@ function ClientRowWithDrawer({
 }: {
   client: Client;
   summary: ClientEngagementSummary | undefined;
+  relationshipBadge: ClientRelationshipBadge | undefined;
   engagements: ClientEngagementRow[];
   owner: ClientOwner | undefined;
   isYou: boolean;
@@ -229,6 +240,15 @@ function ClientRowWithDrawer({
                 <Badge variant="outline" className="ml-2 text-xs">
                   {t("archived")}
                 </Badge>
+              )}
+              {relationshipBadge && relationshipBadge.count > 0 && (
+                <span
+                  title={relationshipBadge.summary}
+                  className="ml-2 inline-flex items-center gap-0.5 align-middle text-xs font-normal text-muted-foreground"
+                >
+                  <Link2 className="size-3" aria-hidden />
+                  {relationshipBadge.count}
+                </span>
               )}
             </TableCell>
             <TableCell className="py-4">

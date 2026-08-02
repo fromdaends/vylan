@@ -1,5 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
+import { listLiveRelationshipsForFirm } from "@/lib/db/relationships";
+import type { ScopeWarningContact } from "@/lib/relationships/validate";
 import { listTemplates } from "@/lib/db/templates";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
@@ -20,12 +22,31 @@ export default async function NewEngagementPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [clients, templates, firm, user] = await Promise.all([
-    listClients({ includeArchived: false }),
-    listTemplates(),
-    getCurrentFirm(),
-    getCurrentUser(),
-  ]);
+  const [clients, templates, firm, user, firmRelationships] =
+    await Promise.all([
+      listClients({ includeArchived: false }),
+      listTemplates(),
+      getCurrentFirm(),
+      getCurrentUser(),
+      listLiveRelationshipsForFirm(),
+    ]);
+
+  // Recipient safety (relationships spec §3): each business client's linked
+  // authorized contacts. Live links only reference unarchived clients (the
+  // archive cascade hides the rest), so names resolve from the list above.
+  const clientById = new Map(clients.map((c) => [c.id, c]));
+  const authorizedContacts: Record<string, ScopeWarningContact[]> = {};
+  for (const r of firmRelationships) {
+    if (r.rel_type !== "authorized_contact") continue;
+    const contact = clientById.get(r.from_client_id);
+    if (!contact) continue;
+    (authorizedContacts[r.to_client_id] ??= []).push({
+      clientId: contact.id,
+      name: contact.display_name,
+      email: contact.email,
+      scopes: r.scopes ?? [],
+    });
+  }
 
   const t = await getTranslations("Engagements");
   const tApp = await getTranslations("App");
@@ -67,6 +88,7 @@ export default async function NewEngagementPage({
         invoiceDefaultDelayDays={firm?.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}
         canManageReminderDefaults={user?.role === "owner"}
+        authorizedContacts={authorizedContacts}
       />
     </div>
   );

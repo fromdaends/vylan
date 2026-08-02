@@ -2,6 +2,11 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getEngagement } from "@/lib/db/engagements";
 import { getClient } from "@/lib/db/clients";
+import {
+  listRelationshipsForClient,
+  listRelatedClientsBrief,
+} from "@/lib/db/relationships";
+import { findScopeWarning } from "@/lib/relationships/validate";
 import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
 import {
   listUploadedFilesForEngagement,
@@ -175,6 +180,8 @@ import {
   ExternalLink,
   Lock,
   ChevronRight,
+  Link2,
+  AlertTriangle,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -217,6 +224,61 @@ export default async function EngagementDetailPage({
   if (!engagement) notFound();
   const client = await getClient(engagement.client_id);
   const { uploads, urlByPath } = uploadData;
+
+  // Relationships (spec §3, read-only): the compact header line linking to the
+  // client's Relationships card, and the recipient scope warning. One query
+  // for the client's live links, one for the other ends' names/emails.
+  const clientRelationships = client
+    ? await listRelationshipsForClient(client.id)
+    : [];
+  const relatedBrief = await listRelatedClientsBrief(
+    clientRelationships.map((r) =>
+      r.from_client_id === client?.id ? r.to_client_id : r.from_client_id,
+    ),
+  );
+  const relatedById = new Map(relatedBrief.map((c) => [c.id, c]));
+  // "Owned by Zachary Thresh · 100%" when the ONLY link is a single owner;
+  // otherwise "N linked clients". Resolvable links only (RLS may hide a
+  // private other end from staff — then the count matches what they can see).
+  const visibleRelationships = clientRelationships.filter((r) =>
+    relatedById.has(
+      r.from_client_id === client?.id ? r.to_client_id : r.from_client_id,
+    ),
+  );
+  const soleOwnerLink =
+    client &&
+    visibleRelationships.length === 1 &&
+    visibleRelationships[0].rel_type === "owner_of" &&
+    visibleRelationships[0].to_client_id === client.id
+      ? visibleRelationships[0]
+      : null;
+  // Recipient safety (spec §3): everything sent on this engagement goes to the
+  // client record's email — when that address belongs to a linked authorized
+  // contact whose scopes don't cover this engagement's domain, warn (never
+  // block). Deterministic email match; no inference.
+  const scopeWarningContact =
+    client && client.type === "business"
+      ? findScopeWarning(
+          client.email,
+          engagement.type,
+          clientRelationships
+            .filter(
+              (r) =>
+                r.rel_type === "authorized_contact" &&
+                r.to_client_id === client.id &&
+                relatedById.has(r.from_client_id),
+            )
+            .map((r) => {
+              const c = relatedById.get(r.from_client_id)!;
+              return {
+                clientId: c.id,
+                name: c.display_name,
+                email: c.email,
+                scopes: r.scopes ?? [],
+              };
+            }),
+        )
+      : null;
   // Send / reminder are locked only once the free trial has expired; an active
   // trial has full access.
   const trialLocked = firm ? isTrialExpired(firm) : false;
@@ -643,6 +705,25 @@ export default async function EngagementDetailPage({
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
+  // Scope names live in the Clients namespace (shared with the profile card).
+  const tClients = await getTranslations("Clients");
+  const relHeaderLine = soleOwnerLink
+    ? t("rel_owned_by", {
+        name:
+          relatedById.get(soleOwnerLink.from_client_id)?.display_name ?? "",
+        pct: soleOwnerLink.percentage ?? 0,
+      })
+    : visibleRelationships.length > 0
+      ? t("rel_linked_count", { count: visibleRelationships.length })
+      : null;
+  const scopeWarningText = scopeWarningContact
+    ? t("rel_scope_warning", {
+        name: scopeWarningContact.name,
+        scopes: scopeWarningContact.scopes
+          .map((s) => tClients(`rel_scope_${s}`))
+          .join(", "),
+      })
+    : null;
 
   // The handoff note from the last reassignment. Team-mode only, and only
   // fetched when there IS an assignee — the note is instructions for the person
@@ -801,6 +882,18 @@ export default async function EngagementDetailPage({
                 {client.display_name}
               </Link>
             )}
+            {/* Relationships, read-only (spec §3): "Owned by X · 100%" or
+                "N linked clients", pointing at the profile's Relationships
+                card. Detail lives there, not here. */}
+            {client && relHeaderLine && (
+              <Link
+                href={`/clients/${client.id}#relationships`}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Link2 className="size-3" aria-hidden />
+                {relHeaderLine}
+              </Link>
+            )}
             {engagement.due_date && (
               <span className="text-muted-foreground">
                 ·{" "}
@@ -840,6 +933,19 @@ export default async function EngagementDetailPage({
               </Badge>
             )}
           </div>
+          {/* Recipient safety (spec §3): Vylan has no per-send recipient
+              picker — every send on this engagement (portal link, reminder,
+              signature request, invoice) goes to the client record's email.
+              When that address belongs to a linked authorized contact whose
+              scopes don't cover this engagement's domain, say so ONCE, here,
+              above all of those send controls. Warning only — sending is
+              never blocked; the accountant decides. */}
+          {scopeWarningText && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+              {scopeWarningText}
+            </p>
+          )}
           {/* Workflow stage. Its own row rather than inline above: six nodes
               need horizontal room, and crowding them against the client link +
               due date would squeeze both. No card around it — thin line, open
