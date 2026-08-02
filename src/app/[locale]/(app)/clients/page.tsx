@@ -1,5 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients, type Client } from "@/lib/db/clients";
+import { listLiveRelationshipsForFirm } from "@/lib/db/relationships";
+import { resolveRelationshipRows } from "@/lib/relationships/validate";
 import { listEngagements } from "@/lib/db/engagements";
 import { loadEngagementSignals } from "@/lib/dashboard/worklist";
 import { deriveEngagementStatus } from "@/lib/attention";
@@ -204,6 +206,48 @@ export default async function ClientsPage({
 
   const t = await getTranslations("Clients");
 
+  // Relationships indicator (spec §3): one query for the firm's live links,
+  // one for names (archived included so a link to an archived client still
+  // reads as a name, and unaffected by this page's type filter). Turned into
+  // a per-client {count, one-line summary} map for the row badge + tooltip.
+  const [firmRelationships, allClientsForNames] = await Promise.all([
+    listLiveRelationshipsForFirm(),
+    listClients({ includeArchived: true }),
+  ]);
+  const relNameById = new Map(
+    allClientsForNames.map((c) => [c.id, c.display_name]),
+  );
+  const relScopeSummary = (scopes: readonly string[] | null) =>
+    (scopes ?? []).map((s) => t(`rel_scope_${s}`)).join(", ");
+  const relationshipBadges: Record<
+    string,
+    { count: number; summary: string }
+  > = {};
+  for (const c of clientsRaw) {
+    const rows = resolveRelationshipRows(c.id, firmRelationships).filter((r) =>
+      relNameById.has(r.otherClientId),
+    );
+    if (rows.length === 0) continue;
+    const parts = rows.slice(0, 3).map((r) => {
+      const name = relNameById.get(r.otherClientId)!;
+      const label =
+        r.relType === "spouse_of"
+          ? t("rel_spouse")
+          : r.relType === "owner_of"
+            ? r.direction === "out"
+              ? t("rel_owns", { pct: r.percentage ?? 0 })
+              : t("rel_owner", { pct: r.percentage ?? 0 })
+            : t("rel_contact", { scopes: relScopeSummary(r.scopes) });
+      return `${label} · ${name}`;
+    });
+    const extra = rows.length - parts.length;
+    relationshipBadges[c.id] = {
+      count: rows.length,
+      summary:
+        extra > 0 ? `${parts.join("; ")} +${extra}` : parts.join("; "),
+    };
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
@@ -259,6 +303,7 @@ export default async function ClientsPage({
         sort={sort}
         activeOnly={activeOnly}
         teamEnabled={teamEnabled}
+        relationships={relationshipBadges}
       />
     </div>
   );
