@@ -1941,8 +1941,6 @@
     "access_remove": "Retirer {name} de ce mandat",
     "access_failed": "Impossible de faire ce changement. Réessayez.",
     "access_needs_migration": "Cela fonctionnera dans un instant — la mise à jour de la base de données n'a pas encore été appliquée.",
-    "client_owner_label": "Clients de qui",
-    "client_owner_any": "Clients de tout le monde",
     "scope_all": "Tous les engagements",
     "new": "Nouvel engagement",
     "new_title": "Nouvel engagement",

@@ -175,18 +175,6 @@ export const loadEngagementWorklist = cache(
         title: e.title,
         clientName: clientsById.get(e.client_id)?.display_name ?? "—",
         clientId: e.client_id,
-        // WHO OWNS THE RELATIONSHIP, as distinct from who is doing this job.
-        // Free: `clients` is already loaded above, so this is a map lookup, not
-        // a query. The distinction is the whole point of the filter it feeds —
-        // "show me everything on Ashley's clients" is a different question from
-        // "show me everything Ashley is doing", and a firm needs both.
-        clientOwnerUserId: clientsById.get(e.client_id)?.assigned_user_id ?? null,
-        clientOwnerName:
-          clientsById.get(e.client_id)?.assigned_user_id != null
-            ? (userLabelById.get(
-                clientsById.get(e.client_id)!.assigned_user_id!,
-              ) ?? null)
-            : null,
         status: e.status,
         derivedStatus: deriveEngagementStatus(e.status, a),
         flaggedFilesCount: action.flaggedFiles,

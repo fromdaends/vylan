@@ -1941,8 +1941,6 @@
     "access_remove": "Take {name} off this job",
     "access_failed": "Couldn't change that. Try again.",
     "access_needs_migration": "This will work in a moment — the database change hasn't been applied yet.",
-    "client_owner_label": "Whose clients",
-    "client_owner_any": "Anyone's clients",
     "scope_all": "All engagements",
     "new": "New engagement",
     "new_title": "New engagement",
