@@ -285,6 +285,8 @@
     "tab_people": "Personnes",
     "profile_about_title": "À propos",
     "permissions_title": "Permissions",
+    "permissions_roles_first": "L'accès provient des rôles que vous attribuez. Vous pouvez aussi accorder quelque chose de plus à cette personne ci-dessous.",
+    "permissions_from_role": "Via",
     "permissions_role_label": "Rôle",
     "role_member": "Membre",
     "role_junior": "Junior",

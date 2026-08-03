@@ -14,7 +14,7 @@ import {
   getServerSupabase,
 } from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
-import { isCapability, isPreset } from "@/lib/auth/capabilities";
+import { isCapability } from "@/lib/auth/capabilities";
 import { getCurrentFirm, firmAllowsMemberInvites } from "@/lib/db/firms";
 import { isOnTrial } from "@/lib/trial";
 import { logUserActivity } from "@/lib/db/activity";
@@ -1218,27 +1218,27 @@ export async function leaveTeam(): Promise<TeamModeResult> {
 // actually RLS-backed, converting it here would move a real boundary into a
 // layer that cannot enforce it — see the note on team.manage in capabilities.ts.
 //
-// THE ONE THAT MATTERS: an OWNER never gets a preset. The rank is what RLS
-// reads, so a preset on an owner row is at best ignored and at worst renders
-// controls the database then refuses. Refused outright rather than silently
-// dropped, so a UI bug surfaces as an error instead of as a setting that does
-// not stick.
+// THE ONE THAT MATTERS: an OWNER never gets grants. The rank already carries
+// everything, so writing to an owner row is at best a no-op. Refused outright
+// rather than silently dropped, so a UI bug surfaces as an error instead of as
+// a setting that does not stick.
+//
+// PRESETS ARE GONE (Member / Junior, deleted at the founder's instruction). The
+// second parameter used to be the preset name; it is accepted and IGNORED so a
+// browser tab loaded from the previous deployment cannot 500 on its next click.
 export async function setMemberPermissions(
   userId: string,
-  // `string`, NOT "member" | "junior". This is a SERVER ACTION: its arguments
-  // arrive over the wire and a caller can send anything, so the narrow type
-  // would be a lie that makes the runtime check below look redundant to both
-  // the compiler and the next reader. Validate, then narrow.
-  preset: string,
-  grants: string[] = [],
+  // Old shape: (userId, preset, grants). New shape: (userId, grants).
+  // A SERVER ACTION's arguments arrive over the wire and a caller can send
+  // anything, so both are typed loosely and sorted out at runtime.
+  a: string | string[] = [],
+  b?: string[],
 ): Promise<MemberActionResult> {
+  const grants = Array.isArray(b) ? b : Array.isArray(a) ? a : [];
   const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!me || !firm) return { ok: false, error: "no_session" };
   if (me.role !== "owner") return { ok: false, error: "owner_only" };
   if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
-  if (!isPreset(preset) || preset === "owner") {
-    return { ok: false, error: "update_failed" };
-  }
 
   const admin = getServiceRoleSupabase();
   const { data: target } = await admin
@@ -1262,7 +1262,10 @@ export async function setMemberPermissions(
 
   const { error } = await admin
     .from("users")
-    .update({ permission_preset: preset, extra_capabilities: clean })
+    // permission_preset is deliberately NOT written. The column still exists
+    // in the database — dropping it is the founder's call — but nothing reads
+    // it any more, so writing to it would only keep a dead value looking alive.
+    .update({ extra_capabilities: clean })
     .eq("id", userId)
     .eq("firm_id", firm.id);
   if (error) {
@@ -1283,7 +1286,6 @@ export async function setMemberPermissions(
   // A lost log line is worth less than a switch that feels broken.
   void logUserActivity(firm.id, null, "team_permissions_changed", {
     target_user_id: userId,
-    preset,
     grants: clean,
   }).catch((e) => {
     console.error("[team] permissions activity log failed:", e);

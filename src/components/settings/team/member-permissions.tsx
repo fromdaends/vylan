@@ -4,30 +4,39 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/cn";
 import { setMemberPermissions } from "@/app/actions/team";
 import { GRANTABLE_CAPABILITIES } from "@/lib/auth/grantable";
+import { roleTextClass } from "@/lib/roles/palette";
 
-// What one person is allowed to do — Phase 2's per-person switches.
+// USER ACCESS — what one person is allowed to do, and WHERE EACH PIECE CAME
+// FROM.
 //
 // It lives on the PERSON'S OWN PAGE, tucked into the left rail, because that is
 // where the founder asked for it: "there should be a little profile page where
-// you can view that person's profile, by clicking on them from the people tab,
-// and the permission switches should exist inside that page, like hidden away."
-// Not a permissions screen, not a column on the roster — a quiet panel on the
-// object it acts on.
+// you can view that person's profile ... and the permission switches should
+// exist inside that page, like hidden away." Not a permissions screen, not a
+// column on the roster — a quiet panel on the object it acts on.
 //
-// ── WHY A ROLE PLUS EXTRAS, RATHER THAN A WALL OF SWITCHES ───────────────────
+// ── THE MEMBER / JUNIOR SWITCH IS GONE ───────────────────────────────────────
 //
-// The role is the baseline; the switches below it are only ever ADDITIONS. That
-// is not a simplification, it is the storage model made visible: a preset names
-// a set, and extra_capabilities can only add to it. A UI that let you switch
-// OFF something the role grants would be promising a revocation the database
-// has nowhere to record — it would have to silently move the person to a
-// different role, which is exactly the kind of clever that surprises people.
+// This panel used to open with a segmented Member / Junior control. The founder
+// deleted it: "there shouldn't be two ways of having permissions ... permissions
+// should exist purely based off roles that is created by the owner." The same
+// two switches appeared here AND on a role, either could grant, and neither
+// screen told you which one had.
 //
-// So: pick Member or Junior, then optionally hand this one person something
-// extra. Both halves are honest about what they write.
+// So ROLES are the switchboard now, and this panel does two things instead:
+//
+//   1. Says what this person already gets FROM A ROLE, and names the role. That
+//      is the question an owner actually arrives with — "why can she do that?"
+//      — and it had no answer anywhere in the app before.
+//   2. Keeps ONE per-person override, for the case where you want to hand one
+//      person one thing without inventing a role for them.
+//
+// A capability a role already grants shows its source and its switch is DEAD,
+// not merely on: turning it off here would promise a revocation this model
+// cannot express (grants only ever add), and a switch that lies is worse than a
+// switch that is honest about being decided elsewhere.
 //
 // ── WHAT IS DELIBERATELY NOT OFFERED ─────────────────────────────────────────
 //
@@ -52,15 +61,15 @@ const GRANTABLE = GRANTABLE_CAPABILITIES;
 
 export function MemberPermissions({
   userId,
-  preset,
   grants,
+  /** The roles this person wears that carry capabilities, so the panel can name
+   *  the source instead of showing an unexplained switch. */
+  fromRoles = [],
   disabled = false,
 }: {
   userId: string;
-  // Current stored preset. null / undefined = never set = Member, which is what
-  // every existing row is and what capabilities.ts resolves it to.
-  preset: string | null | undefined;
   grants: readonly string[] | null | undefined;
+  fromRoles?: { name: string; color: string; capabilities: string[] }[];
   // Migration 1120 not applied yet, or a deactivated teammate.
   disabled?: boolean;
 }) {
@@ -69,23 +78,17 @@ export function MemberPermissions({
   // revalidation from blocking paint); its `pending` flag is deliberately
   // unread — nothing on this panel should grey out while it runs.
   const [, start] = useTransition();
-  const [role, setRole] = useState<"member" | "junior">(
-    preset === "junior" ? "junior" : "member",
-  );
   const [extra, setExtra] = useState<string[]>(() => [...(grants ?? [])]);
 
-  const save = (nextRole: "member" | "junior", nextExtra: string[]) => {
+  const save = (nextExtra: string[]) => {
     // Optimistic, then reverted on failure — the alternative is a switch that
     // visibly lags every click by a round-trip.
-    const prevRole = role;
-    const prevExtra = extra;
-    setRole(nextRole);
+    const prev = extra;
     setExtra(nextExtra);
     start(async () => {
-      const res = await setMemberPermissions(userId, nextRole, nextExtra);
+      const res = await setMemberPermissions(userId, nextExtra);
       if (res.ok) return;
-      setRole(prevRole);
-      setExtra(prevExtra);
+      setExtra(prev);
       toast.error(
         res.error === "unavailable"
           ? t("permissions_unavailable")
@@ -94,80 +97,56 @@ export function MemberPermissions({
     });
   };
 
-  return (
-    <div className="space-y-4">
-      {/* The role. Two options, so a segmented pair rather than a dropdown —
-          you can see both choices and what you did not pick. */}
-      <div>
-        <div
-          role="radiogroup"
-          aria-label={t("permissions_role_label")}
-          className="flex gap-1 rounded-lg bg-muted/50 p-1"
-        >
-          {(["member", "junior"] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              role="radio"
-              aria-checked={role === r}
-              // NOT disabled while saving. The update is optimistic, so the
-              // only thing `pending` bought was freezing the control for the
-              // length of a round-trip that included a page revalidation —
-              // which is exactly why this felt slow enough to need a refresh.
-              // Every save posts the whole desired state, so a fast second
-              // click simply wins.
-              disabled={disabled}
-              onClick={() => role !== r && save(r, extra)}
-              className={cn(
-                "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                role === r
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {r === "member" ? t("role_member") : t("role_junior")}
-            </button>
-          ))}
-        </div>
-        {/* What the chosen role means, in words. A role name alone tells an
-            owner nothing about what they just did to somebody. */}
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {role === "member"
-            ? t("permissions_member_help")
-            : t("permissions_junior_help")}
-        </p>
-      </div>
+  const label = (cap: string) =>
+    cap === "billing.manage"
+      ? t("permissions_cap_billing")
+      : t("permissions_cap_integrations");
 
-      {/* Extras — additions only, never revocations. See the note above. */}
-      <div className="space-y-2 border-t border-border/50 pt-3">
-        <p className="text-xs font-medium text-muted-foreground">
-          {t("permissions_extras_label")}
-        </p>
+  // Which role grants what. First role wins the attribution — naming all of
+  // them turns a one-line answer into a list nobody reads.
+  const grantedBy = new Map<string, { name: string; color: string }>();
+  for (const r of fromRoles) {
+    for (const c of r.capabilities) {
+      if (!grantedBy.has(c)) grantedBy.set(c, { name: r.name, color: r.color });
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {t("permissions_roles_first")}
+      </p>
+
+      <div className="space-y-2.5 border-t border-border/50 pt-3">
         {GRANTABLE.map((cap) => {
-          const on = extra.includes(cap);
+          const source = grantedBy.get(cap);
+          const on = source != null || extra.includes(cap);
           return (
-            <label
-              key={cap}
-              className="flex items-start justify-between gap-3 text-xs"
-            >
-              <span className="leading-snug text-foreground">
-                {cap === "billing.manage"
-                  ? t("permissions_cap_billing")
-                  : t("permissions_cap_integrations")}
-              </span>
-              <Switch
-                checked={on}
-                disabled={disabled}
-                onCheckedChange={(next) =>
-                  save(
-                    role,
-                    next
-                      ? [...extra, cap]
-                      : extra.filter((c) => c !== cap),
-                  )
-                }
-              />
-            </label>
+            <div key={cap} className="space-y-0.5">
+              <label className="flex items-start justify-between gap-3 text-xs">
+                <span className="leading-snug text-foreground">
+                  {label(cap)}
+                </span>
+                <Switch
+                  checked={on}
+                  // Decided by the role, so this switch reports rather than
+                  // sets. See the note at the top.
+                  disabled={disabled || source != null}
+                  ariaLabel={label(cap)}
+                  onCheckedChange={(next) =>
+                    save(next ? [...extra, cap] : extra.filter((c) => c !== cap))
+                  }
+                />
+              </label>
+              {source && (
+                <p className="text-[11px] text-muted-foreground">
+                  {t("permissions_from_role")}{" "}
+                  <span className={roleTextClass(source.color)}>
+                    {source.name}
+                  </span>
+                </p>
+              )}
+            </div>
           );
         })}
       </div>
