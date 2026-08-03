@@ -398,6 +398,7 @@ export default async function ClientDetailPage({
   // here — reusing them keeps one wording for "Assigned to" across the app.
   const tWl = await getTranslations("Dashboard");
   const tStage = await getTranslations("Stage");
+  const tHome = await getTranslations("Home");
   const tArchive = await getTranslations("Archive");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
@@ -890,7 +891,7 @@ export default async function ClientDetailPage({
               href={clientTabHref(client.id, "engagements")}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              {tWl("view_all")}
+              {tHome("view_all")}
             </Link>
           ) : null
         }
