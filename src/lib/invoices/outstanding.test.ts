@@ -32,7 +32,7 @@ describe("outstandingCents", () => {
   // The whole reason this module exists: every invoice settled before the
   // payment ledger shipped has status paid and amount_paid_cents = 0. Reading
   // it as arithmetic would report the firm's entire payment history as owed.
-  it("is zero for a PAID invoice that has no ledger rows (pre-1270)", () => {
+  it("is zero for a PAID invoice that has no ledger rows (pre-1310)", () => {
     expect(outstandingCents(INV({ status: "paid", amount_paid_cents: 0 }))).toBe(
       0,
     );

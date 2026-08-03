@@ -10,7 +10,7 @@
 
 import { addDays } from "date-fns";
 
-// Mirrored from the CHECK constraints in migration 1270, so the form, the
+// Mirrored from the CHECK constraints in migration 1310, so the form, the
 // server action and the database all refuse the same values.
 export const CHASE_INTERVAL_MIN = 1;
 export const CHASE_INTERVAL_MAX = 60;

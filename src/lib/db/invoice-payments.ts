@@ -1,4 +1,4 @@
-// Data layer for the invoice payment ledger (migration 1270).
+// Data layer for the invoice payment ledger (migration 1310).
 //
 // One row per payment actually received against an invoice — the cheque, the
 // Interac transfer, the card charge. The running total on
@@ -41,7 +41,7 @@ export type InvoicePayment = {
 };
 
 // PGRST205 / 42P01 = table missing, PGRST204 / 42703 = column missing. Both
-// mean migration 1270 hasn't reached this database.
+// mean migration 1310 hasn't reached this database.
 export function isLedgerSchemaMissing(
   err: { code?: string | null } | null | undefined,
 ): boolean {
@@ -133,7 +133,7 @@ export type InvoicePaymentRow = InvoicePayment & {
 };
 
 // The payment history for one invoice, newest first, with the recorder's name
-// resolved for display. Empty before 1270 is applied — which reads correctly as
+// resolved for display. Empty before 1310 is applied — which reads correctly as
 // "no payments recorded", the truth on such a database.
 export async function listInvoicePayments(
   paymentRequestId: string,
