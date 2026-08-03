@@ -2,6 +2,11 @@
 //
 // The data fetch that used to be /quickbooks/receipts' page body. That route
 // still exists and redirects here, so old links and bookmarks survive.
+//
+// ALSO RENDERED ON ONE CLIENT'S PAGE (?tab=bookkeeping), via lockedClientId.
+// Same component, same scan, same list — the client page picks the client
+// instead of the reader picking it. A client-shaped copy of this file would
+// have been the third place the phrase "missing receipt" gets decided.
 
 import { getTranslations } from "next-intl/server";
 import type { AppLocale } from "@/i18n/routing";
@@ -31,9 +36,15 @@ function isIsoDate(v: string | undefined): v is string {
 export async function ReceiptsTab({
   locale,
   sp,
+  lockedClientId,
 }: {
   locale: AppLocale;
   sp: { client?: string; from?: string; to?: string };
+  // Set on ONE client's page: this list is about them, and the reader is not
+  // offered a way to walk to another client from inside it. Also drops the
+  // "go connect a client" empty state, which on a client's own page would
+  // send you away from the connection card sitting directly above.
+  lockedClientId?: string;
 }) {
   const t = await getTranslations("Quickbooks");
   const [firm, clients] = await Promise.all([
@@ -42,10 +53,18 @@ export async function ReceiptsTab({
   ]);
 
   if (!firm || clients.length === 0) {
-    return <NoConnectedClients body={t("gaps_not_connected")} />;
+    return lockedClientId ? null : (
+      <NoConnectedClients body={t("gaps_not_connected")} />
+    );
   }
 
-  const selected = clients.find((c) => c.clientId === sp.client) ?? clients[0]!;
+  // Locked: only this client, and nothing at all if their books are not in
+  // QuickBooks — an empty list would read as "no receipts missing", which is
+  // the one thing it must never mean.
+  const selected = lockedClientId
+    ? clients.find((c) => c.clientId === lockedClientId)
+    : (clients.find((c) => c.clientId === sp.client) ?? clients[0]!);
+  if (!selected) return null;
   const from = isIsoDate(sp.from) ? sp.from : isoDaysAgo(DEFAULT_DAYS);
   const to = isIsoDate(sp.to) ? sp.to : new Date().toISOString().slice(0, 10);
 
@@ -83,6 +102,7 @@ export async function ReceiptsTab({
         id: c.clientId,
         name: c.clientName ?? c.companyName ?? c.clientId,
       }))}
+      lockedClient={Boolean(lockedClientId)}
       selectedClientId={selected.clientId}
       from={from}
       to={to}

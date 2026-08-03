@@ -2,6 +2,9 @@
 //
 // The data fetch that used to be /quickbooks/uncategorized' page body. That
 // route still exists and redirects here.
+//
+// ALSO RENDERED ON ONE CLIENT'S PAGE (?tab=bookkeeping), via lockedClientId —
+// see receipts-tab.tsx for why that is a prop rather than a second file.
 
 import { getTranslations } from "next-intl/server";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -31,8 +34,12 @@ function isIsoDate(v: string | undefined): v is string {
 
 export async function UncategorizedTab({
   sp,
+  lockedClientId,
 }: {
   sp: { client?: string; from?: string; to?: string };
+  // See receipts-tab.tsx — one client's page, no client picker, no
+  // "go connect someone" empty state.
+  lockedClientId?: string;
 }) {
   const t = await getTranslations("Quickbooks");
   const [firm, clients] = await Promise.all([
@@ -41,10 +48,15 @@ export async function UncategorizedTab({
   ]);
 
   if (!firm || clients.length === 0) {
-    return <NoConnectedClients body={t("uncat_not_connected")} />;
+    return lockedClientId ? null : (
+      <NoConnectedClients body={t("uncat_not_connected")} />
+    );
   }
 
-  const selected = clients.find((c) => c.clientId === sp.client) ?? clients[0]!;
+  const selected = lockedClientId
+    ? clients.find((c) => c.clientId === lockedClientId)
+    : (clients.find((c) => c.clientId === sp.client) ?? clients[0]!);
+  if (!selected) return null;
   const from = isIsoDate(sp.from) ? sp.from : isoDaysAgo(DEFAULT_DAYS);
   const to = isIsoDate(sp.to) ? sp.to : new Date().toISOString().slice(0, 10);
 
@@ -78,6 +90,7 @@ export async function UncategorizedTab({
         id: c.clientId,
         name: c.clientName ?? c.companyName ?? c.clientId,
       }))}
+      lockedClient={Boolean(lockedClientId)}
       selectedClientId={selected.clientId}
       from={from}
       to={to}

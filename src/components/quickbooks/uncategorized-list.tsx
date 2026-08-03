@@ -69,6 +69,9 @@ type RowState =
 
 export function UncategorizedList(props: {
   clients: { id: string; name: string }[];
+  // See receipt-gaps.tsx — on one client's page the picker is a way out of the
+  // page you are on, so it is not offered.
+  lockedClient?: boolean;
   selectedClientId: string;
   from: string;
   to: string;
@@ -217,21 +220,23 @@ export function UncategorizedList(props: {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <Select
-          value={props.selectedClientId}
-          onValueChange={(v) => setParam("client", v)}
-        >
-          <SelectTrigger className="h-8 w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {props.clients.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {!props.lockedClient && (
+          <Select
+            value={props.selectedClientId}
+            onValueChange={(v) => setParam("client", v)}
+          >
+            <SelectTrigger className="h-8 w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {props.clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <label className="flex items-center gap-2 text-muted-foreground">
           {t("gaps_from")}
           <input

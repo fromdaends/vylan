@@ -39,6 +39,11 @@ const keyOf = (g: Gap) => `${g.entity}:${g.qboId}`;
 
 export function ReceiptGaps(props: {
   clients: { id: string; name: string }[];
+  // Rendered on ONE client's page: the whole screen is already about them, so
+  // the picker would be a way to walk to a different client from inside a page
+  // whose header names this one. The date range stays — that is a question
+  // about this client's books, not about which client you are reading.
+  lockedClient?: boolean;
   selectedClientId: string;
   from: string;
   to: string;
@@ -129,21 +134,23 @@ export function ReceiptGaps(props: {
       {/* Controls: which client, what period. Kept as quiet inline selects
           rather than a filter bar — one row of chrome above a working list. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <Select
-          value={props.selectedClientId}
-          onValueChange={(v) => setParam("client", v)}
-        >
-          <SelectTrigger className="h-8 w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {props.clients.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {!props.lockedClient && (
+          <Select
+            value={props.selectedClientId}
+            onValueChange={(v) => setParam("client", v)}
+          >
+            <SelectTrigger className="h-8 w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {props.clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <label className="flex items-center gap-2 text-muted-foreground">
           {t("gaps_from")}
           <input

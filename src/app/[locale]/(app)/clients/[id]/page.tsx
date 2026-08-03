@@ -35,6 +35,9 @@ import {
   CLIENT_ENGAGEMENT_VIEWS,
   clientEngagementViewHref,
   type ClientEngagementView,
+  parseClientBookkeepingView,
+  CLIENT_BOOKKEEPING_VIEWS,
+  clientBookkeepingViewHref,
 } from "@/lib/clients/tabs";
 import { listDocuments } from "@/lib/db/documents";
 // The SAME browser /files renders. Not a client-scoped copy of it — see the
@@ -83,6 +86,19 @@ import { getXeroConnectionHealth } from "@/lib/xero/connection";
 import { isXeroConfigured } from "@/lib/xero/client";
 import { ClientXeroCard } from "@/components/clients/client-xero-card";
 import { ClientPortalPinCard } from "@/components/clients/client-portal-pin-card";
+// ── The Bookkeeping tab ──────────────────────────────────────────────────────
+// The SAME close board and the SAME two working lists the firm-wide
+// Bookkeeping page renders, scoped to this client — not client-shaped copies of
+// them. See the repo's Cohesion rule, and the Files tab above for the identical
+// treatment of the file browser.
+import { CloseBoard } from "@/components/quickbooks/close-board";
+import { ReceiptsTab } from "@/app/[locale]/(app)/quickbooks/drafts/receipts-tab";
+import { UncategorizedTab } from "@/app/[locale]/(app)/quickbooks/drafts/uncategorized-tab";
+import {
+  listClosesForPeriod,
+  countOpenRequestsByClient,
+} from "@/lib/db/month-close";
+import { isPeriodKey, defaultPeriod } from "@/lib/close/period";
 
 // Shared by the hidden archive/restore form and the ⋯ menu item that submits it.
 const CLIENT_ARCHIVE_FORM_ID = "client-archive-form";
@@ -110,6 +126,8 @@ export default async function ClientDetailPage({
     xero: xeroParam,
     tab: tabParam,
     ev: evParam,
+    bk: bkParam,
+    period: periodParam,
   } = sp;
   // Which facet of this client we are looking at. The tab is a URL rather than
   // client state, so a tab is linkable, opens in a new tab, and the back
@@ -118,6 +136,15 @@ export default async function ClientDetailPage({
   // The Engagements tab's lifecycle slice. Server-side, because Archived is a
   // different database scope — see the note on CLIENT_ENGAGEMENT_VIEWS.
   const engView = parseClientEngagementView(evParam);
+  // The Bookkeeping tab's working list, and which month its close board shows.
+  // Both live in the URL for the same reason the tab does: which list is open
+  // decides which live ledger scan runs, so it cannot be component state.
+  const bkView = parseClientBookkeepingView(bkParam);
+  const period = isPeriodKey(periodParam)
+    ? periodParam
+    // Last month, not this one: you close July during August, and opening on a
+    // month nobody can finish yet is the firm-wide board's default too.
+    : defaultPeriod(new Date().toISOString().slice(0, 10));
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -354,10 +381,13 @@ export default async function ClientDetailPage({
           xeroHealth: "ok" as Awaited<
             ReturnType<typeof getXeroConnectionHealth>
           >,
+          closedAt: null as string | null,
+          closedBy: null as string | null,
+          openRequests: 0,
         };
       }
       const currentFirm = await getCurrentFirm();
-      const [qbo, xero] = await Promise.all([
+      const [qbo, xero, close] = await Promise.all([
         (async () => {
           const status = await getClientQuickbooksStatus(client.id);
           const health =
@@ -376,12 +406,31 @@ export default async function ClientDetailPage({
               : ("ok" as const);
           return { status, health };
         })(),
+        // The month-end close for THIS client, in the month on screen.
+        // Database reads only — the two ledger figures on the board are still
+        // fetched on demand behind its "Check" button, which is what keeps a
+        // blank cell honestly meaning "nobody has looked" instead of "clean".
+        (async () => {
+          const [closes, openByClient] = await Promise.all([
+            listClosesForPeriod(period),
+            countOpenRequestsByClient([client.id]),
+          ]);
+          const row = closes.get(client.id);
+          return {
+            closedAt: row?.closedAt ?? null,
+            closedBy: row?.closedBy ?? null,
+            openRequests: openByClient.get(client.id) ?? 0,
+          };
+        })(),
       ]);
       return {
         qboStatus: qbo.status,
         qboHealth: qbo.health,
         xeroStatus: xero.status,
         xeroHealth: xero.health,
+        closedAt: close.closedAt,
+        closedBy: close.closedBy,
+        openRequests: close.openRequests,
       };
     })(),
   ]);
@@ -569,6 +618,10 @@ export default async function ClientDetailPage({
   const tArchive = await getTranslations("Archive");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
+  // The Bookkeeping tab renders the firm-wide bookkeeping components, so it
+  // speaks their namespace — reusing their strings rather than a second set of
+  // words for "Missing receipts" that could drift from the page they came from.
+  const tQb = await getTranslations("Quickbooks");
 
   // Per-client QuickBooks connection status for the card below. Mirrors how
   // Settings assembles the firm-level status: base status + a health check (which
@@ -622,6 +675,12 @@ export default async function ClientDetailPage({
     isDemo: xeroStatus?.isDemo ?? false,
     callbackStatus: xeroCallbackStatus,
   };
+  // Is there a set of books to report on at all? Both the close board and the
+  // working lists below it are about a LEDGER; with neither provider connected
+  // there is nothing to be outstanding, and the connection card is the whole
+  // answer the tab has.
+  const clientBooksConnected =
+    clientQuickbooks.connected || clientXero.connected;
   const isOwner = me?.role === "owner";
   // Connecting this client's books is integrations.manage, NOT the rank. Every
   // connect/disconnect route already checks exactly that capability, so a role
@@ -1162,12 +1221,85 @@ export default async function ClientDetailPage({
             reference — the comment above it said so while these two sat in
             it. They also give the work column something to hold on a client
             with few engagements, which is what left the right side empty. */}
-        {/* Bookkeeping lives on the client's own page: an OWNER can connect this
-            client here (the client is known from context — no name-matching), and
-            once connected everyone sees the status. ONE system per client: once
-            QuickBooks is connected the Xero card hides (and vice versa) — a
-            receipt can only belong in one set of books. Hidden entirely for
-            staff on a not-yet-connected client. */}
+        {/* ── THE WORK, above the plumbing ───────────────────────────────
+            The tab used to be the connection card and nothing else, which
+            answered "are this client's books hooked up" — a question you ask
+            once — and never "what is outstanding for them", which is the one
+            you ask every month. The close board and the two working lists now
+            lead; the connection cards sit underneath as reference.
+
+            Every piece here is the SAME component the firm-wide Bookkeeping
+            page renders, given one client instead of all of them. */}
+        {tab === "bookkeeping" && clientBooksConnected && (
+          <Panel title={tQb("close_title")}>
+            <CloseBoard
+              scope="client"
+              period={period}
+              locale={locale}
+              rows={[
+                {
+                  clientId: client.id,
+                  name: client.display_name,
+                  provider: clientQuickbooks.connected
+                    ? "quickbooks"
+                    : "xero",
+                  openRequests: bookkeeping.openRequests,
+                  closedAt: bookkeeping.closedAt,
+                  closedBy: bookkeeping.closedBy
+                    ? (nameOf.get(bookkeeping.closedBy) ?? null)
+                    : null,
+                },
+              ]}
+            />
+          </Panel>
+        )}
+
+        {/* The two working lists, as tabs of one panel — the shape the
+            firm-wide page uses, for the reason it uses it: each is a LIVE read
+            of this client's ledger, so only the one you are looking at runs.
+            QuickBooks only. A Xero client gets the same honest note the close
+            board's own books column gives them rather than an empty list,
+            which would read as "nothing outstanding". */}
+        {tab === "bookkeeping" && clientBooksConnected && (
+          <Panel
+            title={tQb("bk_logs_title")}
+            aside={
+              clientQuickbooks.connected ? (
+                <FilterLinks
+                  label={tQb("bk_logs_title")}
+                  items={CLIENT_BOOKKEEPING_VIEWS.map((v) => ({
+                    key: v,
+                    href: clientBookkeepingViewHref(client.id, v, period),
+                    label:
+                      v === "receipts" ? tQb("gaps_title") : tQb("uncat_title"),
+                    active: v === bkView,
+                  }))}
+                />
+              ) : undefined
+            }
+          >
+            {!clientQuickbooks.connected ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {tQb("close_ledger_xero_pending")}
+              </p>
+            ) : bkView === "uncategorized" ? (
+              <UncategorizedTab sp={sp} lockedClientId={client.id} />
+            ) : (
+              <ReceiptsTab
+                locale={locale}
+                sp={sp}
+                lockedClientId={client.id}
+              />
+            )}
+          </Panel>
+        )}
+
+        {/* Bookkeeping lives on the client's own page: an OWNER can connect
+            this client here (the client is known from context — no
+            name-matching), and once connected everyone sees the status. ONE
+            system per client: once QuickBooks is connected the Xero card hides
+            (and vice versa) — a receipt can only belong in one set of books.
+            Hidden entirely for staff on a not-yet-connected client. */}
         {tab === "bookkeeping" &&
           (clientQuickbooks.connected ||
           clientXero.connected ||

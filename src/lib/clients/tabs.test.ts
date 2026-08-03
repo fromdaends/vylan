@@ -7,6 +7,10 @@ import {
   CLIENT_ENGAGEMENT_VIEW_PARAM,
   parseClientEngagementView,
   clientEngagementViewHref,
+  CLIENT_BOOKKEEPING_VIEWS,
+  CLIENT_BOOKKEEPING_VIEW_PARAM,
+  parseClientBookkeepingView,
+  clientBookkeepingViewHref,
 } from "./tabs";
 
 describe("parseClientTab", () => {
@@ -120,5 +124,84 @@ describe("the Files tab", () => {
     ];
     expect(BROWSER_PARAMS).not.toContain("tab");
     expect(BROWSER_PARAMS).not.toContain(CLIENT_ENGAGEMENT_VIEW_PARAM);
+  });
+});
+
+describe("parseClientBookkeepingView", () => {
+  it("accepts every offered list", () => {
+    for (const v of CLIENT_BOOKKEEPING_VIEWS) {
+      expect(parseClientBookkeepingView(v)).toBe(v);
+    }
+  });
+
+  it("falls back to missing receipts, including for the firm page's third tab", () => {
+    // The firm-wide Bookkeeping page has a "documents" tab that this one does
+    // not: the client page shows a client's documents on its own Files tab. A
+    // link carrying it must land on a real list, not a blank panel.
+    for (const junk of [undefined, null, "", "documents", "RECEIPTS", "../"]) {
+      expect(parseClientBookkeepingView(junk)).toBe("receipts");
+    }
+  });
+});
+
+describe("clientBookkeepingViewHref", () => {
+  it("leaves the default list as the bare tab URL", () => {
+    expect(clientBookkeepingViewHref("c1", "receipts")).toBe(
+      "/clients/c1?tab=bookkeeping",
+    );
+  });
+
+  it("uses its own param — `tab` is already spent on the client page's tabs", () => {
+    // This is the whole reason `bk` exists. A second `tab=` in the query would
+    // navigate off the Bookkeeping tab on the first sub-tab click.
+    expect(CLIENT_BOOKKEEPING_VIEW_PARAM).not.toBe("tab");
+    expect(CLIENT_BOOKKEEPING_VIEW_PARAM).not.toBe(CLIENT_ENGAGEMENT_VIEW_PARAM);
+    expect(clientBookkeepingViewHref("c1", "uncategorized")).toBe(
+      `/clients/c1?tab=bookkeeping&${CLIENT_BOOKKEEPING_VIEW_PARAM}=uncategorized`,
+    );
+  });
+
+  it("does not collide with what the shared bookkeeping components write", () => {
+    // CloseBoard writes `period`; ReceiptGaps and UncategorizedList write
+    // `client`, `from` and `to`. Each does it by mutating the CURRENT url, so
+    // any name shared with this page's own params would be silently
+    // overwritten mid-click.
+    const WRITTEN_BY_SHARED_COMPONENTS = ["period", "client", "from", "to"];
+    expect(WRITTEN_BY_SHARED_COMPONENTS).not.toContain("tab");
+    expect(WRITTEN_BY_SHARED_COMPONENTS).not.toContain(
+      CLIENT_BOOKKEEPING_VIEW_PARAM,
+    );
+    expect(WRITTEN_BY_SHARED_COMPONENTS).not.toContain(
+      CLIENT_ENGAGEMENT_VIEW_PARAM,
+    );
+  });
+
+  it("carries the close board's month across a sub-tab switch", () => {
+    // Switching list must not silently reset which month you were closing —
+    // the board sits directly above the tab strip.
+    const href = clientBookkeepingViewHref("c1", "uncategorized", "2026-07");
+    const url = new URL(href, "https://x.test");
+    expect(url.searchParams.get("period")).toBe("2026-07");
+    expect(parseClientTab(url.searchParams.get("tab"))).toBe("bookkeeping");
+    expect(
+      parseClientBookkeepingView(
+        url.searchParams.get(CLIENT_BOOKKEEPING_VIEW_PARAM),
+      ),
+    ).toBe("uncategorized");
+  });
+
+  it("round-trips: every href parses back to the list that made it, tab intact", () => {
+    for (const view of CLIENT_BOOKKEEPING_VIEWS) {
+      const url = new URL(
+        clientBookkeepingViewHref("c1", view, "2026-07"),
+        "https://x.test",
+      );
+      expect(
+        parseClientBookkeepingView(
+          url.searchParams.get(CLIENT_BOOKKEEPING_VIEW_PARAM),
+        ),
+      ).toBe(view);
+      expect(parseClientTab(url.searchParams.get("tab"))).toBe("bookkeeping");
+    }
   });
 });
