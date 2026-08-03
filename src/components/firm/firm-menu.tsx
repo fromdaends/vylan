@@ -8,47 +8,51 @@
 // heading and every firm-level action scattered across tabs and a "⋯" nobody
 // opens.
 //
+//
+// ── WHAT THIS MENU DOES *NOT* HOLD ───────────────────────────────────────────
+//
+// Anything that is a TAB on the page behind it. The founder, seeing both:
+// "there's now a dropdown menu with options that do not live on the header
+// tabs… and then there's settings and people."
+//
+// The rule we settled on: a PLACE you look at is a tab; a thing you DO is in
+// here; nothing appears in both. So "Firm settings" left (it is a tab) and so
+// did "Members" — that one opened a floating panel listing the same people as
+// the Members tab directly behind the open menu, which is two ways to read one
+// list.
+//
+// Roles and Activity log are still here ONLY because they are not tabs yet.
+// When they become tabs they leave too, and this menu is actions alone.
+//
 // The trigger itself lives in NameMenu, shared with the client page — the
 // founder asked for "the exact same thing" there, and the way to make that
 // true in six months is for it to be the same component today.
 
-import { useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import {
   Building2,
   ScrollText,
-  Settings,
   ShieldHalf,
   UserPlus,
-  Users,
 } from "lucide-react";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { NameMenu } from "@/components/ui/name-menu";
-import {
-  MembersDialog,
-  type DialogMember,
-} from "@/components/settings/team/members-dialog";
 
 export function FirmMenu({
   firmName,
   canManage,
   onInvite,
-  members = [],
 }: {
   firmName: string;
   canManage: boolean;
   /** Opens the invite dialog the team page already owns. */
   onInvite?: () => void;
-  /** Everyone active, for the Members panel. */
-  members?: DialogMember[];
 }) {
   const t = useTranslations("Team");
-  const [membersOpen, setMembersOpen] = useState(false);
 
   return (
-    <>
-      <NameMenu
+    <NameMenu
         name={firmName}
         label={t("firm_menu_label")}
         enabled={canManage}
@@ -63,12 +67,6 @@ export function FirmMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem asChild className="gap-2">
-          <Link href="/settings/team?tab=settings">
-            <Settings className="size-4" aria-hidden />
-            {t("firm_menu_settings")}
-          </Link>
-        </DropdownMenuItem>
         {/* Name, logo, brand colour, default language — the firm's identity,
             which lives on the account screen rather than the team one. */}
         <DropdownMenuItem asChild className="gap-2">
@@ -86,16 +84,6 @@ export function FirmMenu({
             {t("roles_title")}
           </Link>
         </DropdownMenuItem>
-        {/* Opens a PANEL, not a link. This item used to point at
-            /settings/team?tab=people — the page you are standing on when the
-            menu is open, so clicking it did nothing at all. */}
-        <DropdownMenuItem
-          onSelect={() => setMembersOpen(true)}
-          className="gap-2"
-        >
-          <Users className="size-4" aria-hidden />
-          {t("firm_menu_members")}
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="gap-2">
           <Link href="/settings/audit">
@@ -103,14 +91,6 @@ export function FirmMenu({
             {t("firm_menu_audit")}
           </Link>
         </DropdownMenuItem>
-      </NameMenu>
-
-      <MembersDialog
-        open={membersOpen}
-        onOpenChange={setMembersOpen}
-        members={members}
-        canOpenProfiles={canManage}
-      />
-    </>
+    </NameMenu>
   );
 }
