@@ -23,6 +23,8 @@ import {
   isDuplicateNameError,
   retryAfterMs,
   fetchCurrencyPrefs,
+  parseIntuitFaultCodes,
+  INTUIT_PERIOD_CLOSED_CODES,
 } from "./client";
 
 // Isolate OAuth-endpoint resolution: the discovery document is exercised on its
@@ -936,6 +938,50 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
 
   const prefs = (CurrencyPrefs: unknown) => ({ Preferences: { CurrencyPrefs } });
 
+  // The closing date rides along on the SAME request — Intuit returns every
+  // preference group in one response, so knowing it costs no extra call.
+  const prefsWith = (AccountingInfoPrefs: unknown) => ({
+    Preferences: {
+      CurrencyPrefs: { MultiCurrencyEnabled: false, HomeCurrency: { value: "CAD" } },
+      AccountingInfoPrefs,
+    },
+  });
+  const readWith = async (AccountingInfoPrefs: unknown) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({ ok: true, json: prefsWith(AccountingInfoPrefs) }),
+      ),
+    );
+    return fetchCurrencyPrefs("AT", "realm1");
+  };
+
+  it("reads BookCloseDate off the same Preferences response", async () => {
+    const p = await readWith({ BookCloseDate: "2026-06-30" });
+    expect(p.bookCloseDate).toBe("2026-06-30");
+    // The currency answer is unchanged by its presence.
+    expect(p.homeCurrency).toBe("CAD");
+  });
+
+  it("reports null when the company has no closing date (books open)", async () => {
+    expect((await readWith({})).bookCloseDate).toBeNull();
+    expect((await readWith(undefined)).bookCloseDate).toBeNull();
+  });
+
+  it("refuses anything that is not a real YYYY-MM-DD", async () => {
+    // A half-parsed date is worse than none: it would be reasoned about as if
+    // it were true. Only an exact ISO date counts.
+    for (const bad of ["", "  ", "2026-6-30", "30/06/2026", "yesterday", "2026"]) {
+      expect((await readWith({ BookCloseDate: bad })).bookCloseDate).toBeNull();
+    }
+  });
+
+  it("trims a padded date rather than rejecting it", async () => {
+    expect((await readWith({ BookCloseDate: " 2026-06-30 " })).bookCloseDate).toBe(
+      "2026-06-30",
+    );
+  });
+
   it("reads the home currency and the multicurrency flag from Preferences", async () => {
     const fetchMock = vi.fn(async () =>
       mockResponse({
@@ -948,7 +994,11 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
     );
     vi.stubGlobal("fetch", fetchMock);
     const p = await fetchCurrencyPrefs("AT", "realm1", "sandbox");
-    expect(p).toEqual({ homeCurrency: "USD", multicurrencyEnabled: true });
+    expect(p).toEqual({
+      homeCurrency: "USD",
+      multicurrencyEnabled: true,
+      bookCloseDate: null,
+    });
     // Preferences, not CompanyInfo — CompanyInfo carries no home currency.
     const firstCall = fetchMock.mock.calls[0] as unknown as [string];
     expect(String(firstCall[0])).toContain("/preferences");
@@ -968,7 +1018,11 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
       ),
     );
     const p = await fetchCurrencyPrefs("AT", "realm1");
-    expect(p).toEqual({ homeCurrency: "CAD", multicurrencyEnabled: false });
+    expect(p).toEqual({
+      homeCurrency: "CAD",
+      multicurrencyEnabled: false,
+      bookCloseDate: null,
+    });
   });
 
   it("leaves the flag UNKNOWN when QuickBooks did not say", async () => {
@@ -981,7 +1035,11 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
       ),
     );
     const p = await fetchCurrencyPrefs("AT", "realm1");
-    expect(p).toEqual({ homeCurrency: "GBP", multicurrencyEnabled: null });
+    expect(p).toEqual({
+      homeCurrency: "GBP",
+      multicurrencyEnabled: null,
+      bookCloseDate: null,
+    });
   });
 
   it("fails soft to all-unknown on a non-ok response", async () => {
@@ -992,6 +1050,7 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
     expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
       homeCurrency: null,
       multicurrencyEnabled: null,
+      bookCloseDate: null,
     });
   });
 
@@ -1005,6 +1064,7 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
     expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
       homeCurrency: null,
       multicurrencyEnabled: null,
+      bookCloseDate: null,
     });
   });
 
@@ -1016,6 +1076,66 @@ describe("fetchCurrencyPrefs — can this company express a foreign currency?", 
     expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
       homeCurrency: null,
       multicurrencyEnabled: null,
+      bookCloseDate: null,
     });
+  });
+});
+
+describe("parseIntuitFaultCodes — which rejection was it?", () => {
+  // Why this exists at all: QuickbooksError.code is VYLAN's category for what we
+  // were doing ("write_failed"), not Intuit's reason. Callers that need to tell
+  // a closed period from a bad account must read Intuit's own code, and they
+  // cannot regex the message — it carries a body truncated at 500 characters, so
+  // the code can fall off the end.
+  it("pulls the code out of a Fault envelope", () => {
+    const body = JSON.stringify({
+      Fault: {
+        Error: [
+          {
+            Message: "The account period has closed",
+            Detail: "...",
+            code: "6210",
+          },
+        ],
+        type: "ValidationFault",
+      },
+    });
+    expect(parseIntuitFaultCodes(body)).toEqual(["6210"]);
+  });
+
+  it("accepts an already-parsed response, not just text", () => {
+    // Some call sites read res.text() and some res.json(); both need the codes.
+    expect(parseIntuitFaultCodes({ Fault: { Error: [{ code: "6200" }] } })).toEqual(
+      ["6200"],
+    );
+  });
+
+  it("reads every error in the envelope", () => {
+    const body = JSON.stringify({
+      Fault: { Error: [{ code: "6210" }, { code: "6000" }] },
+    });
+    expect(parseIntuitFaultCodes(body)).toEqual(["6210", "6000"]);
+  });
+
+  it("coerces a numeric code to a string", () => {
+    expect(parseIntuitFaultCodes({ Fault: { Error: [{ code: 6210 }] } })).toEqual([
+      "6210",
+    ]);
+  });
+
+  it("returns nothing for a non-JSON body instead of throwing", () => {
+    // Intuit occasionally returns HTML from an edge/proxy, and this runs INSIDE
+    // a catch block — throwing here would replace a useful error with a crash.
+    expect(parseIntuitFaultCodes("<html>502 Bad Gateway</html>")).toEqual([]);
+    expect(parseIntuitFaultCodes("")).toEqual([]);
+    expect(parseIntuitFaultCodes(null)).toEqual([]);
+  });
+
+  it("returns nothing for a body with no Fault", () => {
+    expect(parseIntuitFaultCodes(JSON.stringify({ Bill: { Id: "1" } }))).toEqual([]);
+  });
+
+  it("names both codes Intuit uses for a closed period", () => {
+    expect([...INTUIT_PERIOD_CLOSED_CODES]).toEqual(["6200", "6210"]);
   });
 });

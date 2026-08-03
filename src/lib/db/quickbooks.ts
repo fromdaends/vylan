@@ -400,23 +400,51 @@ export async function updateFirmQuickbooksCompanyCountry(
 // information ("this company cannot take a CurrencyRef"), unlike null.
 export async function updateQuickbooksCurrencyPrefs(
   firmId: string,
-  prefs: { homeCurrency: string | null; multicurrencyEnabled: boolean | null },
+  prefs: {
+    homeCurrency: string | null;
+    multicurrencyEnabled: boolean | null;
+    // Advisory closing date (migration 1360). Absent on callers that predate it.
+    bookCloseDate?: string | null;
+  },
   clientId?: QuickbooksClientScope,
 ): Promise<void> {
-  if (prefs.homeCurrency == null && prefs.multicurrencyEnabled == null) return;
+  if (
+    prefs.homeCurrency == null &&
+    prefs.multicurrencyEnabled == null &&
+    prefs.bookCloseDate === undefined
+  ) {
+    return;
+  }
   const sb = getServiceRoleSupabase();
   const patch: Record<string, unknown> = {};
   if (prefs.homeCurrency != null) patch.home_currency = prefs.homeCurrency;
   if (prefs.multicurrencyEnabled != null) {
     patch.multicurrency_enabled = prefs.multicurrencyEnabled;
   }
-  const base = () =>
-    sb.from("quickbooks_connections").update(patch).eq("firm_id", firmId);
-  const { error } = await runWithClientFallback(
-    clientId,
-    () => withClientScope(base(), clientId),
-    () => base(),
-  );
+  // Written even when NULL, unlike the two above: a company that REOPENS its
+  // books reports no closing date, and that is real information we must record
+  // rather than leaving yesterday's date sitting in the cache forever.
+  if (prefs.bookCloseDate !== undefined) {
+    patch.book_close_date = prefs.bookCloseDate;
+  }
+  const write = (p: Record<string, unknown>) => {
+    const base = () =>
+      sb.from("quickbooks_connections").update(p).eq("firm_id", firmId);
+    return runWithClientFallback(
+      clientId,
+      () => withClientScope(base(), clientId),
+      () => base(),
+    );
+  };
+  let { error } = await write(patch);
+  // Same reason as the read: naming book_close_date before migration 1360 is
+  // applied fails the WHOLE update, which would take the currency prefs with it.
+  // Drop the new column and write the rest rather than losing both.
+  if (error && isMissingSchema(error) && "book_close_date" in patch) {
+    const { book_close_date: _dropped, ...rest } = patch;
+    if (Object.keys(rest).length > 0) ({ error } = await write(rest));
+    else error = null;
+  }
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] updateQuickbooksCurrencyPrefs failed:", error);
   }
@@ -429,19 +457,38 @@ export async function updateQuickbooksCurrencyPrefs(
 export async function readQuickbooksCurrencyPrefs(
   firmId: string,
   clientId?: QuickbooksClientScope,
-): Promise<{ homeCurrency: string | null; multicurrencyEnabled: boolean | null }> {
-  const unknown = { homeCurrency: null, multicurrencyEnabled: null };
+): Promise<{
+  homeCurrency: string | null;
+  multicurrencyEnabled: boolean | null;
+  bookCloseDate: string | null;
+}> {
+  const unknown = {
+    homeCurrency: null,
+    multicurrencyEnabled: null,
+    bookCloseDate: null,
+  };
   const sb = getServiceRoleSupabase();
-  const base = () =>
-    sb
-      .from("quickbooks_connections")
-      .select("home_currency, multicurrency_enabled")
-      .eq("firm_id", firmId);
-  const { data, error } = await runWithClientFallback(
-    clientId,
-    () => withClientScope(base(), clientId).maybeSingle(),
-    () => base().maybeSingle(),
+  // Two column lists, not one. Naming book_close_date (migration 1360) in a
+  // database that does not have it yet fails the WHOLE query, which would take
+  // the currency prefs down with it and silently turn multicurrency off for
+  // every firm until the SQL is applied. So: ask for it, and on a missing-column
+  // error ask again without it. Never `select("*")` — this table holds the
+  // OAuth tokens.
+  const read = (columns: string) => {
+    const base = () =>
+      sb.from("quickbooks_connections").select(columns).eq("firm_id", firmId);
+    return runWithClientFallback(
+      clientId,
+      () => withClientScope(base(), clientId).maybeSingle(),
+      () => base().maybeSingle(),
+    );
+  };
+  let { data, error } = await read(
+    "home_currency, multicurrency_enabled, book_close_date",
   );
+  if (error && isMissingSchema(error)) {
+    ({ data, error } = await read("home_currency, multicurrency_enabled"));
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] readQuickbooksCurrencyPrefs failed:", error);
@@ -451,6 +498,7 @@ export async function readQuickbooksCurrencyPrefs(
   const row = data as {
     home_currency?: string | null;
     multicurrency_enabled?: boolean | null;
+    book_close_date?: string | null;
   } | null;
   const code = row?.home_currency?.trim().toUpperCase();
   return {
@@ -459,6 +507,9 @@ export async function readQuickbooksCurrencyPrefs(
       typeof row?.multicurrency_enabled === "boolean"
         ? row.multicurrency_enabled
         : null,
+    // Absent before 1360 is applied — null, i.e. "we cannot state a closing
+    // date", which is exactly how the advisory treats it.
+    bookCloseDate: row?.book_close_date ?? null,
   };
 }
 

@@ -173,6 +173,16 @@ export async function POST(
         { error: "reconnect_required", detail: r.detail },
         { status: 409 },
       );
+    case "period_closed":
+      // The client closed their books over this date. Nothing was written and
+      // retrying cannot help, so this is a 409 (fix the situation) rather than
+      // a 502 (our side broke) — the card must not offer a bare "try again".
+      return NextResponse.json(
+        // closeDate is the RAW ISO date, not a formatted one: the card renders
+        // it in the reader's own locale.
+        { error: "period_closed", detail: r.detail, closeDate: r.closeDate },
+        { status: 409 },
+      );
     case "post_failed":
       return NextResponse.json(
         { error: "post_failed", detail: r.detail },

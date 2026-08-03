@@ -28,12 +28,17 @@ import {
   quickbooksCreate,
   quickbooksUploadAttachment,
   quickbooksTaxLinesEnabled,
+  fetchCurrencyPrefs,
+  INTUIT_PERIOD_CLOSED_CODES,
   QuickbooksError,
   type QboTxnEntity,
   fetchExchangeRate,
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
-import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
+import {
+  readQuickbooksCurrencyPrefs,
+  updateQuickbooksCurrencyPrefs,
+} from "@/lib/db/quickbooks";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
@@ -88,6 +93,14 @@ export type PostOutcomeKind =
   // access token was fresh — the customer revoked Vylan's access in QuickBooks,
   // confirmed by a forced refresh failing). The owner must reconnect.
   | "reconnect_required"
+  // The client CLOSED THEIR BOOKS over the transaction's date in QuickBooks
+  // (Intuit fault 6200/6210). Not a Vylan failure and not retriable: a closing
+  // date is only a warning inside QuickBooks — a user clicks through it, or
+  // types the password — but over the API it is an unconditional refusal, and
+  // Intuit's own guidance is to make the change on the QuickBooks website. So
+  // there is nothing to retry until either the closing date moves or the entry
+  // is dated after it. Nothing was written.
+  | "period_closed"
   | "post_failed"
   | "conflict"
   | "record_failed";
@@ -98,6 +111,10 @@ export type PostOutcome = {
   firmId: string | null;
   postedQboId?: string | null;
   detail?: string;
+  // The client's QuickBooks closing date (YYYY-MM-DD) on a `period_closed`
+  // outcome, read fresh at the moment of the rejection. Null when that read
+  // failed — the outcome still stands, it just cannot name the date.
+  closeDate?: string | null;
   // Bill/Purchase (expense) or Invoice (income) postability problems — informational.
   problems?: (
     PostabilityProblem | InvoicePostabilityProblem | PurchasePostabilityProblem
@@ -588,6 +605,54 @@ export async function postApprovedDraft(
     // refresh succeeds it was a spurious 401 (the token is now refreshed, so the
     // next attempt uses a good one) → fall through to the normal retriable
     // failure. Nothing was created either way, so there is no double-post risk.
+    // Books closed over this date. Checked BEFORE the 401 branch and before the
+    // generic failure, because it is the one rejection that is definitely not
+    // ours and definitely not worth retrying — left in post_failed it reads to
+    // the accountant as "Vylan is broken" when the truth is "your client locked
+    // the month".
+    if (
+      e instanceof QuickbooksError &&
+      e.hasIntuitCode(...INTUIT_PERIOD_CLOSED_CODES)
+    ) {
+      console.warn(
+        "[quickbooks] post blocked — client's books are closed over this date",
+        detail,
+      );
+      await recordDraftPostError({ uploadedFileId: fileId, error: detail });
+      // Intuit has just PROVEN the books are closed, so this is the one moment a
+      // closing date is worth reading: fetch it fresh (never from the cache,
+      // which only refreshes on connect/sync and may predate this close) so the
+      // accountant is told WHICH date to work around rather than just "some date
+      // on or before this one". Best-effort — a failed read simply drops the
+      // date from the message, it never turns a clear refusal into an error.
+      let closeDate: string | null = null;
+      try {
+        const fresh = await fetchCurrencyPrefs(
+          ctx.accessToken,
+          ctx.realmId,
+          ctx.environment,
+        );
+        closeDate = fresh.bookCloseDate;
+        if (closeDate) {
+          await updateQuickbooksCurrencyPrefs(
+            draft.firmId,
+            { homeCurrency: null, multicurrencyEnabled: null, bookCloseDate: closeDate },
+            draft.clientId,
+          );
+        }
+      } catch {
+        // Leave closeDate null; the generic message still says what to do.
+      }
+      return {
+        kind: "period_closed",
+        ...base,
+        closeDate,
+        detail:
+          "This client's books are closed in QuickBooks" +
+          (closeDate ? ` through ${closeDate}` : " on or before this date") +
+          ". Move the closing date in QuickBooks, or date this entry after it, then post again.",
+      };
+    }
     if (e instanceof QuickbooksError && e.status === 401) {
       const reAuth = await refreshAccessTokenAfter401(
         draft.firmId,

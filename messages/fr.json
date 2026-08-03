@@ -3600,6 +3600,8 @@
     "post_go": "Envoyer",
     "post_cancel": "Annuler",
     "post_failed": "Échec de l’envoi. Réessayez.",
+    "post_period_closed": "Les livres de ce client sont fermés dans QuickBooks à cette date ou avant. Modifiez la date de clôture dans QuickBooks, ou datez cette écriture après celle-ci, puis publiez de nouveau.",
+    "post_period_closed_on": "Les livres de ce client sont fermés dans QuickBooks jusqu'au {date}. Modifiez la date de clôture dans QuickBooks, ou datez cette écriture après celle-ci, puis publiez de nouveau.",
     "post_reconnect": "Votre connexion QuickBooks a été interrompue. Veuillez vous reconnecter et réessayer.",
     "post_reconnect_cta": "Reconnecter QuickBooks",
     "post_problem_generic": "Un élément de cette écriture n’est plus valide dans QuickBooks. Vérifiez les champs signalés et réessayez.",
