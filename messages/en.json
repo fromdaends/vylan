@@ -2819,7 +2819,14 @@
     "settings_terms_none_placeholder": "No due date",
     "settings_terms_summary": "New invoices will be due {days} days after you send them.",
     "settings_terms_summary_receipt": "New invoices will be due the day you send them.",
-    "settings_terms_summary_none": "New invoices will have no due date, so none of them can ever be overdue and reminders start a week after sending instead."
+    "settings_terms_summary_none": "New invoices will have no due date, so none of them can ever be overdue and reminders start a week after sending instead.",
+    "filter_button": "Sort & filter",
+    "filter_period": "Period",
+    "filter_period_all": "All time",
+    "filter_period_30": "Last 30 days",
+    "filter_period_month": "This month",
+    "filter_period_custom": "Custom range",
+    "filter_active": "Filtered: {list}"
   },
   "Footer": {
     "based_in": "Built in Canada.",

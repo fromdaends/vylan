@@ -2,20 +2,19 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { useRouter } from "@/i18n/navigation";
 
-// THE FILES HEADER SEARCH — one search box for the whole section.
+// THE PAGE-HEADER SEARCH — one box, top right, for a whole section.
 //
-// It lives in the PAGE HEADER rather than inside Browse's toolbar, and typing
-// in it switches to Browse and filters the level you are on. That is the
-// redesign's one behavioural claim about search: you should never have to find
-// the right tab before you can look something up.
+// Files and Billing both put search up in the page header rather than inside a
+// toolbar buried under the tabs, and both write it to `?q=`. That is one
+// component with two call sites, not two search boxes that happen to look the
+// same today and drift apart the first time one of them is touched.
 //
-// URL-as-state, like the rest of /files: the query is written to ?q= (with
-// ?tab=browse so a search from Home lands somewhere that can show results), so
-// a search is linkable, survives a reload, and needs no client-side store. The
+// URL-as-state, like the rest of these sections: the query lives in `?q=`, so a
+// search is linkable, survives a reload, and needs no client-side store. The
 // input keeps its own value between keystrokes so it never lags the typist
 // while the server round-trips.
 
@@ -23,8 +22,23 @@ import { useRouter } from "@/i18n/navigation";
  * a normal typing burst is ONE navigation, short enough to feel live. */
 const DEBOUNCE_MS = 250;
 
-export function FilesHeaderSearch() {
-  const t = useTranslations("Files");
+export function HeaderSearch({
+  basePath,
+  placeholder,
+  forceParams,
+  className,
+}: {
+  /** Route this search writes to, e.g. "/files" or "/billing". */
+  basePath: string;
+  /** Already translated — the server page owns the copy. */
+  placeholder: string;
+  /**
+   * Params pinned on every search. Files passes `{ tab: "browse" }`: a query
+   * typed on Home has to land somewhere that can actually show results.
+   */
+  forceParams?: Record<string, string>;
+  className?: string;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const urlQuery = params.get("q") ?? "";
@@ -53,22 +67,20 @@ export function FilesHeaderSearch() {
 
     if (trimmed) sp.set("q", trimmed);
     else sp.delete("q");
-
-    // Searching means Browse. Home has no result list to filter, so a query
-    // typed there would otherwise vanish into a tab that cannot show it.
-    sp.set("tab", "browse");
+    for (const [k, v] of Object.entries(forceParams ?? {})) sp.set(k, v);
     // A new query starts at page one — staying on page 4 of the previous
     // search reliably shows an empty list and reads as "no results".
     sp.delete("page");
 
     written.current = trimmed;
     startTransition(() => {
-      router.replace(`/files?${sp.toString()}`);
+      const qs = sp.toString();
+      router.replace(qs ? `${basePath}?${qs}` : basePath);
     });
   }
 
   return (
-    <div className="relative">
+    <div className={cn("relative", className)}>
       <Search
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
         aria-hidden
@@ -89,8 +101,8 @@ export function FilesHeaderSearch() {
             commit(value);
           }
         }}
-        placeholder={t("search_all_placeholder")}
-        aria-label={t("search_all_placeholder")}
+        placeholder={placeholder}
+        aria-label={placeholder}
         className="h-[42px] w-full rounded-[11px] border border-border bg-card pr-3.5 pl-9 text-sm text-foreground shadow-[0_1px_2px_rgba(10,10,20,0.03)] transition-colors placeholder:text-muted-foreground/75 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:w-[340px]"
       />
     </div>
