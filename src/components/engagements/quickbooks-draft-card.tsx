@@ -45,7 +45,6 @@ import { QuickbooksDateField } from "./quickbooks-date-field";
 import {
   formatCurrency,
   formatDate,
-  formatNumber,
   type AppLocale,
 } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -250,12 +249,11 @@ export async function QuickbooksDraftCard({
         ? t("choose_vendor")
         : t("choose_party");
 
-  const amountLabel =
-    v.amount == null
-      ? "—"
-      : v.foreignCurrency && v.currency
-        ? `${formatNumber(v.amount, locale, 2)} ${v.currency}`
-        : formatCurrency(v.amount, locale);
+  // Same treatment as queue-row: format in the entry's own currency instead of
+  // branching on "is this foreign" and falling back to a hardcoded CAD symbol.
+  const amountLabel = formatCurrency(v.amount, locale, {
+    currency: v.currency,
+  });
 
   // A descriptive title for this particular entry: the vendor/customer it books
   // to (the accountant's pick, else the AI match), falling back to the source

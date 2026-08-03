@@ -46,15 +46,32 @@ function parseDateInput(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Money, in the currency it is actually denominated in.
+//
+// This used to hardcode CAD, which is right for billing and invoices (Vylan
+// bills in CAD) but wrong for ledger data: a connected Xero or QuickBooks
+// organisation can bank in USD. Downstream code knew the helper was lying and
+// grew four different, mutually inconsistent workarounds — the worst of which
+// printed a CAD-styled "$1,234.56" and then appended " USD" beside it.
+//
+// The third argument stays back-compatible with the ~7 call sites that pass a
+// digit count. Pass an object to reach `currency` — deliberately NOT a fourth
+// positional, because making callers write `formatCurrency(x, locale, 2, cur)`
+// just to reach the currency is how a shared helper earns itself another copy.
+//
+// `currency` is nullish-tolerant: ledger rows often have no currency recorded,
+// and the firm's own currency is the right assumption there.
 export function formatCurrency(
   amount: number | null | undefined,
   locale: AppLocale,
-  fractionDigits = 2,
+  opts: number | { fractionDigits?: number; currency?: string | null } = 2,
 ): string {
   if (amount == null || !Number.isFinite(amount)) return "—";
+  const { fractionDigits = 2, currency } =
+    typeof opts === "number" ? { fractionDigits: opts, currency: undefined } : opts;
   return new Intl.NumberFormat(intlLocale(locale), {
     style: "currency",
-    currency: "CAD",
+    currency: currency?.trim() || "CAD",
     maximumFractionDigits: fractionDigits,
     minimumFractionDigits: fractionDigits,
   }).format(amount);

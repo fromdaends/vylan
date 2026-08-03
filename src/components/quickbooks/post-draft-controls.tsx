@@ -493,10 +493,14 @@ export function PostDraftControls({
                           {c.vendorName || entityLabel(c.entity)}
                         </div>
                         <div className="text-xs text-muted-foreground">
+                          {/* Format IN the draft's own currency rather than
+                              printing a CAD symbol and appending a
+                              contradicting code beside it ("$1,234.56 USD"). */}
                           {c.totalAmt != null
-                            ? formatCurrency(c.totalAmt, locale)
+                            ? formatCurrency(c.totalAmt, locale, {
+                                currency: c.currency,
+                              })
                             : "—"}
-                          {c.currency ? ` ${c.currency}` : ""}
                           {c.txnDate
                             ? ` · ${formatDate(c.txnDate, locale, "medium")}`
                             : ""}
