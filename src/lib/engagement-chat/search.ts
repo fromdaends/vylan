@@ -4,6 +4,7 @@
 // knowledge source is this structured data, never the raw documents.
 
 import { CHAT_SEARCH_RESULT_CAP } from "./config";
+import { normalizeText } from "@/lib/text/normalize";
 
 // The subset of an uploaded_files row the chat reads. The jsonb shapes match
 // what the classify worker writes (src/lib/ai/process.ts): ai_extracted_fields
@@ -76,14 +77,6 @@ export type SearchCriteria = {
   text?: string;
 };
 
-// Accent- and case-insensitive normalization (Québec French data).
-export function normalizeText(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
-}
 
 function nameHaystack(row: ChatFileRow): string {
   const f = row.ai_extracted_fields;

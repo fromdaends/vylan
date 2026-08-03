@@ -5,10 +5,10 @@ import {
   compactFileDetails,
   fileMatches,
   isFlagged,
-  normalizeText,
   searchFiles,
   type ChatFileRow,
 } from "./search";
+import { normalizeText } from "@/lib/text/normalize";
 
 function file(overrides: Partial<ChatFileRow> = {}): ChatFileRow {
   return {

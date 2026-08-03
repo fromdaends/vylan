@@ -4,11 +4,16 @@
 // broken, and nobody types accents into a search box. This is the shared home
 // for that folding.
 //
-// NOTE: an identical normalizeText lives in
-// src/components/clients/client-archive/archive-filter.ts. That copy came
-// first and is deliberately left alone here (it belongs to another session's
-// locked file). Point it at this module when convenient — the behaviour is
-// intentionally identical, and there are tests on both sides.
+// THE ONLY normalizeText. There used to be four, and two of them had drifted:
+// the engagement preview and the engagement chat search used NFD without the
+// oe/ae mapping, so typing "soeur" found nothing for a client named Sœur, and
+// "finance" missed text carrying the ﬁ ligature that PDF extraction produces —
+// on the two surfaces that search extracted document text. Accents worked
+// everywhere, which is exactly why nobody noticed.
+//
+// Each copy also had its own tests, and all four passed: a test file asserts
+// what its own copy happens to do, not what the concept is supposed to do. If
+// you need folding, import it from here. Do not write a fifth.
 
 // Combining diacritical marks (U+0300-U+036F) plus the precomposed French
 // ligatures oe (U+0153) and ae (U+00E6), built with escapes so this file stays
@@ -23,13 +28,17 @@ const LIG_AE = new RegExp("\\u00e6", "g");
 // Œ→œ and Æ→æ so only the lowercase ligatures need mapping; NFKD then
 // decomposes accents (é→e+◌́) and compatibility ligatures (ﬁ→fi) before the
 // combining marks are stripped.
+// Trailing/leading whitespace is never meaningful to a match, and one of the
+// copies folded into here already trimmed — so trimming is the standard rather
+// than something each caller remembers to do.
 export function normalizeText(input: string): string {
   return input
     .toLowerCase()
     .replace(LIG_OE, "oe")
     .replace(LIG_AE, "ae")
     .normalize("NFKD")
-    .replace(DIACRITICS, "");
+    .replace(DIACRITICS, "")
+    .trim();
 }
 
 // Split a query into folded terms. Every term must match somewhere for a

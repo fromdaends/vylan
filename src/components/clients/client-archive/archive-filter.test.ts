@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { filterAndSortArchive, normalizeText, type ArchiveSortKey } from "./archive-filter";
+import { filterAndSortArchive, type ArchiveSortKey } from "./archive-filter";
+import { normalizeText } from "@/lib/text/normalize";
 import type {
   ArchiveEngagement,
   ArchiveFile,
