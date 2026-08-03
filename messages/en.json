@@ -1581,6 +1581,8 @@
     "nav_clients": "Clients",
     "nav_engagements": "Engagements",
     "nav_work": "Work",
+    "nav_work_tasks": "Tasks",
+    "nav_close_panel": "Close",
     "nav_engagements_toggle": "Toggle engagement views",
     "nav_templates": "Templates",
     "nav_quickbooks": "QuickBooks",

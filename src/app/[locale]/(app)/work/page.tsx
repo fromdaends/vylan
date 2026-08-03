@@ -24,7 +24,6 @@ import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users"
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { InternalWork } from "@/components/engagements/internal-work";
-import { WorkTabs } from "@/components/work/work-tabs";
 import { WorkFilters, type WorkScope } from "@/components/work/work-filters";
 
 export default async function WorkPage({
@@ -67,8 +66,6 @@ export default async function WorkPage({
           {t("work_subtitle")}
         </p>
       </header>
-
-      <WorkTabs current="tasks" />
 
       <WorkFilters
         scope={scope}
