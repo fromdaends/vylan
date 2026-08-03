@@ -21,6 +21,19 @@ import {
 } from "@/components/settings/audit-actions";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
+import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
+import { ClientsTable } from "@/components/clients/clients-table";
+import type { ClientOwner } from "@/components/clients/owner";
+import { buildClientEngagementIndex } from "@/lib/clients/engagement-index";
+import { listEngagements } from "@/lib/db/engagements";
+import { ProfileTabs } from "@/components/ui/profile-tabs";
+import { FilterLinks } from "@/components/ui/filter-links";
+// PLAIN module, not a "use client" one: this Server Component CALLS these, and
+// a client-module export would be a client reference that throws (#959).
+import {
+  parseTeamProfileTab,
+  teamProfileTabHref,
+} from "@/lib/team/profile-tabs";
 import { HandOverWork } from "@/components/settings/team/hand-over-work";
 import { DeactivateMember } from "@/components/settings/team/deactivate-member";
 import { MemberPermissions } from "@/components/settings/team/member-permissions";
@@ -53,6 +66,11 @@ export const dynamic = "force-dynamic";
 // sees the intersection of "their work" and "what I'm allowed to see" — the
 // activity feed stays owner-only, mirroring /settings/audit.
 const PROFILE_VIEWS = ["active", "ready", "completed", "archived"] as const;
+
+// How many rows each section PREVIEWS on the overview before handing off to its
+// own tab. One number for all three, so the cards stay the same height as each
+// other instead of the page reading as a ragged column.
+const OVERVIEW_PREVIEW = 5;
 type ProfileView = (typeof PROFILE_VIEWS)[number];
 
 function resolveProfileView(raw: string | undefined): ProfileView {
@@ -66,12 +84,17 @@ export default async function TeamMemberProfilePage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; tab?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
-  const view = resolveProfileView((await searchParams).view);
+  const sp = await searchParams;
+  const view = resolveProfileView(sp.view);
+  // Which facet of this person we're looking at — the same treatment the client
+  // page got, and for the same reason: this page had become one long scroll
+  // through about / roles / permissions / removal / work / clients / history.
+  const tab = parseTeamProfileTab(sp.tab);
 
   const user = await getCurrentUser();
   if (!user) notFound();
@@ -86,11 +109,21 @@ export default async function TeamMemberProfilePage({
   const member = members.find((m) => m.id === id);
   if (!member) notFound();
 
-  // Two scopes at most, and usually one: loadEngagementWorklist is React.cache'd
-  // per scope, so active/ready/completed all resolve to the same single query.
-  // Only the Archived tab costs a second one. The stat tile stays pinned to the
-  // ACTIVE count on purpose — a headline number that changes meaning when you
-  // switch tabs isn't a headline, it's a second copy of the table's length.
+  // Two engagement scopes at most, and usually one: loadEngagementWorklist is
+  // React.cache'd per scope, so active/ready/completed all resolve to the same
+  // single query. Only the Archived filter costs a second one. The stat row
+  // stays pinned to the ACTIVE count on purpose — a headline number that
+  // changes meaning when you switch filters isn't a headline, it's a second
+  // copy of the table's length.
+  //
+  // The rest is gated by TAB. Every one of these used to run on every render,
+  // which after the tabs landed would mean each tab switch paying for the
+  // firm's whole client list and a 20-row activity read to show a permission
+  // switch. That is the latency the founder hit on the client page's tabs, and
+  // this page would have inherited it.
+  const wantsWork = tab === "overview" || tab === "engagements";
+  const wantsClients = tab === "overview" || tab === "clients";
+  const wantsActivity = isOwner && (tab === "overview" || tab === "activity");
   const [
     activeWorklist,
     viewWorklist,
@@ -99,18 +132,26 @@ export default async function TeamMemberProfilePage({
     activity,
     avatarUrl,
   ] = await Promise.all([
-      loadEngagementWorklist("active"),
-      loadEngagementWorklist(scopeForView(view)),
-      listClients(),
+      // The Active count is in the About panel and in the removal dialog's
+      // "they're holding N things" warning — both of which live in the rail,
+      // and the rail is the overview.
+      tab === "overview" ? loadEngagementWorklist("active") : [],
+      wantsWork ? loadEngagementWorklist(scopeForView(view)) : [],
+      wantsClients ? listClients() : [],
       // Recurring schedules this person holds (0940). Needed by the removal
       // dialog: a schedule keeps minting NEW work every cycle, so someone whose
       // whole footprint is repeating work would otherwise be reported as
       // holding NOTHING and be removed with no handover offered. That exact bug
       // is why the count exists on the roster; passing 0 here would have
       // reintroduced it the moment removal moved to this page.
-      countLiveSeriesByAssignee(),
-      isOwner
-        ? listActivityForFirm({ actorId: id, limit: 20 })
+      tab === "overview" ? countLiveSeriesByAssignee() : new Map<string, number>(),
+      // The overview shows a preview, the tab shows the log. Asking for 20 rows
+      // to render 5 is the cheaper of the two round-trips to get wrong.
+      wantsActivity
+        ? listActivityForFirm({
+            actorId: id,
+            limit: tab === "activity" ? 100 : OVERVIEW_PREVIEW,
+          })
         : Promise.resolve([]),
       getBrandingImageUrl(member.avatar_path),
     ]);
@@ -129,7 +170,9 @@ export default async function TeamMemberProfilePage({
   // leaving it that way would have this page showing one list while their
   // actual access follows another — two answers to the same question, and after
   // the list decides access, the wrong one would be the louder.
-  const memberClientIds = await listClientIdsForMember(id);
+  const memberClientIds = wantsClients
+    ? await listClientIdsForMember(id)
+    : new Set<string>();
   const assigned = filterClientsByOwner(clientsRaw, id, "");
   const assignedIds = new Set(assigned.map((c) => c.id));
   const clients = [
@@ -139,8 +182,44 @@ export default async function TeamMemberProfilePage({
     ),
   ];
 
+  // The Clients TAB renders the firm's real clients table, so it needs what
+  // that table reads: per-client engagement tallies and the rows its expanded
+  // drawer lists. One firm-wide engagement read, on this tab only — the same
+  // shape /clients does, through the same shared builder so the two screens
+  // cannot count differently.
+  const clientTabEngagements =
+    tab === "clients" ? await listEngagements({ scope: "active" }) : [];
+  const clientIdsShown = new Set(clients.map((c) => c.id));
+  const { summaries: clientSummaries, engagementsByClient } =
+    buildClientEngagementIndex(
+      // Narrowed to THIS person's clients before indexing: the drawer under a
+      // row must show that client's work, and the badge counts are per client
+      // anyway, so carrying the whole firm's rows through would be waste.
+      clientTabEngagements.filter((e) => clientIdsShown.has(e.client_id)),
+    );
+  // Owner chips for the table's "Owner" column. The seat cap is 1–15, so
+  // resolving every member's avatar once here is cheaper than the table doing
+  // it per row — and it is what /clients already does.
+  const memberAvatars = await Promise.all(
+    tab === "clients"
+      ? members.map((m) => getBrandingImageUrl(m.avatar_path))
+      : [],
+  );
+  const clientOwners: Record<string, ClientOwner> = {};
+  if (tab === "clients") {
+    members.forEach((m, i) => {
+      clientOwners[m.id] = {
+        id: m.id,
+        name: userDisplayLabel(m),
+        avatarUrl: memberAvatars[i],
+      };
+    });
+  }
+
   // The firm's roles, and which of them this person wears. Both empty until
-  // 1260 is applied, which reads as "no roles yet" — the right answer either way.
+  // 1260 is applied, which reads as "no roles yet" — the right answer either
+  // way. Overview only: the badges render beside their name, which the header
+  // shows on every tab, so the READ stays but the roles EDITOR is in the rail.
   const [firmRoles, heldRoleIds] = await Promise.all([
     listFirmRoles(),
     listRoleIdsForUser(id),
@@ -152,6 +231,8 @@ export default async function TeamMemberProfilePage({
   const tClients = await getTranslations("Clients");
   const tAudit = await getTranslations("Audit");
   const tEngagements = await getTranslations("Engagements");
+  const tDashboard = await getTranslations("Dashboard");
+  const tStage = await getTranslations("Stage");
 
   const knownActions = new Set<string>(AUDIT_ACTIONS as readonly string[]);
   const actionLabel = (key: string): string =>
@@ -199,14 +280,41 @@ export default async function TeamMemberProfilePage({
         </div>
       </div>
 
+      {/* The same tab row the client page has, from the same component. The
+          header card's bottom edge was left empty when the lifecycle filter
+          moved down to the list it filters ("the main headers should be main
+          headers"); this is the page-level thing that earns it back.
+          Activity is owner-only — it mirrors /settings/audit's visibility, and
+          a tab that 404s half the firm is worse than no tab. */}
+      <ProfileTabs
+        label={name}
+        items={[
+          { key: "overview", href: teamProfileTabHref(id, "overview"), label: tClients("tab_overview"), active: tab === "overview" },
+          { key: "engagements", href: teamProfileTabHref(id, "engagements"), label: t("profile_engagements_title"), active: tab === "engagements" },
+          { key: "clients", href: teamProfileTabHref(id, "clients"), label: t("profile_clients_title"), active: tab === "clients" },
+          ...(isOwner
+            ? [{ key: "activity", href: teamProfileTabHref(id, "activity"), label: t("profile_activity_title"), active: tab === "activity" }]
+            : []),
+        ]}
+      />
       </header>
 
-      {/* Two columns, same shape as a client's page and following Canopy's
-          profile layout: a narrow rail of quiet reference on the left, the
-          person's actual WORK on the right. */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+      {/* Two columns on the OVERVIEW, same shape as a client's page and
+          following Canopy's profile layout: a narrow rail of quiet reference
+          on the left, the person's actual WORK on the right.
+          Every other tab is one full-width column — a rail of "about" beside a
+          table you came to read is the "you just moved the block" problem the
+          founder called out, one level up. */}
+      <div
+        className={
+          tab === "overview"
+            ? "grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start"
+            : ""
+        }
+      >
 
-      {/* ── Left rail ────────────────────────────────────────────────────── */}
+      {/* ── Left rail (overview only) ────────────────────────────────────── */}
+      {tab === "overview" && (
       <div className="space-y-4">
         <Panel title={t("profile_about_title")}>
           {/* The three big number tiles that used to sit here are gone. A row
@@ -324,62 +432,111 @@ export default async function TeamMemberProfilePage({
           </div>
         )}
       </div>
+      )}
 
       {/* ── Main column: their work ──────────────────────────────────────── */}
       <div className="space-y-6">
       {/* The lifecycle filter belongs HERE, on the list it filters — not in the
           header card. Founder, seeing it at the top: "the main headers should
-          be main headers", and a filter for one section is not one. The header
-          card's tab row is now empty and stays that way until something
-          page-level earns it. */}
+          be main headers", and a filter for one section is not one.
+          On the TAB this is the real list: the same searchable, stage-filtered
+          browser the client page's Engagements tab uses, because "everything
+          this person is working on" deserves the same tools as "everything for
+          this client". On the OVERVIEW it is a five-row preview with a way in. */}
+      {(tab === "overview" || tab === "engagements") && (
       <Panel
         title={t("profile_engagements_title")}
         flush
         aside={
-          <nav
-            aria-label={t("profile_engagements_title")}
-            className="flex flex-wrap items-center gap-1"
-          >
-            {PROFILE_VIEWS.map((v) => (
-              <Link
-                key={v}
-                href={
-                  v === "active"
-                    ? `/settings/team/${id}`
-                    : `/settings/team/${id}?view=${v}`
-                }
-                aria-current={v === view ? "page" : undefined}
-                className={
-                  v === view
-                    ? "rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground"
-                    : "rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                }
-              >
-                {tEngagements(viewLabelKey(v) as Parameters<typeof tEngagements>[0])}
-              </Link>
-            ))}
-          </nav>
+          tab === "engagements" ? (
+            <FilterLinks
+              label={t("profile_engagements_title")}
+              items={PROFILE_VIEWS.map((v) => ({
+                key: v,
+                href: `${teamProfileTabHref(id, "engagements")}${v === "active" ? "" : `&view=${v}`}`,
+                label: tEngagements(
+                  viewLabelKey(v) as Parameters<typeof tEngagements>[0],
+                ),
+                active: v === view,
+              }))}
+            />
+          ) : engagements.length > OVERVIEW_PREVIEW ? (
+            <Link
+              href={teamProfileTabHref(id, "engagements")}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {tDashboard("view_all")}
+            </Link>
+          ) : null
         }
       >
-        <WorklistTable
-          rows={engagements}
-          locale={locale}
-          emptyText={t("profile_no_engagements", { name })}
-          growNameColumn
-          teamEnabled={false}
-          reassignMembers={reassignTargets}
-          viewerId={user.id}
-        />
+        {tab === "engagements" ? (
+          <WorklistBrowser
+            rows={engagements}
+            locale={locale}
+            emptyText={t("profile_no_engagements", { name })}
+            emptySearchText={tDashboard("wl_empty_search")}
+            emptyStageText={tStage("empty_for_stage")}
+            // The one place searching by CLIENT is the useful thing: every row
+            // here is a different client, which is the opposite of the client
+            // page where the name is identical on all of them.
+            searchClientNames
+            teamEnabled={false}
+            reassignMembers={reassignTargets}
+            viewerId={user.id}
+          />
+        ) : (
+          <WorklistTable
+            rows={engagements.slice(0, OVERVIEW_PREVIEW)}
+            locale={locale}
+            emptyText={t("profile_no_engagements", { name })}
+            growNameColumn
+            teamEnabled={false}
+            reassignMembers={reassignTargets}
+            viewerId={user.id}
+          />
+        )}
       </Panel>
+      )}
 
-      <Panel title={t("profile_clients_title")}>
+      {/* Their clients. On the TAB this is the firm's REAL clients table —
+          expandable rows showing that client's work, the owner chip, the row
+          menu — filtered to the ones this person owns or is on the team of.
+          Not a lookalike list: the same component /clients renders, fed through
+          the same shared index, so the two screens can never count differently.
+          On the overview it stays a five-row preview with a way in. */}
+      {(tab === "overview" || tab === "clients") && (
+      <Panel
+        title={`${t("profile_clients_title")}${tab === "clients" ? ` (${clients.length})` : ""}`}
+        flush={tab === "clients"}
+        aside={
+          tab === "overview" && clients.length > OVERVIEW_PREVIEW ? (
+            <Link
+              href={teamProfileTabHref(id, "clients")}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {tDashboard("view_all")}
+            </Link>
+          ) : null
+        }
+      >
         {clients.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className={tab === "clients" ? "px-4 py-6 text-sm text-muted-foreground" : "text-sm text-muted-foreground"}>
             {t("profile_no_clients", { name })}
           </p>
+        ) : tab === "clients" ? (
+          <ClientsTable
+            clients={clients}
+            summaries={clientSummaries}
+            engagementsByClient={engagementsByClient}
+            owners={clientOwners}
+            currentUserId={user.id}
+            locale={locale}
+            teamEnabled
+          />
         ) : (
           <ul className="-mx-4 -my-1 divide-y divide-border/40">
-            {clients.slice(0, 8).map((c) => (
+            {clients.slice(0, OVERVIEW_PREVIEW).map((c) => (
               <li key={c.id}>
                 <Link
                   href={`/clients/${c.id}`}
@@ -399,9 +556,25 @@ export default async function TeamMemberProfilePage({
           </ul>
         )}
       </Panel>
+      )}
 
-      {isOwner && (
-      <Panel title={t("profile_activity_title")}>
+      {/* What they've done. Owner-only, mirroring /settings/audit — the founder's
+          standing call is that history is not something staff surveil each
+          other with. The overview previews five; the tab is the log. */}
+      {isOwner && (tab === "overview" || tab === "activity") && (
+      <Panel
+        title={t("profile_activity_title")}
+        aside={
+          tab === "overview" && activity.length >= OVERVIEW_PREVIEW ? (
+            <Link
+              href={teamProfileTabHref(id, "activity")}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {tDashboard("view_all")}
+            </Link>
+          ) : null
+        }
+      >
         {activity.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_activity", { name })}
