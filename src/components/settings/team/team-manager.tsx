@@ -201,7 +201,7 @@ export function TeamManager({
           <FirmMenu
             firmName={firmName}
             canManage={canManage}
-            members={activeMembers}
+
             onInvite={
               canManage && !onTrial && !seat.atCap
                 ? () => setInviteOpen(true)
