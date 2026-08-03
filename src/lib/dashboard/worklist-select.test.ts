@@ -8,6 +8,7 @@ import {
   selectRecent,
   selectCompleted,
   selectAssignedTo,
+  selectForClient,
 } from "./worklist-select";
 
 function row(
@@ -24,6 +25,7 @@ function row(
   return {
     title: `Engagement ${over.id}`,
     clientName: "Client",
+    clientId: "client-1",
     status: "in_progress",
     derivedStatus,
     dueDate: null,
@@ -257,5 +259,32 @@ describe("selectAssignedTo", () => {
 
   it("returns nothing when the user has no assigned rows", () => {
     expect(selectAssignedTo(rows, "nobody")).toEqual([]);
+  });
+});
+
+describe("selectForClient", () => {
+  it("keeps only that client's rows", () => {
+    const rows = [
+      row({ id: "a", clientId: "c1" }),
+      row({ id: "b", clientId: "c2" }),
+      row({ id: "c", clientId: "c1" }),
+    ];
+    expect(selectForClient(rows, "c1").map((r) => r.id)).toEqual(["a", "c"]);
+  });
+
+  it("matches the ID, never the display name", () => {
+    // Two clients really can share a name; a name filter would put one firm's
+    // work on the other's page.
+    const rows = [
+      row({ id: "a", clientId: "c1", clientName: "Smith Holdings" }),
+      row({ id: "b", clientId: "c2", clientName: "Smith Holdings" }),
+    ];
+    expect(selectForClient(rows, "c1").map((r) => r.id)).toEqual(["a"]);
+  });
+
+  it("returns NOTHING for a missing id, not everything", () => {
+    // The safe direction when the caller has lost track of whose page this is.
+    expect(selectForClient([row({ id: "a", clientId: "c1" })], null)).toEqual([]);
+    expect(selectForClient([row({ id: "a", clientId: "c1" })], "")).toEqual([]);
   });
 });

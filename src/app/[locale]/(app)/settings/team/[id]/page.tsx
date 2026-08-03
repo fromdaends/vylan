@@ -27,6 +27,7 @@ import { MemberPermissions } from "@/components/settings/team/member-permissions
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Panel } from "@/components/ui/panel";
 import { formatDate } from "@/lib/format";
 import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
 import { MemberRoles } from "@/components/settings/team/member-roles";
@@ -456,30 +457,6 @@ export default async function TeamMemberProfilePage({
 
 // Same titled box as the client page — every section its own bordered card
 // with a header band, which is the shape of Canopy's whole profile.
-function Panel({
-  title,
-  flush = false,
-  aside,
-  children,
-}: {
-  title: string;
-  flush?: boolean;
-  /** Controls that belong to THIS section, in its own title band. */
-  aside?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60 px-4 py-2.5">
-        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-          {title}
-        </h2>
-        {aside}
-      </div>
-      <div className={flush ? "" : "p-4"}>{children}</div>
-    </section>
-  );
-}
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (

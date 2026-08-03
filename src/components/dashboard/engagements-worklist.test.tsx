@@ -71,6 +71,7 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id" | "title">): Wo
       : status);
   return {
     clientName: "Client",
+    clientId: "client-1",
     status: "in_progress",
     derivedStatus,
     dueDate: null,

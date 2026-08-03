@@ -85,6 +85,10 @@ export type WorklistRow = {
   id: string;
   title: string;
   clientName: string;
+  // Which client's work this is. The name alone cannot scope a list — two
+  // clients can share a display name, and a filter that matches on text is a
+  // filter that eventually shows someone else's engagements.
+  clientId: string;
   status: EngagementStatus;
   // The unified display status (deriveEngagementStatus in lib/attention):
   // same as `status` except a live engagement whose checklist puts the ball
