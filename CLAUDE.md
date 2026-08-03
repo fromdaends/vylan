@@ -138,6 +138,55 @@ and tell the user. Do not try to fix it alone. The cost of waiting is small.
 The cost of two parallel sessions silently corrupting each other's work is
 very large.
 
+## Cohesion — one concept, one component
+
+A feature that appears on more than one screen must not exist as more than one
+copy. This is the single most common way this product drifts: organizers are
+built on the client page AND in the create-client flow, settings are styled in
+the settings page AND in firm settings, and the day they are written they look
+identical — so nobody notices they are photocopies rather than the same object.
+Months later the founder asks to "expand organizers", the session edits the one
+surface it was pointed at, and the other surface silently stays behind. The
+founder should never have to say "and also update it in the other place." That
+is your job, not theirs.
+
+### The rule
+
+1. **Before changing ANY feature, find every surface it appears on.** Grep for
+   the concept by name, by component, by its database table, and by its route
+   before you write a single line. A change request naming one screen is not
+   evidence that only one screen shows it — the founder describes where they
+   were standing, not where the code lives.
+2. **Then either update all of them, or (better) merge them into one shared
+   piece as part of the same PR.** Never leave one surface changed and another
+   not. If merging is too big for the current task, say so explicitly in your
+   summary and update every copy — a silent partial update is the failure mode
+   this rule exists to prevent.
+3. **Never create a second copy of UI that already exists.** If a screen needs
+   a slimmer version of an existing thing, add a prop/variant to the existing
+   component. Copy-paste-then-trim is how the drift starts.
+4. **Style belongs to shared tokens and shared primitives**, never to a screen.
+   "Change how settings look" must be one edit that ripples, not one edit per
+   settings page.
+
+Precedent: PR #1149 collapsed two team editors into one used in both places it
+is needed. That is the shape of the fix, every time.
+
+### What "the same concept" means
+
+The same concept, even when the two copies are worded differently: organizers /
+client members / "who works on it"; settings panels wherever they appear; the
+document row, the client picker, the money cell, the status pill. If two files
+would both need editing to answer one founder sentence, they are one concept.
+
+### Exceptions — narrow, and stated out loud
+
+Two surfaces may stay separate ONLY when they genuinely differ in behaviour and
+you say so in your summary — for example a Server Component list versus an
+interactive client-side editor. "It was easier" is not an exception. When you
+do keep them separate, they must still share the pieces they can (row, cell,
+formatter, type), and the shared piece is where behaviour lives.
+
 ## Autonomy and decision authority
 
 This project is run by a solo founder. The user wants to maximize velocity. Default to **doing**, not asking. The bar for asking a question is: "would a wrong choice here cost me more than 30 minutes to undo?"
