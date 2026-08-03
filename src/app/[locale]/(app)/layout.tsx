@@ -5,12 +5,7 @@ import { getAuthUser } from "@/lib/supabase/auth-user";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
-import {
-  getCurrentUser,
-  listActiveFirmUsers,
-  userDisplayLabel,
-} from "@/lib/db/users";
-import { hasActiveTeam } from "@/lib/team/mode";
+import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { firmHasAnyXeroConnection } from "@/lib/db/xero";
 import { getBrandingImageUrl } from "@/lib/storage";
@@ -55,7 +50,6 @@ export default async function AppLayout({
     aalResult,
     dbUser,
     firm,
-    activeFirmUsers,
     quickbooksHasAny,
     xeroHasAny,
     t,
@@ -66,7 +60,6 @@ export default async function AppLayout({
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     getCurrentUser(),
     getCurrentFirm(),
-    listActiveFirmUsers(),
     // Drives the Bookkeeping rail tab. True when the firm has ANY connection
     // (firm-level OR any client) — so the tab appears once a product is
     // actually in use, not merely because the app's keys are installed.
@@ -116,11 +109,6 @@ export default async function AppLayout({
   // stays out of the render path (react-hooks purity).
   const trialExpired = isTrialExpired(firm);
   const trialDays = trialDaysLeft(firm);
-  const teamEnabled = hasActiveTeam({
-    teamEnabled: firm.team_enabled === true,
-    activeMemberCount: activeFirmUsers.length,
-  });
-
   return (
     <AppShell
       brandColor={firm.brand_color}
@@ -128,7 +116,6 @@ export default async function AppLayout({
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
       isOwner={dbUser.role === "owner"}
-      teamEnabled={teamEnabled}
       quickbooksConnected={quickbooksHasAny}
       xeroConnected={xeroHasAny}
       topBar={

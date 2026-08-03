@@ -30,12 +30,7 @@
 
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import {
-  Building2,
-  ScrollText,
-  ShieldHalf,
-  UserPlus,
-} from "lucide-react";
+import { ScrollText, ShieldHalf, UserPlus } from "lucide-react";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { NameMenu } from "@/components/ui/name-menu";
 
@@ -67,14 +62,13 @@ export function FirmMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        {/* Name, logo, brand colour, default language — the firm's identity,
-            which lives on the account screen rather than the team one. */}
-        <DropdownMenuItem asChild className="gap-2">
-          <Link href="/settings?tab=account">
-            <Building2 className="size-4" aria-hidden />
-            {t("edit_firm")}
-          </Link>
-        </DropdownMenuItem>
+        {/* "Edit firm" USED TO BE HERE, pointing at /settings?tab=account,
+            while the Settings TAB on the page behind this menu pointed
+            somewhere else — two destinations for one idea, which is the split
+            the founder objected to. The firm's identity (name, logo, brand
+            colour, client email language) now renders on that Settings tab
+            beside the firm-wide switches, so there is one place, and by the
+            rule above it is a tab rather than an item in here. */}
         {/* Roles is its own destination, not a block inside settings. That is
             the founder's whole point of reference: in Discord you open Roles
             and get a page, not a paragraph. */}

@@ -95,7 +95,6 @@ export function AppShell({
   userAvatarUrl,
   labels,
   isOwner = false,
-  teamEnabled = true,
   quickbooksConnected = false,
   xeroConnected = false,
 }: {
@@ -111,7 +110,6 @@ export function AppShell({
   isOwner?: boolean;
   // Hides team shortcuts when collaboration mode is off. The Settings account
   // card remains the intentional entry point for creating a team again.
-  teamEnabled?: boolean;
   // Shows the QuickBooks Integrations sub-item + drives the Bookkeeping tab.
   quickbooksConnected?: boolean;
   // Together with quickbooksConnected, drives the top-level "Bookkeeping" tab:
@@ -202,13 +200,17 @@ export function AppShell({
         // Firm is PINNED below the list, not in it. Added to the list first, it
         // became the ninth item, fell past the fold of the rail's hidden-scrollbar
         // nav, and rendered as an unlabelled glyph pressed against the avatar.
-        // Team-gated: with collaboration off the page 404s, so it would be a dead
-        // end rather than a destination.
-        footerItem={
-          teamEnabled
-            ? { href: "/settings/team", label: labels.firm, icon: Building2 }
-            : undefined
-        }
+        // NO LONGER team-gated. It used to be, on the grounds that the page was
+        // just a "create a team" card with collaboration off — but that page is
+        // now also the only place a firm edits its own name, logo, brand colour
+        // and client email language, and a solo firm has all four. Hiding the
+        // link would have made those uneditable for every new signup, since
+        // team mode starts off (migration 0540).
+        footerItem={{
+          href: "/settings/team",
+          label: labels.firm,
+          icon: Building2,
+        }}
         navLabel={tApp("nav_primary_label")}
         labels={labels}
         userDisplayName={userDisplayName}
@@ -303,7 +305,6 @@ export function AppShell({
             userDisplayName={userDisplayName}
             userEmail={userEmail}
             userAvatarUrl={userAvatarUrl}
-            teamEnabled={teamEnabled}
             onItemClick={() => setMobileAccountOpen(false)}
           />
         </SheetContent>
@@ -427,7 +428,6 @@ function MobileAccountMenu({
   userDisplayName,
   userEmail,
   userAvatarUrl,
-  teamEnabled,
   onItemClick,
 }: {
   labels: Labels;
@@ -435,10 +435,8 @@ function MobileAccountMenu({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
-  teamEnabled: boolean;
   onItemClick: () => void;
 }) {
-  const tTeam = useTranslations("Team");
   return (
     <div className="flex flex-col">
       {/* Drag handle — visual affordance for swipe-to-dismiss. */}
@@ -472,20 +470,17 @@ function MobileAccountMenu({
             label={labels.profile}
             onClick={onItemClick}
           />
+          {/* "Edit firm" USED TO BE HERE, pointing at /settings?tab=account —
+              the mobile copy of the item deleted from the firm dropdown, and
+              the third surface for one idea. The firm's name, logo, brand
+              colour and client email language are edited on the firm page's
+              Settings tab now, which is exactly where the item below goes. */}
           <MobileMenuItem
-            href="/settings?tab=account"
-            icon={Building2}
-            label={tTeam("edit_firm")}
+            href="/settings/team"
+            icon={Users2}
+            label={labels.firm}
             onClick={onItemClick}
           />
-          {teamEnabled && (
-            <MobileMenuItem
-              href="/settings/team"
-              icon={Users2}
-              label={labels.firm}
-              onClick={onItemClick}
-            />
-          )}
           <MobileMenuItem
             href="/settings"
             icon={Settings}

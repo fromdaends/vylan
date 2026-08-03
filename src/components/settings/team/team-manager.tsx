@@ -129,6 +129,8 @@ export function useErrorMessage() {
 
 export function TeamManager({
   firmName,
+  firmLogoUrl = null,
+  firmBrandColor,
   canManage,
   onTrial,
   seat,
@@ -140,9 +142,17 @@ export function TeamManager({
   firmSettings,
   tabs,
   view = "people",
+  teamEnabled = true,
+  setupCard = null,
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
+  // The firm's logo, beside its name — the same thing a teammate's avatar does
+  // on their profile. A firm that has uploaded one should see it on its own
+  // page, not only in the sidebar. Null falls back to initials on the brand
+  // colour, which is what AvatarInitials does everywhere else.
+  firmLogoUrl?: string | null;
+  firmBrandColor?: string;
   // Owners see the full manager; staff get a read-only roster (no invite,
   // deactivate, transfer, or seat controls).
   canManage: boolean;
@@ -171,6 +181,13 @@ export function TeamManager({
   // Firm navigation, rendered directly under the header. Optional so every
   // other caller of this component is unaffected.
   tabs?: ReactNode;
+  // Whether the firm has turned collaboration on. Off is the DEFAULT for a new
+  // signup, and such a firm has no roster, no seats and nobody to hand over to
+  // — but it still has a name, a logo and a brand colour, which is why this
+  // page renders for it at all rather than being replaced by the setup card.
+  teamEnabled?: boolean;
+  // What the People tab shows instead of the roster when team mode is off.
+  setupCard?: ReactNode;
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -193,7 +210,17 @@ export function TeamManager({
           the same kind of page. */}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
-        <div>
+        {/* Logo, then name — the identical shape a teammate's profile header
+            uses for their avatar. Before this the firm page was the only one
+            of the three profile-ish screens with no picture at all. */}
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          <AvatarInitials
+            src={firmLogoUrl ?? undefined}
+            name={firmName}
+            size={56}
+            color={firmBrandColor}
+          />
+        <div className="min-w-0">
           {/* The firm name IS the menu — Discord's server dropdown, which is
               the founder's reference. Everything you can do to the firm now
               hangs off the name instead of being scattered across a tab row
@@ -220,6 +247,7 @@ export function TeamManager({
                 ? t("subtitle")
                 : t("subtitle_readonly")}
           </p>
+        </div>
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
@@ -260,9 +288,12 @@ export function TeamManager({
 
 
       {/* Seat usage — a fact about the FIRM (what you are paying for), not about
-          any one person, so it lives on the Firm tab. */}
+          any one person, so it lives on the Firm tab. Nothing to report before
+          collaboration is on: the firm is one person and the number would only
+          ever read 1 of n. */}
       {view === "settings" &&
         canManage &&
+        teamEnabled &&
         (onTrial ? (
           <TrialTeamLock />
         ) : (
@@ -296,7 +327,14 @@ export function TeamManager({
           </div>
         ))}
 
-      {view === "people" && (
+      {/* The People tab, for a firm that has not turned collaboration on: the
+          "create a team" card, in place of a roster that would be one row of
+          yourself. The header and tabs above it stay, so the Settings tab
+          beside it — which is now the only place the firm's name, logo and
+          brand colour can be edited — is still reachable. */}
+      {view === "people" && !teamEnabled && setupCard}
+
+      {view === "people" && teamEnabled && (
       <>
       {/* Active members — MERGED with the workload roll-up: one row per member
           showing who they are + their live workload (Active / To review / Needs
@@ -432,6 +470,7 @@ export function TeamManager({
           staff member to hand to. */}
       {view === "settings" &&
         canManage &&
+        teamEnabled &&
         activeMembers.some((m) => m.role === "staff") && (
         <TransferOwnership
           staff={activeMembers
@@ -440,7 +479,7 @@ export function TeamManager({
         />
       )}
 
-      {view === "settings" && canManage && <LeaveTeamSection />}
+      {view === "settings" && canManage && teamEnabled && <LeaveTeamSection />}
 
       {canManage && (
         <InviteModal
