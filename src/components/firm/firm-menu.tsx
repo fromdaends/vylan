@@ -21,8 +21,12 @@
 // the Members tab directly behind the open menu, which is two ways to read one
 // list.
 //
-// Roles and Activity log are still here ONLY because they are not tabs yet.
-// When they become tabs they leave too, and this menu is actions alone.
+// Activity log is still here ONLY because it is not a tab yet. When it becomes
+// one it leaves too, and this menu is actions alone.
+//
+// Roles already made that trip: it is a tab on the page behind this menu now,
+// so it left. The rule is only worth anything if it is applied the moment it
+// applies.
 //
 // The trigger itself lives in NameMenu, shared with the client page — the
 // founder asked for "the exact same thing" there, and the way to make that
@@ -30,7 +34,7 @@
 
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { ScrollText, ShieldHalf, UserPlus } from "lucide-react";
+import { ScrollText, UserPlus } from "lucide-react";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { NameMenu } from "@/components/ui/name-menu";
 
@@ -69,16 +73,6 @@ export function FirmMenu({
             colour, client email language) now renders on that Settings tab
             beside the firm-wide switches, so there is one place, and by the
             rule above it is a tab rather than an item in here. */}
-        {/* Roles is its own destination, not a block inside settings. That is
-            the founder's whole point of reference: in Discord you open Roles
-            and get a page, not a paragraph. */}
-        <DropdownMenuItem asChild className="gap-2">
-          <Link href="/settings/team/roles">
-            <ShieldHalf className="size-4" aria-hidden />
-            {t("roles_title")}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="gap-2">
           <Link href="/settings/audit">
             <ScrollText className="size-4" aria-hidden />

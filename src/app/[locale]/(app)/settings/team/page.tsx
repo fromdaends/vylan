@@ -27,7 +27,8 @@ import {
   computeEngagementWorkload,
   workloadForMember,
 } from "@/lib/team/workload";
-import { listRolesByUser } from "@/lib/db/firm-roles";
+import { listFirmRoles, listRolesByUser } from "@/lib/db/firm-roles";
+import { RolesWorkbench } from "@/components/settings/team/roles-workbench";
 import { can } from "@/lib/auth/capabilities";
 
 export const dynamic = "force-dynamic";
@@ -40,12 +41,15 @@ export default async function TeamPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  // `role` is the Roles tab's selection — RolesWorkbench writes it by mutating
+  // the current URL, so it rides alongside `tab` rather than replacing it.
+  searchParams: Promise<{ tab?: string; role?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   // Which tab. Anything unrecognised falls back to the roster rather than a
   // blank page — a bad ?tab= should never cost you the screen.
-  const requestedTab = (await searchParams).tab;
+  const sp = await searchParams;
+  const requestedTab = sp.tab;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -63,17 +67,28 @@ export default async function TeamPage({
   // Only owners have a Firm tab (every block on it is owner-gated), so a staff
   // member arriving on ?tab=firm falls back to the roster rather than a blank
   // page. An unrecognised value falls back the same way.
-  const view: "people" | "settings" =
-    canManage && requestedTab === "settings" ? "settings" : "people";
-  const [members, invites, usage, rolesByUser] = await Promise.all([
+  // Roles is owner-only for the same reason its old standalone route was: the
+  // settings on it decide what everyone wearing a role may do, so deciding them
+  // cannot be one of the things other people may do. It also needs a team —
+  // with collaboration off there is nobody to wear a role.
+  const view: "people" | "settings" | "roles" =
+    canManage && requestedTab === "settings"
+      ? "settings"
+      : canManage && firm.team_enabled === true && requestedTab === "roles"
+        ? "roles"
+        : "people";
+  const [members, invites, usage, rolesByUser, firmRoles] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
     canManage ? getFirmSeatUsage(firm.id) : Promise.resolve(null),
-    // Who wears what — the badges on the roster. The roles THEMSELVES are no
-    // longer read here: they moved to their own page, and fetching them for a
-    // screen that no longer lists them is exactly the wasted await that made
-    // the client tabs slow.
+    // Who wears what — the badges on the roster, needed on every tab.
     listRolesByUser(),
+    // The roles THEMSELVES, only for the tab that lists them. Loading them on
+    // the roster too is exactly the wasted await that made the client tabs
+    // slow before #1159 gated them.
+    view === "roles"
+      ? listFirmRoles()
+      : Promise.resolve([] as Awaited<ReturnType<typeof listFirmRoles>>),
   ]);
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
@@ -99,6 +114,16 @@ export default async function TeamPage({
   const teamEnabled = firm.team_enabled === true;
 
   const nameById = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
+
+  // Invert "who holds what" into "who is on this role" once, here, rather than
+  // making the Roles tab do it per render. Lifted verbatim from the standalone
+  // roles route this tab replaces.
+  const memberIdsByRole = new Map<string, string[]>();
+  for (const [userId, held] of rolesByUser) {
+    for (const r of held) {
+      memberIdsByRole.set(r.id, [...(memberIdsByRole.get(r.id) ?? []), userId]);
+    }
+  }
 
   // Resolve each member's avatar once so the roster shows real profile
   // pictures (AvatarInitials falls back to initials when the URL is null).
@@ -248,8 +273,10 @@ export default async function TeamPage({
           canManage ? (
             <FirmTabs
               current={view}
+              teamEnabled={teamEnabled}
               labels={{
                 people: t("tab_people"),
+                roles: t("roles_title"),
                 settings: tApp("nav_settings"),
               }}
             />
@@ -266,6 +293,26 @@ export default async function TeamPage({
         pendingInvites={pendingInvites}
         locale={locale}
         unassignedWorkload={canManage ? workloadUnassigned : undefined}
+        rolesBoard={
+          view === "roles" ? (
+            <RolesWorkbench
+              roles={firmRoles.map((r) => ({
+                id: r.id,
+                name: r.name,
+                color: r.color,
+                capabilities: r.capabilities,
+                isOwnerRole: r.isOwnerRole,
+                memberIds: memberIdsByRole.get(r.id) ?? [],
+              }))}
+              people={activeMembers.map((m) => ({
+                id: m.id,
+                name: m.name,
+                email: m.email,
+              }))}
+              selectedId={sp.role ?? null}
+            />
+          ) : null
+        }
         firmSettings={
           canManage ? (
             <>
