@@ -1,4 +1,5 @@
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 import { setAllFilesReviewForItem } from "./file-review";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { buildRequestItemRow } from "@/lib/engagements/request-item-row";
@@ -79,13 +80,13 @@ export async function listRequestItems(
 // summary stays a true roll-up no matter which path made the decision.
 export async function approveItem(itemId: string): Promise<void> {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+  const authUser = await getAuthUser();
   await setAllFilesReviewForItem(
     supabase,
     itemId,
     "approved",
     null,
-    auth.user?.id ?? null,
+    authUser?.id ?? null,
   );
 }
 
@@ -94,13 +95,13 @@ export async function rejectItem(
   reason: string,
 ): Promise<void> {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+  const authUser = await getAuthUser();
   await setAllFilesReviewForItem(
     supabase,
     itemId,
     "rejected",
     reason,
-    auth.user?.id ?? null,
+    authUser?.id ?? null,
   );
 }
 

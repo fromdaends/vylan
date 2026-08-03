@@ -8,6 +8,9 @@ import { HomeTab } from "@/components/files/home-tab";
 // very same browser on its Files tab (Cohesion rule: one browser, two places,
 // never two browsers).
 import { BrowseTab } from "@/components/files/browse-tab";
+import { FilesHeaderSearch } from "@/components/files/files-header-search";
+import { NewMenu } from "@/components/files/new-menu";
+import { listClientOptions } from "@/lib/db/clients";
 import { resolveFilesTab, type FilesTab } from "@/lib/files/tabs";
 
 // FILES — the firm-wide document browser.
@@ -54,20 +57,43 @@ export default async function FilesPage({
     { id: "settings", label: t("tab_settings"), href: "/files?tab=settings" },
   ];
 
+  // The "+ New" button moved OUT of Browse and into the page header, so it is
+  // reachable from Home too. Browse therefore stops drawing its own copy —
+  // see BrowseTab's `hostedChrome` prop — rather than the two coexisting.
+  // Filing settings hides it entirely: Save is that screen's one colored
+  // button, and the UI kit allows exactly one per screen.
+  const showNew = tab !== "settings";
+  const clients = showNew ? await listClientOptions() : [];
+
   return (
-    <div className="mx-auto w-full max-w-5xl animate-in-fade">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {t("page_title")}
-        </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
-          {t("page_subtitle")}
-        </p>
+    // FULL WIDTH, not a centered 1024px column: this is a file manager, and a
+    // file manager that leaves half the monitor empty reads as a web page about
+    // files rather than the thing itself.
+    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div>
+          <h1 className="text-[26px] font-[650] tracking-[-0.02em]">
+            {t("page_title")}
+          </h1>
+          <p className="mt-[5px] text-sm text-muted-foreground">
+            {t("page_subtitle")}
+          </p>
+        </div>
+        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+          <FilesHeaderSearch />
+          {showNew && (
+            <NewMenu
+              clients={clients}
+              clientId={sp.client?.trim() ?? null}
+              folderParentId={sp.folder?.trim() ?? null}
+            />
+          )}
+        </div>
       </header>
 
       <nav
         aria-label={t("page_title")}
-        className="mb-6 flex items-center gap-6 border-b border-border"
+        className="mt-[22px] mb-6 flex items-center gap-[26px] border-b border-border"
       >
         {tabs.map((item) => {
           const active = item.id === tab;
@@ -77,10 +103,10 @@ export default async function FilesPage({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                "-mb-px border-b-2 px-0.5 pb-[11px] text-sm transition-colors",
                 active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+                  ? "border-accent font-semibold text-foreground"
+                  : "border-transparent font-medium text-muted-foreground hover:border-border hover:text-foreground",
               )}
             >
               {item.label}
@@ -90,11 +116,9 @@ export default async function FilesPage({
       </nav>
 
       {tab === "settings" ? (
-        <div className="max-w-4xl">
-          <FilingPanel />
-        </div>
+        <FilingPanel />
       ) : tab === "browse" ? (
-        <BrowseTab locale={locale} sp={sp} />
+        <BrowseTab locale={locale} sp={sp} hostedChrome />
       ) : (
         <HomeTab locale={locale} />
       )}

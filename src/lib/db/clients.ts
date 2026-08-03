@@ -1,5 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 // Value + type live in a PLAIN module: a "use client" component imports the
 // function, and anything reachable from this file drags in next/headers.
 import type { ClientVisibility } from "@/lib/clients/visibility";
@@ -10,38 +13,22 @@ import { addClientMember } from "@/lib/db/client-members";
 // can't set is_private (the clients_all WITH CHECK would reject the insert), and
 // "clients private by default" is the OWNER's posture. Migration-gated + fails
 // open: if the column/role isn't there yet, this is false = public = today's
-// behavior (select('*') never throws on the absent column).
-async function newClientDefaultsPrivate(
-  supabase: SupabaseClient,
-): Promise<boolean> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return false;
-  const { data: u } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", auth.user.id)
-    .maybeSingle();
-  if (!u || u.role !== "owner") return false;
-  const { data: f } = await supabase
-    .from("firms")
-    .select("*")
-    .eq("id", u.firm_id)
-    .maybeSingle();
-  return (f as { clients_private_by_default?: boolean } | null)
+// behavior (select('*') never throws on the absent column). Reads through the
+// request-cached getCurrentUser/getCurrentFirm, so it costs nothing on a
+// request that already resolved them.
+async function newClientDefaultsPrivate(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "owner") return false;
+  const firm = await getCurrentFirm();
+  return (firm as { clients_private_by_default?: boolean } | null)
     ?.clients_private_by_default === true;
 }
 
 async function currentFirmId(): Promise<string> {
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Not authenticated");
-  const { data: u, error } = await supabase
-    .from("users")
-    .select("firm_id")
-    .eq("id", auth.user.id)
-    .single();
-  if (error || !u?.firm_id) throw new Error("No firm for user");
-  return u.firm_id as string;
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Not authenticated");
+  if (!user.firm_id) throw new Error("No firm for user");
+  return user.firm_id;
 }
 
 export type Client = {
@@ -109,9 +96,7 @@ function isMissingColumn(
 }
 
 async function currentAuthUserId(): Promise<string | null> {
-  const supabase = await getServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+  return (await getAuthUser())?.id ?? null;
 }
 
 export type ClientFilters = {
@@ -120,27 +105,68 @@ export type ClientFilters = {
   includeArchived?: boolean;
 };
 
-export async function listClients(filters: ClientFilters = {}): Promise<
-  Client[]
-> {
+// The real fetch, React.cache'd on PRIMITIVE keys — cache() compares object
+// arguments by reference, so caching the public function directly would never
+// dedupe two call sites passing equal-looking filter objects. Several pages
+// read the client list more than once per render (the table + a name map, or
+// a page plus the worklist loader); this collapses identical reads to one
+// query per request. Every caller is a page-render read (verified: nothing
+// creates a client and re-lists within one request).
+const listClientsCached = cache(async function _listClients(
+  search: string,
+  type: "individual" | "business" | "all",
+  includeArchived: boolean,
+): Promise<Client[]> {
   const supabase = await getServerSupabase();
   let query = supabase.from("clients").select("*");
 
-  if (!filters.includeArchived) {
+  if (!includeArchived) {
     query = query.is("archived_at", null);
   }
-  if (filters.type && filters.type !== "all") {
-    query = query.eq("type", filters.type);
+  if (type !== "all") {
+    query = query.eq("type", type);
   }
-  if (filters.search && filters.search.trim()) {
-    const s = filters.search.trim();
-    query = query.or(`display_name.ilike.%${s}%,email.ilike.%${s}%`);
+  if (search) {
+    query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
   }
   query = query.order("created_at", { ascending: false });
 
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as Client[];
+});
+
+export async function listClients(filters: ClientFilters = {}): Promise<
+  Client[]
+> {
+  return listClientsCached(
+    filters.search?.trim() ?? "",
+    filters.type ?? "all",
+    filters.includeArchived === true,
+  );
+}
+
+/**
+ * Every client the firm can see, as {id, name} — the list behind the "+ New"
+ * menu's import/upload pickers.
+ *
+ * Deliberately NOT the folder list the Files RPC returns: that only includes
+ * clients who already have documents, and importing history is exactly how a
+ * client with none gets their first. Shared by the Files page header and the
+ * embedded browser so the two can never drift to different client sets.
+ */
+export async function listClientOptions(): Promise<
+  { id: string; name: string }[]
+> {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("clients")
+    .select("id, display_name")
+    .order("display_name", { ascending: true })
+    .limit(1000);
+  return ((data ?? []) as Array<{ id: string; display_name: string }>).map(
+    (c) => ({ id: c.id, name: c.display_name }),
+  );
 }
 
 export async function getClient(id: string): Promise<Client | null> {
@@ -198,7 +224,7 @@ export async function createClient(input: ClientInput): Promise<Client> {
   const withProfile = {
     ...withProfileNoPrivate,
     // Honor the firm's "clients private by default" switch (owner-created only).
-    is_private: await newClientDefaultsPrivate(supabase),
+    is_private: await newClientDefaultsPrivate(),
   };
   const insertClient = (row: object) =>
     supabase.from("clients").insert(row).select("*").single();
@@ -263,7 +289,7 @@ export async function bulkCreateClients(
   // by default" switch. Degrade one column-set per tier (like createClient), so an
   // unknown is_private (0810 pending) doesn't also drop owner attribution (0210):
   // owner+private -> owner only -> base.
-  const isPrivate = await newClientDefaultsPrivate(supabase);
+  const isPrivate = await newClientDefaultsPrivate();
   const withOwner = base.map((r) => ({ ...r, assigned_user_id: owner }));
   let { error, count } = await supabase
     .from("clients")

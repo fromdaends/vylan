@@ -10,7 +10,6 @@ import { findScopeWarning } from "@/lib/relationships/validate";
 import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
 import {
   listUploadedFilesForEngagement,
-  signedDownloadUrls,
   type UploadedFile,
 } from "@/lib/db/uploaded-files";
 import { Link } from "@/i18n/navigation";
@@ -46,7 +45,6 @@ import { OpenCommentComposerOnLoad } from "@/components/engagements/open-comment
 import {
   listCommentsForEngagement,
   groupEngagementComments,
-  type EngagementComments,
   type FileComment,
 } from "@/lib/db/file-comments";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
@@ -94,6 +92,7 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
+import { InvoiceOptionsDialog } from "@/components/engagements/invoice-options-dialog";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
@@ -131,11 +130,13 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import {
   getLatestPaymentRequestForEngagement,
   getLastFirmPaymentAmountCents,
+  type PaymentRequest,
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
 import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { reconcilePayPalOrder } from "@/lib/payments/paypal-reconcile";
+import { shouldReconcile } from "@/lib/reconcile-throttle";
 import { firmPaymentRails } from "@/lib/payments/rails";
 import {
   getSignatureRequestsByItem,
@@ -193,6 +194,9 @@ export default async function EngagementDetailPage({
 }: {
   params: Promise<{ locale: string; id: string }>;
   searchParams?: Promise<{ panel?: string; comment?: string }>;
+  // ?panel=invoice is Billing → New invoice landing here: the invoice flow
+  // lives on this page and nowhere else, so that button picks an engagement
+  // and links in rather than mounting a second copy of the builder.
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
@@ -201,44 +205,353 @@ export default async function EngagementDetailPage({
 
   // Items / uploads all key off the URL `id` (= engagement.id), so they don't
   // need to wait for getEngagement — run the whole lot in ONE parallel batch.
-  // The uploads branch also batch-signs every download URL in a single storage
-  // round-trip (was N separate calls, the biggest chunk of this page's load).
-  // Only the client lookup (needs engagement.client_id) waits. There is no
-  // Activity feed on this page at all any more: history is owner-only and
-  // lives at /settings/audit, filterable by client or by person. The Assistant
-  // panel's Activity tab and its /api/engagement-chat/activity route are gone
-  // too — they had been dead for a while before anyone noticed.
-  const [engagement, items, uploadData, firm, user, firmUsers] =
+  // Only things needing engagement/firm fields wait, and those all go in one
+  // SECOND batch below. There is no Activity feed on this page at all any
+  // more: history is owner-only and lives at /settings/audit, filterable by
+  // client or by person. The Assistant panel's Activity tab and its
+  // /api/engagement-chat/activity route are gone too — they had been dead for
+  // a while before anyone noticed.
+  //
+  // Uploads are no longer batch-signed here: FilePreviewRow serves bytes
+  // through the authenticated /api/files/[id] proxy and its own comment says
+  // the signed-URL prop is "accepted for compatibility but no longer read" —
+  // the page was paying a storage round trip per render for links nothing
+  // rendered.
+  const [engagement, items, uploads, firm, user, firmUsers, invoiceSettings] =
     await Promise.all([
       getEngagement(id),
       listRequestItems(id),
-      (async () => {
-        const uploads = await listUploadedFilesForEngagement(id);
-        const urlByPath = await signedDownloadUrls(
-          uploads.map((u) => u.storage_path),
-          900,
-        );
-        return { uploads, urlByPath };
-      })(),
+      listUploadedFilesForEngagement(id),
       getCurrentFirm(),
       getCurrentUser(),
       listFirmUsers(),
+      // Invoice-builder inputs (migration 0750): null = invoicing not set up
+      // (builder still works, no taxes / numbering). Session-keyed only.
+      getFirmInvoiceSettings(),
     ]);
   if (!engagement) notFound();
-  const client = await getClient(engagement.client_id);
-  const { uploads, urlByPath } = uploadData;
 
-  // Relationships (spec §3, read-only): the compact header line linking to the
-  // client's Relationships card, and the recipient scope warning. One query
-  // for the client's live links, one for the other ends' names/emails.
-  const clientRelationships = client
-    ? await listRelationshipsForClient(client.id)
-    : [];
-  const relatedBrief = await listRelatedClientsBrief(
-    clientRelationships.map((r) =>
-      r.from_client_id === client?.id ? r.to_client_id : r.from_client_id,
-    ),
+  // Everything below the second batch reads these — compute them first so the
+  // batch's gates (team mode, payment rails, signature items) are decidable.
+  // Send / reminder are locked only once the free trial has expired; an active
+  // trial has full access.
+  const trialLocked = firm ? isTrialExpired(firm) : false;
+  // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
+  // The server actions enforce this too; this is the matching UI gate.
+  const canDelete = user ? canDeleteEngagements(user.role) : false;
+  // "Payable" is rail-agnostic since the PayPal rail (0730): a firm with
+  // EITHER Stripe or PayPal ready can invoice.
+  const connectReady = firmPaymentRails(firm).any;
+  // Assignment (Phase 5): resolve the assignee (may be deactivated — still
+  // shown for history) + the active members available as reassignment targets.
+  const assignee =
+    firmUsers.find((u) => u.id === engagement.assigned_user_id) ?? null;
+  const activeMembers = firmUsers
+    .filter((u) => !u.deactivated_at)
+    .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: activeMembers.length,
+  });
+  // Resolve a reviewer id -> display name for the QuickBooks draft cards
+  // (who approved / dismissed). Includes deactivated members so history shows.
+  const reviewerNameById = new Map<string, string>(
+    firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
   );
+  // Prompt B: signature items (the accountant supplies a document, the client
+  // returns a signed copy) render in their own "Signatures" group, separate
+  // from the document-collection checklist.
+  const signatureItems = items.filter((i) => i.kind === "signature");
+  const collectionItems = items.filter((i) => i.kind !== "signature");
+
+  // SECOND batch: everything keyed off engagement/firm fields, fanned out in
+  // parallel. Each thunk chains its own dependents internally (statuses →
+  // cached lists, payment row → reconcile → cancel chip), so the page's total
+  // depth is two batches plus the self-heal tail — this used to be ~15
+  // strictly sequential awaits, most of them 30-80ms round trips to the
+  // remote database, re-paid on every 5s AutoRefresh tick.
+  const [
+    client,
+    relationshipData,
+    paymentData,
+    repeatSeriesRow,
+    engagementComments,
+    bk,
+    signatureRequestsByItem,
+    finalDocData,
+    handoffRaw,
+  ] = await Promise.all([
+    getClient(engagement.client_id),
+    // Relationships (spec §3, read-only): the compact header line linking to
+    // the client's Relationships card, and the recipient scope warning. One
+    // query for the client's live links, one for the other ends' names/emails.
+    (async () => {
+      const rels = await listRelationshipsForClient(engagement.client_id);
+      const brief = await listRelatedClientsBrief(
+        rels.map((r) =>
+          r.from_client_id === engagement.client_id
+            ? r.to_client_id
+            : r.from_client_id,
+        ),
+      );
+      return { rels, brief };
+    })(),
+    // Payments (Phase 3): only relevant once the firm can actually receive
+    // money. Latest request (status badge) + the dialog's pre-fill amount,
+    // then the same self-heals as before — now throttled (see
+    // lib/reconcile-throttle.ts) so AutoRefresh ticks don't re-call Stripe /
+    // PayPal every 5 seconds for an invoice that is simply still unpaid.
+    (async () => {
+      if (!connectReady || !firm) {
+        return {
+          latestPayment: null as PaymentRequest | null,
+          lastFirmAmountCents: null as number | null,
+          canceledAt: null as string | null,
+          showCanceledChip: false,
+        };
+      }
+      const [latestPaymentRaw, lastFirmAmountCents] = await Promise.all([
+        getLatestPaymentRequestForEngagement(engagement.id),
+        getLastFirmPaymentAmountCents(firm.id),
+      ]);
+      // Self-heal: if a payment is still "requested" but Stripe already
+      // collected it (the webhook can lag or be misconfigured), reconcile
+      // straight from Stripe so the accountant sees "Paid" without depending
+      // on the webhook.
+      let latestPayment = latestPaymentRaw;
+      if (
+        latestPaymentRaw &&
+        latestPaymentRaw.status === "requested" &&
+        firm.stripe_connect_account_id &&
+        shouldReconcile(`stripe:${latestPaymentRaw.id}`)
+      ) {
+        const status = await reconcilePaymentRequest(
+          latestPaymentRaw.id,
+          firm.stripe_connect_account_id,
+        );
+        if (status && status !== latestPaymentRaw.status) {
+          latestPayment = { ...latestPaymentRaw, status };
+        }
+      }
+      // Same self-heal for the PayPal rail: an APPROVED-but-never-captured
+      // order (the popup's callback can die) or a capture whose record was
+      // lost gets settled here, so the accountant sees "Paid" without
+      // depending on a webhook.
+      if (
+        latestPayment &&
+        latestPayment.status === "requested" &&
+        latestPayment.paypal_order_id
+      ) {
+        const paypalMerchantId =
+          (firm as { paypal_merchant_id?: string | null } | null)
+            ?.paypal_merchant_id ?? null;
+        if (
+          paypalMerchantId &&
+          shouldReconcile(`paypal:${latestPayment.id}`)
+        ) {
+          const status = await reconcilePayPalOrder(
+            latestPayment.id,
+            paypalMerchantId,
+          );
+          if (status && status !== latestPayment.status) {
+            latestPayment = { ...latestPayment, status };
+          }
+        }
+      }
+      // A canceled (waived) invoice shows a brief "Payment canceled" chip in
+      // the header, then hides — the permanent record lives in the audit log.
+      // Reconciles never produce "canceled", so this can chain here.
+      const cancel =
+        latestPayment?.status === "canceled"
+          ? await getRecentInvoiceCancel(
+              engagement.id,
+              PAYMENT_CANCELED_CHIP_WINDOW_MS,
+            )
+          : { canceledAt: null, recent: false };
+      return {
+        latestPayment,
+        lastFirmAmountCents,
+        canceledAt: cancel.canceledAt,
+        showCanceledChip: cancel.recent,
+      };
+    })(),
+    // Recurring series (migration 0770): degrades to null pre-migration
+    // (getRecurringSeries soft-fails on missing schema), so the page renders
+    // with Repeat simply reading "off".
+    engagement.series_id
+      ? getRecurringSeries(engagement.series_id)
+      : Promise.resolve(null),
+    // Team Wave 3 (+0930): comments + @mentions on files, checklist items, and
+    // the engagement itself. One load for the whole page, only in team mode (a
+    // firm-team feature). Empty pre-migration / non-team, so no thread renders.
+    teamEnabled
+      ? listCommentsForEngagement(id)
+      : Promise.resolve(groupEngagementComments([])),
+    // Stage 3 (Phase 3): bookkeeping connection statuses, then — when
+    // connected — the cached lists, learned matches, stored suggestions,
+    // payout journal drafts and (Xero) base currency, all in parallel. The
+    // base-currency read used to hide inline in the backfill call's args as
+    // one more sequential step.
+    (async () => {
+      const [xeroStatus, qboStatus] = await Promise.all([
+        getClientXeroStatus(engagement.client_id),
+        getClientQuickbooksStatus(engagement.client_id),
+      ]);
+      const provider: "quickbooks" | "xero" | null = xeroStatus
+        ? "xero"
+        : qboStatus
+          ? "quickbooks"
+          : null;
+      if (!provider) {
+        return {
+          xeroStatus,
+          qboStatus,
+          provider,
+          suggestions: new Map<string, StoredDraft>(),
+          lists: null,
+          learned: {} as LearnedMappings,
+          tracking: [] as Awaited<
+            ReturnType<typeof readCachedXeroTracking>
+          >,
+          journals: new Map<string, PayoutJournalDraft>(),
+          baseCurrency: null as string | null,
+        };
+      }
+      const [suggestions, lists, learned, tracking, journals, baseCurrency] =
+        await Promise.all([
+          getSuggestionsForEngagement(id),
+          provider === "xero"
+            ? readCachedXeroLists(engagement.client_id)
+            : readCachedQuickbooksLists(engagement.client_id),
+          readFirmLearnedMappings(engagement.client_id),
+          // Xero-only, and empty for the many organisations that use no
+          // tracking — the picker then renders nothing.
+          provider === "xero"
+            ? readCachedXeroTracking(engagement.client_id)
+            : Promise.resolve([]),
+          getPayoutJournalsForEngagement(id),
+          // See TransactionSuggestion.booksCurrency — Xero only; QuickBooks
+          // posts carry no currency, so it keeps the CAD assumption.
+          provider === "xero"
+            ? readClientXeroBaseCurrency(
+                engagement.firm_id,
+                engagement.client_id,
+              )
+            : Promise.resolve(null),
+        ]);
+      return {
+        xeroStatus,
+        qboStatus,
+        provider,
+        suggestions,
+        lists,
+        learned,
+        tracking,
+        journals,
+        baseCurrency,
+      };
+    })(),
+    // SignWell status per signature item (one query, RLS-scoped), then the
+    // same webhook-lag self-heal as before — throttled like the payment
+    // reconciles, since "sent"/"viewed" is a signature's status for days.
+    (async () => {
+      if (signatureItems.length === 0) {
+        return new Map<string, SignatureRequest>();
+      }
+      const map = await getSignatureRequestsByItem(engagement.id);
+      const awaitingSigs = [...map.values()].filter(
+        (sr) =>
+          (sr.status === "sent" || sr.status === "viewed") &&
+          shouldReconcile(`signwell:${sr.id}`),
+      );
+      if (awaitingSigs.length > 0) {
+        const reconciled = await Promise.all(
+          awaitingSigs.map((sr) => reconcileSignatureRequest(sr)),
+        );
+        const anyChanged = reconciled.some(
+          (s, i) => s !== awaitingSigs[i].status,
+        );
+        if (anyChanged) {
+          // One re-read to pick up new status + signed_file_path on changed rows.
+          const fresh = await getSignatureRequestsByItem(engagement.id);
+          for (const [k, v] of fresh) map.set(k, v);
+        }
+      }
+      return map;
+    })(),
+    // Final documents (accountant deliverables) + their pre-signed download
+    // links. The accountant download is always allowed — the invoice lock only
+    // ever gates the CLIENT's portal download, never the firm. Empty before
+    // migration 0620.
+    (async () => {
+      const finalDocs = await listFinalDocumentsForEngagement(engagement.id);
+      const finalHrefById = new Map<string, string>();
+      await Promise.all(
+        finalDocs.map(async (d) => {
+          try {
+            finalHrefById.set(
+              d.id,
+              await signedUrl(d.storage_path, 3600, d.original_filename),
+            );
+          } catch {
+            // Leave unset → the row disables its download link.
+          }
+        }),
+      );
+      return { finalDocs, finalHrefById };
+    })(),
+    // The handoff note from the last reassignment. Team-mode only, and only
+    // fetched when there IS an assignee — the note is instructions for the
+    // person holding the work, so on an unassigned engagement it has no
+    // audience.
+    teamEnabled && engagement.assigned_user_id
+      ? getLatestHandoffNote(engagement.id)
+      : Promise.resolve(null),
+  ]);
+
+  // ── Per-job access (1310) ────────────────────────────────────────────────
+  // Owner-only, team-only, and only once the engagement is more than a draft.
+  // Placed AFTER the second batch on purpose: `client` is resolved in it, and
+  // this needs the client's assignee to work out who is already covered.
+  // Skipped entirely for everybody else — a staff member never pays two reads
+  // for a control they cannot see.
+  const canGrantJobAccess =
+    user?.role === "owner" && teamEnabled && engagement.status !== "draft";
+  const [jobGuestRows, clientCastRows] = canGrantJobAccess
+    ? await Promise.all([
+        listEngagementMembers(id),
+        listClientMembers(engagement.client_id),
+      ])
+    : [[], []];
+  const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
+  // Anyone who can ALREADY see this through the client is not a candidate:
+  // adding them would grant nothing, and removing them later would take
+  // nothing away. The control lists EXCEPTIONS, not the audience.
+  const coveredByClient = new Set<string>([
+    ...clientCastRows.map((m) => m.userId),
+    ...(client?.assigned_user_id ? [client.assigned_user_id] : []),
+  ]);
+  const jobGuests = activeMembers.filter((m) => jobGuestIds.has(m.id));
+  const jobCandidates = activeMembers.filter(
+    (m) =>
+      !jobGuestIds.has(m.id) &&
+      !coveredByClient.has(m.id) &&
+      m.id !== user?.id &&
+      m.id !== engagement.assigned_user_id,
+  );
+
+  const clientRelationships = relationshipData.rels;
+  const relatedBrief = relationshipData.brief;
+  const { latestPayment, lastFirmAmountCents } = paymentData;
+  const invoiceCanceledAt = paymentData.canceledAt;
+  const showCanceledChip = paymentData.showCanceledChip;
+  const bookkeepingProvider = bk.provider;
+  const bookkeepingConnected = bookkeepingProvider != null;
+  const bkLists = bk.lists;
+  const bkLearned = bk.learned;
+  const bkTracking = bk.tracking;
+  const { finalDocs, finalHrefById } = finalDocData;
+
   const relatedById = new Map(relatedBrief.map((c) => [c.id, c]));
   // "Owned by Zachary Thresh · 100%" when the ONLY link is a single owner;
   // otherwise "N linked clients". Resolvable links only (RLS may hide a
@@ -282,64 +595,6 @@ export default async function EngagementDetailPage({
             }),
         )
       : null;
-  // Send / reminder are locked only once the free trial has expired; an active
-  // trial has full access.
-  const trialLocked = firm ? isTrialExpired(firm) : false;
-  // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
-  // The server actions enforce this too; this is the matching UI gate.
-  const canDelete = user ? canDeleteEngagements(user.role) : false;
-
-  // Payments (Phase 3): only relevant once the firm can actually receive money
-  // (Stripe Connect ready). Load the latest request (status badge) + compute the
-  // dialog's pre-fill amount (per-service default price -> last amount -> empty).
-  // "Payable" is rail-agnostic since the PayPal rail (0730): a firm with EITHER
-  // Stripe or PayPal ready can invoice, so the payment panel loads for both.
-  const connectReady = firmPaymentRails(firm).any;
-  const [latestPaymentRaw, lastFirmAmountCents] =
-    connectReady && firm
-      ? await Promise.all([
-          getLatestPaymentRequestForEngagement(engagement.id),
-          getLastFirmPaymentAmountCents(firm.id),
-        ])
-      : [null, null];
-  // Self-heal: if a payment is still "requested" but Stripe already collected it
-  // (the webhook can lag or be misconfigured), reconcile straight from Stripe so
-  // the accountant sees "Paid" without depending on the webhook.
-  let latestPayment = latestPaymentRaw;
-  if (
-    latestPaymentRaw &&
-    latestPaymentRaw.status === "requested" &&
-    firm?.stripe_connect_account_id
-  ) {
-    const status = await reconcilePaymentRequest(
-      latestPaymentRaw.id,
-      firm.stripe_connect_account_id,
-    );
-    if (status && status !== latestPaymentRaw.status) {
-      latestPayment = { ...latestPaymentRaw, status };
-    }
-  }
-  // Same self-heal for the PayPal rail: an APPROVED-but-never-captured order
-  // (the popup's callback can die) or a capture whose record was lost gets
-  // settled here, so the accountant sees "Paid" without depending on a webhook.
-  if (
-    latestPayment &&
-    latestPayment.status === "requested" &&
-    latestPayment.paypal_order_id
-  ) {
-    const paypalMerchantId =
-      (firm as { paypal_merchant_id?: string | null } | null)
-        ?.paypal_merchant_id ?? null;
-    if (paypalMerchantId) {
-      const status = await reconcilePayPalOrder(
-        latestPayment.id,
-        paypalMerchantId,
-      );
-      if (status && status !== latestPayment.status) {
-        latestPayment = { ...latestPayment, status };
-      }
-    }
-  }
   const paymentPrefillCents = resolveDefaultAmountCents(
     firm?.service_prices,
     engagement.type,
@@ -347,12 +602,6 @@ export default async function EngagementDetailPage({
   );
   const paymentPrefill =
     paymentPrefillCents != null ? (paymentPrefillCents / 100).toFixed(2) : "";
-  // Recurring series (migration 0770): the engagement's series, when it's in
-  // one. Degrades to null pre-migration (getRecurringSeries soft-fails on
-  // missing schema), so the page renders with Repeat simply reading "off".
-  const repeatSeriesRow = engagement.series_id
-    ? await getRecurringSeries(engagement.series_id)
-    : null;
   const repeatSeries = repeatSeriesRow
     ? {
         id: repeatSeriesRow.id,
@@ -411,16 +660,40 @@ export default async function EngagementDetailPage({
         invoiceSnapshot: currentInvoiceSnap,
       },
     });
-  // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
-  // = invoicing not set up: builder still works, no taxes / numbering) and the
-  // Default-prices presets as one-tap line items.
-  const invoiceSettings = await getFirmInvoiceSettings();
+  // Default-prices presets as one-tap line items for the invoice builder
+  // (invoiceSettings itself was fetched in the first batch).
   const tSettings = await getTranslations("Settings");
   const presetDefs = [
     { key: "t1", label: tSettings("service_price_t1") },
     { key: "t2", label: tSettings("service_price_t2") },
     { key: "bookkeeping", label: tSettings("service_price_bookkeeping") },
   ];
+  // The engagement's live invoice, in the shape the invoice dialog wants.
+  // Extracted to a variable because TWO mounts of that dialog need it now: the
+  // header kebab's, and the trigger-less one that ?panel=invoice opens for
+  // Billing → New invoice. Building it inline twice is how the two would drift.
+  const invoiceForOptions = latestPayment
+    ? {
+        id: latestPayment.id,
+        status: latestPayment.status,
+        amount_cents: latestPayment.amount_cents,
+        description: latestPayment.description,
+        locks_deliverables: latestPayment.locks_deliverables,
+        override_unlocked: latestPayment.override_unlocked,
+        // Native-invoice fields (0750) for the builder's edit mode;
+        // null/undefined on legacy simple rows.
+        invoice_kind: latestPayment.invoice_kind ?? null,
+        invoice_number: latestPayment.invoice_number ?? null,
+        line_items: latestPayment.line_items ?? null,
+        tax_breakdown: latestPayment.tax_breakdown ?? null,
+        tax_total_cents: latestPayment.tax_total_cents ?? null,
+        due_date: latestPayment.due_date ?? null,
+        invoice_terms: latestPayment.invoice_terms ?? null,
+        invoice_notes: latestPayment.invoice_notes ?? null,
+        invoice_language: latestPayment.invoice_language ?? null,
+      }
+    : null;
+
   const invoiceBuilder = {
     settings: invoiceSettings
       ? {
@@ -430,6 +703,10 @@ export default async function EngagementDetailPage({
           defaultTerms: invoiceSettings.default_terms,
           defaultNotes: invoiceSettings.default_notes,
           defaultTaxesEnabled: invoiceSettings.default_taxes_enabled,
+          // Pre-fills the builder's due date (migration 1330). `undefined` on a
+          // pre-1330 read collapses to null, which the builder reads as "leave
+          // the field blank" — exactly the old behaviour.
+          defaultDueDays: invoiceSettings.default_due_days ?? null,
         }
       : null,
     presets: presetDefs.flatMap(({ key, label }) => {
@@ -449,67 +726,12 @@ export default async function EngagementDetailPage({
     engagementLocksDeliverables: engagement.invoice_locks_deliverables === true,
   });
 
-  // Assignment (Phase 5): resolve the assignee (may be deactivated — still shown
-  // for history) + the active members available as reassignment targets.
-  const assignee =
-    firmUsers.find((u) => u.id === engagement.assigned_user_id) ?? null;
-  const activeMembers = firmUsers
-    .filter((u) => !u.deactivated_at)
-    .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
-  const teamEnabled = hasActiveTeam({
-    teamEnabled: firm?.team_enabled === true,
-    activeMemberCount: activeMembers.length,
-  });
-
-  // ── Per-job access (1310) ────────────────────────────────────────────────
-  // Owner-only, team-only, and only once the engagement exists as more than a
-  // draft. Two reads, both cheap, and skipped entirely for everybody else — a
-  // staff member never pays for a control they cannot see.
-  const canGrantJobAccess =
-    user?.role === "owner" &&
-    teamEnabled &&
-    // Same test as `isDraft` below, spelled out because that constant is
-    // declared 350 lines further down and moving it would ripple.
-    engagement.status !== "draft";
-  const [jobGuestRows, clientCastRows] = canGrantJobAccess
-    ? await Promise.all([
-        listEngagementMembers(id),
-        listClientMembers(engagement.client_id),
-      ])
-    : [[], []];
-  const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
-  // Anyone who can ALREADY see this through the client is not a candidate:
-  // adding them would grant nothing, and removing them later would take
-  // nothing away. The control lists EXCEPTIONS, not the audience.
-  const coveredByClient = new Set<string>([
-    ...clientCastRows.map((m) => m.userId),
-    ...(client?.assigned_user_id ? [client.assigned_user_id] : []),
-  ]);
-  const jobGuests = activeMembers.filter((m) => jobGuestIds.has(m.id));
-  const jobCandidates = activeMembers.filter(
-    (m) =>
-      !jobGuestIds.has(m.id) &&
-      !coveredByClient.has(m.id) &&
-      m.id !== user?.id &&
-      m.id !== engagement.assigned_user_id,
-  );
-  // Team Wave 3 (+0930): comments + @mentions on files, checklist items, and
-  // the engagement itself. One load for the whole page, only in team mode (a
-  // firm-team feature). Empty pre-migration / non-team, so no thread renders.
-  const engagementComments: EngagementComments = teamEnabled
-    ? await listCommentsForEngagement(id)
-    : groupEngagementComments([]);
   const commentsByFile = engagementComments.byFile;
-  // Resolve a reviewer id -> display name for the QuickBooks draft cards
-  // (who approved / dismissed). Includes deactivated members so history shows.
-  const reviewerNameById = new Map<string, string>(
-    firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
-  );
 
-  const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
+  const filesByItem = new Map<string, UploadedFile[]>();
   for (const u of uploads) {
     const arr = filesByItem.get(u.request_item_id) ?? [];
-    arr.push({ ...u, url: urlByPath.get(u.storage_path) ?? "#" });
+    arr.push(u);
     filesByItem.set(u.request_item_id, arr);
   }
 
@@ -521,33 +743,9 @@ export default async function EngagementDetailPage({
   // matcher + pickers consume), so everything downstream is provider-neutral.
   // Per-client (0710): this engagement's connection, cached lists, and learned
   // matches are THIS client's. Everything degrades gracefully to nothing when
-  // this client isn't connected / before the migrations land.
-  const [xeroStatus, qboStatus] = await Promise.all([
-    getClientXeroStatus(engagement.client_id),
-    getClientQuickbooksStatus(engagement.client_id),
-  ]);
-  const bookkeepingProvider: "quickbooks" | "xero" | null = xeroStatus
-    ? "xero"
-    : qboStatus
-      ? "quickbooks"
-      : null;
-  const bookkeepingConnected = bookkeepingProvider != null;
-  const [initialSuggestions, bkLists, bkLearned, bkTracking] =
-    bookkeepingConnected
-      ? await Promise.all([
-          getSuggestionsForEngagement(id),
-          bookkeepingProvider === "xero"
-            ? readCachedXeroLists(engagement.client_id)
-            : readCachedQuickbooksLists(engagement.client_id),
-          readFirmLearnedMappings(engagement.client_id),
-          // Xero-only, and empty for the many organisations that use no
-          // tracking — the picker then renders nothing.
-          bookkeepingProvider === "xero"
-            ? readCachedXeroTracking(engagement.client_id)
-            : Promise.resolve([]),
-        ])
-      : [new Map<string, StoredDraft>(), null, {} as LearnedMappings, []];
-  let suggestionsByFile = initialSuggestions;
+  // this client isn't connected / before the migrations land. (All fetched in
+  // the second batch above.)
+  let suggestionsByFile = bk.suggestions;
   // Self-heal: regenerate any draft that's missing but whose file already has a
   // stored transaction read (re-upload race / pre-migration classify / cleanup),
   // mirroring the payment + signature reconcile-on-load above. Cheap (no AI
@@ -565,24 +763,19 @@ export default async function EngagementDetailPage({
       existingFileIds: new Set(suggestionsByFile.keys()),
       provider: bookkeepingProvider ?? "quickbooks",
       // See TransactionSuggestion.booksCurrency — Xero only; QuickBooks posts
-      // carry no currency, so it keeps the CAD assumption.
-      booksCurrency:
-        bookkeepingProvider === "xero" && engagement.client_id
-          ? await readClientXeroBaseCurrency(
-              engagement.firm_id,
-              engagement.client_id,
-            )
-          : null,
+      // carry no currency, so it keeps the CAD assumption. Prefetched in the
+      // second batch (bk.baseCurrency) — it used to hide here as one more
+      // sequential round trip inside this call's arguments.
+      booksCurrency: bk.baseCurrency,
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }
   // Payout journal drafts (migration 1010), one per processor-statement
   // upload. Created lazily below for any payout that was read but has no draft
   // yet — the same self-heal shape as the transaction backfill above, and just
-  // as cheap (no AI call, pure DB).
-  let payoutJournals = bookkeepingConnected
-    ? await getPayoutJournalsForEngagement(id)
-    : new Map<string, PayoutJournalDraft>();
+  // as cheap (no AI call, pure DB). In the steady state (every draft exists)
+  // the loop performs zero awaits.
+  let payoutJournals = bk.journals;
   if (bookkeepingConnected) {
     let createdJournals = 0;
     for (const u of uploads) {
@@ -649,56 +842,6 @@ export default async function EngagementDetailPage({
     .filter((x) => x.active)
     .map((x) => ({ id: x.id, name: x.name, type: x.accountType }));
 
-  // Prompt B: signature items (the accountant supplies a document, the client
-  // returns a signed copy) render in their own "Signatures" group, separate
-  // from the document-collection checklist.
-  const signatureItems = items.filter((i) => i.kind === "signature");
-  const collectionItems = items.filter((i) => i.kind !== "signature");
-
-  // SignWell status per signature item (one query, RLS-scoped). Empty before
-  // migration 0400 is applied or when there are no signature items.
-  const signatureRequestsByItem =
-    signatureItems.length > 0
-      ? await getSignatureRequestsByItem(engagement.id)
-      : new Map<string, SignatureRequest>();
-
-  // Self-heal: the SignWell webhook can lag or be misconfigured, so for any
-  // request still out for signature, reconcile straight from SignWell. If it's
-  // signed, this pulls the signed PDF back and flips the status without waiting
-  // on the webhook (mirrors the payments reconcile).
-  const awaitingSigs = [...signatureRequestsByItem.values()].filter(
-    (sr) => sr.status === "sent" || sr.status === "viewed",
-  );
-  if (awaitingSigs.length > 0) {
-    const reconciled = await Promise.all(
-      awaitingSigs.map((sr) => reconcileSignatureRequest(sr)),
-    );
-    const anyChanged = reconciled.some((s, i) => s !== awaitingSigs[i].status);
-    if (anyChanged) {
-      // One re-read to pick up the new status + signed_file_path on changed rows.
-      const fresh = await getSignatureRequestsByItem(engagement.id);
-      for (const [k, v] of fresh) signatureRequestsByItem.set(k, v);
-    }
-  }
-
-  // Final documents (accountant deliverables) + their pre-signed download links.
-  // The accountant download is always allowed — the invoice lock only ever gates
-  // the CLIENT's portal download, never the firm. Empty before migration 0620.
-  const finalDocs = await listFinalDocumentsForEngagement(engagement.id);
-  const finalHrefById = new Map<string, string>();
-  await Promise.all(
-    finalDocs.map(async (d) => {
-      try {
-        finalHrefById.set(
-          d.id,
-          await signedUrl(d.storage_path, 3600, d.original_filename),
-        );
-      } catch {
-        // Leave unset → the row disables its download link.
-      }
-    }),
-  );
-
   // Client messaging (the thread + its unread count) now lives entirely in the
   // chat popup, fetched client-side from /api/client-messages — the engagement
   // page no longer loads or computes it.
@@ -726,18 +869,6 @@ export default async function EngagementDetailPage({
           ? t("payment_status_canceled")
           : t("payment_status_requested")
     : null;
-  // A canceled (waived) invoice shows a brief "Payment canceled" chip in the
-  // header, then hides — the permanent record lives in the Activity/audit log.
-  // The waive time comes from that log's invoice_waived row (no dedicated
-  // column), so a reload past the window shows nothing; the 5s AutoRefresh (and
-  // the chip's own timer) drop it in an open tab.
-  const { canceledAt: invoiceCanceledAt, recent: showCanceledChip } =
-    latestPayment?.status === "canceled"
-      ? await getRecentInvoiceCancel(
-          engagement.id,
-          PAYMENT_CANCELED_CHIP_WINDOW_MS,
-        )
-      : { canceledAt: null, recent: false };
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
@@ -761,15 +892,9 @@ export default async function EngagementDetailPage({
       })
     : null;
 
-  // The handoff note from the last reassignment. Team-mode only, and only
-  // fetched when there IS an assignee — the note is instructions for the person
-  // holding the work, so on an unassigned engagement it has no audience.
-  // reviewerNameById already holds every firm user, deactivated included, so a
-  // note written by someone who has since left still shows their name.
-  const handoffRaw =
-    teamEnabled && engagement.assigned_user_id
-      ? await getLatestHandoffNote(engagement.id)
-      : null;
+  // The handoff note (fetched in the second batch). reviewerNameById already
+  // holds every firm user, deactivated included, so a note written by someone
+  // who has since left still shows their name.
   const handoff = handoffRaw
     ? {
         note: handoffRaw.note,
@@ -1197,29 +1322,7 @@ export default async function EngagementDetailPage({
                 isLive ? (engagement.magic_token ?? undefined) : undefined
               }
               connectReady={connectReady}
-              invoice={
-                latestPayment
-                  ? {
-                      id: latestPayment.id,
-                      status: latestPayment.status,
-                      amount_cents: latestPayment.amount_cents,
-                      description: latestPayment.description,
-                      locks_deliverables: latestPayment.locks_deliverables,
-                      override_unlocked: latestPayment.override_unlocked,
-                      // Native-invoice fields (0750) for the builder's edit
-                      // mode; null/undefined on legacy simple rows.
-                      invoice_kind: latestPayment.invoice_kind ?? null,
-                      invoice_number: latestPayment.invoice_number ?? null,
-                      line_items: latestPayment.line_items ?? null,
-                      tax_breakdown: latestPayment.tax_breakdown ?? null,
-                      tax_total_cents: latestPayment.tax_total_cents ?? null,
-                      due_date: latestPayment.due_date ?? null,
-                      invoice_terms: latestPayment.invoice_terms ?? null,
-                      invoice_notes: latestPayment.invoice_notes ?? null,
-                      invoice_language: latestPayment.invoice_language ?? null,
-                    }
-                  : null
-              }
+              invoice={invoiceForOptions}
               engagementLocksDeliverables={
                 engagement.invoice_locks_deliverables === true
               }
@@ -1237,6 +1340,40 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
+
+      {/* Billing → New invoice arrives as ?panel=invoice. Mounted HERE, at page
+          level, rather than inside the header kebab: Radix unmounts the menu's
+          content while it is closed, so the kebab's own copy of this dialog
+          does not exist on page load and could not open itself. Same component,
+          same props, no trigger. */}
+      {sp.panel === "invoice" &&
+        connectReady &&
+        engagement.status !== "cancelled" && (
+          <InvoiceOptionsDialog
+            autoOpen
+            trigger={null}
+            engagementId={engagement.id}
+            connectReady={connectReady}
+            invoice={invoiceForOptions}
+            engagementLocksDeliverables={
+              engagement.invoice_locks_deliverables === true
+            }
+            defaultAmount={paymentPrefill}
+            locale={locale}
+            engagementStatus={
+              engagement.status === "complete" ? "complete" : "live"
+            }
+            automation={{
+              mode: engagement.invoice_auto_mode ?? "off",
+              delayDays: engagement.invoice_delay_days ?? null,
+              amountCents: engagement.invoice_amount_cents ?? null,
+              description: engagement.invoice_description ?? null,
+              locksDeliverables:
+                engagement.invoice_locks_deliverables === true,
+            }}
+            builder={invoiceBuilder}
+          />
+        )}
 
       {isDraft &&
         (items.length === 0 ? (
@@ -1404,7 +1541,7 @@ async function ItemRow({
   aiEnabled,
 }: {
   item: RequestItem;
-  files: (UploadedFile & { url: string })[];
+  files: UploadedFile[];
   // Team Wave 3 (+0930 targets): the engagement id + per-file and per-item
   // threads + @mentionable active members + the viewer, gated on team mode.
   engagementId: string;
@@ -1580,7 +1717,6 @@ async function ItemRow({
             <FilePreviewRow
               key={f.id}
               file={f}
-              url={f.url}
               expectedDocType={item.doc_type}
               expectedYear={expectedYear}
               clientName={clientName}
@@ -1801,12 +1937,12 @@ async function SignatureRow({
   let downloadSignedHref: string | null = null;
   if (isSigned && signatureRequest?.signed_file_path) {
     try {
-      viewSignedHref = await signedUrl(signatureRequest.signed_file_path, 3600);
-      downloadSignedHref = await signedUrl(
-        signatureRequest.signed_file_path,
-        3600,
-        `${label}.pdf`,
-      );
+      // Two distinct links (the download one carries a filename), signed in
+      // parallel — they used to be two sequential storage round trips.
+      [viewSignedHref, downloadSignedHref] = await Promise.all([
+        signedUrl(signatureRequest.signed_file_path, 3600),
+        signedUrl(signatureRequest.signed_file_path, 3600, `${label}.pdf`),
+      ]);
     } catch {
       viewSignedHref = null;
       downloadSignedHref = null;

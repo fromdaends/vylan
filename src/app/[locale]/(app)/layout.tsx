@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
@@ -29,8 +30,11 @@ export default async function AppLayout({
 }) {
   const { locale } = await params;
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
+  // The ONE per-request network auth validation (React.cache'd) —
+  // getCurrentUser / getCurrentFirm and the lib/db helpers downstream all
+  // reuse it instead of each re-validating against the auth server.
+  const authUser = await getAuthUser();
+  if (!authUser) {
     redirect(getPathname({ locale, href: "/login" }));
   }
 
@@ -43,11 +47,17 @@ export default async function AppLayout({
   // getCurrentUser / getCurrentFirm are React.cache()-wrapped, so the
   // /profile page (which also calls them) reuses these results — no
   // double DB hit on /profile renders.
+  //
+  // The bookkeeping-rail flags ride in the SAME batch: they only need the
+  // session, so paying for them after the user/firm resolves (as this layout
+  // used to) made every page render one round-trip deeper for no reason.
   const [
     aalResult,
     dbUser,
     firm,
     activeFirmUsers,
+    quickbooksHasAny,
+    xeroHasAny,
     t,
     tAuth,
     tProfile,
@@ -57,6 +67,12 @@ export default async function AppLayout({
     getCurrentUser(),
     getCurrentFirm(),
     listActiveFirmUsers(),
+    // Drives the Bookkeeping rail tab. True when the firm has ANY connection
+    // (firm-level OR any client) — so the tab appears once a product is
+    // actually in use, not merely because the app's keys are installed.
+    // Cheap + RLS-scoped; false before the migration.
+    firmHasAnyQuickbooksConnection(),
+    firmHasAnyXeroConnection(),
     getTranslations("App"),
     getTranslations("Auth"),
     getTranslations("Profile"),
@@ -84,15 +100,16 @@ export default async function AppLayout({
   // fetched here: the icon rail has no firm button and no Engagements sub-nav to
   // badge, so both were dead queries on every authenticated page render. The
   // Engagements page still computes its own badges for its tab strip.
-  const [avatarUrl, quickbooksHasAny, xeroHasAny] = await Promise.all([
+  //
+  // Trial firms also hit a hard LIFETIME AI cap (abuse/cost guard) well before
+  // the 14 days are up. Surface an "upgrade" state in the banner when it's
+  // reached. Only query usage for trial firms — paid firms skip the round trip.
+  // Batched with the avatar signing rather than awaited after it.
+  const [avatarUrl, aiUsage] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
-    // Drives the Bookkeeping rail tab. True when the firm has ANY connection
-    // (firm-level OR any client) — so the tab appears once a product is actually
-    // in use, not merely because the app's keys are installed. Cheap +
-    // RLS-scoped; false before the migration.
-    firmHasAnyQuickbooksConnection(),
-    firmHasAnyXeroConnection(),
+    firm.is_demo ? getFirmAiUsage(firm.id) : Promise.resolve(null),
   ]);
+  const aiLimitReached = aiUsage ? aiUsage.isTrial && aiUsage.paused : false;
 
   // Free-trial banner state (only rendered for unconverted trial firms).
   // isTrialExpired / trialDaysLeft default "now" internally so Date.now()
@@ -103,14 +120,6 @@ export default async function AppLayout({
     teamEnabled: firm.team_enabled === true,
     activeMemberCount: activeFirmUsers.length,
   });
-  // Trial firms also hit a hard LIFETIME AI cap (abuse/cost guard) well before
-  // the 14 days are up. Surface an "upgrade" state in the banner when it's
-  // reached. Only query usage for trial firms — paid firms skip the round trip.
-  let aiLimitReached = false;
-  if (firm.is_demo) {
-    const usage = await getFirmAiUsage(firm.id);
-    aiLimitReached = usage.isTrial && usage.paused;
-  }
 
   return (
     <AppShell
@@ -138,6 +147,10 @@ export default async function AppLayout({
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
         files: t("nav_files"),
+        // Reuses the existing nav_billing key ("Billing" / "Facturation") —
+        // the same word, now pointing at the firm-level Billing section rather
+        // than the Vylan subscription page it used to label.
+        billing: t("nav_billing"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
         engagementViews: {
@@ -148,8 +161,6 @@ export default async function AppLayout({
           archived: tEng("view_archived_label"),
           deleted: tEng("view_deleted_label"),
         },
-        // `nav_billing` translation key kept for the Settings page's
-        // billing link card; no longer needed in the sidebar labels.
         settings: t("nav_settings"),
         firm: t("nav_firm"),
         sectionMain: t("nav_section_main"),

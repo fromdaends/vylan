@@ -61,7 +61,15 @@ export type JobKind =
   // every other due notification for that user into one email. The worker
   // re-checks read/dismissed/already-sent state, so a retry can never
   // double-send and a notification the user already read is never emailed.
-  | "send_notification_email";
+  | "send_notification_email"
+  // Chase an unpaid invoice (migration 1310). Payload:
+  // { payment_request_id, occurrence }. Deliberately the SAME queue and cron as
+  // send_reminder rather than a parallel scheduler. Queued jobs are never
+  // cancelled on payment: the worker re-reads the invoice and stops if it is
+  // paid, void, fully covered by partial payments, or the per-invoice
+  // auto_chase switch is off — which is correct even when a payment lands
+  // between a cancel and its job firing.
+  | "send_invoice_reminder";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getBrowserSupabase } from "@/lib/supabase/client";
 import { type RawPresenceState } from "@/lib/engagements/presence";
 
 // The firm's single presence channel. Every surface that wants to show "who is
@@ -29,35 +28,51 @@ export function useFirmPresence({
 
   useEffect(() => {
     if (!firmId || !viewerId) return;
-    const supabase = getBrowserSupabase();
-    const channel = supabase.channel(`firm-presence:${firmId}`, {
-      // Stated explicitly rather than relying on a .on("presence") binding
-      // happening to be registered before .subscribe(). Realtime only turns
-      // presence on if a binding exists at subscribe time, so a refactor that
-      // reorders those two lines would silently disable this with no error.
-      config: { presence: { key: viewerId, enabled: true } },
-    });
-
-    const sync = () => setState(channel.presenceState());
-    channel
-      .on("presence", { event: "sync" }, sync)
-      .on("presence", { event: "join" }, sync)
-      .on("presence", { event: "leave" }, sync)
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          // An id and an engagement id. Nothing else may go in here — the
-          // channel is public. See the note in presence.ts.
-          void channel.track({ id: viewerId, e: onEngagementId });
-        }
+    // The Supabase browser client is loaded LAZILY, inside the effect: this
+    // hook is the only reason @supabase/supabase-js (a ~220KB chunk) sat in
+    // the critical first-load path of every page that shows presence avatars.
+    // As a dynamic import it hydrates first and the presence socket follows a
+    // beat later — invisible for a feature whose data is people-arriving.
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    void (async () => {
+      const { getBrowserSupabase } = await import("@/lib/supabase/client");
+      if (cancelled) return;
+      const supabase = getBrowserSupabase();
+      const channel = supabase.channel(`firm-presence:${firmId}`, {
+        // Stated explicitly rather than relying on a .on("presence") binding
+        // happening to be registered before .subscribe(). Realtime only turns
+        // presence on if a binding exists at subscribe time, so a refactor that
+        // reorders those two lines would silently disable this with no error.
+        config: { presence: { key: viewerId, enabled: true } },
       });
+
+      const sync = () => setState(channel.presenceState());
+      channel
+        .on("presence", { event: "sync" }, sync)
+        .on("presence", { event: "join" }, sync)
+        .on("presence", { event: "leave" }, sync)
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            // An id and an engagement id. Nothing else may go in here — the
+            // channel is public. See the note in presence.ts.
+            void channel.track({ id: viewerId, e: onEngagementId });
+          }
+        });
+
+      cleanup = () => {
+        // untrack first: the server emits the `leave` diff on the same
+        // round-trip, so colleagues see you go immediately instead of waiting
+        // out a ~25s heartbeat. removeChannel alone would rely on that timeout.
+        void channel.untrack().finally(() => {
+          void supabase.removeChannel(channel);
+        });
+      };
+    })();
 
     return () => {
-      // untrack first: the server emits the `leave` diff on the same
-      // round-trip, so colleagues see you go immediately instead of waiting
-      // out a ~25s heartbeat. removeChannel alone would rely on that timeout.
-      void channel.untrack().finally(() => {
-        void supabase.removeChannel(channel);
-      });
+      cancelled = true;
+      cleanup?.();
     };
     // onEngagementId is in the deps on purpose: moving from one engagement to
     // another has to re-track, or your face stays on the row you left.

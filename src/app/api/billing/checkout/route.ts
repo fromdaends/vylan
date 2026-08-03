@@ -75,8 +75,13 @@ export async function POST(request: NextRequest) {
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${appUrl}/billing?status=success`,
-    cancel_url: `${appUrl}/billing?status=cancelled`,
+    // Settings > Billing. This page moved out of /billing when the firm-level
+    // Billing section (the firm's invoices to ITS clients) took that route:
+    // two different things called Billing in one sidebar is how confusion
+    // starts. Plan and subscription is a preference, so it belongs in Settings,
+    // which is where its own breadcrumb already said it lived.
+    success_url: `${appUrl}/settings/billing?status=success`,
+    cancel_url: `${appUrl}/settings/billing?status=cancelled`,
     metadata: { firm_id: firm.id, plan },
     subscription_data: { metadata: { firm_id: firm.id, plan } },
     allow_promotion_codes: true,

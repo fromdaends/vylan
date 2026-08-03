@@ -11,18 +11,13 @@
 // were two anonymous controls for one question — what can I do to this client —
 // which is exactly the shape the firm page just got rid of.
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
-import { toast } from "sonner";
+import { Link } from "@/i18n/navigation";
 import {
   Archive,
   ArchiveRestore,
-  Eye,
-  EyeOff,
   FolderOpen,
-  Lock,
-  LockOpen,
   Pencil,
   ScrollText,
   Users,
@@ -33,19 +28,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NameMenu } from "@/components/ui/name-menu";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
-import {
-  setClientPrivacyAction,
-  setClientVisibilityAction,
-} from "@/app/actions/clients";
 import { clientTabHref } from "@/lib/clients/tabs";
 import type { Client } from "@/lib/db/clients";
-import { clientVisibility } from "@/lib/clients/visibility";
 
 export function ClientNameMenu({
   client,
   locale,
   canManage,
-  showPrivacy,
   isOwner,
   /** Submits the archive/restore <form> the page renders outside the menu — a
    *  form cannot be a dropdown item, but a button can point at one by id. */
@@ -54,50 +43,12 @@ export function ClientNameMenu({
   client: Client;
   locale: "fr" | "en";
   canManage: boolean;
-  showPrivacy: boolean;
   isOwner: boolean;
   archiveFormId: string;
 }) {
   const t = useTranslations("Clients");
-  const router = useRouter();
-  const [, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
-  const [priv, setPriv] = useState(client.is_private ?? false);
-  // The MIDDLE privacy level (1280). Separate state from `priv` because they
-  // answer separate questions: is_private decides who may WRITE the row,
-  // visibility decides who may SEE it exists.
-  const [listed, setListed] = useState(clientVisibility(client) === "listed");
   const archived = client.archived_at != null;
-
-  function togglePrivacy() {
-    const next = !priv;
-    setPriv(next); // optimistic
-    startTransition(async () => {
-      const res = await setClientPrivacyAction(client.id, next);
-      if (res.ok) {
-        router.refresh();
-      } else {
-        setPriv(!next); // revert
-        if (res.error === "unavailable") toast.info(t("private_unavailable"));
-        else toast.error(t("private_failed"));
-      }
-    });
-  }
-
-  function toggleListed() {
-    const next = !listed;
-    setListed(next); // optimistic
-    startTransition(async () => {
-      const res = await setClientVisibilityAction(client.id, next);
-      if (res.ok) {
-        router.refresh();
-      } else {
-        setListed(!next); // revert
-        if (res.error === "unavailable") toast.info(t("listed_unavailable"));
-        else toast.error(t("private_failed"));
-      }
-    });
-  }
 
   return (
     <>
@@ -142,42 +93,12 @@ export function ClientNameMenu({
             </Link>
           </DropdownMenuItem>
         )}
+        {/* The two privacy items that used to sit here are GONE. Who can
+            see a client is decided by its Organizers list now, so
+            "Make visible to staff" and "Let the whole firm see it exists"
+            were two more answers to a question that already has one —
+            the founder's word for them was redundant, and it was right. */}
         <DropdownMenuSeparator />
-        {showPrivacy && (
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              togglePrivacy();
-            }}
-            className="gap-2"
-          >
-            {priv ? (
-              <LockOpen className="size-4" aria-hidden />
-            ) : (
-              <Lock className="size-4" aria-hidden />
-            )}
-            {priv ? t("make_public") : t("make_private")}
-          </DropdownMenuItem>
-        )}
-        {/* Discoverable to the whole firm, or only to the people on it. Owner
-            only, and RLS agrees (1280) — deciding who may learn a client
-            exists is a privacy call, not a working one. */}
-        {showPrivacy && (
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              toggleListed();
-            }}
-            className="gap-2"
-          >
-            {listed ? (
-              <EyeOff className="size-4" aria-hidden />
-            ) : (
-              <Eye className="size-4" aria-hidden />
-            )}
-            {listed ? t("make_members_only") : t("make_listed")}
-          </DropdownMenuItem>
-        )}
         <DropdownMenuItem
           onSelect={() => {
             // A plain <button form="..."> does NOT work here: closing the menu

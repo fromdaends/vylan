@@ -648,15 +648,13 @@ function MemberRow({
               >
                 {member.name}
               </Link>
-              {member.role === "owner" ? (
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
-                  <span
-                    aria-hidden
-                    className="size-1.5 shrink-0 rounded-full bg-accent"
-                  />
-                  {t("role_owner")}
-                </span>
-              ) : member.isExternal ? (
+              {/* NO RANK PILL FOR AN OWNER any more. Since 1290 the Owner role
+                  is a real role and renders as a badge below, so drawing the
+                  rank as well put the word "Owner" on the row twice — which is
+                  exactly what the founder saw and called out. The badge is the
+                  one that stays, because it is the one you can click through
+                  to. Staff keep their rank word: nothing else says it. */}
+              {member.role === "owner" ? null : member.isExternal ? (
                 // Named rather than left as an ordinary member: an outsider
                 // sees a different firm from everyone else on this list, and
                 // a roster that does not say so is a roster that misleads.

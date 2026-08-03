@@ -21,6 +21,7 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
+  Receipt,
   Settings,
   Sparkles,
   UserCircle,
@@ -44,6 +45,9 @@ type Labels = {
   // because that is where it belongs in the mental model: the things you set up
   // (templates), the things you have (files), the work in flight (engagements).
   files: string;
+  // The firm's invoices to ITS clients. Not the Vylan subscription page, which
+  // is in Settings.
+  billing: string;
   bookkeeping: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
@@ -119,6 +123,11 @@ export function AppShell({
   const tApp = useTranslations("App");
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
+  // Routes that draw their own full-width canvas. Exact match on purpose:
+  // /files is full-bleed, but /files/organize is a normal review screen and
+  // keeps the shell's centered column.
+  const fullBleed = pathname === "/files";
+
   // Close the mobile account sheet on route change (e.g. user tapped
   // a menu link). Ref-guarded to avoid setting state on every render.
   const lastPathRef = useRef(pathname);
@@ -142,14 +151,25 @@ export function AppShell({
     // established AI mark (the chat popup's "Vylan" tab uses it), so the nav and
     // the assistant agree. Document filing USED to be its second tab; it moved
     // to /files?tab=settings, where it sits beside the documents it files.
+    // Performance USED to be the second entry. The page is retired: its money
+    // half became the Billing section below, its documents half was dropped,
+    // and the AI numbers moved onto the Vylan hub as a second tab. /performance
+    // redirects there rather than 404ing.
     { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
-    // "Performance" is the same word in EN and FR, so it's safe to hardcode.
-    { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
     // Files — every client document in one place, plus the filing settings that
     // decide where copies land in the firm's cloud storage.
     { href: "/files", label: labels.files, icon: FolderOpen },
+    // Billing — every invoice the firm has raised, what is owed, and who is
+    // being chased. Sits between Files and Engagements because it follows the
+    // same mental model as the rest of the rail: the things you have (files),
+    // the money they turned into (billing), the work in flight (engagements).
+    //
+    // NOTE: /billing is THIS section. The firm's own Vylan subscription lives
+    // at /settings/billing — it moved there when this shipped, because two
+    // things called Billing in one sidebar is how confusion starts.
+    { href: "/billing", label: labels.billing, icon: Receipt },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
@@ -229,18 +249,30 @@ export function AppShell({
             // whole page left — the bug a Mac/Safari user hit on the Overview.
             // clip (not hidden) keeps overflow-y visible, so position:sticky
             // inside main still works. The sticky top bar is outside <main>.
-            "flex-1 mx-auto w-full overflow-x-clip px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade",
-            // The data-dense pages (Overview, Clients, Engagements list +
-            // detail) get a wider cap on large monitors (>=1800px) so they fill
-            // a 27" screen instead of letterboxing. Forms (New engagement) and
-            // every smaller screen (MacBooks, laptops, phones) stay at 1600px,
-            // byte-identical to before.
-            pathname === "/dashboard" ||
-            pathname === "/clients" ||
-            (pathname.startsWith("/engagements") &&
-              pathname !== "/engagements/new")
-              ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
-              : "max-w-[1600px]",
+            "flex-1 mx-auto w-full overflow-x-clip animate-in-fade",
+            // FULL-BLEED ROUTES own their entire content area: no width cap and
+            // no padding from the shell, because they set their own. /files is
+            // a file manager — capping it at 1600px on a 27" monitor letterboxes
+            // the one screen in the product that most wants the width, and the
+            // shell's px-8 fought the page's own 44px gutter.
+            fullBleed
+              ? // Mobile still needs clearance for the bottom tab bar; the page
+                // supplies its own bottom padding from `sm` up.
+                "max-w-none pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
+              : cn(
+                  "px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8",
+                  // The data-dense pages (Overview, Clients, Engagements list +
+                  // detail) get a wider cap on large monitors (>=1800px) so they
+                  // fill a 27" screen instead of letterboxing. Forms (New
+                  // engagement) and every smaller screen (MacBooks, laptops,
+                  // phones) stay at 1600px, byte-identical to before.
+                  pathname === "/dashboard" ||
+                    pathname === "/clients" ||
+                    (pathname.startsWith("/engagements") &&
+                      pathname !== "/engagements/new")
+                    ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
+                    : "max-w-[1600px]",
+                ),
           )}
         >
           {children}

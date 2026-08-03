@@ -33,7 +33,10 @@ function makeSupabase() {
     api.order = () => api;
     api.limit = () => api;
     api.single = async () => result(rowFor(name));
-    api.maybeSingle = async () => result(null);
+    // getCurrentUser (which createEngagementWithItems now rides for its
+    // auth + users-row read) uses .maybeSingle(), so it must answer with
+    // the same rows .single() does — null here reads as "not authenticated".
+    api.maybeSingle = async () => result(rowFor(name));
     api.insert = (rows: Row | Row[]) => {
       captured[name] = (captured[name] ?? []).concat(
         Array.isArray(rows) ? rows : [rows],

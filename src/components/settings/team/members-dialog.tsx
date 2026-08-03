@@ -14,7 +14,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Search, ShieldCheck } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -152,12 +152,6 @@ export function MembersDialog({
                             >
                               {m.name}
                             </span>
-                            {m.role === "owner" && (
-                              <ShieldCheck
-                                className="size-3.5 shrink-0 text-muted-foreground"
-                                aria-label={t("role_owner")}
-                              />
-                            )}
                             {m.isSelf && (
                               <span className="shrink-0 text-xs text-muted-foreground">
                                 {t("you")}

@@ -42,7 +42,7 @@ describe("buildSystemPrompt", () => {
     expect(s).not.toMatch(/sample data|seeded|demo data/i);
     // This test used to also assert "free trial" and "full access to the real
     // product". Both were dropped: is_demo is DEMO MODE (client emails are
-    // paused — see convertToLiveAction), not a billing state, and "full
+    // paused — the retired demo-mode gate), not a billing state, and "full
     // access" was the opposite of true. See the demo-mode context tests below.
   });
 

@@ -41,7 +41,13 @@ function renderRows() {
   return render(
     <FileSelectionProvider>
       <SelectionSize />
-      <RowsSurface>
+      <RowsSurface
+        orderedFiles={[
+          { source: "checklist", id: "d1" },
+          { source: "checklist", id: "d2" },
+          { source: "imported", id: "d3" },
+        ]}
+      >
         <SelectableRow
           kind="folder"
           rowKey="f1"
@@ -63,6 +69,12 @@ function renderRows() {
             <button>menu</button>
           </div>
         </SelectableRow>
+        <SelectableRow kind="file" rowKey="checklist-d2" source="checklist" id="d2">
+          <div>File Two</div>
+        </SelectableRow>
+        <SelectableRow kind="file" rowKey="imported-d3" source="imported" id="d3">
+          <div>File Three</div>
+        </SelectableRow>
       </RowsSurface>
     </FileSelectionProvider>,
   );
@@ -74,14 +86,27 @@ beforeEach(() => {
 });
 
 describe("SelectableRow", () => {
-  it("selects a folder on single click and deselects on the second", () => {
+  it("selects a folder on single click and STAYS selected on a re-click", () => {
     renderRows();
     const row = screen.getByText("Folder One").parentElement!;
     fireEvent.click(row);
     expect(row).toHaveAttribute("data-selected");
     expect(push).not.toHaveBeenCalled();
+    // Drive never deselects on a re-click — the founder's exact report was
+    // "when you click it a second time it shouldn't close". Esc clears.
     fireEvent.click(row);
+    expect(row).toHaveAttribute("data-selected");
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(row).not.toHaveAttribute("data-selected");
+  });
+
+  it("keeps a file selected on a plain re-click too", () => {
+    renderRows();
+    const row = screen.getByText(/File One/).parentElement!;
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("data-selected");
+    expect(screen.getByTestId("size").textContent).toBe("1");
   });
 
   it("opens a folder on double click, not single", () => {
@@ -140,6 +165,42 @@ describe("SelectableRow", () => {
     fireEvent.click(screen.getByText(/File One/).parentElement!);
     expect(screen.getByText("bulk_selected")).toBeInTheDocument();
     expect(screen.getByText("action_download")).toBeInTheDocument();
+  });
+
+  it("shift-click selects the whole range from the anchor", () => {
+    renderRows();
+    fireEvent.click(screen.getByText(/File One/).parentElement!);
+    fireEvent.click(screen.getByText("File Three").parentElement!, {
+      shiftKey: true,
+    });
+    expect(screen.getByTestId("size").textContent).toBe("3");
+    expect(screen.getByText("File Two").parentElement!).toHaveAttribute(
+      "data-selected",
+    );
+  });
+
+  it("a later shift-click re-ranges from the SAME anchor", () => {
+    renderRows();
+    fireEvent.click(screen.getByText(/File One/).parentElement!);
+    fireEvent.click(screen.getByText("File Three").parentElement!, {
+      shiftKey: true,
+    });
+    // Narrow the range: anchor is still File One.
+    fireEvent.click(screen.getByText("File Two").parentElement!, {
+      shiftKey: true,
+    });
+    expect(screen.getByTestId("size").textContent).toBe("2");
+    expect(screen.getByText("File Three").parentElement!).not.toHaveAttribute(
+      "data-selected",
+    );
+  });
+
+  it("shift-click with no anchor selects just that row", () => {
+    renderRows();
+    fireEvent.click(screen.getByText("File Two").parentElement!, {
+      shiftKey: true,
+    });
+    expect(screen.getByTestId("size").textContent).toBe("1");
   });
 
   it("selecting a folder clears file selection, and vice versa", () => {

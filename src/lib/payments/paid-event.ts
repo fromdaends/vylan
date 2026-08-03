@@ -23,6 +23,7 @@ import {
   type PaidProvider,
 } from "@/lib/db/payment-requests";
 import { logServiceRoleActivity } from "@/lib/db/activity";
+import { insertRailPaymentSR } from "@/lib/db/invoice-payments";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { expireOpenStripeCheckout } from "@/lib/payments/close-other-rail";
 import { freezeInvoicePdfSR } from "@/lib/invoices/pdf-data";
@@ -59,17 +60,49 @@ export async function recordInvoicePaid(
   });
   if (!result) return { outcome: "already_settled" };
 
-  // Cross-rail closeout: PayPal just settled this invoice, but a Stripe
-  // Checkout session created earlier may still be OPEN and able to take a
-  // card. Expire it (best-effort — the atomic flip above already makes a
-  // second charge unrecordable; this closes the door on the client paying at
-  // all). Stripe-paid invoices need nothing: uncaptured PayPal orders are
-  // inert.
-  if (provider === "paypal" && result.stripeCheckoutSessionId) {
+  // Cross-rail closeout: something OTHER than Stripe just settled this
+  // invoice, but a Stripe Checkout session created earlier may still be OPEN
+  // and able to take a card. Expire it (best-effort — the atomic flip above
+  // already makes a second charge unrecordable; this closes the door on the
+  // client paying at all). Stripe-paid invoices need nothing: uncaptured
+  // PayPal orders are inert.
+  //
+  // This covers 'manual' too, and that is the case it matters most for: the
+  // firm records the cheque that arrived on Friday, and without this the
+  // client can still open their portal on Monday and pay the same bill by
+  // card. A refund is then the only way out, and refunds are a Stripe
+  // dashboard operation in v1.
+  if (provider !== "stripe" && result.stripeCheckoutSessionId) {
     await expireOpenStripeCheckout(
       result.firmId,
       result.stripeCheckoutSessionId,
     ).catch(() => {});
+  }
+
+  // Mirror the rail's payment into the ledger (migration 1310) so the invoice's
+  // payment history is ONE list whatever collected the money, and "collected
+  // this month" can be summed from a single place going forward.
+  //
+  // Skipped for 'manual': recordManualPayment already wrote the ledger row —
+  // that row is what completed the invoice and brought us here — and writing a
+  // second would double the total (the trigger re-sums the ledger, so the
+  // invoice would read as over-paid).
+  //
+  // Best-effort: the money is already recorded on the invoice, and a ledger
+  // write failing must never turn a collected payment into an error.
+  if (provider !== "manual") {
+    await insertRailPaymentSR({
+      firmId: result.firmId,
+      paymentRequestId,
+      clientId: null,
+      engagementId: result.engagementId,
+      amountCents: result.amountCents,
+      method: provider,
+      paidOn: new Date().toISOString().slice(0, 10),
+      reference:
+        refs.paymentIntentId ?? refs.paypalCaptureId ?? refs.checkoutSessionId ?? null,
+      recordedByUserId: null,
+    });
   }
 
   await logServiceRoleActivity(

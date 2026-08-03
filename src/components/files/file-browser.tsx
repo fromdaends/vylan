@@ -9,11 +9,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Badge } from "@/components/ui/badge";
+import { StatusCapsule, type StatusTone } from "@/components/ui/status-capsule";
 import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
 import type { SnippetPart } from "@/lib/files/search-snippet";
 import { RowCheckbox } from "./row-checkbox";
 import { RowsSurface, SelectableRow } from "./selectable-row";
+import {
+  DocumentActionsMenu,
+  DocumentRowContextMenu,
+  type DocumentMenuMeta,
+} from "./document-actions-menu";
 import {
   DraggableFile,
   DraggableFolder,
@@ -85,9 +90,14 @@ export type BrowserEntry =
        */
       from?: { label: string; href?: string; muted?: boolean } | null;
       /** Small trailing badges: status, Imported, Duplicate… */
-      badges?: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[];
-      /** The per-file actions menu, built by the page (it is a client island). */
+      badges?: { label: string; tone: StatusTone }[];
+      /** Custom actions node (the recycle bin's Restore). Regular file rows
+       * pass `docMeta` instead and get the ⋯ menu AND right-click for free. */
       actions?: React.ReactNode;
+      /** The document identity the shared actions menus need. When present,
+       * the row renders the ⋯ menu in its actions cell and the whole row
+       * becomes a right-click target with the SAME items. */
+      docMeta?: Omit<DocumentMenuMeta, "locale">;
       /** Identity for multi-select. Both are needed: an id is only unique
        * within its own table, so selection is keyed on the pair. */
       selectSource?: string;
@@ -116,6 +126,26 @@ function iconForMime(mime: string | null): LucideIcon {
     return FileText;
   }
   return File;
+}
+
+/** Wraps a file row in the right-click menu when it carries its document
+ * identity. The plain div is the ContextMenuTrigger's `asChild` target —
+ * Radix needs a child that accepts the handlers it clones on. */
+function MaybeRowContext({
+  meta,
+  locale,
+  children,
+}: {
+  meta?: Omit<DocumentMenuMeta, "locale">;
+  locale: AppLocale;
+  children: React.ReactNode;
+}) {
+  if (!meta) return <>{children}</>;
+  return (
+    <DocumentRowContextMenu {...meta} locale={locale}>
+      <div>{children}</div>
+    </DocumentRowContextMenu>
+  );
 }
 
 /** Wraps a row in a drop target only when it declares one. */
@@ -153,9 +183,9 @@ export async function FileBrowser({
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-border/70 bg-card">
+      <div className="rounded-xl border border-border/70 bg-card">
         <BrowserHeader t={t} />
-        <p className="px-4 py-14 text-center text-sm text-muted-foreground">
+        <p className="px-6 py-14 text-center text-sm text-muted-foreground">
           {emptyMessage}
         </p>
       </div>
@@ -167,10 +197,19 @@ export async function FileBrowser({
        (absolute, same height) instead of inserting above it. Inserting
        pushed every row down by the bar's height on the first click — which
        moved the row out from under the second click of a double-click. */
-    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card">
-      <RowsSurface locale={locale} folders={barFolders}>
+    <div className="relative overflow-hidden rounded-xl border border-border/70 bg-card">
+      <RowsSurface
+        locale={locale}
+        folders={barFolders}
+        // The render order Shift-click ranges are computed against.
+        orderedFiles={entries.flatMap((e) =>
+          e.kind === "file" && e.selectSource && e.selectId
+            ? [{ source: e.selectSource, id: e.selectId }]
+            : [],
+        )}
+      >
       <BrowserHeader t={t} />
-      <ul className="divide-y divide-border/50">
+      <ul className="divide-y divide-border/45">
         {entries.map((entry) => (
           <li key={`${entry.kind}-${entry.id}`}>
             {entry.kind === "folder" ? (
@@ -199,17 +238,17 @@ export async function FileBrowser({
                   <Folder
                     // Filled, in the brand blue: the single strongest signal
                     // that a row is a container rather than a document.
-                    className="size-5 shrink-0 fill-accent/25 text-accent"
+                    className="size-5 shrink-0 fill-accent/22 text-accent"
                     aria-hidden
                   />
-                  <span className="truncate text-sm">{entry.name}</span>
+                  <span className="truncate text-sm font-medium">{entry.name}</span>
                 </span>
-                <Cell width="w-36" column="type">{entry.hint ?? ""}</Cell>
-                <Cell width="w-40" column="source">{""}</Cell>
-                <Cell width="w-20" align="right" column="size">
+                <Cell column="type">{entry.hint ?? ""}</Cell>
+                <Cell column="source">{""}</Cell>
+                <Cell align="right" column="size">
                   {""}
                 </Cell>
-                <Cell width="w-24" align="right" column="modified">
+                <Cell align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
               </div>
@@ -217,7 +256,7 @@ export async function FileBrowser({
                     have nothing to act on, and the empty span keeps both
                     aligned with the file rows below. The menu stays OUTSIDE
                     the selectable body so its clicks stay its own. */}
-                <span className="w-8 shrink-0 pr-4 text-right">
+                <span className="w-8 shrink-0 pr-5 text-right">
                   {entry.actions}
                 </span>
               </div>
@@ -246,6 +285,7 @@ export async function FileBrowser({
                     : undefined
                 }
               >
+              <MaybeRowContext meta={entry.docMeta} locale={locale}>
               <div className={ROW_CLASS}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {/* Renders nothing outside a selection provider (the recycle
@@ -272,17 +312,20 @@ export async function FileBrowser({
                       {entry.name}
                     </Link>
                   ) : (
-                    <span className="truncate text-sm">{entry.name}</span>
+                    <span className="truncate text-sm font-medium">{entry.name}</span>
                   )}
+                  {/* Color marks the EXCEPTION (UI kit rule 2): a neutral
+                      capsule with one colored dot, never a filled pill. A row
+                      in its resting state carries none at all. */}
                   {entry.badges?.map((b) => (
-                    <Badge key={b.label} variant={b.tone} className="shrink-0">
+                    <StatusCapsule key={b.label} tone={b.tone} size="sm">
                       {b.label}
-                    </Badge>
+                    </StatusCapsule>
                   ))}
                 </span>
 
-                <Cell width="w-36" column="type">{entry.typeLabel ?? "—"}</Cell>
-                <Cell width="w-40" column="source">
+                <Cell column="type">{entry.typeLabel ?? "—"}</Cell>
+                <Cell column="source">
                   {entry.from ? (
                     entry.from.href && !entry.from.muted ? (
                       <Link
@@ -298,13 +341,18 @@ export async function FileBrowser({
                     "—"
                   )}
                 </Cell>
-                <Cell width="w-20" align="right" column="size">
+                <Cell align="right" column="size">
                   {formatBytes(entry.sizeBytes)}
                 </Cell>
-                <Cell width="w-24" align="right" column="modified">
+                <Cell align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
-                <span className="w-8 shrink-0 text-right">{entry.actions}</span>
+                <span className="w-8 shrink-0 text-right">
+                  {entry.actions ??
+                    (entry.docMeta && (
+                      <DocumentActionsMenu {...entry.docMeta} locale={locale} />
+                    ))}
+                </span>
               </div>
               {entry.snippet && entry.snippet.length > 0 && (
                 <p className="-mt-1 truncate px-4 pb-2 pl-[3.75rem] text-xs text-muted-foreground">
@@ -322,6 +370,7 @@ export async function FileBrowser({
                   )}
                 </p>
               )}
+              </MaybeRowContext>
               </SelectableRow>
               </DraggableFile>
             )}
@@ -342,7 +391,7 @@ export async function FileBrowser({
 // SELECTED: gray at 50% over the hard selection blue muddied it into exactly
 // the "too dark" look the founder rejected. (SelectableRow is the `group`.)
 const ROW_CLASS =
-  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 group-data-[selected]:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/55 group-data-[selected]:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 // Each metadata column earns its place only once the row is wide enough to
 // still show a NAME afterwards.
@@ -363,14 +412,27 @@ const COL_VISIBILITY = {
   modified: "block",
 } as const;
 
+// Column widths live here ONCE, so the header and every row cannot drift.
+// Passing them in by hand at each call site is how a hand-built table starts
+// looking one pixel wrong in a way nobody can find.
+const COL_WIDTH = {
+  type: "w-[170px]",
+  source: "w-[150px]",
+  size: "w-[70px]",
+  modified: "w-[86px]",
+  // 32px, NOT the design's 24px: the design measures the ⋯ GLYPH, but the
+  // real control is a size-8 icon button. At 24px the button overflowed its
+  // cell and the card's overflow-hidden sliced the dots off at the card edge
+  // — the founder caught it on the live page.
+  actions: "w-8",
+} as const;
+
 /** One metadata cell. */
 function Cell({
-  width,
   align = "left",
   column,
   children,
 }: {
-  width: string;
   align?: "left" | "right";
   column: keyof typeof COL_VISIBILITY;
   children: React.ReactNode;
@@ -378,8 +440,8 @@ function Cell({
   return (
     <span
       className={cn(
-        "shrink-0 truncate text-xs text-muted-foreground",
-        width,
+        "shrink-0 truncate text-[12.5px] text-muted-foreground",
+        COL_WIDTH[column],
         align === "right" && "text-right",
         COL_VISIBILITY[column],
       )}
@@ -393,15 +455,23 @@ function BrowserHeader({ t }: { t: (key: string) => string }) {
   return (
     // Fixed h-11 — the selection strip overlays this row at the same height,
     // so the two must match exactly or rows shift when the strip appears.
-    <div className="flex h-11 items-center gap-3 border-b border-border/60 bg-muted/30 px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="flex h-11 items-center gap-3 border-b border-border/60 bg-muted/50 px-5 text-[11px] font-semibold tracking-[0.06em] uppercase text-muted-foreground">
       <span className="min-w-0 flex-1">{t("col_name")}</span>
-      <span className="hidden w-36 shrink-0 lg:block">{t("col_type")}</span>
-      <span className="hidden w-40 shrink-0 xl:block">{t("col_source")}</span>
-      <span className="hidden w-20 shrink-0 text-right md:block">
+      <span className={cn("hidden shrink-0 lg:block", COL_WIDTH.type)}>
+        {t("col_type")}
+      </span>
+      <span className={cn("hidden shrink-0 xl:block", COL_WIDTH.source)}>
+        {t("col_source")}
+      </span>
+      <span
+        className={cn("hidden shrink-0 text-right md:block", COL_WIDTH.size)}
+      >
         {t("col_size")}
       </span>
-      <span className="w-24 shrink-0 text-right">{t("col_modified")}</span>
-      <span className="w-8 shrink-0" aria-hidden />
+      <span className={cn("shrink-0 text-right", COL_WIDTH.modified)}>
+        {t("col_modified")}
+      </span>
+      <span className={cn("shrink-0", COL_WIDTH.actions)} aria-hidden />
     </div>
   );
 }

@@ -156,11 +156,6 @@ export function FilePreviewRow({
   footer,
 }: {
   file: UploadedFile;
-  // Legacy signed-URL prop (still passed by the engagement page). It's
-  // superseded by the same-origin /api/files/[id] proxy below — which doesn't
-  // expire mid-review and serves HTTP range requests for fast large-file
-  // rendering — so we accept it for compatibility but no longer read it.
-  url?: string;
   expectedDocType: DocType;
   // Phase 4 matching context (optional — the comparison runs only when known).
   expectedYear?: number | null;

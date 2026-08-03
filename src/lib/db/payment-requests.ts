@@ -12,7 +12,10 @@ import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server
 export type PaymentRequestStatus = "requested" | "paid" | "failed" | "canceled";
 export type PaymentDelivery = "portal" | "email" | "both";
 // Which rail collected the money (migration 0730). Stamped at the paid flip.
-export type PaidProvider = "stripe" | "paypal";
+// 'manual' (migration 1310) means it did not arrive by a rail at all — a
+// cheque, an Interac transfer, cash. WHICH of those it was lives on the
+// invoice_payments ledger row, because one invoice can be settled by two.
+export type PaidProvider = "stripe" | "paypal" | "manual";
 
 export type PaymentRequest = {
   id: string;
@@ -378,6 +381,30 @@ export async function cancelPaymentRequest(id: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
+// Flip an invoice's auto-chase switch (migration 1310). No status guard: an
+// accountant may reasonably switch chasing off on a paid or void invoice to
+// tidy the row, and the worker ignores the flag on those anyway. Returns true
+// only when a row actually changed, so a pre-1310 database (where the column
+// does not exist) reports false rather than a phantom success.
+export async function setInvoiceAutoChase(
+  id: string,
+  on: boolean,
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .update({ auto_chase: on })
+    .eq("id", id)
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] setInvoiceAutoChase failed:", error);
+    }
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 // The amount (in cents) of the firm's most recent payment request — used to
 // pre-fill the dialog ("remember last amount") when there's no per-service
 // default. Returns null if the firm has never requested a payment.
@@ -501,36 +528,35 @@ export async function listFirmPaymentsWithNames(
   const engTitle = new Map<string, string>();
   const cliName = new Map<string, string>();
   const userName = new Map<string, string>();
-  if (engIds.length) {
-    const { data } = await sb
-      .from("engagements")
-      .select("id, title")
-      .in("id", engIds);
-    for (const e of data ?? []) engTitle.set(e.id as string, e.title as string);
+  // The three name lookups are independent — run them as one parallel batch
+  // instead of the three sequential round trips this used to cost on every
+  // /settings and client-profile money render.
+  const [engRes, cliRes, userRes] = await Promise.all([
+    engIds.length
+      ? sb.from("engagements").select("id, title").in("id", engIds)
+      : Promise.resolve({ data: null }),
+    cliIds.length
+      ? sb.from("clients").select("id, display_name").in("id", cliIds)
+      : Promise.resolve({ data: null }),
+    userIds.length
+      ? // RLS scopes users to the firm, so this only resolves firm members.
+        // Name preference mirrors userDisplayLabel: display_name > name > email.
+        sb.from("users").select("id, name, display_name, email").in("id", userIds)
+      : Promise.resolve({ data: null }),
+  ]);
+  for (const e of engRes.data ?? []) {
+    engTitle.set(e.id as string, e.title as string);
   }
-  if (cliIds.length) {
-    const { data } = await sb
-      .from("clients")
-      .select("id, display_name")
-      .in("id", cliIds);
-    for (const c of data ?? [])
-      cliName.set(c.id as string, c.display_name as string);
+  for (const c of cliRes.data ?? []) {
+    cliName.set(c.id as string, c.display_name as string);
   }
-  if (userIds.length) {
-    // RLS scopes users to the firm, so this only resolves firm members. Name
-    // preference mirrors userDisplayLabel: display_name > name > email.
-    const { data } = await sb
-      .from("users")
-      .select("id, name, display_name, email")
-      .in("id", userIds);
-    for (const u of data ?? []) {
-      const label =
-        (u.display_name as string | null)?.trim() ||
-        (u.name as string | null)?.trim() ||
-        (u.email as string | null) ||
-        null;
-      if (label) userName.set(u.id as string, label);
-    }
+  for (const u of userRes.data ?? []) {
+    const label =
+      (u.display_name as string | null)?.trim() ||
+      (u.name as string | null)?.trim() ||
+      (u.email as string | null) ||
+      null;
+    if (label) userName.set(u.id as string, label);
   }
   return rows.map((r) => ({
     id: r.id as string,

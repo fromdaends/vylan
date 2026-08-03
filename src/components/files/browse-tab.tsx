@@ -4,7 +4,6 @@ import { FilesToolbar } from "@/components/files/files-toolbar";
 import { FileBrowser, type BrowserEntry } from "@/components/files/file-browser";
 import { PathBar } from "@/components/files/path-bar";
 import { FilesPagination } from "@/components/files/files-pagination";
-import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
 import { NewMenu } from "@/components/files/new-menu";
@@ -32,6 +31,8 @@ import {
   type DocumentSort,
   type ReviewStatus,
 } from "@/lib/db/documents";
+import { listClientOptions } from "@/lib/db/clients";
+import type { StatusTone } from "@/components/ui/status-capsule";
 import { splitSnippet } from "@/lib/files/search-snippet";
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
@@ -60,6 +61,7 @@ export async function BrowseTab({
   basePath = "/files",
   baseParams,
   lockedClientId = null,
+  hostedChrome = false,
 }: {
   locale: AppLocaleish;
   sp: Record<string, string | undefined>;
@@ -69,14 +71,24 @@ export async function BrowseTab({
   basePath?: string;
   // Params the HOST route needs on every link (the client page's ?tab=files).
   // Kept separate from the browser's own params so the two can never collide:
-  // the browser writes client/folder/year/category/q/type/status/sort/page and
-  // nothing else, so a host param named anything outside that list is safe.
+  // the browser writes client/folder/year/category/q/type/status/sort/view/page
+  // and nothing else, so a host param outside that list is safe.
   baseParams?: Record<string, string>;
   // Pins the browser inside ONE client. The client folder level is skipped
   // entirely (you are already in it), and no link can navigate out of it — a
   // browser embedded in a client that could wander to another client's files
   // would be a quiet access surprise, even with RLS behind it.
   lockedClientId?: string | null;
+  // True when the HOST page's header already carries the search box and the
+  // "+ New" menu (that is /files). The browser then draws neither, so there is
+  // exactly one of each on screen.
+  //
+  // This is the one thing that legitimately differs between the two places
+  // this browser renders: /files has a section header with room for them, the
+  // client page does not and keeps them inline. Everything below this line —
+  // the path bar, the list, sorting, the footer — is identical in both, which
+  // is the point of there being one component.
+  hostedChrome?: boolean;
 }) {
   const t = await getTranslations("Files");
 
@@ -121,6 +133,7 @@ export async function BrowseTab({
       type: sp.type ?? null,
       status: sp.status ?? null,
       sort: sp.sort ?? null,
+      view: sp.view ?? null,
       page: sp.page ?? null,
       ...overrides,
     };
@@ -157,10 +170,19 @@ export async function BrowseTab({
   const hasDocumentFilter = !!docType || !!status;
   // A custom folder shows its own contents directly — it is a real folder
   // holding real documents, not a derived bucket to drill further into.
-  // An explicit sort also lists files: it is what Home's "View all" links to
-  // (/files?sort=date = the firm's documents, newest first, flat).
+  //
+  // `?view=files` is the flat firm-wide document list — what Home's "View all"
+  // links to. This used to be inferred from `?sort=` being present, which was
+  // fine while sorting only existed once you were already among documents. Now
+  // that the CLIENT LIST has a Sort button too, that inference would throw you
+  // out of the client folders the moment you sorted them. The intent gets its
+  // own param instead of riding on a side effect of another one.
   const showFiles =
-    categorySet || hasDocumentFilter || !!search || !!folderId || !!sp.sort?.trim();
+    categorySet ||
+    hasDocumentFilter ||
+    !!search ||
+    !!folderId ||
+    sp.view === "files";
 
   const docTypeOptions = Object.entries(DOC_TYPE_LABELS)
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
@@ -183,16 +205,9 @@ export async function BrowseTab({
     : undefined;
 
   // Every client the firm can see — the import wizard maps folders onto these.
-  // Deliberately NOT the folder list from the RPC: that only includes clients
-  // who already have documents, and importing history is exactly how a client
-  // with none gets their first.
-  const { data: allClients } = await (await getServerSupabase())
-    .from("clients")
-    .select("id, display_name")
-    .order("display_name", { ascending: true })
-    .limit(1000);
-  const importClients = ((allClients ?? []) as Array<{ id: string; display_name: string }>)
-    .map((c) => ({ id: c.id, name: c.display_name }));
+  // Skipped entirely when the host page owns the "+ New" menu: this is a
+  // 1000-row query, and fetching it to render nothing is pure latency.
+  const importClients = hostedChrome ? [] : await listClientOptions();
 
   // The path: root → client → year → category. Each ancestor is a link back up,
   // which is how you leave a folder in a file manager.
@@ -295,6 +310,8 @@ export async function BrowseTab({
 
   return (
     <div className="space-y-4">
+      {/* Sort rides on the path row, beside the folder it sorts, rather than
+          in a second strip underneath it — the redesign's one toolbar. */}
       <PathBar
         segments={segments}
         // No "View client profile" link when the browser is EMBEDDED in that
@@ -302,31 +319,36 @@ export async function BrowseTab({
         // The link earns its place on /files, where the client is a folder you
         // drilled into and their profile is genuinely elsewhere.
         clientProfileId={lockedClientId ? null : (clientHeader?.id ?? null)}
+        trailing={
+          <FilesToolbar
+            search={search}
+            sort={sp.sort ?? "date"}
+            docType={sp.type ?? ""}
+            status={sp.status ?? ""}
+            year={yearParam ?? ""}
+            years={firmYears}
+            docTypes={docTypeOptions}
+            scope={clientId || showFiles ? "documents" : "folders"}
+            // On /files the page header carries the one search box. Rendering
+            // the toolbar's copy too would put two search fields on one screen
+            // writing the same ?q= param.
+            hideSearch={hostedChrome}
+          />
+        }
       />
 
-      {/* Import sits beside the search, per the spec — and is the ONLY way
-          documents enter Vylan outside the engagement/portal pipeline. There is
-          deliberately no plain "upload file" action anywhere on Browse. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <FilesToolbar
-        search={search}
-        sort={sp.sort ?? "date"}
-        docType={sp.type ?? ""}
-        status={sp.status ?? ""}
-        year={yearParam ?? ""}
-        years={firmYears}
-        docTypes={docTypeOptions}
-          scope={clientId || showFiles ? "documents" : "folders"}
-        />
-        {/* Drive's one entry point for putting things in (§7): Import, and
-            New folder when inside a client. Replaces the standalone Import
-            button. */}
-        <NewMenu
-          clients={importClients}
-          clientId={clientId}
-          folderParentId={folderId}
-        />
-      </div>
+      {/* Drive's one entry point for putting things in (§7): Import, and New
+          folder when inside a client. On /files this lives in the page header
+          instead, so Home can reach it as well. */}
+      {!hostedChrome && (
+        <div className="flex justify-end">
+          <NewMenu
+            clients={importClients}
+            clientId={clientId}
+            folderParentId={folderId}
+          />
+        </div>
+      )}
 
       {/* Selection only wraps the FILE list. Folder rows are navigation, and a
           checkbox on a folder would promise a bulk action on its contents that
@@ -423,18 +445,23 @@ export async function BrowseTab({
           locale={locale}
           search={search}
           page={page}
+          sort={sort}
           buildQuery={buildQuery}
         />
       )}
 
-      {/* The way into the recycle bin. Quiet and at the bottom, like every file
-          manager's Trash — findable, never in the way. Also a drop target:
+      {/* Footer: what you are looking at on the left, the way into the recycle
+          bin on the right. Quiet and at the bottom, like every file manager's
+          Trash — findable, never in the way. The bin is also a drop target:
           dragging files onto it soft-deletes them, with an Undo toast. */}
-      <div className="pt-2">
+      {/* The count itself is NOT repeated here — FilesPagination already
+          renders "N results" directly under the list, and two counts on one
+          screen invites them to disagree. */}
+      <div className="flex items-center justify-end gap-4 pt-1">
         <TrashDropTarget>
           <Link
             href="/files?deleted=1"
-            className="inline-flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
           >
             <Trash2 className="size-3.5" aria-hidden />
             {t("bin_title")}
@@ -453,15 +480,21 @@ async function ClientLevel({
   locale,
   search,
   page,
+  sort,
   buildQuery,
 }: {
   locale: AppLocaleish;
   search: string;
   page: number;
+  sort: DocumentSort;
   buildQuery: (o?: Record<string, string | null>) => string;
 }) {
   const t = await getTranslations("Files");
-  const { folders, total, available } = await listClientFolders({ search, page });
+  const { folders, total, available } = await listClientFolders({
+    search,
+    page,
+    sort,
+  });
   if (!available) return <Dormant message={t("unavailable")} />;
 
   const entries: BrowserEntry[] = folders.map((f) => ({
@@ -709,8 +742,8 @@ async function FileList({
       ...(searchQ
         ? [
             contentOnlyKeys.has(`${doc.source}|${doc.id}`)
-              ? { label: t("match_content"), tone: "outline" as const }
-              : { label: t("match_name"), tone: "outline" as const },
+              ? { label: t("match_content"), tone: "accent" as const }
+              : { label: t("match_name"), tone: "accent" as const },
           ]
         : []),
     ],
@@ -718,22 +751,21 @@ async function FileList({
       const raw = snippetByKey.get(`${doc.source}|${doc.id}`);
       return raw ? splitSnippet(raw) : undefined;
     })(),
-    actions: (
-      <DocumentActionsMenu
-        source={doc.source}
-        id={doc.id}
-        name={doc.name}
-        year={doc.year}
-        category={doc.category}
-        docType={doc.docType}
-        // Move is disabled only while the AI is genuinely mid-read; its answer
-        // would land on top of the person's. An imported or never-analysed
-        // document is always movable — hand-sorting is the whole point of them.
-        canMove={!doc.classificationPending}
-        visibility={doc.visibility}
-        locale={locale}
-      />
-    ),
+    // ONE identity feeds both menus (the ⋯ button and row right-click) —
+    // FileBrowser builds them from this so they can never drift apart.
+    docMeta: {
+      source: doc.source,
+      id: doc.id,
+      name: doc.name,
+      year: doc.year,
+      category: doc.category,
+      docType: doc.docType,
+      // Move is disabled only while the AI is genuinely mid-read; its answer
+      // would land on top of the person's. An imported or never-analysed
+      // document is always movable — hand-sorting is the whole point of them.
+      canMove: !doc.classificationPending,
+      visibility: doc.visibility,
+    },
   }));
 
   return (
@@ -794,17 +826,17 @@ function fileBadges(
   doc: BrowseDocument,
   t: T,
   clientName: string | null | undefined,
-): { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[] {
-  const badges: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[] =
+): { label: string; tone: StatusTone }[] {
+  const badges: { label: string; tone: StatusTone }[] =
     [];
   // In firm-wide results the row has to say WHOSE file this is; inside a folder
   // that would be the same value on every row and is left off.
-  if (clientName) badges.push({ label: clientName, tone: "secondary" });
+  if (clientName) badges.push({ label: clientName, tone: "muted" });
   // The one badge every surface shows for a hidden-from-client file.
   if (doc.visibility === "firm") {
-    badges.push({ label: t("badge_firm_only"), tone: "secondary" });
+    badges.push({ label: t("badge_firm_only"), tone: "muted" });
   }
-  if (doc.isDuplicate) badges.push({ label: t("badge_duplicate"), tone: "outline" });
+  if (doc.isDuplicate) badges.push({ label: t("badge_duplicate"), tone: "muted" });
   // Only the EXCEPTIONS get a badge. Approved is the resting state of a filed
   // document — badging it would put a coloured pill on almost every row and the
   // rows that actually need attention would stop standing out.
@@ -812,7 +844,7 @@ function fileBadges(
     badges.push({ label: t("status_rejected"), tone: "destructive" });
   }
   if (doc.reviewStatus === "pending") {
-    badges.push({ label: t("status_pending"), tone: "outline" });
+    badges.push({ label: t("status_pending"), tone: "warning" });
   }
   return badges;
 }

@@ -21,7 +21,7 @@ export async function FilesPagination({
   const t = await getTranslations("Files");
   if (pageCount <= 1) {
     return (
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="mt-3 text-[12.5px] text-muted-foreground">
         {t("result_count", { count: total })}
       </p>
     );
@@ -37,7 +37,7 @@ export async function FilesPagination({
       className="mt-4 flex items-center justify-between gap-4"
       aria-label={t("pagination_label")}
     >
-      <p className="text-xs text-muted-foreground">
+      <p className="text-[12.5px] text-muted-foreground">
         {t("result_count", { count: total })}
       </p>
       <div className="flex items-center gap-2">
