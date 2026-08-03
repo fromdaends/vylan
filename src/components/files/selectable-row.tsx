@@ -53,6 +53,12 @@ import { BulkBar } from "./bulk-bar";
 type RowsContext = {
   selectedFolder: SelectedFolder | null;
   setSelectedFolder: (sel: SelectedFolder | null) => void;
+  /** File keys in RENDER order — what makes Shift-click's "everything between
+   * these two" well-defined. */
+  orderedKeys: string[];
+  /** The range anchor: the last row plainly clicked. */
+  anchorKey: string | null;
+  setAnchorKey: (key: string | null) => void;
 };
 
 const Ctx = createContext<RowsContext | null>(null);
@@ -63,21 +69,30 @@ const Ctx = createContext<RowsContext | null>(null);
 export function RowsSurface({
   locale = "en",
   folders,
+  orderedFiles,
   children,
 }: {
   locale?: "en" | "fr";
   /** The current client's custom folders, for the bar's "File into". */
   folders?: { id: string; name: string }[];
+  /** The page's file rows in render order, as raw {source,id} pairs — the
+   * SERVER list builds this (it cannot call selectionKey itself: importing
+   * from a "use client" module turns the import into a stub there). */
+  orderedFiles?: { source: string; id: string }[];
   children: ReactNode;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
   const selection = useFileSelection();
   const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const orderedKeys = (orderedFiles ?? []).map((f) => selectionKey(f.source, f.id));
 
   const clearAll = useCallback(() => {
     setSelectedFolder(null);
+    setAnchorKey(null);
     selection?.clear();
   }, [selection]);
 
@@ -127,7 +142,9 @@ export function RowsSurface({
   }, [selection, clearAll, router, t, startTransition]);
 
   return (
-    <Ctx.Provider value={{ selectedFolder, setSelectedFolder }}>
+    <Ctx.Provider
+      value={{ selectedFolder, setSelectedFolder, orderedKeys, anchorKey, setAnchorKey }}
+    >
       <BulkBar
         locale={locale}
         folders={folders}
@@ -209,16 +226,33 @@ export function SelectableRow({
     // Drive never deselects on a re-click (founder: "when you click it a
     // second time it shouldn't close"); getting OUT of a selection is what
     // the bar's X, Esc, another row, or empty space are for. Ctrl/Cmd-click
-    // stays a true toggle — that is the explicit add/remove gesture.
+    // stays a true toggle, and Shift-click selects the whole RANGE between
+    // the last plainly-clicked row (the anchor) and this one.
     if (kind === "folder") {
       selectFolder(true);
       selection?.clear();
     } else if (fileKey && selection) {
-      if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey && rows) {
+        // The anchor stays put across repeated shift-clicks, so you can
+        // widen or narrow the range — Drive's exact behaviour. Falls back to
+        // a plain single-select when there is no usable anchor.
+        const a = rows.orderedKeys.indexOf(rows.anchorKey ?? fileKey);
+        const b = rows.orderedKeys.indexOf(fileKey);
+        if (a !== -1 && b !== -1) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          selection.clear();
+          selection.setMany(rows.orderedKeys.slice(lo, hi + 1), true);
+          if (rows.anchorKey === null) rows.setAnchorKey(fileKey);
+        }
+      } else if (e.ctrlKey || e.metaKey) {
         selection.toggle(fileKey);
-      } else if (!(selection.selected.has(fileKey) && selection.selected.size === 1)) {
-        selection.clear();
-        selection.toggle(fileKey);
+        rows?.setAnchorKey(fileKey);
+      } else {
+        if (!(selection.selected.has(fileKey) && selection.selected.size === 1)) {
+          selection.clear();
+          selection.toggle(fileKey);
+        }
+        rows?.setAnchorKey(fileKey);
       }
       rows?.setSelectedFolder(null);
     }
