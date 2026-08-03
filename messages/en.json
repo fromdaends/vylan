@@ -1553,6 +1553,10 @@
     "open_button": "Team chat"
   },
   "Clients": {
+    "tab_team": "Team",
+    "tab_files": "Files",
+    "recent_files": "Recent files",
+    "view_all_files": "View all",
     "import_commit_failed": "Couldn't import the clients. Please try again.",
     "title": "Clients",
     "document_archive": "Documents",
@@ -1749,7 +1753,7 @@
     "access_reason_owner": "owner",
     "access_reason_assigned": "assigned",
     "access_reason_member": "on the team",
-    "access_everyone": "Everyone at your firm ({count} people), because this client isn't private. Mark it private to limit it to the people above.",
+    "access_everyone": "Nobody else at your firm can see this client. Add someone above to give them access.",
     "access_only_you": "Only you can see this client. Add someone above so they can work on it.",
     "team_position": "What they do on this client",
     "team_position_add": "Add a role",

@@ -68,7 +68,10 @@ export function MemberPermissions({
   disabled?: boolean;
 }) {
   const t = useTranslations("Team");
-  const [pending, start] = useTransition();
+  // The transition is still what carries the save (and keeps the route's
+  // revalidation from blocking paint); its `pending` flag is deliberately
+  // unread — nothing on this panel should grey out while it runs.
+  const [, start] = useTransition();
   const [role, setRole] = useState<"member" | "junior">(
     preset === "junior" ? "junior" : "member",
   );
@@ -110,7 +113,13 @@ export function MemberPermissions({
               type="button"
               role="radio"
               aria-checked={role === r}
-              disabled={disabled || pending}
+              // NOT disabled while saving. The update is optimistic, so the
+              // only thing `pending` bought was freezing the control for the
+              // length of a round-trip that included a page revalidation —
+              // which is exactly why this felt slow enough to need a refresh.
+              // Every save posts the whole desired state, so a fast second
+              // click simply wins.
+              disabled={disabled}
               onClick={() => role !== r && save(r, extra)}
               className={cn(
                 "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
@@ -151,7 +160,7 @@ export function MemberPermissions({
               </span>
               <Switch
                 checked={on}
-                disabled={disabled || pending}
+                disabled={disabled}
                 onCheckedChange={(next) =>
                   save(
                     role,
