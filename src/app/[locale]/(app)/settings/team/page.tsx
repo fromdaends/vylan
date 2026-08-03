@@ -27,6 +27,7 @@ import {
   workloadForMember,
 } from "@/lib/team/workload";
 import { listRolesByUser } from "@/lib/db/firm-roles";
+import { can } from "@/lib/auth/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,10 @@ export default async function TeamPage({
 
   // Owners manage; staff only view. firm_invites + seat usage are owner-only
   // (RLS) — staff would just get empty results, so skip those fetches for them.
-  const canManage = user.role === "owner";
+  // team.manage, not the rank. The server side (actions/team.ts, the roles
+  // page, /api routes) already asks this question via can(); the screen asking a
+  // different one is how a granted role ends up hiding its own controls.
+  const canManage = can(user, "team.manage");
   // Only owners have a Firm tab (every block on it is owner-gated), so a staff
   // member arriving on ?tab=firm falls back to the roster rather than a blank
   // page. An unrecognised value falls back the same way.
