@@ -64,6 +64,11 @@ export const AUDIT_ACTIONS = [
   "client_reassigned",
   "client_privacy_changed",
   "engagement_privacy_changed",
+  // Per-job access (1310). Registered WITH the feature, not after it — this
+  // file's own notes record the audit log printing raw codes twice because an
+  // action was logged before it was listed.
+  "engagement_access_granted",
+  "engagement_access_revoked",
   "firm_settings_changed",
   "user_deactivated",
   "user_reactivated",

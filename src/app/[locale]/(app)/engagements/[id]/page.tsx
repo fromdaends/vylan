@@ -113,6 +113,7 @@ import { engagementMatchesSeries } from "@/lib/recurring/sync";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
+import { EngagementAccess } from "@/components/engagements/engagement-access";
 import { EngagementPresence } from "@/components/engagements/engagement-presence";
 import { getLatestHandoffNote } from "@/lib/db/activity";
 import {
@@ -167,6 +168,8 @@ import {
 import { StageStepper } from "@/components/engagements/stage-stepper";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { hasActiveTeam } from "@/lib/team/mode";
+import { listClientMembers } from "@/lib/db/client-members";
+import { listEngagementMembers } from "@/lib/db/engagement-members";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
@@ -505,6 +508,37 @@ export default async function EngagementDetailPage({
       ? getLatestHandoffNote(engagement.id)
       : Promise.resolve(null),
   ]);
+
+  // ── Per-job access (1310) ────────────────────────────────────────────────
+  // Owner-only, team-only, and only once the engagement is more than a draft.
+  // Placed AFTER the second batch on purpose: `client` is resolved in it, and
+  // this needs the client's assignee to work out who is already covered.
+  // Skipped entirely for everybody else — a staff member never pays two reads
+  // for a control they cannot see.
+  const canGrantJobAccess =
+    user?.role === "owner" && teamEnabled && engagement.status !== "draft";
+  const [jobGuestRows, clientCastRows] = canGrantJobAccess
+    ? await Promise.all([
+        listEngagementMembers(id),
+        listClientMembers(engagement.client_id),
+      ])
+    : [[], []];
+  const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
+  // Anyone who can ALREADY see this through the client is not a candidate:
+  // adding them would grant nothing, and removing them later would take
+  // nothing away. The control lists EXCEPTIONS, not the audience.
+  const coveredByClient = new Set<string>([
+    ...clientCastRows.map((m) => m.userId),
+    ...(client?.assigned_user_id ? [client.assigned_user_id] : []),
+  ]);
+  const jobGuests = activeMembers.filter((m) => jobGuestIds.has(m.id));
+  const jobCandidates = activeMembers.filter(
+    (m) =>
+      !jobGuestIds.has(m.id) &&
+      !coveredByClient.has(m.id) &&
+      m.id !== user?.id &&
+      m.id !== engagement.assigned_user_id,
+  );
 
   const clientRelationships = relationshipData.rels;
   const relatedBrief = relationshipData.brief;
@@ -1060,6 +1094,17 @@ export default async function EngagementDetailPage({
               </Badge>
             )}
           </div>
+          {/* Who has been let into THIS job only. Quiet, under the badges,
+              because it is a rare deliberate act rather than a daily control. */}
+          {canGrantJobAccess && (
+            <div className="mt-2">
+              <EngagementAccess
+                engagementId={id}
+                guests={jobGuests}
+                candidates={jobCandidates}
+              />
+            </div>
+          )}
           {/* Recipient safety (spec §3): Vylan has no per-send recipient
               picker — every send on this engagement (portal link, reminder,
               signature request, invoice) goes to the client record's email.
