@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -46,12 +46,20 @@ export function QuickUpload({
   defaultClientId,
   externalOpen,
   onExternalOpenChange,
+  initialFiles,
 }: {
   clients: { id: string; name: string }[];
   /** Browsing inside a client pre-answers the only question this asks. */
   defaultClientId: string | null;
   externalOpen: boolean;
   onExternalOpenChange: (open: boolean) => void;
+  /**
+   * Files the caller already has in hand — the Home dropzone passes what was
+   * dropped on it. Without this the drop would open an empty picker and ask
+   * the user to find the same files again, which is not what "drop files here"
+   * promises. Seeded once per open; the picker still works normally after.
+   */
+  initialFiles?: File[] | null;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
@@ -69,6 +77,23 @@ export function QuickUpload({
 
   const oversize = picked.filter((f) => f.size > MAX_BYTES).length;
   const uploadable = picked.length - oversize;
+
+  // Adopt dropped files when the dialog is opened with some. Keyed on the
+  // array identity the caller hands over, so re-renders don't re-seed and a
+  // second drop of the same filenames still registers.
+  //
+  // This genuinely IS prop-into-state sync, which the lint rule is right to
+  // flag in general: File objects cannot live in state (they are not
+  // serializable and the upload loop needs the real handles from filesRef),
+  // and the dialog is opened by a CONTROLLED prop, so Radix's onOpenChange
+  // never fires on the way in and there is no event handler to seed from.
+  // The dependency is the array identity, so this runs once per drop.
+  useEffect(() => {
+    if (!initialFiles || initialFiles.length === 0) return;
+    filesRef.current = initialFiles;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+    setPicked(initialFiles.map((f) => ({ name: f.name, size: f.size })));
+  }, [initialFiles]);
 
   function reset() {
     setPicked([]);

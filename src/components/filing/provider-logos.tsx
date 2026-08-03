@@ -1,6 +1,8 @@
 // Provider marks for the Document filing surface. Plain inline SVGs sized by
 // className, brand-color fills — same pattern as QuickbooksLogo / XeroLogo.
 
+import type { StorageProvider } from "@/lib/filing/types";
+
 // Google Drive tricolor triangle (Simple Icons "Google Drive").
 export function GoogleDriveLogo({ className }: { className?: string }) {
   return (
@@ -114,4 +116,27 @@ export function SmartVaultLogo({ className }: { className?: string }) {
       />
     </svg>
   );
+}
+
+// ONE place that maps a provider to its mark. Every surface that shows a
+// storage provider (Filing settings' hero and provider rows, the Files Home
+// cloud card) goes through this — so adding a provider, or fixing a logo, is
+// one edit rather than a hunt through the screens that happen to draw one.
+export function ProviderLogo({
+  provider,
+  className,
+}: {
+  provider: StorageProvider;
+  className?: string;
+}) {
+  switch (provider) {
+    case "google_drive":
+      return <GoogleDriveLogo className={className} />;
+    case "microsoft":
+      return <MicrosoftLogo className={className} />;
+    case "dropbox":
+      return <DropboxLogo className={className} />;
+    case "smartvault":
+      return <SmartVaultLogo className={className} />;
+  }
 }
