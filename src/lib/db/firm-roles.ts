@@ -19,6 +19,19 @@ export type FirmRole = {
   color: RoleColor;
   /** What wearing this role grants. Narrowed to the vetted list on write. */
   capabilities: string[];
+  /**
+   * The ONE automatic role every firm owner wears (migration 1290).
+   *
+   * Its membership is maintained by a database trigger, not by hand, and the
+   * app refuses to delete it, edit its permissions or change who is in it —
+   * see the guards in app/actions/firm-roles.ts. Its `capabilities` are empty
+   * and never read: an owner gets everything from users.role, so a switch here
+   * would be a control that changes nothing.
+   *
+   * Absent until 1290 is applied, which reads as false — a firm with no owner
+   * role yet behaves exactly as it did before.
+   */
+  isOwnerRole: boolean;
 };
 
 export class FirmRolesUnsupportedError extends Error {
@@ -41,6 +54,7 @@ function toRole(r: Record<string, unknown>): FirmRole | null {
     capabilities: Array.isArray(r.capabilities)
       ? r.capabilities.filter((c): c is string => typeof c === "string")
       : [],
+    isOwnerRole: r.is_owner_role === true,
   };
 }
 
@@ -50,7 +64,7 @@ export async function listFirmRoles(): Promise<FirmRole[]> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("firm_roles")
-    .select("id, name, color, capabilities")
+    .select("id, name, color, capabilities, is_owner_role")
     .order("name", { ascending: true });
   if (error) {
     if (isMissingSchema(error)) return [];
@@ -73,7 +87,7 @@ export async function listRolesByUser(): Promise<Map<string, FirmRole[]>> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("user_firm_roles")
-    .select("user_id, firm_roles(id, name, color, capabilities)");
+    .select("user_id, firm_roles(id, name, color, capabilities, is_owner_role)");
   if (error) {
     if (isMissingSchema(error)) return out;
     throw error;
@@ -90,9 +104,19 @@ export async function listRolesByUser(): Promise<Map<string, FirmRole[]>> {
     if (list) list.push(role);
     else out.set(userId, [role]);
   }
-  // Same alphabetical order as the picker, so a person's badges do not shuffle
-  // between the roster and their profile.
-  for (const list of out.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+  // Alphabetical, EXCEPT the owner role always leads. It is the one badge that
+  // is a fact about the person rather than a choice somebody made, and the
+  // "first role wins" rule that colours a name in the member panel should land
+  // on it rather than on whichever role happens to sort first.
+  for (const list of out.values()) {
+    list.sort((a, b) =>
+      a.isOwnerRole === b.isOwnerRole
+        ? a.name.localeCompare(b.name)
+        : a.isOwnerRole
+          ? -1
+          : 1,
+    );
+  }
   return out;
 }
 
