@@ -199,18 +199,20 @@ export async function getInvoiceAttachmentForDownloadSR(id: string): Promise<{
 }
 
 // One final document by id, for the portal download route. Returns just what the
-// route needs to authorize (engagement_id) and stream (storage_path, filename,
-// mime). Null if missing.
+// route needs to authorize (engagement_id), stream (storage_path, filename,
+// mime) and RECORD (display_name — the activity row has to name the file the
+// same way the portal named it on screen). Null if missing.
 export async function getFinalDocumentForDownloadSR(id: string): Promise<{
   engagement_id: string;
   storage_path: string;
   original_filename: string;
+  display_name: string | null;
   mime_type: string | null;
 } | null> {
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb
     .from("final_documents")
-    .select("engagement_id, storage_path, original_filename, mime_type")
+    .select("engagement_id, storage_path, original_filename, display_name, mime_type")
     .eq("id", id)
     .maybeSingle();
   if (error) {
@@ -224,6 +226,7 @@ export async function getFinalDocumentForDownloadSR(id: string): Promise<{
     engagement_id: data.engagement_id as string,
     storage_path: data.storage_path as string,
     original_filename: data.original_filename as string,
+    display_name: (data.display_name as string | null) ?? null,
     mime_type: (data.mime_type as string | null) ?? null,
   };
 }

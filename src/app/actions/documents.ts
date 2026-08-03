@@ -294,40 +294,13 @@ export async function bulkDeleteDocumentsAction(input: {
   return { ok: succeeded > 0, succeeded, failed, skipped: 0 };
 }
 
-/**
- * Record that someone downloaded a document.
- *
- * Called by the client AFTER the browser has been pointed at the bytes, so it
- * cannot block or delay the download. That does mean a download can in
- * principle happen without a log line (the tab closes mid-request) — an honest
- * trade: the alternative is routing every download through a server action and
- * losing HTTP range streaming, which is what makes a 200-page PDF readable.
- * The bytes route itself is still fully authorized either way.
- */
-export async function logDocumentDownloadAction(input: {
-  source: string;
-  id: string;
-}): Promise<{ ok: boolean }> {
-  if (!isDocumentSource(input.source) || !input.id) return { ok: false };
-  const firm = await getCurrentFirm();
-  if (!firm) return { ok: false };
-  // Prove the caller can actually see this document before writing a log line
-  // that says they downloaded it — otherwise the endpoint is a way to forge
-  // audit entries about documents you cannot read.
-  const sb = await getServerSupabase();
-  const { data } = await sb
-    .from(TABLE[input.source])
-    .select("id")
-    .eq("id", input.id)
-    .maybeSingle();
-  if (!data) return { ok: false };
-
-  await logUserActivity(firm.id, null, "file_downloaded", {
-    source: input.source,
-    file_id: input.id,
-  });
-  return { ok: true };
-}
+// logDocumentDownloadAction used to live here: the browser called it right
+// after pointing itself at the bytes. It was removed because being a component
+// call was the whole problem — only the Files grid's row menu ever called it,
+// so five other download surfaces wrote nothing and /settings/audit showed a
+// fraction of real downloads as though it were all of them. The byte routes
+// record downloads now (src/lib/files/download-audit.ts), which no surface can
+// route around.
 
 // PGRST204/42703 = missing column, PGRST205/42P01 = missing table. Pre-1070
 // environments simply have no Files feature; say so rather than "error".

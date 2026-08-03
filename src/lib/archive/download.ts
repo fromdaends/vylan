@@ -18,6 +18,10 @@ export type ResolvedArchiveFile = {
   storagePath: string;
   filename: string;
   mimeType: string | null;
+  // Every archived file, in all three categories, is proven to belong to an
+  // in-scope engagement below — so the engagement is always known, and a
+  // download's audit row can name the work it came from.
+  engagementId: string;
 };
 
 // Signed PDFs carry no size in the DB; use a generous nominal size so the
@@ -222,6 +226,7 @@ export async function resolveArchiveFile(input: {
       storagePath: f.storage_path as string,
       filename: (f.display_name as string | null) ?? (f.original_filename as string),
       mimeType: (f.mime_type as string | null) ?? null,
+      engagementId: f.engagement_id as string,
     };
   }
 
@@ -241,6 +246,7 @@ export async function resolveArchiveFile(input: {
       storagePath: d.storage_path as string,
       filename: (d.display_name as string | null) ?? (d.original_filename as string),
       mimeType: (d.mime_type as string | null) ?? null,
+      engagementId: d.engagement_id as string,
     };
   }
 
@@ -267,6 +273,7 @@ export async function resolveArchiveFile(input: {
     storagePath: s.signed_file_path as string,
     filename: `${label || "Document"}.pdf`,
     mimeType: "application/pdf",
+    engagementId: s.engagement_id as string,
   };
 }
 

@@ -46,6 +46,15 @@ export type ServableDocument = {
   /** display_name ?? original_filename — what a download should be called. */
   fileName: string;
   deletedAt: string | null;
+  /**
+   * What the document hangs off, so a download's audit row can name the work
+   * and link to it. Exactly one is set per source: checklist uploads and
+   * deliverables belong to an engagement; an import belongs to a client and has
+   * no engagement at all (1070 gave imported_documents client_id, not
+   * engagement_id).
+   */
+  engagementId: string | null;
+  clientId: string | null;
 };
 
 /**
@@ -97,6 +106,8 @@ export async function resolveServableDocument(
         (file.display_name as string | null) ?? (file.original_filename as string),
       // Pre-1070 environments have no such column; undefined reads as null.
       deletedAt: (file.deleted_at as string | null) ?? null,
+      engagementId: (file.engagement_id as string | null) ?? null,
+      clientId: null,
     };
   }
 
@@ -104,9 +115,15 @@ export async function resolveServableDocument(
   // directly, so each table's own policy is the gate — no join that could be
   // more permissive than the table itself.
   const table = source === "final" ? "final_documents" : "imported_documents";
+  // Same query, one differing column: the two tables genuinely scope
+  // differently (a deliverable to an engagement, an import to a client), and
+  // asking either for the other's column would error the whole select.
+  const scopeColumn = source === "final" ? "engagement_id" : "client_id";
   const { data, error } = await supabase
     .from(table)
-    .select("id, storage_path, original_filename, display_name, mime_type, deleted_at")
+    .select(
+      `id, storage_path, original_filename, display_name, mime_type, deleted_at, ${scopeColumn}`,
+    )
     .eq("id", id)
     .maybeSingle();
   if (error || !data) return null;
@@ -118,5 +135,13 @@ export async function resolveServableDocument(
     fileName:
       (data.display_name as string | null) ?? (data.original_filename as string),
     deletedAt: (data.deleted_at as string | null) ?? null,
+    engagementId:
+      source === "final"
+        ? ((data as { engagement_id?: string | null }).engagement_id ?? null)
+        : null,
+    clientId:
+      source === "imported"
+        ? ((data as { client_id?: string | null }).client_id ?? null)
+        : null,
   };
 }
