@@ -89,6 +89,7 @@ export function InvoiceOptionsDialog({
   automation,
   builder,
   trigger,
+  autoOpen = false,
 }: {
   engagementId: string;
   connectReady: boolean;
@@ -100,11 +101,24 @@ export function InvoiceOptionsDialog({
   automation: EngagementInvoiceAutomation;
   // Invoice-builder inputs (firm invoice settings + Default-prices presets).
   builder: InvoiceBuilderConfig;
+  // Null when the dialog is mounted with no trigger of its own — the
+  // page-level mount used by Billing's "New invoice", which arrives already
+  // open. The kebab's mount always passes one.
   trigger: ReactNode;
+  // Open on mount. Billing → New invoice picks an engagement and links to
+  // /engagements/{id}?panel=invoice, which lands HERE rather than on a second
+  // copy of the invoice flow — there is exactly one invoice creation path and
+  // this is it.
+  //
+  // The engagement page mounts this instance OUTSIDE the kebab menu. It has
+  // to: Radix unmounts DropdownMenuContent when the menu is closed, so the
+  // menu's own mount does not exist yet on page load and could never open
+  // itself.
+  autoOpen?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -384,7 +398,9 @@ export function InvoiceOptionsDialog({
         }
       }}
     >
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {/* asChild requires exactly one element child, so the trigger-less
+          page-level mount omits it entirely rather than passing null. */}
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       {/* max-w-lg (was -md): the line-item table needs the extra width; the
           attach/automation content just breathes a little more. */}
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">

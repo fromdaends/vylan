@@ -92,6 +92,7 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
+import { InvoiceOptionsDialog } from "@/components/engagements/invoice-options-dialog";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
@@ -190,6 +191,9 @@ export default async function EngagementDetailPage({
 }: {
   params: Promise<{ locale: string; id: string }>;
   searchParams?: Promise<{ panel?: string; comment?: string }>;
+  // ?panel=invoice is Billing → New invoice landing here: the invoice flow
+  // lives on this page and nowhere else, so that button picks an engagement
+  // and links in rather than mounting a second copy of the builder.
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
@@ -630,6 +634,32 @@ export default async function EngagementDetailPage({
     { key: "t2", label: tSettings("service_price_t2") },
     { key: "bookkeeping", label: tSettings("service_price_bookkeeping") },
   ];
+  // The engagement's live invoice, in the shape the invoice dialog wants.
+  // Extracted to a variable because TWO mounts of that dialog need it now: the
+  // header kebab's, and the trigger-less one that ?panel=invoice opens for
+  // Billing → New invoice. Building it inline twice is how the two would drift.
+  const invoiceForOptions = latestPayment
+    ? {
+        id: latestPayment.id,
+        status: latestPayment.status,
+        amount_cents: latestPayment.amount_cents,
+        description: latestPayment.description,
+        locks_deliverables: latestPayment.locks_deliverables,
+        override_unlocked: latestPayment.override_unlocked,
+        // Native-invoice fields (0750) for the builder's edit mode;
+        // null/undefined on legacy simple rows.
+        invoice_kind: latestPayment.invoice_kind ?? null,
+        invoice_number: latestPayment.invoice_number ?? null,
+        line_items: latestPayment.line_items ?? null,
+        tax_breakdown: latestPayment.tax_breakdown ?? null,
+        tax_total_cents: latestPayment.tax_total_cents ?? null,
+        due_date: latestPayment.due_date ?? null,
+        invoice_terms: latestPayment.invoice_terms ?? null,
+        invoice_notes: latestPayment.invoice_notes ?? null,
+        invoice_language: latestPayment.invoice_language ?? null,
+      }
+    : null;
+
   const invoiceBuilder = {
     settings: invoiceSettings
       ? {
@@ -1243,29 +1273,7 @@ export default async function EngagementDetailPage({
                 isLive ? (engagement.magic_token ?? undefined) : undefined
               }
               connectReady={connectReady}
-              invoice={
-                latestPayment
-                  ? {
-                      id: latestPayment.id,
-                      status: latestPayment.status,
-                      amount_cents: latestPayment.amount_cents,
-                      description: latestPayment.description,
-                      locks_deliverables: latestPayment.locks_deliverables,
-                      override_unlocked: latestPayment.override_unlocked,
-                      // Native-invoice fields (0750) for the builder's edit
-                      // mode; null/undefined on legacy simple rows.
-                      invoice_kind: latestPayment.invoice_kind ?? null,
-                      invoice_number: latestPayment.invoice_number ?? null,
-                      line_items: latestPayment.line_items ?? null,
-                      tax_breakdown: latestPayment.tax_breakdown ?? null,
-                      tax_total_cents: latestPayment.tax_total_cents ?? null,
-                      due_date: latestPayment.due_date ?? null,
-                      invoice_terms: latestPayment.invoice_terms ?? null,
-                      invoice_notes: latestPayment.invoice_notes ?? null,
-                      invoice_language: latestPayment.invoice_language ?? null,
-                    }
-                  : null
-              }
+              invoice={invoiceForOptions}
               engagementLocksDeliverables={
                 engagement.invoice_locks_deliverables === true
               }
@@ -1283,6 +1291,40 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
+
+      {/* Billing → New invoice arrives as ?panel=invoice. Mounted HERE, at page
+          level, rather than inside the header kebab: Radix unmounts the menu's
+          content while it is closed, so the kebab's own copy of this dialog
+          does not exist on page load and could not open itself. Same component,
+          same props, no trigger. */}
+      {sp.panel === "invoice" &&
+        connectReady &&
+        engagement.status !== "cancelled" && (
+          <InvoiceOptionsDialog
+            autoOpen
+            trigger={null}
+            engagementId={engagement.id}
+            connectReady={connectReady}
+            invoice={invoiceForOptions}
+            engagementLocksDeliverables={
+              engagement.invoice_locks_deliverables === true
+            }
+            defaultAmount={paymentPrefill}
+            locale={locale}
+            engagementStatus={
+              engagement.status === "complete" ? "complete" : "live"
+            }
+            automation={{
+              mode: engagement.invoice_auto_mode ?? "off",
+              delayDays: engagement.invoice_delay_days ?? null,
+              amountCents: engagement.invoice_amount_cents ?? null,
+              description: engagement.invoice_description ?? null,
+              locksDeliverables:
+                engagement.invoice_locks_deliverables === true,
+            }}
+            builder={invoiceBuilder}
+          />
+        )}
 
       {isDraft &&
         (items.length === 0 ? (

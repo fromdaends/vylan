@@ -17,6 +17,7 @@ import {
   type Job,
 } from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
+import { processInvoiceReminderJob } from "@/lib/invoices/chase";
 import { processClassifyJob } from "@/lib/ai/process";
 import { processSetAssessmentJob } from "@/lib/ai/set-assessment";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
@@ -168,6 +169,19 @@ async function runJob(
   try {
     if (job.kind === "send_reminder") {
       const detail = await processReminderJob(job.payload);
+      if (detail.skipped?.startsWith("send_failed")) {
+        await markJobFailed(job.id, detail.skipped);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "send_invoice_reminder") {
+      // Same contract as send_reminder: a failed SEND is retryable (the queue's
+      // backoff has another go), while every other skip is terminal-done. The
+      // common skips here are "the invoice got paid" and "the switch is off",
+      // and retrying either would be a loop that never ends.
+      const detail = await processInvoiceReminderJob(job.payload);
       if (detail.skipped?.startsWith("send_failed")) {
         await markJobFailed(job.id, detail.skipped);
         return { id: job.id, kind: job.kind, ok: false, detail };

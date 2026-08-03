@@ -1,30 +1,44 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { redirect } from "@/i18n/navigation";
+import { redirect, Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
+import { cn } from "@/lib/cn";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
+import { loadAi } from "@/lib/performance/ai";
+import { loadAutomation } from "@/lib/performance/automation";
+import type { PerformanceRange } from "@/lib/performance/types";
 import { AutomatedJobsPanel } from "@/components/vylan/automated-jobs-panel";
+import { AiPerformanceTab } from "@/components/vylan/ai-performance-tab";
 
 // The "Vylan" hub: the firm's own automation surface, reached from the rail's
 // Sparkles tab.
 //
-// It used to carry two tabs — Automated jobs and Document filing. Filing has
-// moved to /files?tab=settings, next to the documents it actually files: a firm
-// setting a folder template wants the browser one click away to see what it did,
-// and filing was always a stranger here.
+// THE TAB STRIP IS BACK, and the earlier note about why it went away still
+// holds: a strip of ONE is furniture implying a sibling that does not exist.
+// There are two real panels again — Automated jobs, and the AI performance
+// numbers that came off the retired Performance page — so it is navigation
+// once more rather than decoration.
 //
-// With one panel left, the tab strip is GONE rather than rendered as a strip of
-// one. A single "tab" is not navigation, it is furniture that implies a
-// sibling that no longer exists.
-//
-// ?tab=filing still arrives here from bookmarks, older emails, and any storage
-// OAuth callback that has not been redeployed, so it forwards rather than 404s.
+// Filing used to be the second tab and now lives at /files?tab=settings, beside
+// the documents it files. ?tab=filing still arrives here from bookmarks, older
+// emails, and any storage OAuth callback that has not been redeployed, so it
+// forwards rather than 404s.
 export const dynamic = "force-dynamic";
+
+type VylanTab = "jobs" | "ai";
+
+function parseRange(value: string | undefined): PerformanceRange {
+  return value === "this_month" || value === "all_time"
+    ? value
+    : "last_3_months"; // sensible default: recent, with enough sample to matter
+}
 
 export default async function VylanHubPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; range?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -35,10 +49,16 @@ export default async function VylanHubPage({
 
   setRequestLocale(locale);
   const t = await getTranslations("VylanHub");
+  const tab: VylanTab = sp.tab === "ai" ? "ai" : "jobs";
+
+  const tabs = [
+    { id: "jobs" as const, label: t("tab_jobs"), href: "/vylan" },
+    { id: "ai" as const, label: t("tab_ai"), href: "/vylan?tab=ai" },
+  ];
 
   return (
     <div className="mx-auto max-w-4xl animate-in-fade">
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           {t("page_title")}
         </h1>
@@ -47,7 +67,72 @@ export default async function VylanHubPage({
         </p>
       </header>
 
-      <AutomatedJobsPanel />
+      <nav
+        aria-label={t("page_title")}
+        className="mb-6 flex items-center gap-6 border-b border-border"
+      >
+        {tabs.map((item) => {
+          const active = item.id === tab;
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                active
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {tab === "ai" ? (
+        <AiPerformancePanel locale={locale} rangeParam={sp.range} />
+      ) : (
+        <AutomatedJobsPanel />
+      )}
     </div>
+  );
+}
+
+async function AiPerformancePanel({
+  locale,
+  rangeParam,
+}: {
+  locale: "en" | "fr";
+  rangeParam: string | undefined;
+}) {
+  const range = parseRange(rangeParam);
+
+  // The firm's "reset stats" baseline (migration 0880) clamps every
+  // range-scoped stat; the current user's role gates the owner-only reset
+  // control. `performance_reset_at` may be undefined until 0880 is applied —
+  // treated as "no reset". Unchanged from the retired Performance page.
+  const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
+  const resetAt = firm?.performance_reset_at ?? null;
+  const parsedReset = resetAt ? Date.parse(resetAt) : NaN;
+  const resetAtMs = Number.isFinite(parsedReset) ? parsedReset : null;
+
+  // `undefined` nowMs lets each loader read the clock itself (a lib function),
+  // keeping this render pure; the reset baseline is threaded as the 3rd arg.
+  const [ai, automation] = await Promise.all([
+    loadAi(range, undefined, resetAtMs),
+    loadAutomation(range, undefined, resetAtMs),
+  ]);
+
+  return (
+    <AiPerformanceTab
+      range={range}
+      locale={locale}
+      ai={ai}
+      automation={automation}
+      resetAt={resetAt}
+      isOwner={user?.role === "owner"}
+    />
   );
 }

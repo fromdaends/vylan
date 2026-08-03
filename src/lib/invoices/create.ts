@@ -24,7 +24,10 @@ import {
 import {
   getFirmInvoiceSettings,
   allocateInvoiceSeq,
+  getChaseSettings,
 } from "@/lib/db/invoice-settings";
+import { scheduleInvoiceChase } from "@/lib/invoices/chase";
+import { setInvoiceAutoChase } from "@/lib/db/payment-requests";
 import { formatInvoiceNumber } from "@/lib/invoices/number";
 import {
   computeInvoiceTotals,
@@ -301,6 +304,33 @@ export async function createInvoiceForEngagement(
     } catch (e) {
       console.error("[invoices] createInvoiceForEngagement email failed:", e);
     }
+  }
+
+  // Start chasing it. The firm's default decides whether a new invoice is
+  // chased at all; the per-invoice auto_chase column (defaulted true by the
+  // migration) is then the switch the accountant can flip on the row itself.
+  //
+  // Best-effort and swallowed: a queue hiccup must never undo an invoice that
+  // is already recorded and already emailed. An unchased invoice is a smaller
+  // problem than an invoice the accountant thinks failed to send.
+  try {
+    const chase = await getChaseSettings();
+    if (chase.enabledDefault) {
+      await scheduleInvoiceChase({
+        invoiceId: row.id,
+        issuedOn:
+          (invoiceFields.issue_date as string | undefined) ??
+          new Date().toISOString().slice(0, 10),
+        dueDate: (invoiceFields.due_date as string | null | undefined) ?? null,
+        settings: chase,
+      });
+    } else {
+      // Firm-wide default is off, so the row's own default must not leave it
+      // looking armed in the UI when nothing is queued.
+      await setInvoiceAutoChase(row.id, false);
+    }
+  } catch (e) {
+    console.error("[invoices] scheduling invoice chase failed:", e);
   }
 
   return { ok: true, id: row.id };

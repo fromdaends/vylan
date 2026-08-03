@@ -147,6 +147,10 @@ export default async function AppLayout({
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
         files: t("nav_files"),
+        // Reuses the existing nav_billing key ("Billing" / "Facturation") —
+        // the same word, now pointing at the firm-level Billing section rather
+        // than the Vylan subscription page it used to label.
+        billing: t("nav_billing"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
         engagementViews: {
@@ -157,8 +161,6 @@ export default async function AppLayout({
           archived: tEng("view_archived_label"),
           deleted: tEng("view_deleted_label"),
         },
-        // `nav_billing` translation key kept for the Settings page's
-        // billing link card; no longer needed in the sidebar labels.
         settings: t("nav_settings"),
         firm: t("nav_firm"),
         sectionMain: t("nav_section_main"),
