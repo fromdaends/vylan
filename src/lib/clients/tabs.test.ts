@@ -94,3 +94,31 @@ describe("clientEngagementViewHref", () => {
     }
   });
 });
+
+describe("the Files tab", () => {
+  it("is a real tab, not a link to another route", () => {
+    // It used to navigate to /clients/<id>/archive. Founder: "get rid of file
+    // archive — it exists purely within the files on a client's page."
+    expect(CLIENT_TABS).toContain("files");
+    expect(clientTabHref("c1", "files")).toBe("/clients/c1?tab=files");
+  });
+
+  it("uses `tab`, which the embedded file browser never writes", () => {
+    // The browser hosted on that tab writes client/folder/year/category/q/
+    // type/status/sort/page. If it also wrote `tab`, one folder click would
+    // navigate away from the tab that is rendering it.
+    const BROWSER_PARAMS = [
+      "client",
+      "folder",
+      "year",
+      "category",
+      "q",
+      "type",
+      "status",
+      "sort",
+      "page",
+    ];
+    expect(BROWSER_PARAMS).not.toContain("tab");
+    expect(BROWSER_PARAMS).not.toContain(CLIENT_ENGAGEMENT_VIEW_PARAM);
+  });
+});
