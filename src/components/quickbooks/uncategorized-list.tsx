@@ -318,7 +318,10 @@ export function UncategorizedList(props: {
                 <th className="py-2 font-medium">{t("gaps_col_date")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_what")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_parked")}</th>
-                <th className="py-2 text-right font-medium">
+                {/* pr-4 on the amount, because it is right-aligned and the
+                    next heading is left-aligned: with no gap between them the
+                    two run together and the header reads "AMOUNTCATEGORY". */}
+                <th className="py-2 pr-4 text-right font-medium">
                   {t("gaps_col_amount")}
                 </th>
                 <th className="py-2 font-medium">{t("uncat_col_category")}</th>
@@ -388,7 +391,7 @@ export function UncategorizedList(props: {
                     <td className="py-2.5 align-top text-muted-foreground">
                       {txn.accountName ?? "—"}
                     </td>
-                    <td className="py-2.5 align-top text-right font-medium tabular-nums">
+                    <td className="py-2.5 pr-4 align-top text-right font-medium tabular-nums">
                       {txn.uncatAmt.toFixed(2)}
                       {txn.currency ? (
                         <span className="ml-1 text-xs font-normal text-muted-foreground">

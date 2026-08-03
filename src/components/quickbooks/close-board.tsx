@@ -32,6 +32,7 @@ import {
   shiftPeriod,
 } from "@/lib/close/period";
 import { closeMonthAction, reopenMonthAction } from "@/app/actions/month-close";
+import { BankRecCell } from "@/components/quickbooks/bank-rec-cell";
 
 type Row = {
   clientId: string;
@@ -229,6 +230,7 @@ export function CloseBoard(props: {
               <th className="py-2 font-medium">{t("close_col_client")}</th>
               <th className="py-2 font-medium">{t("close_col_owed")}</th>
               <th className="py-2 font-medium">{t("close_col_books")}</th>
+              <th className="py-2 font-medium">{t("close_col_bank_rec")}</th>
               <th className="py-2 font-medium">{t("close_col_month")}</th>
             </tr>
           </thead>
@@ -331,6 +333,17 @@ export function CloseBoard(props: {
                           ))}
                       </>
                     )}
+                  </td>
+
+                  {/* Bank reconciliation: books vs statement, per account.
+                      Its own on-demand read — same reason as the column
+                      beside it, and it must never be mistaken for that one. */}
+                  <td className="py-2.5 align-top">
+                    <BankRecCell
+                      clientId={row.clientId}
+                      period={props.period}
+                      locale={loc}
+                    />
                   </td>
 
                   <td className="py-2.5 align-top">
