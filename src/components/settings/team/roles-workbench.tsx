@@ -19,7 +19,14 @@
 // Discord's "Role Style" (gradient / holographic) is a paid upsell there. Not
 // replicated: solid colours only, and no locked row dangling a purchase.
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -266,9 +273,14 @@ export function RolesWorkbench({
             </nav>
           </div>
 
+          {/* key={selected.id} REMOUNTS each tab when you switch roles. Without
+              it React keeps the same instance and its useState initialisers
+              never run again — so opening a brand-new role showed the PREVIOUS
+              role's name in the field while the list said "New role". */}
           <div className="p-4">
             {tab === "display" && (
               <DisplayTab
+                key={selected.id}
                 role={selected}
                 report={report}
                 onSaved={() => startTransition(() => router.refresh())}
@@ -276,6 +288,7 @@ export function RolesWorkbench({
             )}
             {tab === "permissions" && (
               <PermissionsTab
+                key={selected.id}
                 role={selected}
                 report={report}
                 onSaved={() => startTransition(() => router.refresh())}
@@ -283,6 +296,7 @@ export function RolesWorkbench({
             )}
             {tab === "members" && (
               <MembersTab
+                key={selected.id}
                 role={selected}
                 people={people}
                 report={report}
@@ -357,22 +371,68 @@ function DisplayTab({
   onSaved: () => void;
 }) {
   const t = useTranslations("Team");
-  const [name, setName] = useState(role.name);
+  // A role created from "+" is named with the placeholder below. Showing that
+  // placeholder as literal TEXT means you have to select it and delete it
+  // before you can type — so a fresh role starts with an EMPTY field and the
+  // default shows through as the placeholder instead. Type and it is yours;
+  // type nothing and it stays "New role".
+  const fresh = role.name === t("roles_new_name");
+  const [name, setName] = useState(fresh ? "" : role.name);
   const [color, setColor] = useState(role.color);
-  const [busy, setBusy] = useState(false);
-  const dirty = name.trim() !== role.name || color !== role.color;
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  // The last values actually committed, so a save fires only on a real change.
+  const saved = useRef({ name: role.name, color: role.color });
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function save() {
-    if (!name.trim() || busy) return;
-    setBusy(true);
-    try {
-      if (report(await updateRoleAction({ roleId: role.id, name, color }))) {
+  // AUTOSAVE. The founder's words: "I shouldn't have to click save because
+  // people are gonna not do that, and it's gonna get all fucked up." So there
+  // is no Save button — the name debounces while you type, and the colour
+  // commits the moment you pick it.
+  const commit = useCallback(
+    async (nextName: string, nextColor: string) => {
+      const clean = nextName.trim();
+      // An empty field is "I haven't named it yet", never "call it nothing" —
+      // the role keeps the name it has.
+      const finalName = clean || saved.current.name;
+      if (finalName === saved.current.name && nextColor === saved.current.color)
+        return;
+      setState("saving");
+      const res = await updateRoleAction({
+        roleId: role.id,
+        name: finalName,
+        color: nextColor,
+      });
+      if (report(res)) {
+        saved.current = { name: finalName, color: nextColor };
+        setState("saved");
         onSaved();
+      } else {
+        setState("idle");
       }
-    } finally {
-      setBusy(false);
-    }
+    },
+    [role.id, report, onSaved],
+  );
+
+  function editName(next: string) {
+    setName(next);
+    if (timer.current) clearTimeout(timer.current);
+    // Long enough that a normal typing pause doesn't fire a write per word,
+    // short enough that moving to another tab lands after it has saved.
+    timer.current = setTimeout(() => commit(next, color), 700);
   }
+
+  function pickColor(next: string) {
+    setColor(next);
+    commit(name, next);
+  }
+
+  // A pending debounce must still land if you navigate away mid-word.
+  useEffect(() => {
+    const pending = timer;
+    return () => {
+      if (pending.current) clearTimeout(pending.current);
+    };
+  }, []);
 
   // Two columns once there is room: the fields you edit on the left, the badge
   // you are editing on the right. One column with a preview stranded under it
@@ -383,16 +443,25 @@ function DisplayTab({
       <div className="space-y-6">
       <div className="space-y-1.5">
         <label htmlFor="role-name" className="text-sm font-medium">
-          {t("roles_name")} <span className="text-destructive">*</span>
+          {t("roles_name")}
         </label>
         <Input
           id="role-name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          autoFocus={fresh}
+          placeholder={t("roles_new_name")}
+          onChange={(e) => editName(e.target.value)}
+          // Blur and Enter both flush the pending debounce, so tabbing to
+          // Members never leaves a half-typed name unsaved.
+          onBlur={() => {
+            if (timer.current) clearTimeout(timer.current);
+            commit(name, color);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              save();
+              if (timer.current) clearTimeout(timer.current);
+              commit(name, color);
             }
           }}
           maxLength={ROLE_NAME_MAX}
@@ -400,9 +469,7 @@ function DisplayTab({
       </div>
 
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">
-          {t("roles_color")} <span className="text-destructive">*</span>
-        </p>
+        <p className="text-sm font-medium">{t("roles_color")}</p>
         <p className="text-xs text-muted-foreground">{t("roles_color_hint")}</p>
         <fieldset className="mt-2 flex flex-wrap gap-2">
           <legend className="sr-only">{t("roles_color")}</legend>
@@ -410,7 +477,7 @@ function DisplayTab({
             <button
               key={c}
               type="button"
-              onClick={() => setColor(c)}
+              onClick={() => pickColor(c)}
               aria-label={c}
               aria-pressed={color === c}
               className={`size-8 rounded-md ${roleSwatchClass(c)} transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
@@ -423,11 +490,17 @@ function DisplayTab({
         </fieldset>
       </div>
 
-      {dirty && (
-        <Button onClick={save} disabled={!name.trim() || busy}>
-          {t("roles_save")}
-        </Button>
-      )}
+      {/* Where the Save button was. It says what just happened rather than
+          asking you to make it happen — and it never occupies space it isn't
+          using, so the layout doesn't jump when it appears. */}
+      <p
+        aria-live="polite"
+        className={`h-5 text-xs transition-opacity ${
+          state === "idle" ? "opacity-0" : "text-muted-foreground opacity-100"
+        }`}
+      >
+        {state === "saving" ? t("roles_saving") : t("roles_saved")}
+      </p>
       </div>
 
       {/* The preview shows the badge in the two places it actually appears —

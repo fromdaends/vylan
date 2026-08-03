@@ -42,7 +42,7 @@ import { BrowseTab } from "@/components/files/browse-tab";
 import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
-import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
+import { ClientNameMenu } from "@/components/clients/client-name-menu";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
@@ -54,14 +54,13 @@ import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/payments/payment-badge";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 import { PaymentsList } from "@/components/payments/payments-list";
-import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import {
   archiveClientAction,
   restoreClientAction,
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus, Pencil, Lock, FileText } from "lucide-react";
+import { Plus, Lock, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -501,31 +500,20 @@ export default async function ClientDetailPage({
         <div className="flex min-w-0 items-start gap-3">
           <AvatarInitials name={client.display_name} size={44} />
           <div className="min-w-0">
-          {/* The pen sits with the name because that IS what it edits. As a
-              labelled button on the right it read as a primary action of the
-              page, which it isn't — the page is for reading the client. */}
+          {/* The client's name IS the menu — the same NameMenu the firm page
+              uses, because the founder asked for "the exact same thing". It
+              replaces BOTH the pen that used to sit here and the "⋯" that used
+              to sit in the corner: two anonymous controls answering one
+              question, which is the shape the firm page just shed. */}
           <div className="flex items-center gap-1">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">
-              {client.display_name}
-            </h1>
-            {canManageClients && (
-              <ClientFormDialog
-                mode="edit"
-                locale={locale}
-                client={client}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t("edit_client")}
-                    className="size-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                }
-              />
-            )}
+            <ClientNameMenu
+              client={client}
+              locale={locale}
+              canManage={canManageClients}
+              showPrivacy={isOwner && teamEnabled}
+              isOwner={isOwner}
+              archiveFormId={CLIENT_ARCHIVE_FORM_ID}
+            />
           </div>
           <div className="flex items-center gap-2 mt-2 text-sm">
             <Badge variant="secondary">
@@ -564,29 +552,17 @@ export default async function ClientDetailPage({
           )}
           </div>
         </div>
-        {/* One control left in the corner. The Documents button went because
-            the Files tab below already goes to the same route, and archiving is
-            a once-a-year action that doesn't deserve permanent real estate.
-            The form lives outside the menu and is reached by id, because a
-            <form> cannot be a dropdown item and still submit cleanly. */}
-        <div className="flex items-center gap-2">
-          <form
-            id={CLIENT_ARCHIVE_FORM_ID}
-            action={client.archived_at ? restoreClientAction : archiveClientAction}
-            className="hidden"
-          >
-            <input type="hidden" name="id" value={client.id} />
-          </form>
-          <ClientActionsMenu
-            clientId={client.id}
-            isPrivate={client.is_private ?? false}
-            showPrivacy={isOwner && teamEnabled}
-            archive={{
-              formId: CLIENT_ARCHIVE_FORM_ID,
-              archived: client.archived_at != null,
-            }}
-          />
-        </div>
+        {/* The corner is now empty of controls — everything moved onto the
+            name. The archive form stays here and is reached BY ID from the
+            menu, because a <form> cannot be a dropdown item and still submit
+            cleanly. */}
+        <form
+          id={CLIENT_ARCHIVE_FORM_ID}
+          action={client.archived_at ? restoreClientAction : archiveClientAction}
+          className="hidden"
+        >
+          <input type="hidden" name="id" value={client.id} />
+        </form>
       </div>
 
       {/* The tab row, sitting on the card's bottom edge with the active tab

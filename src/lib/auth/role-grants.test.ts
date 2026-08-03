@@ -2,34 +2,33 @@ import { describe, it, expect } from "vitest";
 import { can, capabilitiesFor } from "./capabilities";
 import { GRANTABLE_CAPABILITIES, isGrantable } from "./grantable";
 
-// The rule the founder asked about and did not have an answer to: how a role's
-// permissions meet the Member / Junior switch. The preset is the FLOOR; roles
-// stack on top; nothing a role does can take anything away.
-describe("roles stack on top of the preset", () => {
-  it("adds to a Junior without changing what Junior means", () => {
-    const junior = { role: "staff", permission_preset: "junior" };
-    expect(can(junior, "billing.manage")).toBe(false);
+// How a role's permissions meet the rest of the model, now that Member/Junior
+// are gone. The STAFF FLOOR is the floor; roles stack on top; nothing a role
+// does can take anything away.
+describe("roles stack on top of the staff floor", () => {
+  it("adds to a staff member without changing the floor", () => {
+    const staff = { role: "staff" };
+    expect(can(staff, "billing.manage")).toBe(false);
 
-    const juniorWithRole = { ...junior, role_capabilities: ["billing.manage"] };
-    expect(can(juniorWithRole, "billing.manage")).toBe(true);
-    // Everything else about being a Junior is untouched.
-    expect(can(juniorWithRole, "money.view")).toBe(can(junior, "money.view"));
-    expect(can(juniorWithRole, "team.manage")).toBe(false);
+    const withRole = { ...staff, role_capabilities: ["billing.manage"] };
+    expect(can(withRole, "billing.manage")).toBe(true);
+    // Everything else about being staff is untouched.
+    expect(can(withRole, "money.view")).toBe(can(staff, "money.view"));
+    expect(can(withRole, "team.manage")).toBe(false);
   });
 
-  it("cannot take away what the preset already gave", () => {
+  it("cannot take away what the floor already gave", () => {
     // There is no way to express "this role removes X" — an empty role list is
     // simply no addition. If a future change made roles subtractive, this test
     // is the one that should stop it.
-    const member = { role: "staff", permission_preset: "member" };
-    const withEmptyRole = { ...member, role_capabilities: [] as string[] };
-    expect(capabilitiesFor(withEmptyRole)).toEqual(capabilitiesFor(member));
+    const staff = { role: "staff" };
+    const withEmptyRole = { ...staff, role_capabilities: [] as string[] };
+    expect(capabilitiesFor(withEmptyRole)).toEqual(capabilitiesFor(staff));
   });
 
   it("unions per-person grants and role grants rather than one winning", () => {
     const subject = {
       role: "staff",
-      permission_preset: "junior",
       extra_capabilities: ["integrations.manage"],
       role_capabilities: ["billing.manage"],
     };
@@ -42,17 +41,14 @@ describe("roles stack on top of the preset", () => {
     // must not break every page the person opens.
     const subject = {
       role: "staff",
-      permission_preset: "member",
       role_capabilities: ["nonsense.capability"],
     };
     expect(() => capabilitiesFor(subject)).not.toThrow();
-    expect(capabilitiesFor(subject)).toEqual(
-      capabilitiesFor({ role: "staff", permission_preset: "member" }),
-    );
+    expect(capabilitiesFor(subject)).toEqual(capabilitiesFor({ role: "staff" }));
   });
 
   it("leaves an owner exactly as they were", () => {
-    const owner = { role: "owner", permission_preset: "owner" };
+    const owner = { role: "owner" };
     const ownerWithRole = { ...owner, role_capabilities: ["billing.manage"] };
     expect(capabilitiesFor(ownerWithRole)).toEqual(capabilitiesFor(owner));
   });
