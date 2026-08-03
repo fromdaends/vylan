@@ -1887,7 +1887,15 @@
     "note_error_not_ready": "Les notes seront disponibles dans un instant.",
     "note_error_forbidden": "Vous ne pouvez supprimer que vos propres notes.",
     "note_error_no_session": "Votre session a expiré. Actualisez la page et réessayez.",
-    "note_error_failed": "L'enregistrement a échoué. Réessayez."
+    "note_error_failed": "L'enregistrement a échoué. Réessayez.",
+    "organizers_workload_title": "Qui travaille sur ce client",
+    "organizers_workload_empty": "Personne n'a encore été ajouté à ce client.",
+    "organizers_col_person": "Personne",
+    "organizers_col_why": "Accès",
+    "organizers_col_live": "Travail en cours",
+    "organizers_why_owner": "Propriétaire du cabinet",
+    "organizers_why_assignee": "Responsable du client",
+    "organizers_why_member": "Dans l'équipe"
   },
   "Engagements": {
     "add_comment": "Ajouter un commentaire",
