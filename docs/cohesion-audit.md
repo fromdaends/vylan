@@ -1,6 +1,22 @@
 # Cohesion audit — where one change doesn't reach everywhere
 
-**Run:** 2026-08-03 · **Status:** findings only, nothing changed yet.
+**Run:** 2026-08-03 · **Last updated:** 2026-08-03, after the first fix pass.
+
+## Status
+
+| | Finding | Shipped as |
+|---|---|---|
+| ✅ | 16 — firm name save wiped the auto-reject setting | #1164 |
+| ✅ | 17 — English clients saw no checklist instructions | #1166 |
+| ✅ | 1 — four search normalizers, two drifted | #1169 |
+| ✅ | 14 — two hand-rolled copies of computeInitials | #1170 |
+| ✅ | 13 — every amount rendered as Canadian dollars | #1172 |
+| 🔧 | 6 — download audit log covers 1 of 6 paths | in progress, separate session |
+
+Everything else below is still open. The two highest-value remaining items are
+**Finding 10** (give `Panel` a `className`/`id` passthrough — several other
+cleanups are blocked behind it) and **Findings 2 / 11 / 12** (implement the
+design tokens so "restyle settings" becomes one edit).
 
 ## Why this exists
 
@@ -32,7 +48,7 @@ right thing once, and the rest of the app never found out.
 
 ---
 
-## Finding 1 — the same search function, written four times, two of them wrong
+## Finding 1 — ✅ FIXED (#1169) — the same search function, written four times, two of them wrong
 
 **Severity: high — this is a live bug, not untidiness.**
 
@@ -196,7 +212,7 @@ when touching those files for another reason.
 
 ---
 
-## Finding 6 — the download audit log is silently incomplete
+## Finding 6 — 🔧 IN PROGRESS (separate session) — the download audit log is silently incomplete
 
 **Severity: highest in this audit. This is a trust problem, not a tidiness one.**
 
@@ -447,7 +463,7 @@ client-facing portal itself. Noting it so nobody re-searches for it.
 
 ---
 
-## Finding 13 — every amount in the app is formatted as Canadian dollars
+## Finding 13 — ✅ FIXED (#1172) — every amount in the app is formatted as Canadian dollars
 
 **Severity: high, and it's a correctness bug with a visible symptom.**
 
@@ -488,7 +504,7 @@ capable before anything can adopt it.
 
 ---
 
-## Finding 14 — a comment predicted this exact duplication, and it happened anyway
+## Finding 14 — ✅ FIXED (#1170) — a comment predicted this exact duplication, and it happened anyway
 
 **Severity: low on its own. High as evidence.**
 
@@ -574,7 +590,7 @@ a matter of individual judgement rather than a rule.
 
 ---
 
-## Finding 16 — saving the firm name silently switches off auto-reject
+## Finding 16 — ✅ FIXED (#1164) — saving the firm name silently switches off auto-reject
 
 **Severity: highest tier. Confirmed by executing the real code, not by reading
 it.**
@@ -621,7 +637,7 @@ test to assert the key is *absent*.
 
 ---
 
-## Finding 17 — English-speaking clients see no instructions on most checklist items
+## Finding 17 — ✅ FIXED (#1166) — English-speaking clients see no instructions on most checklist items
 
 **Severity: high. Invisible from your side of the product.**
 
