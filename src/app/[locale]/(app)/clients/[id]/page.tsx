@@ -23,6 +23,8 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
+import { ClientNotes } from "@/components/clients/client-notes";
+import { listClientNotes } from "@/lib/db/client-notes";
 // PLAIN module, not a "use client" one: this Server Component CALLS these, and
 // a client-module export would be a client reference that throws (#959).
 import {
@@ -301,6 +303,12 @@ export default async function ClientDetailPage({
           ]),
         )
       : {};
+
+  // The client's attributed notes (1270). Overview only — nothing else on the
+  // page shows them. Fails soft on its own: listClientNotes returns [] when the
+  // migration hasn't landed, so the composer still renders and a profile never
+  // 500s because a deployment ran ahead of its database.
+  const clientNotes = tab === "overview" ? await listClientNotes(id) : [];
 
   // The overview's "Recent files" card. Only fetched for the overview — every
   // other tab would pay for a query it never renders, which is the point of
@@ -859,6 +867,21 @@ export default async function ClientDetailPage({
           first, with a quiet "View all" to the full archive. The overview
           should answer "what has been coming in from this client lately"
           without making you leave it. */}
+      {/* What the firm knows about this client, in its own words, with a name
+          and a date on every line. Always rendered — an empty notes box is an
+          invitation, and a section that only appears once it has content is a
+          feature nobody discovers. */}
+      {tab === "overview" && (
+        <Panel title={t("notes_title")}>
+          <ClientNotes
+            clientId={client.id}
+            notes={clientNotes}
+            viewerId={me?.id ?? null}
+            locale={locale}
+          />
+        </Panel>
+      )}
+
       {tab === "overview" && recentFiles.length > 0 && (
         <Panel
           title={t("recent_files")}
