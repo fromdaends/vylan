@@ -53,6 +53,11 @@ type Props = {
   /** Active teammates, for the create-time team picker. Empty in a solo firm,
    *  which hides the control entirely. */
   teammates?: { id: string; name: string }[];
+  /** Controlled mode. Pass both to open this from somewhere that cannot host a
+   *  trigger — a dropdown item, for instance: the menu unmounts the item on
+   *  select, so a DialogTrigger inside one never gets to fire. */
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
 };
 
 export function ClientFormDialog({
@@ -61,11 +66,19 @@ export function ClientFormDialog({
   client,
   trigger,
   teammates = [],
+  open: openProp,
+  onOpenChange,
 }: Props) {
   const t = useTranslations("Clients");
   const tc = useTranslations("Common");
   const tAuth = useTranslations("Auth");
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlled ? openProp : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   // Province + timezone are controlled so picking a province auto-fills the
   // timezone (timezone stays editable for the rare multi-zone override).
   const [province, setProvince] = useState(client?.province ?? "none");
@@ -142,6 +155,10 @@ export function ClientFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* No trigger at all in controlled mode — whoever owns `open` owns the
+          affordance too, and an invisible default button would still take a
+          tab stop. */}
+      {!controlled && (
       <DialogTrigger asChild>
         {trigger ??
           (mode === "edit" ? (
@@ -156,6 +173,7 @@ export function ClientFormDialog({
             </Button>
           ))}
       </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>

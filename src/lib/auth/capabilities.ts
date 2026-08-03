@@ -17,22 +17,32 @@
 // Adding a third would mean re-deciding every RLS policy in the schema, and RLS
 // is what actually protects the data — see the private-client rules in 0810.
 //
-// PRESETS sit on top, in application code: Owner, Member, Junior. They are
-// named bundles of capabilities, not database rows, so renaming or re-cutting
-// one is a code change with tests, not a migration.
+// EVERYTHING ELSE IS ADDITIVE, from exactly two sources:
 //
-// GRANTS are the escape hatch: a single extra capability handed to one person
-// ("Sarah also approves timesheets") without inventing a rank for it. Phase 8's
-// time approver is exactly this, which is why the parameter exists now — the
-// old two-value ladder in lib/auth/roles.ts could not express it, and that is
-// the assumption this module is built to break.
+//   ROLES  — the owner names a role, attaches capabilities, and hands it out.
+//            This is the switchboard.
+//   GRANTS — one capability handed to one person without inventing a role for
+//            them ("Sarah also approves timesheets"). The escape hatch, and it
+//            lives on that person's own page under User access.
 //
-// ── ORDER MATTERS ────────────────────────────────────────────────────────────
+// ── MEMBER / JUNIOR ARE GONE ─────────────────────────────────────────────────
 //
-// Owner ⊃ Member ⊃ Junior. That containment is asserted in the tests, because
-// the one genuinely dangerous bug here is a fallback that resolves UP: treat an
-// unrecognised preset as "member" and a typo in the database silently PROMOTES
-// a junior. Unknown values resolve to the most restrictive preset instead.
+// There used to be a third source: named PRESETS (Owner / Member / Junior) with
+// a segmented control on each person's page. The founder removed it — "get rid
+// of member slash junior, get rid of that completely" — and the reason is the
+// one that matters: the SAME two switches appeared both there and on a role,
+// either could grant, and neither screen told you which one had. Two ways to
+// answer one question is how the two screens end up disagreeing.
+//
+// What Member could do is now simply what STAFF can do, unchanged, so removing
+// the presets moved nobody. Junior — the restrictive one — is not replaced:
+// nothing in the app was gated on it (its capability set was empty), so no
+// permission changed hands when it went. Restricting below the staff floor is a
+// thing this model deliberately cannot express today; adding it back would mean
+// subtraction, and subtraction is what made the old shape unreadable.
+//
+// users.permission_preset is left in the database, unread. Dropping a column is
+// the founder's call, and a stale value that nothing consults is harmless.
 //
 // ── WHAT THIS IS NOT ─────────────────────────────────────────────────────────
 //
@@ -100,53 +110,27 @@ export const CAPABILITIES = [
 
 export type Capability = (typeof CAPABILITIES)[number];
 
-// The three presets, most privileged first. Order is load-bearing: the tests
-// assert each one is a subset of the one before it.
-export const PRESETS = ["owner", "member", "junior"] as const;
-export type Preset = (typeof PRESETS)[number];
-
-// The most restrictive preset — where anything unrecognised lands.
-export const FALLBACK_PRESET: Preset = "junior";
-
-// What each preset can do.
+// THE STAFF FLOOR — what everybody who is not the owner starts with, before any
+// role or grant adds to it.
 //
-// MEMBER is calibrated to today's behaviour exactly, so converting call sites
-// changes nothing visible. money.view and clients.manage have no gate anywhere
-// in the app right now; they are listed as member capabilities to KEEP it that
-// way. (That also means Phase 2 is not a pure refactor — it introduces two
-// gates that did not exist. Junior is where they start to bite.)
-const PRESET_CAPABILITIES: Record<Preset, readonly Capability[]> = {
-  owner: CAPABILITIES,
-  member: ["money.view", "clients.manage"],
-  // Junior: does the work and stays out of the money. Deliberately NOT a third
-  // database rank — a preset, so a firm can move someone between Junior and
-  // Member without touching users.role.
-  //
-  // EMPTY, and that is correct rather than an oversight: everything a Junior
-  // does today — opening work, uploading, completing — is ungated in the app,
-  // so there is no capability to name for it. A Junior is defined by what they
-  // CANNOT do. The first entry here will be Phase 8's time.approve, as a named
-  // grant rather than a preset member.
-  junior: [],
-};
+// These two are exactly what the old Member preset carried, which is why
+// deleting the presets moved nobody: money.view and clients.manage have no gate
+// anywhere in the app today, and they are listed here to KEEP it that way.
+// Converting a call site to can(user, "money.view") must not quietly take
+// something away from the staff who have always had it.
+export const STAFF_CAPABILITIES: readonly Capability[] = [
+  "money.view",
+  "clients.manage",
+];
 
 // Pre-built sets so `can()` is a hash lookup rather than a scan of an array.
-const PRESET_SETS: Record<Preset, ReadonlySet<Capability>> = {
-  owner: new Set(PRESET_CAPABILITIES.owner),
-  member: new Set(PRESET_CAPABILITIES.member),
-  junior: new Set(PRESET_CAPABILITIES.junior),
-};
+const OWNER_SET: ReadonlySet<Capability> = new Set(CAPABILITIES);
+const STAFF_SET: ReadonlySet<Capability> = new Set(STAFF_CAPABILITIES);
 
 export function isCapability(value: unknown): value is Capability {
   return (
     typeof value === "string" &&
     (CAPABILITIES as readonly string[]).includes(value)
-  );
-}
-
-export function isPreset(value: unknown): value is Preset {
-  return (
-    typeof value === "string" && (PRESETS as readonly string[]).includes(value)
   );
 }
 
@@ -156,66 +140,40 @@ export function isPreset(value: unknown): value is Preset {
 export type CapabilitySubject = {
   // users.role — the database rank. Two values, forever.
   role: "owner" | "staff" | (string & {});
-  // ⚠️ THESE NAMES MATCH THE users COLUMNS EXACTLY, and that is the point. They
-  // were `preset` and `grants` until an AppUser was first passed straight into
-  // can() — at which case both read as undefined, every stored preset was
-  // silently ignored, and the switches would have written to the database while
-  // changing nothing. Naming the fields after the row means an AppUser IS a
-  // valid subject with no mapping step to forget.
+  // ⚠️ THIS NAME MATCHES THE users COLUMN EXACTLY, and that is the point. It
+  // was `grants` until an AppUser was first passed straight into can() — at
+  // which point it read as undefined, every stored grant was silently ignored,
+  // and the switches would have written to the database while changing nothing.
+  // Naming the field after the row means an AppUser IS a valid subject with no
+  // mapping step to forget.
   //
-  // Optional because migration 1120 may not be applied: undefined behaves
-  // exactly like null, which resolves to the member preset.
-  permission_preset?: string | null;
-  // users.extra_capabilities — per-person grants on top of the preset.
+  // users.extra_capabilities — one person's own grants, set under User access
+  // on their page. Optional because migration 1120 may not be applied;
+  // undefined behaves exactly like an empty list.
   extra_capabilities?: readonly string[] | null;
   // Everything this person's FIRM ROLES grant (1260), already unioned by
   // getCurrentUser. Not a users column — hence the different naming shape from
   // the two above, which deliberately mirror theirs.
   //
   // ROLES ONLY EVER ADD. There is no way to express "this role takes X away",
-  // and that is a decision rather than an omission: two systems that can both
+  // and that is a decision rather than an omission: a system that can both
   // grant and revoke gives a firm two answers to "why can she do that", which
-  // is the exact mess the one-place-decides work escaped. The preset is the
-  // floor, roles stack on top.
+  // is the exact mess deleting the presets escaped. The staff floor is the
+  // floor; roles and grants stack on top of it.
   role_capabilities?: readonly string[] | null;
 };
 
-// Which preset applies to this person.
+// Everything this person can do: the floor, plus their roles, plus their own
+// grants.
 //
-// An OWNER is always the owner preset regardless of what the preset column
-// says. The rank is the thing RLS enforces; letting a stale or wrong preset
-// value demote an owner would lock them out of their own firm with no way back.
-//
-// A staff member with no preset stored is a Member. That is what "staff" has
-// meant since the feature shipped, and it is what every existing row will read
-// as before the backfill runs.
-//
-// A staff member with an UNRECOGNISED preset is a Junior, not a Member. This is
-// the fail-closed direction and it is the whole reason this function exists
-// instead of a cast: falling back to member would mean a typo in one database
-// cell hands someone the money.
-export function resolvePreset(subject: CapabilitySubject): Preset {
-  if (subject.role === "owner") return "owner";
-  const stored = subject.permission_preset;
-  if (stored == null || stored === "") return "member";
-  if (isPreset(stored)) {
-    // "owner" in the preset column on a staff row is not a promotion — the rank
-    // is what RLS reads, and the row would fail every owner-only policy while
-    // the UI showed owner controls. Treat it as unrecognised.
-    return stored === "owner" ? FALLBACK_PRESET : stored;
-  }
-  console.error(
-    `[capabilities] unrecognised permission preset ${JSON.stringify(stored)} — falling back to "${FALLBACK_PRESET}"`,
-  );
-  return FALLBACK_PRESET;
-}
-
-// Everything this person can do, preset plus named grants.
+// An OWNER gets everything, decided by users.role and nothing else. The rank is
+// what RLS enforces, so any other input claiming to demote an owner would lock
+// them out of their own firm with no way back.
 export function capabilitiesFor(
   subject: CapabilitySubject,
 ): ReadonlySet<Capability> {
-  const preset = resolvePreset(subject);
-  const base = PRESET_SETS[preset];
+  if (subject.role === "owner") return OWNER_SET;
+  const base = STAFF_SET;
   const grants = subject.extra_capabilities;
   const fromRoles = subject.role_capabilities;
   const hasGrants = grants && grants.length > 0;

@@ -80,6 +80,24 @@ export function roleSwatchClass(color: unknown): string {
   return SWATCHES[toRoleColor(color)];
 }
 
+// Text only, no pill — for a NAME tinted by its role, which is how Discord
+// draws its member list. Deliberately darker than the badge's text on light
+// backgrounds: here the colour sits on the page ground, not on a 10% tint.
+const TEXTS: Record<RoleColor, string> = {
+  slate: "text-slate-700 dark:text-slate-300",
+  blue: "text-blue-700 dark:text-blue-300",
+  violet: "text-violet-700 dark:text-violet-300",
+  emerald: "text-emerald-700 dark:text-emerald-300",
+  amber: "text-amber-700 dark:text-amber-300",
+  rose: "text-rose-700 dark:text-rose-300",
+  cyan: "text-cyan-700 dark:text-cyan-300",
+  orange: "text-orange-700 dark:text-orange-300",
+};
+
+export function roleTextClass(color: unknown): string {
+  return TEXTS[toRoleColor(color)];
+}
+
 // A role name is a badge, not a paragraph. Long enough for "Senior reviewer",
 // short enough that a roster row cannot be pushed off screen by one.
 export const ROLE_NAME_MAX = 32;

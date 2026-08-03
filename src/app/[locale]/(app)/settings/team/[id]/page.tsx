@@ -387,14 +387,24 @@ export default async function TeamMemberProfilePage({
             <Panel title={t("permissions_title")}>
               <MemberPermissions
                 userId={id}
-                preset={member.permission_preset}
                 grants={member.extra_capabilities}
-                // Migration 1120 not applied yet → the columns come back
+                // What their ROLES already grant, so the panel can name the
+                // source rather than showing a switch with no explanation.
+                fromRoles={firmRoles
+                  .filter(
+                    (r) => heldRoleIds.has(r.id) && r.capabilities.length > 0,
+                  )
+                  .map((r) => ({
+                    name: r.name,
+                    color: r.color,
+                    capabilities: [...r.capabilities],
+                  }))}
+                // Migration 1120 not applied yet → the column comes back
                 // undefined. The switches still render (so the feature is
                 // discoverable) but writing would fail, so they are disabled
                 // with the "available in a moment" message the firm settings
                 // already use for exactly this situation.
-                disabled={member.permission_preset === undefined}
+                disabled={member.extra_capabilities === undefined}
               />
             </Panel>
           )}
