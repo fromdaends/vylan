@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { ArrowDownLeft, ArrowUpRight, HelpCircle, TriangleAlert } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
-import { formatCurrency, formatNumber, type AppLocale } from "@/lib/format";
+import { formatCurrency, type AppLocale } from "@/lib/format";
 import type { FirmDraftRow } from "@/lib/db/quickbooks-suggestions";
 import {
   QuickbooksDraftCard,
@@ -53,13 +53,13 @@ export async function QueueRow({
   });
   const canApprove = canApproveDraft(s, row.resolved);
 
-  const foreign = s.currency != null && s.currency !== "CAD";
-  const amountLabel =
-    s.amount == null
-      ? "—"
-      : foreign && s.currency
-        ? `${formatNumber(s.amount, locale, 2)} ${s.currency}`
-        : formatCurrency(s.amount, locale);
+  // formatCurrency formats IN the row's own currency now, so a USD draft reads
+  // "US$1,234.56" rather than a bare "1,234.56 USD" — and the CAD case is
+  // unchanged. The old is-this-foreign branch also mis-handled a firm whose
+  // books ARE in USD: not-foreign fell through to a hardcoded CAD symbol.
+  const amountLabel = formatCurrency(s.amount, locale, {
+    currency: s.currency,
+  });
 
   const DirectionIcon =
     s.direction === "expense"
