@@ -18,14 +18,14 @@ const baseStatus: ClientQuickbooksStatus = {
   callbackStatus: null,
 };
 
-function renderCard(status: Partial<ClientQuickbooksStatus>, isOwner = true) {
+function renderCard(status: Partial<ClientQuickbooksStatus>, canManage = true) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <ClientQuickbooksCard
         clientId="c1"
         clientName="Acme"
         status={{ ...baseStatus, ...status }}
-        isOwner={isOwner}
+        canManage={canManage}
       />
     </NextIntlClientProvider>,
   );

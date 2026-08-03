@@ -15,14 +15,14 @@ const baseStatus: ClientXeroStatus = {
   callbackStatus: null,
 };
 
-function renderCard(status: Partial<ClientXeroStatus>, isOwner = true) {
+function renderCard(status: Partial<ClientXeroStatus>, canManage = true) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <ClientXeroCard
         clientId="c1"
         clientName="Acme"
         status={{ ...baseStatus, ...status }}
-        isOwner={isOwner}
+        canManage={canManage}
       />
     </NextIntlClientProvider>,
   );
