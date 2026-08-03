@@ -53,7 +53,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const FIRM = { name: "Acme", brand_color: "#1d4ed8", locale_default: "fr" as const };
 const EMAIL = "owner@acme.test";
 
 function renderShell(
@@ -108,8 +107,6 @@ function renderShell(
         paymentsList={null}
         currentUserId="u-test"
         firmName="Acme"
-        firm={FIRM}
-        firmLogoUrl={null}
         email={EMAIL}
         mfaEnabled={false}
         invitePolicy="owner"
@@ -159,15 +156,27 @@ describe("SettingsShell — Account / Security & privacy / Payments", () => {
     ).toBeInTheDocument();
   });
 
-  it("puts email + password (and firm settings) under the Account tab", () => {
+  it("puts email + password under the Account tab", () => {
     renderShell({ initialSection: "account" });
     expect(screen.getByDisplayValue(EMAIL)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: en.Profile.change_password }),
     ).toBeInTheDocument();
+  });
+
+  // The firm's IDENTITY (logo, name, brand colour, client email language) moved
+  // to the firm page's Settings tab. It was reachable from two places at once —
+  // here and there — which is the duplication the founder called out. This
+  // asserts the editor did not quietly come back to the second place: the
+  // give-away is its firm-name field, which nothing else on this screen has.
+  it("does NOT render the firm identity editor — it lives on the firm page", () => {
+    renderShell({ initialSection: "account", isOwner: true });
     expect(
-      screen.getByText(en.Settings.section_firm_settings),
-    ).toBeInTheDocument();
+      screen.queryByLabelText(en.Onboarding.step1_firm_name),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(en.Profile.section_firm_logo),
+    ).not.toBeInTheDocument();
   });
 
   it("puts two-factor + the owner's privacy tools under Security — not email/password", () => {

@@ -6,7 +6,6 @@ import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
-import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { isStripeConfigured } from "@/lib/stripe";
 import { syncFirmConnectStatusFromStripe } from "@/lib/db/stripe-connect";
@@ -81,7 +80,6 @@ export default async function SettingsPage({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const firmLogoUrl = await getBrandingImageUrl(firm.logo_url);
   // The signed-in user's OWN notification preferences (per person, not per
   // firm). Degrades to catalog defaults with schemaReady:false if 0920 has not
   // been applied, so the tab renders either way.
@@ -351,11 +349,6 @@ export default async function SettingsPage({
         paymentsList={paymentsList}
         currentUserId={user.id}
         firmName={firm.name}
-        firm={{
-          name: firm.name,
-          brand_color: firm.brand_color,
-          locale_default: firm.locale_default,
-        }}
         teamSettings={
           isOwner && firm.team_enabled === true
             ? {
@@ -364,7 +357,6 @@ export default async function SettingsPage({
               }
             : null
         }
-        firmLogoUrl={firmLogoUrl}
         email={user.email}
         mfaEnabled={mfaEnabled}
         invitePolicy={firm.invite_policy === "members" ? "members" : "owner"}

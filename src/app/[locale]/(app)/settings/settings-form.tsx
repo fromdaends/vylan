@@ -27,10 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  FirmSettingsSections,
-  type FirmInfo,
-} from "@/components/settings/firm-settings-sections";
 import { TeamSettings } from "@/components/settings/team/firm-settings";
 import { AccountSignInSections } from "@/components/settings/account-security-sections";
 import {
@@ -129,9 +125,7 @@ export function SettingsShell({
   paymentsList,
   currentUserId,
   firmName,
-  firm,
   teamSettings,
-  firmLogoUrl,
   email,
   mfaEnabled,
   invitePolicy,
@@ -186,14 +180,12 @@ export function SettingsShell({
   // tag a teammate's invoices.
   currentUserId: string;
   firmName: string;
-  firm: FirmInfo;
   // Owner + team-mode only (null/absent otherwise): the firm's team settings for
   // the new Team tab (same block as the team page's ⋯ Firm settings dialog).
   teamSettings?: {
     clientsPrivateByDefault: boolean;
     notifyOnAssignment: boolean;
   } | null;
-  firmLogoUrl: string | null;
   email: string;
   mfaEnabled: boolean;
   invitePolicy: "owner" | "members";
@@ -298,8 +290,6 @@ export function SettingsShell({
       <div className="min-w-0 flex-1 md:max-w-[560px]">
         {section === "account" && (
           <AccountSection
-            firm={firm}
-            firmLogoUrl={firmLogoUrl}
             email={email}
             isOwner={isOwner}
             t={t}
@@ -457,14 +447,10 @@ export function SettingsShell({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AccountSection({
-  firm,
-  firmLogoUrl,
   email,
   isOwner,
   t,
 }: {
-  firm: FirmInfo;
-  firmLogoUrl: string | null;
   email: string;
   isOwner: boolean;
   t: Translate;
@@ -493,19 +479,14 @@ function AccountSection({
         </Link>
       )}
 
-      {isOwner ? (
-        <div>
-          <h2 className="text-base font-semibold tracking-tight">
-            {t("section_firm_settings")}
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("section_firm_settings_hint")}
-          </p>
-          <div className="mt-5">
-            <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
-          </div>
-        </div>
-      ) : (
+      {/* The firm's IDENTITY — logo, name, brand colour, the language clients
+          are emailed in — used to render here. It now lives on the firm page's
+          Settings tab, beside the firm-wide switches, because it was reachable
+          from two places at once: this screen (via "Edit firm" in the firm
+          dropdown, now deleted) and that tab. The Team link above is the way
+          across; the editor itself is not duplicated here, since two copies of
+          one form is exactly what drifts the first time either is touched. */}
+      {!isOwner && (
         // Staff see their own sign-in settings; firm branding/name is owner-only.
         <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
           {t("owner_only_note")}

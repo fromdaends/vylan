@@ -18,6 +18,7 @@ import {
   TeamSetup,
 } from "@/components/settings/team/team-manager";
 import { TeamSettings } from "@/components/settings/team/firm-settings";
+import { FirmSettingsSections } from "@/components/settings/firm-settings-sections";
 import { FirmTabs } from "@/components/firm/firm-tabs";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
@@ -88,22 +89,26 @@ export default async function TeamPage({
     />
   );
 
-  if (!firm.team_enabled) {
-    return (
-      <div className="space-y-8">
-        {breadcrumb}
-        <TeamSetup firmName={firm.name} />
-      </div>
-    );
-  }
+  // A SOLO firm (team mode off — the default for every new signup, migration
+  // 0540) used to get nothing here but the "create a team" card: no header, no
+  // tabs. That was fine while the firm's identity was edited on the settings
+  // screen, and became a trap the moment it moved here — a solo owner could no
+  // longer change their firm's name, logo, brand colour or client email
+  // language anywhere at all. A firm has an identity whether or not it has
+  // staff, so the page keeps its shape; only the team-shaped parts stand down.
+  const teamEnabled = firm.team_enabled === true;
 
   const nameById = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
 
   // Resolve each member's avatar once so the roster shows real profile
   // pictures (AvatarInitials falls back to initials when the URL is null).
-  const memberAvatars = await Promise.all(
-    members.map((m) => getBrandingImageUrl(m.avatar_path)),
-  );
+  // The FIRM's own logo rides in the same batch — it feeds both the page
+  // header and the identity editor on the Settings tab, and signing it
+  // separately would be one more sequential round trip for one more image.
+  const [firmLogoUrl, ...memberAvatars] = await Promise.all([
+    getBrandingImageUrl(firm.logo_url),
+    ...members.map((m) => getBrandingImageUrl(m.avatar_path)),
+  ]);
   const avatarById = new Map(members.map((m, i) => [m.id, memberAvatars[i]]));
 
   const activeMembers = members
@@ -190,7 +195,10 @@ export default async function TeamPage({
     ...m,
     roles: rolesByUser.get(m.id) ?? [],
   }));
-  if (canManage) {
+  // Solo firms show the setup card instead of a roster, so the whole workload
+  // roll-up behind it — a firm-wide worklist scan, every client, every
+  // recurring series — would be three queries paying for a table nobody sees.
+  if (canManage && teamEnabled) {
     const [worklist, clientsRaw, seriesByAssignee] = await Promise.all([
       loadEngagementWorklist("active"),
       listClients(),
@@ -234,6 +242,8 @@ export default async function TeamPage({
       {breadcrumb}
       <TeamManager
         view={view}
+        teamEnabled={teamEnabled}
+        setupCard={!teamEnabled ? <TeamSetup firmName={firm.name} /> : null}
         tabs={
           canManage ? (
             <FirmTabs
@@ -246,6 +256,8 @@ export default async function TeamPage({
           ) : undefined
         }
         firmName={firm.name}
+        firmLogoUrl={firmLogoUrl}
+        firmBrandColor={firm.brand_color}
         canManage={canManage}
         onTrial={isOnTrial(firm)}
         seat={seat}
@@ -256,10 +268,39 @@ export default async function TeamPage({
         unassignedWorkload={canManage ? workloadUnassigned : undefined}
         firmSettings={
           canManage ? (
-            <TeamSettings
-              clientsPrivateByDefault={firm.clients_private_by_default === true}
-              notifyOnAssignment={firm.notify_on_assignment !== false}
-            />
+            <>
+              {/* The firm's IDENTITY — name, logo, brand colour, the language
+                  clients are emailed in. It used to render under Settings →
+                  Account, which meant "edit the firm" and "the firm's
+                  settings" were two different screens; the founder's rule for
+                  this page is one place you look at per thing. This is the
+                  SAME component that screen rendered, moved — not a second
+                  copy of the form, which is how the two surfaces would drift
+                  the first time either one changed. */}
+              <FirmSettingsSections
+                firm={{
+                  name: firm.name,
+                  brand_color: firm.brand_color,
+                  locale_default: firm.locale_default === "en" ? "en" : "fr",
+                }}
+                firmLogoUrl={firmLogoUrl}
+              />
+              {/* The two firm-wide switches are about OTHER PEOPLE — who can
+                  see which client, who gets told about an assignment. With
+                  team mode off there is nobody they could apply to, so they
+                  stand down while the identity above stays. */}
+              {teamEnabled && (
+                <>
+                  <div className="my-8 border-t border-border/60" />
+                  <TeamSettings
+                    clientsPrivateByDefault={
+                      firm.clients_private_by_default === true
+                    }
+                    notifyOnAssignment={firm.notify_on_assignment !== false}
+                  />
+                </>
+              )}
+            </>
           ) : null
         }
       />
