@@ -17,6 +17,11 @@ export const CLIENT_TABS = [
   // asked for the Canopy word.
   "organizers",
   "bookkeeping",
+  // The firm's file browser, hosted here rather than linked away to. The
+  // founder: "get rid of file archive — file archive exists purely within the
+  // files on a client's page." It is the SAME component /files renders, locked
+  // to this client, not a client-shaped imitation of it.
+  "files",
 ] as const;
 
 export type ClientTab = (typeof CLIENT_TABS)[number];

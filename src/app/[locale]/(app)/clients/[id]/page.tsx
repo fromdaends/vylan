@@ -36,6 +36,10 @@ import {
   type ClientEngagementView,
 } from "@/lib/clients/tabs";
 import { listDocuments } from "@/lib/db/documents";
+// The SAME browser /files renders. Not a client-scoped copy of it — see the
+// Files tab below and the repo's Cohesion rule.
+import { BrowseTab } from "@/components/files/browse-tab";
+import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
@@ -91,20 +95,20 @@ export default async function ClientDetailPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{
-    qbo?: string;
-    xero?: string;
-    tab?: string;
-    ev?: string;
-  }>;
+  // Open-ended because the Files tab hosts the firm's file browser, which owns
+  // its own set of params (folder / year / category / q / type / status / sort /
+  // page). Naming them all here would mean this signature has to be edited every
+  // time that browser grows one.
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { locale: rawLocale, id } = await params;
+  const sp = await searchParams;
   const {
     qbo: qboParam,
     xero: xeroParam,
     tab: tabParam,
     ev: evParam,
-  } = await searchParams;
+  } = sp;
   // Which facet of this client we are looking at. The tab is a URL rather than
   // client state, so a tab is linkable, opens in a new tab, and the back
   // button works — and each tab's data loads only when that tab is asked for.
@@ -395,6 +399,7 @@ export default async function ClientDetailPage({
   // here — reusing them keeps one wording for "Assigned to" across the app.
   const tWl = await getTranslations("Dashboard");
   const tStage = await getTranslations("Stage");
+  const tArchive = await getTranslations("Archive");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
@@ -605,7 +610,9 @@ export default async function ClientDetailPage({
             ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
             : []),
           // Files is still a route of its own, so this tab NAVIGATES away.
-          { key: "documents", href: `/clients/${client.id}/archive`, label: t("tab_files"), active: false },
+          // Files is a real tab now, not a link away: it hosts the same browser
+          // /files renders, locked to this client.
+          { key: "files", href: clientTabHref(client.id, "files"), label: t("tab_files"), active: tab === "files" },
         ]}
       />
       </header>
@@ -808,6 +815,46 @@ export default async function ClientDetailPage({
           is it, who has it, when is it due — and the status reads as a coloured
           dot plus a word, which is Canopy's treatment and quieter than a row of
           filled pills. */}
+      {/* ── FILES TAB: the firm's file browser, locked to this client ──────
+          Literally the component /files renders — path bar, folder rows, drag
+          to move, bulk bar, upload, sort, the lot — with `lockedClientId` set
+          so you start inside this client's folders and no link can wander out
+          to another client's.
+          Founder: "for the files it should be the full archive browser — like
+          you're just porting it to the client's page", and "get rid of file
+          archive; it exists purely within the files on a client's page". So
+          /clients/[id]/archive is now a redirect that lands here.
+          No Panel around it: the browser draws its own toolbar and path bar,
+          and a titled box around a file manager is a second frame. */}
+      {tab === "files" && (
+        <div className="space-y-4">
+          {/* The one thing the retired archive page had that the browser
+              doesn't: give me everything, as a zip. It handles its own empty
+              case, so it needs no file count to decide whether to render —
+              which is a whole archive load saved on every visit to this tab. */}
+          <div className="flex justify-end">
+            <ArchiveDownloadZipButton
+              endpoint={`/api/clients/${client.id}/archive`}
+              label={tArchive("download_everything")}
+              preparingLabel={tArchive("preparing")}
+              emptyLabel={tArchive("download_empty")}
+              failedLabel={tArchive("download_failed")}
+              tooLargeLabel={tArchive("download_too_large")}
+              variant="outline"
+            />
+          </div>
+          <BrowseTab
+            locale={locale}
+            sp={sp}
+            basePath={`/clients/${client.id}`}
+            // Rides on every link the browser writes, so a folder click stays
+            // on this tab instead of dropping back to the overview.
+            baseParams={{ tab: "files" }}
+            lockedClientId={client.id}
+          />
+        </div>
+      )}
+
       {/* The ENGAGEMENTS TAB — the real list, not this preview. Same table the
           /engagements section renders (progress, attention, presence, the row
           menu), narrowed to this client, with the lifecycle filter and a search
