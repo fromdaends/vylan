@@ -30,25 +30,25 @@ import {
 import type { TeamRow as Member } from "@/components/clients/client-team-editor";
 type Person = { id: string; name: string };
 
+// `isPrivate` and `firmSize` are deliberately gone. They existed to render the
+// "everyone at your firm can see this" case, and since 1240 there is no such
+// case — the list is the answer whether or not a client is marked private.
+// Leaving them as ignored props would have left the next reader thinking
+// privacy still branches here.
 export function ClientAccess({
   clientId,
-  isPrivate,
   members,
   owners,
   assignee,
-  firmSize,
   candidates,
   canEdit,
 }: {
   clientId: string;
-  isPrivate: boolean;
   members: Member[];
   /** Firm owners — they see every client, membership or not. */
   owners: Person[];
   /** The person the client is assigned to, if any. */
   assignee: Person | null;
-  /** Active people in the firm, for the "everyone" case. */
-  firmSize: number;
   candidates: Person[];
   canEdit: boolean;
 }) {
@@ -112,25 +112,23 @@ export function ClientAccess({
           {t("access_heading")}
         </p>
 
-        {isPrivate ? (
-          <ul className="mt-2 space-y-1">
-            {seers.map((p) => (
-              <li key={p.id} className="flex items-baseline justify-between gap-2 text-xs">
-                <span className="min-w-0 truncate">{p.name}</span>
-                <span className="shrink-0 text-muted-foreground">{p.reason}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          // The honest answer while the client is not private: membership is
-          // not yet what limits sight, and saying otherwise would be the same
-          // lie the old panel told, pointing the other way.
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {t("access_everyone", { count: firmSize })}
-          </p>
-        )}
+        {/* One list, whether or not the client is marked private. Since 1240
+            the list IS the answer — "not private" no longer means "the whole
+            firm" — so branching on it here would print two different truths
+            for the same state. */}
+        <ul className="mt-2 space-y-1">
+          {seers.map((p) => (
+            <li key={p.id} className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="min-w-0 truncate">{p.name}</span>
+              <span className="shrink-0 text-muted-foreground">{p.reason}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {t("access_everyone")}
+        </p>
 
-        {isPrivate && seers.length === 1 && (
+        {seers.length === 1 && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
             <Check className="mt-0.5 size-3.5 shrink-0" aria-hidden />
             {t("access_only_you")}
