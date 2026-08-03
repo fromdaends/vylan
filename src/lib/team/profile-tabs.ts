@@ -17,6 +17,12 @@ export const TEAM_PROFILE_TABS = [
   // Owner-only, and the page drops it from the row for everyone else — the
   // activity feed mirrors /settings/audit's visibility, not the profile's.
   "activity",
+  // What this person is allowed to do, and where each permission comes from.
+  // The client page's Organizers tab answers "who can see this and why"; this
+  // is the same question asked of a person instead of a client. Owner-only:
+  // the controls on it are owner-only anyway, and a tab that renders three
+  // empty panels for staff is worse than no tab.
+  "access",
 ] as const;
 
 export type TeamProfileTab = (typeof TEAM_PROFILE_TABS)[number];

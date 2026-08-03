@@ -45,6 +45,8 @@ import { formatDate } from "@/lib/format";
 import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
 import { MemberRoles } from "@/components/settings/team/member-roles";
 import { RoleBadges } from "@/components/settings/team/role-badge";
+import { capabilityRows } from "@/lib/team/capability-sources";
+import { Check, Minus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -225,6 +227,25 @@ export default async function TeamMemberProfilePage({
     listRoleIdsForUser(id),
   ]);
 
+  // What this person may do and WHERE each permission comes from. The allow
+  // answer always comes from capabilitiesFor (via capabilityRows), so this
+  // table can never claim something can() would refuse.
+  const accessRows =
+    tab === "access"
+      ? capabilityRows(
+          {
+            role: member.role,
+            extra_capabilities: member.extra_capabilities,
+            role_capabilities: firmRoles
+              .filter((r) => heldRoleIds.has(r.id))
+              .flatMap((r) => r.capabilities),
+          },
+          firmRoles
+            .filter((r) => heldRoleIds.has(r.id))
+            .map((r) => ({ name: r.name, capabilities: r.capabilities })),
+        )
+      : [];
+
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
@@ -233,6 +254,10 @@ export default async function TeamMemberProfilePage({
   const tEngagements = await getTranslations("Engagements");
   const tDashboard = await getTranslations("Dashboard");
   const tStage = await getTranslations("Stage");
+  // "View all" — the preview→tab link. Lives in Home, which owns the correctly
+  // worded en+fr pair; Dashboard's wl_view_all says "Browse all", which is
+  // written for the worklist's own footer, not for a five-row preview card.
+  const tHome = await getTranslations("Home");
 
   const knownActions = new Set<string>(AUDIT_ACTIONS as readonly string[]);
   const actionLabel = (key: string): string =>
@@ -293,7 +318,10 @@ export default async function TeamMemberProfilePage({
           { key: "engagements", href: teamProfileTabHref(id, "engagements"), label: t("profile_engagements_title"), active: tab === "engagements" },
           { key: "clients", href: teamProfileTabHref(id, "clients"), label: t("profile_clients_title"), active: tab === "clients" },
           ...(isOwner
-            ? [{ key: "activity", href: teamProfileTabHref(id, "activity"), label: t("profile_activity_title"), active: tab === "activity" }]
+            ? [
+                { key: "activity", href: teamProfileTabHref(id, "activity"), label: t("profile_activity_title"), active: tab === "activity" },
+                { key: "access", href: teamProfileTabHref(id, "access"), label: t("tab_access"), active: tab === "access" },
+              ]
             : []),
         ]}
       />
@@ -358,57 +386,6 @@ export default async function TeamMemberProfilePage({
           </dl>
         </Panel>
 
-        {/* The badges this person wears. Owner-only to change, and shown to
-            everybody on the header above — a badge only the owner can see is
-            not a badge. Separate panel from Permissions on purpose: one says
-            what somebody IS, the other what they may DO, and this app has
-            already confused those two words once. */}
-        {isOwner && !member.deactivated_at && (
-          <Panel title={t("roles_title")}>
-            <MemberRoles
-              userId={id}
-              allRoles={firmRoles}
-              heldIds={[...heldRoleIds]}
-              disabled={firmRoles.length === 0}
-            />
-          </Panel>
-        )}
-
-        {/* What this person is allowed to do. Owner-only, and never on the
-            owner's own row or a deactivated one — the server refuses both, and
-            a control that always errors is worse than no control.
-            Tucked in the rail rather than given a section of its own: the
-            founder's standing rule is that a control lives quietly on the
-            object it acts on. */}
-        {isOwner &&
-          !member.deactivated_at &&
-          member.role !== "owner" &&
-          member.id !== user.id && (
-            <Panel title={t("permissions_title")}>
-              <MemberPermissions
-                userId={id}
-                grants={member.extra_capabilities}
-                // What their ROLES already grant, so the panel can name the
-                // source rather than showing a switch with no explanation.
-                fromRoles={firmRoles
-                  .filter(
-                    (r) => heldRoleIds.has(r.id) && r.capabilities.length > 0,
-                  )
-                  .map((r) => ({
-                    name: r.name,
-                    color: r.color,
-                    capabilities: [...r.capabilities],
-                  }))}
-                // Migration 1120 not applied yet → the column comes back
-                // undefined. The switches still render (so the feature is
-                // discoverable) but writing would fail, so they are disabled
-                // with the "available in a moment" message the firm settings
-                // already use for exactly this situation.
-                disabled={member.extra_capabilities === undefined}
-              />
-            </Panel>
-          )}
-
         {/* Owner actions on this person, together, at the bottom of the rail —
             the two heaviest things you can do to a teammate, kept away from the
             first thing you meet. Removing them used to be a "..." menu item on
@@ -446,6 +423,117 @@ export default async function TeamMemberProfilePage({
 
       {/* ── Main column: their work ──────────────────────────────────────── */}
       <div className="space-y-6">
+      {/* ── ACCESS TAB: what this person may do, and WHY ──────────────────
+          The client page's Organizers tab answers "who can see this client and
+          why". This is the same question asked of a person. It also gets the
+          two owner-only controls out of the overview rail, which is reference —
+          they were tucked there under a comment saying controls live quietly on
+          the object they act on, and they still do; the object is this page. */}
+      {tab === "access" && isOwner && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-start">
+          <div className="space-y-4">
+      {/* The badges this person wears. Owner-only to change, and shown to
+          everybody on the header above — a badge only the owner can see is
+          not a badge. Separate panel from Permissions on purpose: one says
+          what somebody IS, the other what they may DO, and this app has
+          already confused those two words once. */}
+      {isOwner && !member.deactivated_at && (
+        <Panel title={t("roles_title")}>
+          <MemberRoles
+            userId={id}
+            allRoles={firmRoles}
+            heldIds={[...heldRoleIds]}
+            disabled={firmRoles.length === 0}
+          />
+        </Panel>
+      )}
+
+      {/* What this person is allowed to do. Owner-only, and never on the
+          owner's own row or a deactivated one — the server refuses both, and
+          a control that always errors is worse than no control.
+          Tucked in the rail rather than given a section of its own: the
+          founder's standing rule is that a control lives quietly on the
+          object it acts on. */}
+      {isOwner &&
+        !member.deactivated_at &&
+        member.role !== "owner" &&
+        member.id !== user.id && (
+          <Panel title={t("permissions_title")}>
+            <MemberPermissions
+              userId={id}
+              grants={member.extra_capabilities}
+              // What their ROLES already grant, so the panel can name the
+              // source rather than showing a switch with no explanation.
+              fromRoles={firmRoles
+                .filter(
+                  (r) => heldRoleIds.has(r.id) && r.capabilities.length > 0,
+                )
+                .map((r) => ({
+                  name: r.name,
+                  color: r.color,
+                  capabilities: [...r.capabilities],
+                }))}
+              // Migration 1120 not applied yet → the column comes back
+              // undefined. The switches still render (so the feature is
+              // discoverable) but writing would fail, so they are disabled
+              // with the "available in a moment" message the firm settings
+              // already use for exactly this situation.
+              disabled={member.extra_capabilities === undefined}
+            />
+          </Panel>
+        )}
+
+          </div>
+
+          <Panel title={t("access_what_title")} flush>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                    <th className="px-4 py-2 font-medium">{t("access_col_permission")}</th>
+                    <th className="px-4 py-2 font-medium">{t("access_col_source")}</th>
+                    <th className="px-4 py-2 text-right font-medium" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {accessRows.map((r) => (
+                    <tr
+                      key={r.capability}
+                      className="border-b border-border/40 last:border-0"
+                    >
+                      <td
+                        className={
+                          r.allowed
+                            ? "px-4 py-2.5 align-middle"
+                            : "px-4 py-2.5 align-middle text-muted-foreground"
+                        }
+                      >
+                        {t(`cap_${r.capability}` as Parameters<typeof t>[0])}
+                      </td>
+                      <td className="px-4 py-2.5 align-middle text-muted-foreground">
+                        {/* Naming the ROLE matters: "a role gives her this" is
+                            useless if you then have to open every role to find
+                            which one. */}
+                        {r.source === "role" && r.roleNames.length > 0
+                          ? r.roleNames.join(", ")
+                          : t(`access_src_${r.source}` as Parameters<typeof t>[0])}
+                      </td>
+                      <td className="px-4 py-2.5 text-right align-middle">
+                        {r.allowed ? (
+                          <Check className="ml-auto size-4 text-emerald-500" aria-label={t("access_yes")} />
+                        ) : (
+                          <Minus className="ml-auto size-4 text-muted-foreground/50" aria-label={t("access_no")} />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+      )}
+
       {/* The lifecycle filter belongs HERE, on the list it filters — not in the
           header card. Founder, seeing it at the top: "the main headers should
           be main headers", and a filter for one section is not one.
@@ -475,7 +563,7 @@ export default async function TeamMemberProfilePage({
               href={teamProfileTabHref(id, "engagements")}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              {tDashboard("view_all")}
+              {tHome("view_all")}
             </Link>
           ) : null
         }
@@ -525,7 +613,7 @@ export default async function TeamMemberProfilePage({
               href={teamProfileTabHref(id, "clients")}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              {tDashboard("view_all")}
+              {tHome("view_all")}
             </Link>
           ) : null
         }
@@ -580,7 +668,7 @@ export default async function TeamMemberProfilePage({
               href={teamProfileTabHref(id, "activity")}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              {tDashboard("view_all")}
+              {tHome("view_all")}
             </Link>
           ) : null
         }
