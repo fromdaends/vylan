@@ -671,7 +671,6 @@ export default async function ClientDetailPage({
               client={client}
               locale={locale}
               canManage={canManageClients}
-              showPrivacy={isOwner && teamEnabled}
               isOwner={isOwner}
               archiveFormId={CLIENT_ARCHIVE_FORM_ID}
             />
@@ -820,7 +819,10 @@ export default async function ClientDetailPage({
             label={t("client_since")}
             value={formatDate(client.created_at, locale, "medium")}
           />
-          <DetailRow label={t("field_notes")} value={client.notes} wide />
+          {/* The old single notes FIELD is gone from here. Authored notes
+              (1270) live in their own panel with an author and a date, and
+              the same page showing both meant "Notes —" beside a box that
+              already had notes in it. */}
         </dl>
       </Panel>
 
