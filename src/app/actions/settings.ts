@@ -40,6 +40,21 @@ export async function updateFirmSettings(
   } catch {
     return { error: "update_failed" };
   }
-  revalidatePath("/profile", "layout");
+  // EVERY surface that renders the firm's identity, not just the one you saved
+  // from. The name, logo and brand colour are read by the app shell's sidebar,
+  // the firm page header and its Settings tab, and the settings screen itself —
+  // so a save that only refreshed /profile left the others showing the old
+  // value out of cache until something else happened to bust it.
+  //
+  // The founder named this before it bit them, asking for the two firm-settings
+  // surfaces to be "a mirror of each other instead of a duplicate… so when one
+  // settings updates the other one does too". A shared component is half of
+  // that; this is the other half. One editor, one action, and every reader
+  // invalidated together.
+  //
+  // Root layout scope rather than a list of paths: the firm name and logo are
+  // in the shell, which wraps every route, and a list would silently miss the
+  // next page that renders them.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
