@@ -11,7 +11,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/db/users";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 import { listFeed, unreadCount } from "@/lib/notifications/feed";
 
 export const runtime = "nodejs";
@@ -20,7 +20,11 @@ export const dynamic = "force-dynamic";
 const MAX_LIMIT = 50;
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
+  // Auth only — this route needs just the caller's id (RLS scopes the rows),
+  // and it is polled every 10s per dashboard tab. getCurrentUser here cost 3
+  // network round trips per poll (auth validation + users row + role grants)
+  // to produce an id the auth check already had.
+  const user = await getAuthUser();
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

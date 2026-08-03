@@ -47,7 +47,17 @@ export default function SignupPage() {
   useEffect(() => {
     if (!awaitingConfirmation) return;
     let active = true;
+    // Stop after 30 minutes: someone who signed up and walked away was
+    // leaving this tab polling the session endpoint every 4s indefinitely.
+    // Anyone who confirms later still gets in — the confirmation link itself
+    // signs them in; this poll only exists to auto-advance the SAME tab.
+    const startedAt = Date.now();
+    const POLL_CUTOFF_MS = 30 * 60 * 1000;
     const id = setInterval(async () => {
+      if (Date.now() - startedAt > POLL_CUTOFF_MS) {
+        clearInterval(id);
+        return;
+      }
       try {
         const res = await fetch("/api/auth/session-poll", {
           cache: "no-store",
