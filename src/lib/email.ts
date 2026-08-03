@@ -252,6 +252,109 @@ No password required.`;
   return { subject, html, text };
 }
 
+// Chase an unpaid invoice. Firm-branded and in the CLIENT's language, like the
+// original payment request, and deliberately quieter than the document
+// reminders: a client who owes money is not behind on a task, they have a bill
+// sitting in a pile. Two tones only.
+//
+//   "due"     the bill is outstanding and not yet late. Reads as a nudge.
+//   "overdue" past the due date. States the date plainly and asks; it does not
+//             threaten, because a firm's relationship with its client survives
+//             a late invoice and would not survive a dunning letter.
+//
+// The amount is the OUTSTANDING balance, not the invoice total, so a client who
+// paid half is never chased for the whole thing. Copy is em-dash-free per house
+// style.
+export function buildInvoiceReminderEmail(opts: {
+  clientName: string;
+  firmName: string;
+  firmLogoUrl?: string | null;
+  engagementTitle: string;
+  // Already-formatted currency, e.g. "$350.00" — the balance still owed.
+  amount: string;
+  invoiceNumber: string | null;
+  // ISO day, already formatted for display by the caller. Null = no due date.
+  dueDateLabel: string | null;
+  tone: "due" | "overdue";
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
+  const amount = escapeHtml(opts.amount);
+  const ref = opts.invoiceNumber ? ` (${opts.invoiceNumber})` : "";
+  const refHtml = escapeHtml(ref);
+
+  if (opts.locale === "fr") {
+    const subject =
+      opts.tone === "overdue"
+        ? `${opts.firmName} : facture${ref} en retard, ${opts.amount}`
+        : `${opts.firmName} : rappel de facture${ref}, ${opts.amount}`;
+    const lead =
+      opts.tone === "overdue"
+        ? `<p>Petit rappel : le solde de <strong>${amount}</strong> pour <strong>${escapeHtml(opts.engagementTitle)}</strong>${refHtml} était dû${
+            opts.dueDateLabel ? ` le ${escapeHtml(opts.dueDateLabel)}` : ""
+          } et demeure impayé.</p>`
+        : `<p>Un rappel amical : le solde de <strong>${amount}</strong> pour <strong>${escapeHtml(opts.engagementTitle)}</strong>${refHtml} est toujours en attente${
+            opts.dueDateLabel
+              ? `, échéance le ${escapeHtml(opts.dueDateLabel)}`
+              : ""
+          }.</p>`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+${lead}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Payer maintenant</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur : <br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Si le paiement vient d'être envoyé, merci d'ignorer ce message.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.clientName},
+
+${
+  opts.tone === "overdue"
+    ? `Le solde de ${opts.amount} pour ${opts.engagementTitle}${ref} était dû${opts.dueDateLabel ? ` le ${opts.dueDateLabel}` : ""} et demeure impayé.`
+    : `Le solde de ${opts.amount} pour ${opts.engagementTitle}${ref} est toujours en attente${opts.dueDateLabel ? `, échéance le ${opts.dueDateLabel}` : ""}.`
+}
+Payer : ${opts.url}
+
+Si le paiement vient d'être envoyé, merci d'ignorer ce message.`;
+    return { subject, html, text };
+  }
+
+  const subject =
+    opts.tone === "overdue"
+      ? `${opts.firmName}: invoice${ref} overdue, ${opts.amount}`
+      : `${opts.firmName}: reminder about invoice${ref}, ${opts.amount}`;
+  const lead =
+    opts.tone === "overdue"
+      ? `<p>A quick reminder that the balance of <strong>${amount}</strong> for <strong>${escapeHtml(opts.engagementTitle)}</strong>${refHtml} was due${
+          opts.dueDateLabel ? ` on ${escapeHtml(opts.dueDateLabel)}` : ""
+        } and is still outstanding.</p>`
+      : `<p>A friendly reminder that the balance of <strong>${amount}</strong> for <strong>${escapeHtml(opts.engagementTitle)}</strong>${refHtml} is still outstanding${
+          opts.dueDateLabel ? `, due ${escapeHtml(opts.dueDateLabel)}` : ""
+        }.</p>`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Hi ${escapeHtml(opts.clientName)},</p>
+${lead}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Pay now</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">If payment is already on its way, please ignore this message.</p>
+</body></html>`;
+  const text = `Hi ${opts.clientName},
+
+${
+  opts.tone === "overdue"
+    ? `The balance of ${opts.amount} for ${opts.engagementTitle}${ref} was due${opts.dueDateLabel ? ` on ${opts.dueDateLabel}` : ""} and is still outstanding.`
+    : `The balance of ${opts.amount} for ${opts.engagementTitle}${ref} is still outstanding${opts.dueDateLabel ? `, due ${opts.dueDateLabel}` : ""}.`
+}
+Pay: ${opts.url}
+
+If payment is already on its way, please ignore this message.`;
+  return { subject, html, text };
+}
+
 // Notify the ACCOUNTANT that a client returned the signed copy of a signature
 // item, with a link to review it in Vylan. Internal (accountant-facing), so it
 // is Vylan-branded rather than firm-branded and uses the accountant's own
