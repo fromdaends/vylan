@@ -19,13 +19,22 @@ export const SettingsSchema = z.object({
   // whatever is in the patch.
   timezone: z.string().min(2, "required").optional(),
   locale_default: z.enum(["fr", "en"]),
-  // HTML checkboxes only send a value when checked (default "on"), so
-  // an absent key means "off". Coerce that to a strict boolean so the
-  // column update is type-safe.
+  // Owned by the Documents tab, which saves via POST /api/firm/auto-reject —
+  // same arrangement as timezone above. The form using THIS schema renders no
+  // auto-reject control, so the key must stay absent from the parsed output:
+  // updateFirmSettings passes the whole parsed object to updateCurrentFirm,
+  // which writes every key it is handed.
+  //
+  // MUST NOT be .default(false). A default MATERIALISES the key even when the
+  // form never sent it, so saving the firm name would hand over
+  // `auto_reject_unusable_docs: false` and silently switch the setting off.
+  // .optional() short-circuits ahead of the preprocess and drops the key
+  // entirely, while still coercing the HTML checkbox's "on" if a form ever
+  // does ship one.
   auto_reject_unusable_docs: z
     .preprocess(
       (v) => v === "on" || v === "true" || v === true,
       z.boolean(),
     )
-    .default(false),
+    .optional(),
 });
