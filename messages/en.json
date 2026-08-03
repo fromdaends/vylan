@@ -2793,7 +2793,8 @@
     "statement_pick_client": "Pick a client from the filter above to generate a statement.",
     "statement_generate": "Download statement",
     "statement_range_hint": "Covers the date range currently filtered.",
-    "amount_incl_tax": "incl. {tax} tax"
+    "amount_incl_tax": "incl. {tax} tax",
+    "statement_all_time_hint": "Every invoice for {client} to date."
   },
   "Footer": {
     "based_in": "Built in Canada.",
@@ -3950,7 +3951,8 @@
     "today_filing_body": "Send approved documents to your cloud storage in the right folder, named your way.",
     "today_open_settings": "Open automation settings",
     "today_open_engagements": "Open engagements",
-    "today_open_filing": "Set up document filing"
+    "today_open_filing": "Set up document filing",
+    "tab_ai": "AI performance"
   },
   "Files": {
     "page_title": "Files",

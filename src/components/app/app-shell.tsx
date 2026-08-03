@@ -146,9 +146,11 @@ export function AppShell({
     // established AI mark (the chat popup's "Vylan" tab uses it), so the nav and
     // the assistant agree. Document filing USED to be its second tab; it moved
     // to /files?tab=settings, where it sits beside the documents it files.
+    // Performance USED to be the second entry. The page is retired: its money
+    // half became the Billing section below, its documents half was dropped,
+    // and the AI numbers moved onto the Vylan hub as a second tab. /performance
+    // redirects there rather than 404ing.
     { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
-    // "Performance" is the same word in EN and FR, so it's safe to hardcode.
-    { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
     // Files — every client document in one place, plus the filing settings that

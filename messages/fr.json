@@ -2793,7 +2793,8 @@
     "statement_pick_client": "Choisissez un client dans le filtre ci-dessus pour g\u00e9n\u00e9rer un \u00e9tat de compte.",
     "statement_generate": "T\u00e9l\u00e9charger l'\u00e9tat de compte",
     "statement_range_hint": "Couvre la p\u00e9riode actuellement filtr\u00e9e.",
-    "amount_incl_tax": "dont {tax} de taxes"
+    "amount_incl_tax": "dont {tax} de taxes",
+    "statement_all_time_hint": "Toutes les factures de {client} \u00e0 ce jour."
   },
   "Footer": {
     "based_in": "Construit au Canada.",
@@ -3950,7 +3951,8 @@
     "today_filing_body": "Envoyez les documents approuvés vers votre stockage infonuagique, dans le bon dossier et nommés à votre façon.",
     "today_open_settings": "Ouvrir les paramètres d'automatisation",
     "today_open_engagements": "Ouvrir les mandats",
-    "today_open_filing": "Configurer le classement"
+    "today_open_filing": "Configurer le classement",
+    "tab_ai": "Performance de l'IA"
   },
   "Files": {
     "page_title": "Fichiers",

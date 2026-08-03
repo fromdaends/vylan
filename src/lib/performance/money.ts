@@ -1,3 +1,13 @@
+// ⚠ CURRENTLY UNREFERENCED, ON PURPOSE.
+//
+// The Performance page was retired (see app/[locale]/(app)/performance/page.tsx).
+// Its money and documents SURFACES were deleted; this loader was not, because
+// the spec for that removal was explicit: no data or tracking is deleted, only
+// surfaces. The underlying stats keep accumulating, so these numbers can be
+// rendered again whenever something wants them without rebuilding the query.
+//
+// Delete it if that stops being true — but delete it deliberately, not because
+// it looked like dead code.
 // Money loader. Reads the firm's invoices (payment_requests) through the same
 // RLS-scoped path the Settings > Payments history uses, so the totals can never
 // drift from that list. Collected + time-to-paid + monthly buckets come from

@@ -28,6 +28,7 @@ import { InvoiceFilters } from "@/components/invoicing/invoice-filters";
 import { InvoicesTable } from "@/components/invoicing/invoices-table";
 import { BillingSettings } from "@/components/invoicing/billing-settings";
 import { NewInvoiceButton } from "@/components/invoicing/new-invoice-button";
+import { StatementButton } from "@/components/invoicing/statement-button";
 
 // Billing — every invoice the firm has raised, what is owed, and who is being
 // chased. NOT the firm's own Vylan subscription, which lives at
@@ -143,6 +144,17 @@ async function InvoicesTab({
       )}
 
       <InvoiceFilters filters={filters} clients={clients} />
+
+      {/* Only with a client filtered — a statement for "all clients" is not a
+          document anyone can send. It inherits the range above it. */}
+      {filters.clientId && (
+        <StatementButton
+          filters={filters}
+          clientName={
+            clients.find((c) => c.id === filters.clientId)?.name ?? ""
+          }
+        />
+      )}
 
       {list.rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/60 px-6 py-14 text-center">

@@ -1,3 +1,13 @@
+// ⚠ CURRENTLY UNREFERENCED, ON PURPOSE.
+//
+// The Performance page was retired (see app/[locale]/(app)/performance/page.tsx).
+// Its money and documents SURFACES were deleted; this loader was not, because
+// the spec for that removal was explicit: no data or tracking is deleted, only
+// surfaces. The underlying stats keep accumulating, so these numbers can be
+// rendered again whenever something wants them without rebuilding the query.
+//
+// Delete it if that stops being true — but delete it deliberately, not because
+// it looked like dead code.
 // Documents-received loader. Powers the Documents view — the full parallel of
 // the Money view: how many documents the firm received (bucketed over time),
 // how many still await review, how fast they get reviewed, and which clients
