@@ -20,6 +20,7 @@ import { hasActiveTeam } from "@/lib/team/mode";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
+import { addClientMemberAction } from "@/app/actions/client-members";
 
 export type ClientFormState = {
   ok?: boolean;
@@ -111,10 +112,26 @@ export async function createClientAction(
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
   }
+  let created;
   try {
-    await createClient(parsed.data);
+    created = await createClient(parsed.data);
   } catch {
     return { error: "create_failed" };
+  }
+
+  // Anyone else picked at creation. Best-effort and AFTER the client exists:
+  // the client is the thing that must not be lost, and a team can be fixed on
+  // its page in two clicks. Ids are validated against the caller's own firm by
+  // addClientMemberAction, so a crafted form field cannot add a stranger.
+  const rawMembers = formData.get("member_ids");
+  if (typeof rawMembers === "string" && rawMembers.trim()) {
+    for (const userId of rawMembers.split(",").map((x) => x.trim()).filter(Boolean)) {
+      try {
+        await addClientMemberAction({ clientId: created.id, userId });
+      } catch (err) {
+        console.error("[clients] could not add a chosen teammate:", err);
+      }
+    }
   }
   revalidatePath("/", "layout");
   return { ok: true };

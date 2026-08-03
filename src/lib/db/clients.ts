@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { addClientMember } from "@/lib/db/client-members";
 
 // New clients default to PRIVATE only when the firm opted in
 // (firms.clients_private_by_default, 0830) AND the creator is an OWNER — staff
@@ -194,7 +195,32 @@ export async function createClient(input: ClientInput): Promise<Client> {
     }
   }
   if (error) throw error;
-  return data as Client;
+  const created = data as Client;
+
+  // EVERY new client starts with somebody on its team.
+  //
+  // The 1210 backfill fixed history; this is the ongoing leak it did not close.
+  // Once slice 3 makes membership the thing that grants sight, a client created
+  // with an empty team is a client nobody is on — and the person who just typed
+  // its name would be the first to lose it. The creator is already recorded as
+  // assigned_user_id above; this makes them a member too, which is the field
+  // that will still mean something afterwards.
+  //
+  // Best-effort: a failure here must never lose the client that was just
+  // created successfully. Pre-1210 it no-ops.
+  if (owner) {
+    try {
+      await addClientMember({
+        firmId: firm_id,
+        clientId: created.id,
+        userId: owner,
+        actorId: owner,
+      });
+    } catch (err) {
+      console.error("[clients] could not seed the client's team:", err);
+    }
+  }
+  return created;
 }
 
 export async function bulkCreateClients(
