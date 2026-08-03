@@ -163,6 +163,7 @@
     "roles_tab_members": "Membres ({count})",
     "roles_color_hint": "Chaque personne affiche la couleur de son rôle le plus élevé.",
     "roles_preview": "Aperçu",
+    "roles_preview_person": "Un membre de l'équipe",
     "roles_search_permissions": "Rechercher des permissions",
     "roles_clear_permissions": "Tout désactiver",
     "roles_additive_note": "Activer quelque chose ici l'accorde à toutes les personnes portant ce rôle, en plus de ce qu'elles ont déjà. Le désactiver ne retire jamais un accès obtenu autrement.",

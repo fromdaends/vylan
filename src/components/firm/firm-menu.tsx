@@ -73,7 +73,12 @@ export function FirmMenu({
           <span className="sr-only">{t("firm_menu_label")}</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60">
+      {/* Anchored to the END of the trigger, which is where the chevron is.
+          align="start" hung the menu off the first letter of the firm name —
+          with a long name that put the menu a whole heading away from the
+          arrow you just clicked. The affordance and the thing it opens have
+          to be in the same place. */}
+      <DropdownMenuContent align="end" sideOffset={6} className="w-60">
         {onInvite && (
           <>
             <DropdownMenuItem onSelect={() => onInvite()} className="gap-2">
