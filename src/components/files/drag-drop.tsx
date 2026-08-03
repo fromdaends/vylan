@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
-import { bulkMoveDocumentsAction } from "@/app/actions/documents";
+import {
+  bulkDeleteDocumentsAction,
+  bulkMoveDocumentsAction,
+  restoreDocumentAction,
+} from "@/app/actions/documents";
 import {
   materializeBucketTargetAction,
   moveBucketToFolderAction,
@@ -494,6 +498,96 @@ export function FolderDropTarget({
         // two states you are looking at.
         over && "ring-2 ring-inset ring-accent",
       )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The "Recently deleted" link as a drop target (Files v2 §7): dragging files
+ * onto it soft-deletes them, Drive's drag-to-trash. DOCUMENTS ONLY — our
+ * folder delete doesn't delete contents (they spill back out unfiled), so a
+ * folder dropped here would do something its gesture doesn't say. Folders
+ * show the no-drop cursor instead, and the dead-drop toast explains.
+ *
+ * The gesture is safe for the same reason the Delete key is: it goes through
+ * the recycle bin, and the toast carries a real Undo.
+ */
+export function TrashDropTarget({ children }: { children: ReactNode }) {
+  const t = useTranslations("Files");
+  const router = useRouter();
+  const selection = useFileSelection();
+  const [over, setOver] = useState(false);
+  const [, startTransition] = useTransition();
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setOver(false);
+    hideDragGhost();
+    const drag = grabDrag();
+    const raw = e.dataTransfer.getData(MIME_DOCS);
+    if (!raw) {
+      drag?.release();
+      return;
+    }
+    let payload: DragPayload;
+    try {
+      payload = JSON.parse(raw) as DragPayload;
+    } catch {
+      drag?.release();
+      return;
+    }
+    if (payload.kind !== "documents" || payload.items.length === 0) {
+      drag?.release();
+      return;
+    }
+    const targets = payload.items;
+
+    startTransition(async () => {
+      const res = await bulkDeleteDocumentsAction({ targets });
+      selection?.clear();
+      if (res.succeeded > 0) drag?.hide();
+      else drag?.release();
+      router.refresh();
+      if (res.succeeded === 0) {
+        toast.error(t("action_failed"));
+        return;
+      }
+      toast.success(t("bulk_deleted", { count: res.succeeded }), {
+        action: {
+          label: t("undo"),
+          onClick: () => {
+            startTransition(async () => {
+              for (const tgt of targets) {
+                await restoreDocumentAction(tgt);
+              }
+              router.refresh();
+            });
+          },
+        },
+      });
+    });
+  }
+
+  return (
+    <div
+      className={cn(
+        "inline-block rounded-lg transition-colors",
+        over && "ring-2 ring-inset ring-destructive/60 bg-destructive/5",
+      )}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(MIME_DOCS)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes(MIME_DOCS)) e.preventDefault();
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={onDrop}
     >
       {children}
     </div>

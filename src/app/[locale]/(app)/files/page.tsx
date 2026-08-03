@@ -23,7 +23,7 @@ import {
   listClientFolders as listCustomFolders,
 } from "@/lib/db/folders";
 import { childrenOf, folderPath } from "@/lib/files/folder-tree";
-import type { DropTarget } from "@/components/files/drag-drop";
+import { TrashDropTarget, type DropTarget } from "@/components/files/drag-drop";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -455,15 +455,18 @@ async function BrowseTab({
       )}
 
       {/* The way into the recycle bin. Quiet and at the bottom, like every file
-          manager's Trash — findable, never in the way. */}
+          manager's Trash — findable, never in the way. Also a drop target:
+          dragging files onto it soft-deletes them, with an Undo toast. */}
       <div className="pt-2">
-        <Link
-          href="/files?deleted=1"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-          {t("bin_title")}
-        </Link>
+        <TrashDropTarget>
+          <Link
+            href="/files?deleted=1"
+            className="inline-flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            {t("bin_title")}
+          </Link>
+        </TrashDropTarget>
       </div>
     </div>
   );
