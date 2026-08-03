@@ -11,6 +11,7 @@ import { brand } from "@/lib/brand";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { getBrandingImageUrl } from "@/lib/storage";
+import { computeInitials } from "@/components/ui/avatar-initials";
 
 export const dynamic = "force-dynamic";
 
@@ -84,13 +85,7 @@ export default async function PortalPage({
       getMessages({ locale: gateLocale }),
       getBrandingImageUrl(branding.firmLogoPath),
     ]);
-    const initials = branding.firmName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
+    const initials = computeInitials(branding.firmName);
     return (
       <html
         lang={gateLocale}

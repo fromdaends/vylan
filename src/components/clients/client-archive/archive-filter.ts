@@ -4,6 +4,7 @@
 // mirroring how the clients list filters in memory.
 
 import type { AppLocale } from "@/lib/format";
+import { normalizeText } from "@/lib/text/normalize";
 import type {
   ArchiveEngagement,
   ArchiveCategoryGroup,
@@ -15,28 +16,6 @@ export type ArchiveSortKey = (typeof ARCHIVE_SORT_OPTIONS)[number];
 
 export const ARCHIVE_CATEGORY_FILTERS = ["all", "checklist", "signed", "final"] as const;
 export type ArchiveCategoryFilter = (typeof ARCHIVE_CATEGORY_FILTERS)[number];
-
-// Combining diacritical marks (U+0300–U+036F) plus the precomposed French
-// ligatures œ (U+0153) and æ (U+00E6), built with escapes so the file stays
-// plain ASCII and unambiguous. NFKD does not decompose œ/æ, so they are mapped
-// explicitly.
-const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
-const LIG_OE = new RegExp("\\u0153", "g");
-const LIG_AE = new RegExp("\\u00e6", "g");
-
-// Fold accents, ligatures, and case so a search for "releve" finds "Relevé" and
-// "soeur" finds "Sœur" (French/Québec text). Lowercasing first collapses Œ→œ and
-// Æ→æ so only the lowercase ligatures need mapping; NFKD then decomposes accents
-// (é→e+◌́) and compatibility ligatures (ﬁ→fi) before the combining marks are
-// stripped.
-export function normalizeText(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(LIG_OE, "oe")
-    .replace(LIG_AE, "ae")
-    .normalize("NFKD")
-    .replace(DIACRITICS, "");
-}
 
 export type FilteredArchive = {
   engagements: ArchiveEngagement[];

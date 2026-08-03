@@ -33,6 +33,7 @@ import {
   quickbooksQuery,
   type QuickbooksEnvironment,
 } from "@/lib/quickbooks/client";
+import { formatLedgerAmount } from "./amount-label";
 
 // QuickBooks' /query page cap. Hitting it means the read was TRUNCATED and the
 // answer is incomplete — reported rather than silently presented as "all of
@@ -241,7 +242,7 @@ export function describeGapForClient(
   gap: ReceiptGap,
   opts: { locale?: "en" | "fr" } = {},
 ): string {
-  const amount = formatAmount(gap.totalAmt, gap.currency);
+  const amount = formatLedgerAmount(gap.totalAmt, gap.currency);
   const who = gap.vendorName?.trim();
   const when = gap.txnDate ? formatDate(gap.txnDate, opts.locale) : null;
   if (opts.locale === "fr") {
@@ -254,11 +255,6 @@ export function describeGapForClient(
     who ? `${amount} at ${who}` : `${amount} payment`,
     when ? ` on ${when}` : "",
   ].join("");
-}
-
-function formatAmount(n: number, currency: string | null): string {
-  const s = n.toFixed(2);
-  return currency ? `${s} ${currency}` : `$${s}`;
 }
 
 // Deliberately not Intl-with-a-timezone: an ISO date from QuickBooks is a
