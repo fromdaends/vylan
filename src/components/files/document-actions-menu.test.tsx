@@ -75,4 +75,27 @@ describe("DocumentRowContextMenu", () => {
     fireEvent.click(screen.getByText("action_rename"));
     expect(screen.getByText("rename_title")).toBeInTheDocument();
   });
+
+  // Files HOME wraps a whole row LINK in this menu, so the recent-files rows
+  // answer a right-click the same way Browse's rows do (founder: "you should
+  // be able to right click on recent files"). Radix's asChild trigger clones
+  // onto a single child, and getting that shape wrong renders an EMPTY row
+  // rather than erroring — so pin that the link survives AND still opens.
+  it("keeps a row link clickable and still opens on right-click", () => {
+    render(
+      <DocumentRowContextMenu {...meta()}>
+        <div>
+          {/* A bare anchor stands in for the row Link — this test is about
+              the trigger keeping its child, not about routing. */}
+          <a href="#row">T4_2025.pdf</a>
+        </div>
+      </DocumentRowContextMenu>,
+    );
+    const link = screen.getByRole("link", { name: "T4_2025.pdf" });
+    expect(link).toHaveAttribute("href", "#row");
+
+    fireEvent.contextMenu(link);
+    expect(screen.getByText("action_rename")).toBeInTheDocument();
+    expect(screen.getByText("action_delete")).toBeInTheDocument();
+  });
 });
