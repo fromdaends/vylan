@@ -25,7 +25,7 @@ import { revalidateAllLocales } from "@/lib/revalidate";
 
 export type EngagementMemberResult = {
   ok: boolean;
-  /** Set when database update 1310 has not been applied yet. */
+  /** Set when database update 1320 has not been applied yet. */
   needsMigration?: boolean;
   error?: "no_session" | "not_allowed" | "not_found" | "save_failed";
 };

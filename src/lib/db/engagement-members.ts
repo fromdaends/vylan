@@ -5,11 +5,11 @@
 // files, and the client's NAME so the row is not attributed to "—". Nothing
 // else — the client's other work stays exactly as hidden as it was.
 //
-// The whole enforcement lives in migration 1310, not here. Ten child tables
+// The whole enforcement lives in migration 1320, not here. Ten child tables
 // already gate on `engagement_is_private()`, so teaching that one function
 // about this table opens exactly the right doors. This module is the roster.
 //
-// READS DEGRADE, WRITES REFUSE, same shape as client-members.ts. Before 1310 is
+// READS DEGRADE, WRITES REFUSE, same shape as client-members.ts. Before 1320 is
 // applied there is no table: a read returns "nobody has been let in", which is
 // the truth, and a write names the file to run rather than failing with a
 // Postgres error nobody can act on.
@@ -26,7 +26,7 @@ export type EngagementMember = {
 export class EngagementMembersUnsupportedError extends Error {
   constructor() {
     super(
-      "Per-job access needs database update 1310. Run supabase/migrations/1310_engagement_members.sql, then try again.",
+      "Per-job access needs database update 1320. Run supabase/migrations/1320_engagement_members.sql, then try again.",
     );
     this.name = "EngagementMembersUnsupportedError";
   }
