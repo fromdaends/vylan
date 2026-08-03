@@ -256,7 +256,7 @@ export async function FileBrowser({
                     have nothing to act on, and the empty span keeps both
                     aligned with the file rows below. The menu stays OUTSIDE
                     the selectable body so its clicks stay its own. */}
-                <span className="w-6 shrink-0 pr-4 text-right">
+                <span className="w-8 shrink-0 pr-5 text-right">
                   {entry.actions}
                 </span>
               </div>
@@ -347,7 +347,7 @@ export async function FileBrowser({
                 <Cell align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
-                <span className="w-6 shrink-0 text-right">
+                <span className="w-8 shrink-0 text-right">
                   {entry.actions ??
                     (entry.docMeta && (
                       <DocumentActionsMenu {...entry.docMeta} locale={locale} />
@@ -420,7 +420,11 @@ const COL_WIDTH = {
   source: "w-[150px]",
   size: "w-[70px]",
   modified: "w-[86px]",
-  actions: "w-6",
+  // 32px, NOT the design's 24px: the design measures the ⋯ GLYPH, but the
+  // real control is a size-8 icon button. At 24px the button overflowed its
+  // cell and the card's overflow-hidden sliced the dots off at the card edge
+  // — the founder caught it on the live page.
+  actions: "w-8",
 } as const;
 
 /** One metadata cell. */
