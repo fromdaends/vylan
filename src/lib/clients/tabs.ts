@@ -12,7 +12,10 @@
 export const CLIENT_TABS = [
   "overview",
   "engagements",
-  "team",
+  // The firm's people on this client. Named ORGANIZERS, not Team: "team" reads
+  // as the firm's own staff list (which is a different page), and the founder
+  // asked for the Canopy word.
+  "organizers",
   "bookkeeping",
 ] as const;
 

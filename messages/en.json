@@ -1583,6 +1583,7 @@
     "open_button": "Team chat"
   },
   "Clients": {
+    "tab_organizers": "Organizers",
     "tab_team": "Team",
     "tab_files": "Files",
     "recent_files": "Recent files",

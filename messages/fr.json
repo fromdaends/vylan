@@ -1583,6 +1583,7 @@
     "open_button": "Clavardage d'équipe"
   },
   "Clients": {
+    "tab_organizers": "Organisateurs",
     "tab_team": "Équipe",
     "tab_files": "Fichiers",
     "recent_files": "Fichiers récents",

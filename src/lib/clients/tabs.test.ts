@@ -22,7 +22,7 @@ describe("clientTabHref", () => {
 
   it("puts every other tab in the query string", () => {
     expect(clientTabHref("c1", "engagements")).toBe("/clients/c1?tab=engagements");
-    expect(clientTabHref("c1", "team")).toBe("/clients/c1?tab=team");
+    expect(clientTabHref("c1", "organizers")).toBe("/clients/c1?tab=organizers");
     expect(clientTabHref("c1", "bookkeeping")).toBe("/clients/c1?tab=bookkeeping");
   });
 

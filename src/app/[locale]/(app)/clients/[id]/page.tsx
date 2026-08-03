@@ -86,10 +86,16 @@ export default async function ClientDetailPage({
   // Relationships card data: this client's live links, plus the firm roster of
   // clients — archived included so a link's NAME still resolves even when its
   // other end is archived (the picker below re-filters to live clients only).
-  const [relationships, allClients] = await Promise.all([
-    listRelationshipsForClient(client.id),
-    listClients({ includeArchived: true }),
-  ]);
+  // OVERVIEW ONLY: the relationships card is the only thing that reads these,
+  // and listClients pulls the firm's WHOLE roster — an expensive query to run
+  // on a tab that shows a file list.
+  const [relationships, allClients] =
+    tab === "overview"
+      ? await Promise.all([
+          listRelationshipsForClient(client.id),
+          listClients({ includeArchived: true }),
+        ])
+      : [[], []];
   const clientNameById = new Map(
     allClients.map((c) => [c.id, c.display_name]),
   );
@@ -125,10 +131,15 @@ export default async function ClientDetailPage({
       })),
   };
 
-  const engagements = await listEngagements({ client_id: id });
+  // OVERVIEW + ENGAGEMENTS only. Nothing else on the page lists them.
+  const engagements =
+    tab === "overview" || tab === "engagements"
+      ? await listEngagements({ client_id: id })
+      : [];
   // Unified status for the pills below — same derivation every other surface
   // reads, via the cached active-scope signal load.
-  const signals = await loadEngagementSignals("active");
+  const signals =
+    engagements.length > 0 ? await loadEngagementSignals("active") : [];
   const derivedStatusById = new Map(
     signals.map((s) => [
       s.engagement.id,
@@ -158,7 +169,8 @@ export default async function ClientDetailPage({
 
   // Phase 3 slice 1: who works on this client. Descriptive only — nothing
   // reads it for access control yet (see 1210_client_members.sql).
-  const castRows = await listClientMembers(id);
+  // ORGANIZERS ONLY — the one tab that lists them.
+  const castRows = tab === "organizers" ? await listClientMembers(id) : [];
   const nameOf = new Map(firmUsers.map((u) => [u.id, userDisplayLabel(u)]));
   const cast = castRows
     // A member whose user row is gone from the roster read has been removed
@@ -176,7 +188,17 @@ export default async function ClientDetailPage({
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
   const castIds = new Set(cast.map((m) => m.userId));
   const castCandidates = assignableMembers.filter((u) => !castIds.has(u.id));
-  const connectedAccountId = firm?.stripe_connect_account_id ?? null;
+  // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ──────────────────────────────────
+  //
+  // This block used to run on every render of this route, which after the tabs
+  // landed meant every tab SWITCH paid for it — including the Stripe
+  // reconciliation below, a live call out to Stripe for each still-"requested"
+  // payment. That is the latency the founder hit clicking between tabs: the
+  // Organizers tab was waiting on Stripe to render a list of names.
+  const needsMoney = tab === "overview" || tab === "engagements";
+  const connectedAccountId = needsMoney
+    ? (firm?.stripe_connect_account_id ?? null)
+    : null;
   if (connectedAccountId) {
     const pending = await listFirmPaymentsWithNames({ clientId: id });
     await Promise.all(
@@ -187,10 +209,19 @@ export default async function ClientDetailPage({
   }
   // Payment status per engagement (for the chip) + this client's payment history
   // (so the accountant can backtrack what was paid on which engagement).
-  const [paymentByEng, clientPayments] = await Promise.all([
-    getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
-    listFirmPaymentsWithNames({ clientId: id }),
-  ]);
+  const [paymentByEng, clientPayments] = needsMoney
+    ? await Promise.all([
+        getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
+        listFirmPaymentsWithNames({ clientId: id }),
+      ])
+    : [
+        // Typed off the real loader so the empty case can never drift from the
+        // populated one.
+        new Map() as Awaited<
+          ReturnType<typeof getLatestPaymentStatusByEngagementIds>
+        >,
+        [] as Awaited<ReturnType<typeof listFirmPaymentsWithNames>>,
+      ];
 
   // The overview's "Recent files" card. Only fetched for the overview — every
   // other tab would pay for a query it never renders, which is the point of
@@ -215,7 +246,10 @@ export default async function ClientDetailPage({
   // Settings assembles the firm-level status: base status + a health check (which
   // detects a dead/revoked connection) + the platform-configured flag + the OAuth
   // callback result from ?qbo=. Connect/disconnect inside the card are owner-only.
-  const qboStatus = await getClientQuickbooksStatus(client.id);
+  // BOOKKEEPING TAB ONLY. The health probe in particular is a live call out to
+  // the ledger, so every tab switch used to wait on Intuit before painting.
+  const qboStatus =
+    tab === "bookkeeping" ? await getClientQuickbooksStatus(client.id) : null;
   const qboHealth =
     firm && qboStatus?.connected
       ? await getQuickbooksConnectionHealth(firm.id, client.id)
@@ -240,7 +274,8 @@ export default async function ClientDetailPage({
   // Per-client Xero status — the sibling of the QuickBooks block above. Health
   // only probes when connected (it doubles as the keep-alive for Xero's 60-day
   // idle expiry).
-  const xeroStatus = await getClientXeroStatus(client.id);
+  const xeroStatus =
+    tab === "bookkeeping" ? await getClientXeroStatus(client.id) : null;
   const xeroHealth =
     firm && xeroStatus?.connected
       ? await getXeroConnectionHealth(firm.id, client.id)
@@ -394,7 +429,7 @@ export default async function ClientDetailPage({
           // people ARE the team on that client, and the shorter noun is what
           // Canopy's tab row is made of.
           ...(teamEnabled
-            ? [{ key: "team", href: clientTabHref(client.id, "team"), label: t("tab_team"), active: tab === "team" }]
+            ? [{ key: "team", href: clientTabHref(client.id, "organizers"), label: t("tab_organizers"), active: tab === "organizers" }]
             : []),
           ...(clientQuickbooks.configured || clientXero.configured
             ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
@@ -434,7 +469,7 @@ export default async function ClientDetailPage({
           the rail on every view; as its own tab it stops competing with the
           work for the top of the page, and gets room to breathe when you do
           want it. */}
-      {teamEnabled && tab === "team" && (
+      {teamEnabled && tab === "organizers" && (
         <Panel title={t("access_title")}>
           <ClientAccess
             clientId={id}
