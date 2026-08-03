@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
 import type { SnippetPart } from "@/lib/files/search-snippet";
 import { RowCheckbox } from "./row-checkbox";
+import { RowsSurface, SelectableRow } from "./selectable-row";
 import {
   DraggableFile,
   DraggableFolder,
@@ -62,6 +63,9 @@ export type BrowserEntry =
        * are then simply not draggable.
        */
       dragPayload?: DragPayload | null;
+      /** Rename/delete identity for the selection bar — only for folders the
+       * firm made. Derived rows (clients, years, categories) have none. */
+      manage?: { clientId: string; folderId: string } | null;
     }
   | {
       kind: "file";
@@ -136,10 +140,14 @@ export async function FileBrowser({
   entries,
   locale,
   emptyMessage,
+  barFolders,
 }: {
   entries: BrowserEntry[];
   locale: AppLocale;
   emptyMessage: string;
+  /** The current client's custom folders, for the selection bar's
+   * "File into" control. */
+  barFolders?: { id: string; name: string }[];
 }) {
   const t = await getTranslations("Files");
 
@@ -155,18 +163,22 @@ export async function FileBrowser({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
+    /* `relative` because the selection strip OVERLAYS the column header
+       (absolute, same height) instead of inserting above it. Inserting
+       pushed every row down by the bar's height on the first click — which
+       moved the row out from under the second click of a double-click. */
+    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card">
+      <RowsSurface locale={locale} folders={barFolders}>
       <BrowserHeader t={t} />
       <ul className="divide-y divide-border/50">
         {entries.map((entry) => (
           <li key={`${entry.kind}-${entry.id}`}>
             {entry.kind === "folder" ? (
-              /* A FOLDER row is navigation, so the link covers everything up to
-                 the actions menu — but the MENU MUST SIT OUTSIDE THE LINK.
-                 Nesting a button inside an anchor means every click on it also
-                 navigates: the menu opens and is then torn down by the
-                 navigation before the dialog can render. Same reason file rows
-                 are not wrapped in a link at all.
+              /* A FOLDER row is no longer a link: Drive's model (Files v2 §7)
+                 is single-click SELECTS, double-click OPENS — SelectableRow
+                 owns both, and navigation happens client-side on the double
+                 click. This is also the latency fix: a stray click used to be
+                 a full page load.
 
                  A row is a drop target ONLY if it declares one. The old
                  fallback to "move to the top level" meant a CLIENT row on the
@@ -174,15 +186,15 @@ export async function FileBrowser({
                  changing nothing — they were already at the top level. */
               <MaybeDropTarget drop={entry.dropTarget} label={entry.name}>
               <DraggableFolder moves={entry.dragPayload ?? null} name={entry.name}>
-              <div className={cn(ROW_CLASS, "gap-0 p-0")}>
-              <Link
+              <SelectableRow
+                kind="folder"
+                rowKey={entry.id}
+                name={entry.name}
                 href={entry.href}
-                /* The row's own drag handler owns this gesture. Without this
-                   the browser drags the LINK — you get a URL chip and the
-                   folder never moves, which reads as "dragging is broken". */
-                draggable={false}
-                className={cn(ROW_CLASS, "min-w-0 flex-1 cursor-pointer")}
+                manage={entry.manage}
               >
+              <div className={cn(ROW_CLASS, "gap-0 p-0")}>
+              <div className={cn(ROW_CLASS, "min-w-0 flex-1")}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   <Folder
                     // Filled, in the brand blue: the single strongest signal
@@ -200,15 +212,16 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
-              </Link>
+              </div>
                 {/* Custom folders carry rename/delete here; derived folders
                     have nothing to act on, and the empty span keeps both
-                    aligned with the file rows below. Outside the Link above —
-                    see the comment there. */}
+                    aligned with the file rows below. The menu stays OUTSIDE
+                    the selectable body so its clicks stay its own. */}
                 <span className="w-8 shrink-0 pr-4 text-right">
                   {entry.actions}
                 </span>
               </div>
+              </SelectableRow>
               </DraggableFolder>
               </MaybeDropTarget>
             ) : (
@@ -221,6 +234,17 @@ export async function FileBrowser({
                 source={entry.selectSource ?? ""}
                 id={entry.selectId ?? ""}
                 name={entry.name}
+              >
+              <SelectableRow
+                kind="file"
+                rowKey={entry.id}
+                source={entry.selectSource}
+                id={entry.selectId}
+                previewUrl={
+                  entry.selectSource && entry.selectId
+                    ? `/api/files/${entry.selectId}?source=${entry.selectSource}`
+                    : undefined
+                }
               >
               <div className={ROW_CLASS}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -298,11 +322,13 @@ export async function FileBrowser({
                   )}
                 </p>
               )}
+              </SelectableRow>
               </DraggableFile>
             )}
           </li>
         ))}
       </ul>
+      </RowsSurface>
     </div>
   );
 }
@@ -312,8 +338,11 @@ export async function FileBrowser({
 // py-3 + the size-5 icons below = ~52px rows, Drive's list density. The
 // founder's review of the old rows: too small — "should feel like a file
 // manager, not a data grid".
+// The group-data override drops the gray hover wash while the row is
+// SELECTED: gray at 50% over the hard selection blue muddied it into exactly
+// the "too dark" look the founder rejected. (SelectableRow is the `group`.)
 const ROW_CLASS =
-  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 group-data-[selected]:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 // Each metadata column earns its place only once the row is wide enough to
 // still show a NAME afterwards.
@@ -362,7 +391,9 @@ function Cell({
 
 function BrowserHeader({ t }: { t: (key: string) => string }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    // Fixed h-11 — the selection strip overlays this row at the same height,
+    // so the two must match exactly or rows shift when the strip appears.
+    <div className="flex h-11 items-center gap-3 border-b border-border/60 bg-muted/30 px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
       <span className="min-w-0 flex-1">{t("col_name")}</span>
       <span className="hidden w-36 shrink-0 lg:block">{t("col_type")}</span>
       <span className="hidden w-40 shrink-0 xl:block">{t("col_source")}</span>

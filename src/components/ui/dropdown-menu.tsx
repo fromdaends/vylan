@@ -47,6 +47,11 @@ function DropdownMenuContent({
           // global *:focus-visible rule (globals.css) would otherwise draw a
           // blue ring around the whole popup. Items have their own focus styles.
           "z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-lg border bg-popover px-0 py-1.5 text-popover-foreground shadow-lg outline-hidden focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+          // Drive-style open: the menu GROWS out of its trigger (Radix sets
+          // the transform origin per side) with a quick fade. Menus had no
+          // animation at all before — reviewed as "there should be an
+          // animation when you click the new button".
+          "origin-(--radix-dropdown-menu-content-transform-origin) data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-90 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 duration-150 ease-out",
           className
         )}
         {...props}
