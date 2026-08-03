@@ -65,7 +65,7 @@ describe("isTrialExpired", () => {
     ).toBe(true);
   });
 
-  // Migration 1240 — a pilot is metered monthly like a paid firm, but it must
+  // Migration 1250 — a pilot is metered monthly like a paid firm, but it must
   // still END. isTrialExpired deliberately never reads is_pilot: that flag
   // picks which AI meter applies, never whether the clock runs. If this stops
   // holding, a pilot quietly becomes a free account forever.

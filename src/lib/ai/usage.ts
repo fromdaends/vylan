@@ -40,7 +40,7 @@ export type AiUsage = {
 // flipped to false yet (Stripe webhook lag), so a converting customer is never
 // throttled. Mirrors the subscription exemption in isTrialExpired.
 //
-// PILOTS are exempt too (migration 1240). A pilot is a comped, time-boxed
+// PILOTS are exempt too (migration 1250). A pilot is a comped, time-boxed
 // evaluation account we WANT using the product heavily enough to give us real
 // feedback, so it is metered monthly through ai_monthly_cap like a paid firm.
 // This only decides WHICH METER applies — a pilot stays is_demo, so
@@ -51,7 +51,7 @@ export function isTrialCapped(firm: {
   is_pilot?: boolean | null;
 }): boolean {
   if (firm.is_demo !== true) return false;
-  // Undefined/null (1240 unapplied, or simply not a pilot) reads as "ordinary
+  // Undefined/null (1250 unapplied, or simply not a pilot) reads as "ordinary
   // trial" — the lifetime ceiling holds. Only an explicit true opts out.
   if (firm.is_pilot === true) return false;
   const sub = firm.subscription_status;
@@ -108,12 +108,12 @@ export async function getFirmAiUsage(firmId: string): Promise<AiUsage> {
   try {
     const sb = await getServiceRoleSupabase();
     // select("*") rather than a column list, ON PURPOSE. Naming is_pilot
-    // explicitly would make the WHOLE select error while migration 1240 is
+    // explicitly would make the WHOLE select error while migration 1250 is
     // unapplied — `firm` would read null, the isTrialCapped branch below would
     // be skipped, and every trial firm would silently escape onto the
     // DEFAULT_AI_MONTHLY_CAP monthly default. That is precisely the cost hole
     // TRIAL_AI_TOTAL_CAP was added to close, reopened by a deploy-ordering
-    // gap. With "*", an unapplied 1240 just reads is_pilot as undefined, which
+    // gap. With "*", an unapplied 1250 just reads is_pilot as undefined, which
     // isTrialCapped treats as "not a pilot", so the trial ceiling holds.
     const { data: firm } = await sb
       .from("firms")

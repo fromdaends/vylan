@@ -1,4 +1,4 @@
--- Pilot accounts (migration 1240).
+-- Pilot accounts (migration 1250).
 --
 -- A pilot is a comped, time-boxed evaluation account handed to a firm whose
 -- feedback we want. It needs one half of each state that already existed:

@@ -60,8 +60,8 @@ describe("isTrialCapped", () => {
     ).toBe(false);
   });
 
-  // Migration 1240 — a pilot is metered monthly, not on the lifetime ceiling.
-  it("exempts a PILOT firm so it meters monthly (migration 1240)", () => {
+  // Migration 1250 — a pilot is metered monthly, not on the lifetime ceiling.
+  it("exempts a PILOT firm so it meters monthly (migration 1250)", () => {
     expect(
       isTrialCapped({
         is_demo: true,
@@ -73,7 +73,7 @@ describe("isTrialCapped", () => {
 
   // The whole point of the pilot flag is that it does NOT leak to ordinary
   // trials. Anything other than an explicit `true` keeps the lifetime cap —
-  // including `undefined`, which is what 1240 reads as before it is applied.
+  // including `undefined`, which is what 1250 reads as before it is applied.
   it("still caps an ordinary trial for every non-true is_pilot value", () => {
     for (const is_pilot of [undefined, null, false] as const) {
       expect(
