@@ -28,6 +28,7 @@ import {
   quickbooksCreate,
   quickbooksUploadAttachment,
   quickbooksTaxLinesEnabled,
+  INTUIT_PERIOD_CLOSED_CODES,
   QuickbooksError,
   type QboTxnEntity,
   fetchExchangeRate,
@@ -88,6 +89,14 @@ export type PostOutcomeKind =
   // access token was fresh — the customer revoked Vylan's access in QuickBooks,
   // confirmed by a forced refresh failing). The owner must reconnect.
   | "reconnect_required"
+  // The client CLOSED THEIR BOOKS over the transaction's date in QuickBooks
+  // (Intuit fault 6200/6210). Not a Vylan failure and not retriable: a closing
+  // date is only a warning inside QuickBooks — a user clicks through it, or
+  // types the password — but over the API it is an unconditional refusal, and
+  // Intuit's own guidance is to make the change on the QuickBooks website. So
+  // there is nothing to retry until either the closing date moves or the entry
+  // is dated after it. Nothing was written.
+  | "period_closed"
   | "post_failed"
   | "conflict"
   | "record_failed";
@@ -588,6 +597,28 @@ export async function postApprovedDraft(
     // refresh succeeds it was a spurious 401 (the token is now refreshed, so the
     // next attempt uses a good one) → fall through to the normal retriable
     // failure. Nothing was created either way, so there is no double-post risk.
+    // Books closed over this date. Checked BEFORE the 401 branch and before the
+    // generic failure, because it is the one rejection that is definitely not
+    // ours and definitely not worth retrying — left in post_failed it reads to
+    // the accountant as "Vylan is broken" when the truth is "your client locked
+    // the month".
+    if (
+      e instanceof QuickbooksError &&
+      e.hasIntuitCode(...INTUIT_PERIOD_CLOSED_CODES)
+    ) {
+      console.warn(
+        "[quickbooks] post blocked — client's books are closed over this date",
+        detail,
+      );
+      await recordDraftPostError({ uploadedFileId: fileId, error: detail });
+      return {
+        kind: "period_closed",
+        ...base,
+        detail:
+          "This client's books are closed in QuickBooks on or before this date. " +
+          "Move the closing date in QuickBooks, or change this entry's date to after it, then post again.",
+      };
+    }
     if (e instanceof QuickbooksError && e.status === 401) {
       const reAuth = await refreshAccessTokenAfter401(
         draft.firmId,

@@ -135,6 +135,14 @@ export async function POST(request: NextRequest) {
       continue;
     }
     if (out.engagementId) engagementIds.add(out.engagementId);
+    if (out.kind === "period_closed") {
+      // Books closed over THIS draft's date. Unlike a revoked grant this is
+      // per-date, not per-client: another draft for the same client dated after
+      // the closing date posts fine. So do NOT mark the client dead — just count
+      // this one as failed and carry on.
+      failed++;
+      continue;
+    }
     if (out.kind === "reconnect_required") {
       // THIS client's grant was revoked — every remaining draft for this client
       // would 401 too. Mark it dead so they skip; OTHER clients still post.

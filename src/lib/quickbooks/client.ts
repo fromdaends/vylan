@@ -61,11 +61,55 @@ export class QuickbooksError extends Error {
     // on failures and appended to `message` so it lands in our logs; quoting it in
     // an Intuit support ticket lets their team pinpoint the exact failed request.
     public readonly tid?: string,
+    // Intuit's OWN error codes off the Fault body, e.g. ["6210"]. Distinct from
+    // `code` above, which is Vylan's category for what we were doing when it
+    // failed. Callers that need to tell one Intuit rejection from another read
+    // this rather than regexing `message` — the message carries a TRUNCATED body
+    // and the code can fall off the end of it.
+    public readonly intuitCodes: readonly string[] = [],
   ) {
     super(message);
     this.name = "QuickbooksError";
   }
+
+  /** True when Intuit rejected this with any of the given fault codes. */
+  hasIntuitCode(...codes: string[]): boolean {
+    return this.intuitCodes.some((c) => codes.includes(c));
+  }
 }
+
+// Intuit reports failures as a Fault envelope:
+//   {"Fault":{"Error":[{"Message":"...","Detail":"...","code":"6210"}], ...}}
+// Pull the codes out so callers can branch on WHICH rejection it was. Everything
+// here is defensive: a non-JSON body (Intuit occasionally returns HTML from an
+// edge/proxy) yields an empty list rather than throwing inside a catch block.
+export function parseIntuitFaultCodes(body: string | object | null): string[] {
+  if (body == null) return [];
+  try {
+    // Accepts the raw body text OR an already-parsed response — some call sites
+    // read `res.text()` and some `res.json()`, and both need the codes.
+    const json = (typeof body === "string" ? JSON.parse(body) : body) as {
+      Fault?: { Error?: { code?: unknown }[] };
+      fault?: { error?: { code?: unknown }[] };
+    };
+    const errors = json.Fault?.Error ?? json.fault?.error ?? [];
+    return errors
+      .map((e) => (e?.code == null ? "" : String(e.code).trim()))
+      .filter((c) => c.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+// Intuit's "the account period has closed" rejection.
+//
+// 6200 and 6210 both mean it. The gap this closes: a closing date is only a
+// WARNING inside QuickBooks (a user clicks through it, or types the password),
+// but over the API it is an unconditional refusal — Intuit's own guidance is
+// "Please use the QBO website to make these changes". A third-party app cannot
+// push through it at all, so this can never be retried into success.
+// https://help.developer.intuit.com/s/article/6210-Account-Period-Closed
+export const INTUIT_PERIOD_CLOSED_CODES = ["6200", "6210"] as const;
 
 // Read Intuit's `intuit_tid` trace id off a response (header names are
 // case-insensitive). Defensive `?.` so a partial mock in tests can't throw — a
@@ -793,6 +837,9 @@ export async function quickbooksCreate(
       withTid(`QuickBooks create failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
       tid,
+      // Parsed from the FULL body, before truncation — a closed-period code
+      // sitting past the 500th character would otherwise be invisible.
+      parseIntuitFaultCodes(detail),
     );
   }
   const json = (await res.json().catch(() => null)) as Record<
@@ -853,6 +900,8 @@ export async function quickbooksCreateJournalEntry(
         extractFault(json) ?? "unknown error"
       }`,
       res.status,
+      undefined,
+      parseIntuitFaultCodes(json),
     );
   }
   const entry = json?.JournalEntry as Record<string, unknown> | undefined;
@@ -1017,6 +1066,7 @@ export async function quickbooksDelete(
       withTid(`QuickBooks delete failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
       tid,
+      parseIntuitFaultCodes(detail),
     );
   }
   // A delete only needs to have SUCCEEDED — we don't consume the returned id (the
@@ -1084,6 +1134,7 @@ export async function quickbooksUpdateEntity(
       withTid(`QuickBooks update failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
       tid,
+      parseIntuitFaultCodes(detail),
     );
   }
   const json = (await res.json().catch(() => null)) as Record<
