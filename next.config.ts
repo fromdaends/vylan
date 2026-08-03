@@ -130,6 +130,20 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      // The Files byte proxy may be framed by OUR OWN pages — the AI Organize
+      // review queue previews documents in an <iframe src="/api/files/…">.
+      // The site-wide DENY above forbids even same-origin framing, which
+      // rendered every organize preview as a gray broken-page box (founder
+      // screenshot, 2026-08-03). SAMEORIGIN plus the modern frame-ancestors
+      // 'self' lets exactly our origin embed these bytes and nobody else;
+      // every other route keeps DENY.
+      {
+        source: "/api/files/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
+      },
       {
         source: "/r/:path*",
         headers: portalPageHeaders,
