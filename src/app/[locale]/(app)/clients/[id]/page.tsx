@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getClient, listClients } from "@/lib/db/clients";
+import { clientVisibility } from "@/lib/clients/visibility";
 import { listRelationshipsForClient } from "@/lib/db/relationships";
 import { resolveRelationshipRows } from "@/lib/relationships/validate";
 import {
@@ -43,6 +44,7 @@ import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/do
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientNameMenu } from "@/components/clients/client-name-menu";
+import { ClientLocked } from "@/components/clients/client-locked";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
@@ -120,6 +122,52 @@ export default async function ClientDetailPage({
 
   const client = await getClient(id);
   if (!client) notFound();
+
+  // ── The middle privacy level (migration 1280) ────────────────────────────
+  //
+  // RLS let us READ this row for one of two very different reasons: either the
+  // viewer is entitled to the client, or the client is 'listed' and the whole
+  // firm can see that it exists. Those look identical from here, so the page
+  // has to ask the second question itself.
+  //
+  // Done BEFORE every other fetch on purpose. A locked viewer must not pay for
+  // the relationships query, the Stripe reconcile or the provider health
+  // probes — and, more importantly, must never have them run at all.
+  const viewer = await getCurrentUser();
+  const listedCast =
+    clientVisibility(client) === "listed" ? await listClientMembers(id) : [];
+  const mayOpen =
+    clientVisibility(client) !== "listed" ||
+    viewer?.role === "owner" ||
+    (viewer != null && client.assigned_user_id === viewer.id) ||
+    listedCast.some((m) => m.userId === viewer?.id);
+
+  if (!mayOpen) {
+    const tCommonLocked = await getTranslations("Common");
+    const tAppLocked = await getTranslations("App");
+    const roster = await listFirmUsers();
+    const nameOf = new Map(roster.map((u) => [u.id, userDisplayLabel(u)]));
+    // The assignee first — they are the person actually accountable — then
+    // everyone else on the list, in the order they were added.
+    const ordered = [
+      ...listedCast.filter((m) => m.userId === client.assigned_user_id),
+      ...listedCast.filter((m) => m.userId !== client.assigned_user_id),
+    ];
+    return (
+      <ClientLocked
+        clientName={client.display_name}
+        breadcrumbLabel={tCommonLocked("breadcrumb")}
+        clientsLabel={tAppLocked("nav_clients")}
+        people={ordered
+          .filter((m) => nameOf.has(m.userId))
+          .map((m) => ({
+            id: m.userId,
+            name: nameOf.get(m.userId)!,
+            position: m.position,
+          }))}
+      />
+    );
+  }
 
   // Relationships card data: this client's live links, plus the firm roster of
   // clients — archived included so a link's NAME still resolves even when its
