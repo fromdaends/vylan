@@ -125,8 +125,8 @@ export function AppShell({
 
   // Routes that draw their own full-width canvas. Exact match on purpose:
   // /files is full-bleed, but /files/organize is a normal review screen and
-  // keeps the shell's centered column.
-  const fullBleed = pathname === "/files";
+  // keeps the shell's centered column — same for /billing vs its sub-routes.
+  const fullBleed = pathname === "/files" || pathname === "/billing";
 
   // Close the mobile account sheet on route change (e.g. user tapped
   // a menu link). Ref-guarded to avoid setting state on every render.

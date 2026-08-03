@@ -50,8 +50,10 @@ export function NewInvoicePicker({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="mr-1.5 size-4" />
+        {/* The one coloured button on this screen (UI kit rule 1), sized to
+            match the header search it sits beside. */}
+        <Button className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">
+          <Plus className="size-[18px]" />
           {labels.button}
         </Button>
       </DialogTrigger>

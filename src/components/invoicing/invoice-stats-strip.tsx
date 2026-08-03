@@ -72,16 +72,16 @@ export async function InvoiceStatsStrip({
 
   return (
     <section aria-label={t("page_title")} className="mb-6">
-      <ul className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 sm:gap-x-8 sm:gap-y-0">
+      <ul className="grid max-w-[1100px] grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 sm:gap-x-8 sm:gap-y-0">
         {items.map((s) => {
           const body = (
             <>
               <span
-                className={`block text-2xl font-semibold leading-none tracking-tight tabular-nums ${s.tone || "text-foreground"}`}
+                className={`block text-2xl font-[650] leading-none tracking-[-0.02em] tabular-nums ${s.tone || "text-foreground"}`}
               >
                 {s.value}
               </span>
-              <span className="block truncate text-xs text-muted-foreground transition-colors group-hover:text-foreground/80">
+              <span className="block truncate text-[12.5px] text-muted-foreground transition-colors group-hover:text-foreground/80">
                 {s.label}
               </span>
               {"hint" in s && s.hint ? (
@@ -96,12 +96,12 @@ export async function InvoiceStatsStrip({
               {s.href ? (
                 <Link
                   href={s.href}
-                  className="group flex min-w-0 flex-col gap-1 rounded-r-sm border-l border-border/40 pl-3 transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:pl-4"
+                  className="group flex min-w-0 flex-col gap-1 rounded-r-sm border-l border-border/50 pl-3 transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:pl-4"
                 >
                   {body}
                 </Link>
               ) : (
-                <div className="flex min-w-0 flex-col gap-1 border-l border-border/40 pl-3 sm:pl-4">
+                <div className="flex min-w-0 flex-col gap-1 border-l border-border/50 pl-3 sm:pl-4">
                   {body}
                 </div>
               )}

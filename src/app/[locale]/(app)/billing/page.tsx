@@ -28,6 +28,7 @@ import { InvoiceFilters } from "@/components/invoicing/invoice-filters";
 import { InvoicesTable } from "@/components/invoicing/invoices-table";
 import { BillingSettings } from "@/components/invoicing/billing-settings";
 import { NewInvoiceButton } from "@/components/invoicing/new-invoice-button";
+import { HeaderSearch } from "@/components/ui/header-search";
 import { StatementButton } from "@/components/invoicing/statement-button";
 
 // Billing — every invoice the firm has raised, what is owed, and who is being
@@ -67,22 +68,31 @@ export default async function BillingPage({
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl animate-in-fade">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    // Full width, like Files: an invoice table has seven columns and a firm
+    // reads it across a monitor, not down a centred column.
+    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-[26px] font-[650] tracking-[-0.02em]">
             {t("page_title")}
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
+          <p className="mt-[5px] text-sm text-muted-foreground">
             {t("page_subtitle")}
           </p>
         </div>
-        {tab === "invoices" && <NewInvoiceButton />}
+        {/* Settings has no list to search and its own Save is that screen's one
+            coloured button, so the pair only appears on Invoices. */}
+        {tab === "invoices" && (
+          <div className="flex w-full items-center gap-2.5 sm:w-auto">
+            <HeaderSearch basePath="/billing" placeholder={t("filter_search")} />
+            <NewInvoiceButton />
+          </div>
+        )}
       </header>
 
       <nav
         aria-label={t("page_title")}
-        className="mb-6 flex items-center gap-6 border-b border-border"
+        className="mt-[22px] mb-6 flex items-center gap-[26px] border-b border-border"
       >
         {tabs.map((item) => {
           const active = item.id === tab;
@@ -92,10 +102,10 @@ export default async function BillingPage({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "-mb-px border-b-2 pb-2.5 text-sm font-medium transition-colors",
+                "-mb-px border-b-2 px-0.5 pb-[11px] text-sm transition-colors",
                 active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+                  ? "border-accent font-semibold text-foreground"
+                  : "border-transparent font-medium text-muted-foreground hover:border-border hover:text-foreground",
               )}
             >
               {item.label}

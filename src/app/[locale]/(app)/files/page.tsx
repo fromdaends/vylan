@@ -8,7 +8,7 @@ import { HomeTab } from "@/components/files/home-tab";
 // very same browser on its Files tab (Cohesion rule: one browser, two places,
 // never two browsers).
 import { BrowseTab } from "@/components/files/browse-tab";
-import { FilesHeaderSearch } from "@/components/files/files-header-search";
+import { HeaderSearch } from "@/components/ui/header-search";
 import { NewMenu } from "@/components/files/new-menu";
 import { listClientOptions } from "@/lib/db/clients";
 import { resolveFilesTab, type FilesTab } from "@/lib/files/tabs";
@@ -80,7 +80,12 @@ export default async function FilesPage({
           </p>
         </div>
         <div className="flex w-full items-center gap-2.5 sm:w-auto">
-          <FilesHeaderSearch />
+          {/* Typing switches to Browse — Home has no result list to filter. */}
+          <HeaderSearch
+            basePath="/files"
+            placeholder={t("search_all_placeholder")}
+            forceParams={{ tab: "browse" }}
+          />
           {showNew && (
             <NewMenu
               clients={clients}
