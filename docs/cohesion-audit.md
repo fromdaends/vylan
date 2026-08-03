@@ -65,8 +65,16 @@ identical copy lives in `archive-filter.ts` and should be pointed at this module
 comment, and moved on — and only found 1 of the 3 copies. A note in a file
 nobody re-reads is not a fix. This is precisely why it had to become a rule.
 
-**Fix size:** small. One shared import, delete three copies, keep the tests.
-Needs a decision on whether `.trim()` becomes standard (it should).
+**Why CI never caught it:** all four copies have tests, and all four pass. Only
+the two *correct* copies test the ligature case — each test file asserts what its
+own copy happens to do, not what the concept is supposed to do. Duplicated code
+brings duplicated tests, and duplicated tests certify the drift instead of
+catching it. Worth remembering: green tests are not evidence that two copies
+agree.
+
+**Fix size:** small. One shared import, delete three copies, keep the tests and
+point them all at the shared function. Needs a decision on whether `.trim()`
+becomes standard (it should).
 
 ---
 
@@ -162,5 +170,28 @@ clients-as-folders for the drive view. Both are correct. The name is the bug:
 sooner or later someone imports the wrong one. Worth renaming, but it is a
 naming problem, not a cohesion problem, and it is listed here so it isn't
 mistaken for one.
+
+---
+
+## Finding 5 — data access is spread out, but mostly harmlessly
+
+**Severity: low. Recorded so it isn't re-investigated later.**
+
+Client and engagement tables are queried from well outside the data layer: 34
+files outside `src/lib/db/` query `clients` directly and 68 query `engagements`.
+That looks alarming, and the first instinct is to call it duplication.
+
+Checked what those queries actually do, and mostly they are **narrow lookups** —
+`select("id")` for an ownership check, `select("id, firm_id")` for a permission
+guard. Those are fine and should be left alone. Only a couple genuinely restate
+a concept the data layer already owns (one re-selects the full client profile
+column list; `select("id, display_name")` — the client-name lookup — appears
+four times).
+
+By contrast `documents` and `firm_members` are queried through the data layer
+only. That's the shape to aim for, and it shows the codebase already knows how.
+
+**Fix size:** small, and low priority. Not worth a dedicated pass; fold it in
+when touching those files for another reason.
 
 ---
