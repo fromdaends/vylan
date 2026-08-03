@@ -195,3 +195,137 @@ only. That's the shape to aim for, and it shows the codebase already knows how.
 when touching those files for another reason.
 
 ---
+
+## Finding 6 — the download audit log is silently incomplete
+
+**Severity: highest in this audit. This is a trust problem, not a tidiness one.**
+
+`/settings/audit` has a filterable event type called "file downloaded"
+([audit-actions.ts:91](src/components/settings/audit-actions.ts:91)). Traced
+where that event is actually written:
+
+- It is written in exactly one function —
+  [documents.ts:325](src/app/actions/documents.ts:325).
+- That function is called from exactly one component —
+  [document-actions-menu.tsx:102](src/components/files/document-actions-menu.tsx:102),
+  the Files v2 grid.
+- There are **six** places a document can be downloaded. The other five —
+  engagement checklist, engagement preview card, preview detail, client archive,
+  portal deliverables — go straight to a route and log nothing.
+- Confirmed the routes don't quietly log server-side instead:
+  `src/app/api/files/[id]/route.ts` contains no logging at all. (The portal has
+  its own separate `client_downloaded_deliverable` event, written to the
+  client-facing activity feed, not the firm audit log.)
+
+So the audit screen offers a "file downloaded" filter that returns a fraction of
+real downloads, with nothing indicating the rest are missing. A missing feature
+is visibly missing; a log that looks complete and isn't is worse, and for an
+accounting product holding client tax documents it's the kind of thing that
+matters if anyone ever asks who accessed a file.
+
+**This is the cohesion problem in its most expensive form:** download was built
+six times, the audit call was added to the copy someone happened to be working
+in, and the other five were never revisited.
+
+**Fix size:** small, and it should probably jump the queue. Move the logging
+into the API routes rather than the components, so it fires regardless of which
+surface triggered it — a route can't be bypassed the way a component can.
+
+---
+
+## Finding 7 — nine different document status pills
+
+**Severity: high.**
+
+Status pills for documents are independently implemented in at least eight
+files, each with its own state list, its own wording and its own colours:
+`portal/item-card.tsx` (twice — two different pills in one file),
+`portal/signature-item-card.tsx`, `client-archive-view.tsx`,
+`file-preview-row.tsx`, `preview-card.tsx`, `quickbooks/queue-row.tsx`,
+`quickbooks-draft-card.tsx`, `usability-badge.tsx`.
+
+Proof they're copies rather than a shared thing: this exact string appears in
+two separate files, character for character —
+
+```
+inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+```
+
+([item-card.tsx:1020](src/components/portal/item-card.tsx:1020),
+[signature-item-card.tsx:210](src/components/portal/signature-item-card.tsx:210))
+
+And they have already drifted in a way that loses information:
+[quickbooks-draft-card.tsx:190](src/components/engagements/quickbooks-draft-card.tsx:190)
+handles four states where its sibling
+[queue-row.tsx:71](src/components/quickbooks/queue-row.tsx:71) handles five — a
+draft that "needs input" shows as a generic "Draft" on one screen and "Needs
+input" on the other.
+
+There *is* a shared pill helper, `engagementStatusVariant` — but it has only 3
+call sites and covers *engagement* status, never document status. Same
+half-adopted-standard pattern as Findings 1, 2 and 3.
+
+**Fix size:** large, and it needs a product decision first. There are genuinely
+four different status vocabularies in the data model (portal request items,
+document review status, AI headline kinds, QuickBooks queue buckets). Someone
+has to decide what the canonical set is before a single pill can be built. This
+is the one finding I would not start without the founder in the room.
+
+---
+
+## Finding 8 — two places decide "is this document flagged?"
+
+**Severity: medium-high, and it needs a product ruling, not just a refactor.**
+
+Two functions read the same raw fields (`review_status`, `ai_usability`,
+`ai_rejected`, `ai_extracted_fields`) and both call the same shared
+`matchDocument` comparator, but each writes its own precedence chain:
+
+- [preview-model.ts:99](src/components/engagements/engagement-preview/preview-model.ts:99)
+  `resolvePreviewStatus` — the accountant's decision wins. An approved file
+  reads approved.
+- [file-ai-headline.ts](src/lib/engagements/file-ai-headline.ts) `deriveFileAi`
+  → `pickAiHeadline` — `review_status` is never passed into the chain at all
+  (it's used only to suppress the headline on files that were never analyzed).
+
+**Correcting the scan's framing here, because the distinction matters:** these
+are not strictly two copies of one function. They answer slightly different
+questions — "what is this file's status" versus "what did the AI conclude". The
+real finding is that both encode the same underlying *business rule* — when an
+AI concern should outrank the accountant's judgement — and they answer it
+differently. For a file the accountant approved but the AI disliked, the preview
+grid shows green and the checklist row shows a warning chip.
+
+I can't tell from the code whether that's deliberate. It may well be intended.
+**That's a question for the founder, not a bug I should fix.** What is not in
+question is that the rule lives in two places, so changing it means changing
+both — and `preview-model.ts`'s own comments show this rule has already needed
+correcting once.
+
+---
+
+## Finding 9 — only one screen knows what kind of file it's showing
+
+**Severity: low-medium.**
+
+`iconForMime` at
+[file-browser.tsx:104](src/components/files/file-browser.tsx:104) is the only
+code in the app that picks an icon from the file's type. Every other document
+row hardcodes one glyph — a spreadsheet, a Word doc and a PDF all render an
+identical page icon in the engagement checklist, the finals list, the client
+archive, the portal and the client overview.
+
+Two of those surfaces already have the file-type data loaded and ignore it. One
+(the client archive) genuinely can't — `ArchiveFile` has no `mimeType` field —
+so that one needs a data change first, not just a render change.
+
+Worth stating as the counter-example: **file size formatting is done right.**
+One `formatBytes` in [src/lib/format.ts:79](src/lib/format.ts:79), reused by
+seven surfaces, zero re-implementations. Same for document *type* labels in
+`src/lib/doc-types.ts`. The codebase does know how to do this — it just hasn't
+done it consistently.
+
+**Fix size:** small. Move `iconForMime` into a shared helper and point the
+hardcoded spots at it.
+
+---
