@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
 import { logPortalActivity } from "@/lib/portal/activity-log";
+import { pickItemText } from "@/lib/engagements/request-item-row";
 import {
   loadSignWellEmbed,
   getSignWellEmbedCtor,
@@ -37,7 +38,7 @@ export function SignatureItemCard({
   const router = useRouter();
   const [local, setLocal] = useState<LocalState>("idle");
 
-  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
+  const label = pickItemText(locale, item.label_fr, item.label);
 
   const isSigned = local === "submitted" || signatureStatus === "completed";
   const canSign =
