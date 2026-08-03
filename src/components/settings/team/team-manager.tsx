@@ -13,10 +13,8 @@ import {
   Clock,
   Check,
   Lock,
-  Building2,
   Users,
   LogOut,
-  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -47,6 +45,7 @@ import {
 } from "@/app/actions/team";
 import { BookCallButton } from "@/components/booking/book-call-button";
 import { RoleBadges } from "./role-badge";
+import { FirmMenu } from "@/components/firm/firm-menu";
 
 type Seat = { used: number; cap: number | null; atCap: boolean };
 type ActiveMember = {
@@ -135,7 +134,6 @@ export function TeamManager({
   locale,
   unassignedWorkload,
   firmSettings,
-  rolesSection,
   tabs,
   view = "people",
 }: {
@@ -162,8 +160,6 @@ export function TeamManager({
   // Firm-wide settings. Rendered INLINE on the Firm tab (and still available
   // from the ⋯ dialog, so the old muscle memory keeps working).
   firmSettings?: ReactNode;
-  // The firm's roles list, shown inline on the Settings tab (owners only).
-  rolesSection?: ReactNode;
   // Which tab is showing. "people" = the roster, invitations and former members.
   // "firm" = the firm itself: seats, its settings, ownership, leaving.
   // Defaults to "people" so any caller that does not pass it behaves as before.
@@ -174,7 +170,6 @@ export function TeamManager({
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [firmOpen, setFirmOpen] = useState(false);
   const showStats = canManage;
 
   const seatLabel =
@@ -195,9 +190,19 @@ export function TeamManager({
       <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {firmName}
-          </h1>
+          {/* The firm name IS the menu — Discord's server dropdown, which is
+              the founder's reference. Everything you can do to the firm now
+              hangs off the name instead of being scattered across a tab row
+              and a "⋯" nobody opens. */}
+          <FirmMenu
+            firmName={firmName}
+            canManage={canManage}
+            onInvite={
+              canManage && !onTrial && !seat.atCap
+                ? () => setInviteOpen(true)
+                : undefined
+            }
+          />
           {/* The subtitle follows the TAB. It used to be pinned to the People
               copy — "Invite teammates and manage who has access to your firm" —
               which sat above the Settings tab describing a screen you were not
@@ -234,40 +239,11 @@ export function TeamManager({
               )}
               {t("invite_button")}
             </Button>
-            {/* Firm-level config lives behind this ⋯ menu (top-right), not inline:
-                "Firm settings" opens the settings dialog; "Edit firm details"
-                jumps to Settings > Account (logo/name/brand/language). */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t("firm_menu_label")}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <MoreHorizontal className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                {firmSettings && (
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      setFirmOpen(true);
-                    }}
-                    className="gap-2"
-                  >
-                    <SlidersHorizontal className="size-4" />
-                    {t("firm_settings_title")}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem asChild className="gap-2">
-                  <Link href="/settings?tab=account">
-                    <Building2 className="size-4" />
-                    {t("edit_firm")}
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* The ⋯ menu that used to sit here is gone. It held "Firm
+                settings" and "Edit firm details", and both now hang off the
+                firm name — which was the founder's whole point: one place you
+                open to act on the firm, not a second anonymous button beside
+                it. */}
             </>
           )}
         </div>
@@ -276,19 +252,6 @@ export function TeamManager({
           underlined — FirmTabs draws it. */}
       {tabs}
       </div>
-
-      {/* Firm settings dialog (opened from the ⋯ menu). */}
-      {firmSettings && (
-        <Dialog open={firmOpen} onOpenChange={setFirmOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("firm_settings_title")}</DialogTitle>
-              <DialogDescription>{t("firm_settings_subtitle")}</DialogDescription>
-            </DialogHeader>
-            {firmSettings}
-          </DialogContent>
-        </Dialog>
-      )}
 
 
       {/* Seat usage — a fact about the FIRM (what you are paying for), not about
@@ -471,11 +434,6 @@ export function TeamManager({
             .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl }))}
         />
       )}
-
-      {/* Roles — made here, handed out on a person's own page. Rendered inline
-          rather than in the firm-settings dialog: a dialog is for a handful of
-          switches, and this is a list you add to over time. */}
-      {view === "settings" && canManage && rolesSection}
 
       {view === "settings" && canManage && <LeaveTeamSection />}
 
