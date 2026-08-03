@@ -27,7 +27,9 @@ export async function POST() {
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const session = await stripe()!.billingPortal.sessions.create({
     customer: firm.stripe_customer_id,
-    return_url: `${appUrl}/billing`,
+    // Settings > Billing — see the note in ../checkout/route.ts on why the
+    // plan page moved off /billing.
+    return_url: `${appUrl}/settings/billing`,
   });
   return NextResponse.json({ url: session.url });
 }
