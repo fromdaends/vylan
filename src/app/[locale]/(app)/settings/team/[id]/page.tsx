@@ -45,11 +45,6 @@ import { formatDate } from "@/lib/format";
 import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
 import { MemberRoles } from "@/components/settings/team/member-roles";
 import { RoleBadges } from "@/components/settings/team/role-badge";
-import {
-  capabilityRows,
-  capabilityLabelKey,
-} from "@/lib/team/capability-sources";
-import { Check, Minus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -230,24 +225,6 @@ export default async function TeamMemberProfilePage({
     listRoleIdsForUser(id),
   ]);
 
-  // What this person may do and WHERE each permission comes from. The allow
-  // answer always comes from capabilitiesFor (via capabilityRows), so this
-  // table can never claim something can() would refuse.
-  const accessRows =
-    tab === "access"
-      ? capabilityRows(
-          {
-            role: member.role,
-            extra_capabilities: member.extra_capabilities,
-            role_capabilities: firmRoles
-              .filter((r) => heldRoleIds.has(r.id))
-              .flatMap((r) => r.capabilities),
-          },
-          firmRoles
-            .filter((r) => heldRoleIds.has(r.id))
-            .map((r) => ({ name: r.name, capabilities: r.capabilities })),
-        )
-      : [];
 
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
@@ -426,15 +403,40 @@ export default async function TeamMemberProfilePage({
 
       {/* ── Main column: their work ──────────────────────────────────────── */}
       <div className="space-y-6">
-      {/* ── ACCESS TAB: what this person may do, and WHY ──────────────────
-          The client page's Organizers tab answers "who can see this client and
-          why". This is the same question asked of a person. It also gets the
-          two owner-only controls out of the overview rail, which is reference —
-          they were tucked there under a comment saying controls live quietly on
-          the object they act on, and they still do; the object is this page. */}
+      {/* ── ACCESS TAB: roles, and the one per-person override ─────────────
+          Gets the two owner-only controls out of the overview rail, which is
+          reference. They were tucked there under a comment saying controls live
+          quietly on the object they act on — they still do; the object is this
+          page, and now they have room.
+
+          IT SHIPPED WITH A THIRD THING AND THE FOUNDER KILLED IT, correctly: a
+          read-only "What they can do" table listing all nine capabilities with
+          where each came from. Beside a panel of two switches it read as seven
+          broken switches — "either remove it or add switches to make it
+          functional".
+
+          Adding the other seven was never an option. Each is refused for its
+          own reason in lib/auth/grantable.ts: not RLS-backed (team.manage),
+          RLS-DECIDED so an app-level grant would change the UI and nothing the
+          database returns (clients.private), owner-only by the founder's call
+          twice (audit.view), not per-person by nature (firm.settings), or the
+          feature does not exist yet (time.approve). Switches for those would be
+          controls that lie.
+
+          And the table was a THIRD permission surface in a model the founder
+          already settled: "there shouldn't be two ways of having permissions —
+          permissions should exist purely based off roles". ROLES are the
+          switchboard; the panel below keeps ONE per-person override for handing
+          somebody one thing without inventing a role for them. Both read from
+          the same GRANTABLE_CAPABILITIES list, so they cannot drift.
+
+          "Where it comes from" did not die with the table — MemberPermissions
+          already names the role a capability arrives from, and kills that
+          switch rather than letting it promise a revocation the model cannot
+          express (grants only ever add). That is the answer to "why can she do
+          that", attached to the control instead of to a report beside it. */}
       {tab === "access" && isOwner && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-start">
-          <div className="space-y-4">
+        <div className="max-w-2xl space-y-4">
       {/* The badges this person wears. Owner-only to change, and shown to
           everybody on the header above — a badge only the owner can see is
           not a badge. Separate panel from Permissions on purpose: one says
@@ -485,55 +487,6 @@ export default async function TeamMemberProfilePage({
             />
           </Panel>
         )}
-
-          </div>
-
-          <Panel title={t("access_what_title")} flush>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">{t("access_col_permission")}</th>
-                    <th className="px-4 py-2 font-medium">{t("access_col_source")}</th>
-                    <th className="px-4 py-2 text-right font-medium" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {accessRows.map((r) => (
-                    <tr
-                      key={r.capability}
-                      className="border-b border-border/40 last:border-0"
-                    >
-                      <td
-                        className={
-                          r.allowed
-                            ? "px-4 py-2.5 align-middle"
-                            : "px-4 py-2.5 align-middle text-muted-foreground"
-                        }
-                      >
-                        {t(capabilityLabelKey(r.capability) as Parameters<typeof t>[0])}
-                      </td>
-                      <td className="px-4 py-2.5 align-middle text-muted-foreground">
-                        {/* Naming the ROLE matters: "a role gives her this" is
-                            useless if you then have to open every role to find
-                            which one. */}
-                        {r.source === "role" && r.roleNames.length > 0
-                          ? r.roleNames.join(", ")
-                          : t(`access_src_${r.source}` as Parameters<typeof t>[0])}
-                      </td>
-                      <td className="px-4 py-2.5 text-right align-middle">
-                        {r.allowed ? (
-                          <Check className="ml-auto size-4 text-emerald-500" aria-label={t("access_yes")} />
-                        ) : (
-                          <Minus className="ml-auto size-4 text-muted-foreground/50" aria-label={t("access_no")} />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
         </div>
       )}
 
