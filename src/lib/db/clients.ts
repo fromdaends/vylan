@@ -1,5 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 // Value + type live in a PLAIN module: a "use client" component imports the
 // function, and anything reachable from this file drags in next/headers.
 import type { ClientVisibility } from "@/lib/clients/visibility";
@@ -10,38 +12,22 @@ import { addClientMember } from "@/lib/db/client-members";
 // can't set is_private (the clients_all WITH CHECK would reject the insert), and
 // "clients private by default" is the OWNER's posture. Migration-gated + fails
 // open: if the column/role isn't there yet, this is false = public = today's
-// behavior (select('*') never throws on the absent column).
-async function newClientDefaultsPrivate(
-  supabase: SupabaseClient,
-): Promise<boolean> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return false;
-  const { data: u } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", auth.user.id)
-    .maybeSingle();
-  if (!u || u.role !== "owner") return false;
-  const { data: f } = await supabase
-    .from("firms")
-    .select("*")
-    .eq("id", u.firm_id)
-    .maybeSingle();
-  return (f as { clients_private_by_default?: boolean } | null)
+// behavior (select('*') never throws on the absent column). Reads through the
+// request-cached getCurrentUser/getCurrentFirm, so it costs nothing on a
+// request that already resolved them.
+async function newClientDefaultsPrivate(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "owner") return false;
+  const firm = await getCurrentFirm();
+  return (firm as { clients_private_by_default?: boolean } | null)
     ?.clients_private_by_default === true;
 }
 
 async function currentFirmId(): Promise<string> {
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Not authenticated");
-  const { data: u, error } = await supabase
-    .from("users")
-    .select("firm_id")
-    .eq("id", auth.user.id)
-    .single();
-  if (error || !u?.firm_id) throw new Error("No firm for user");
-  return u.firm_id as string;
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Not authenticated");
+  if (!user.firm_id) throw new Error("No firm for user");
+  return user.firm_id;
 }
 
 export type Client = {
@@ -109,9 +95,7 @@ function isMissingColumn(
 }
 
 async function currentAuthUserId(): Promise<string | null> {
-  const supabase = await getServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+  return (await getAuthUser())?.id ?? null;
 }
 
 export type ClientFilters = {
@@ -198,7 +182,7 @@ export async function createClient(input: ClientInput): Promise<Client> {
   const withProfile = {
     ...withProfileNoPrivate,
     // Honor the firm's "clients private by default" switch (owner-created only).
-    is_private: await newClientDefaultsPrivate(supabase),
+    is_private: await newClientDefaultsPrivate(),
   };
   const insertClient = (row: object) =>
     supabase.from("clients").insert(row).select("*").single();
@@ -263,7 +247,7 @@ export async function bulkCreateClients(
   // by default" switch. Degrade one column-set per tier (like createClient), so an
   // unknown is_private (0810 pending) doesn't also drop owner attribution (0210):
   // owner+private -> owner only -> base.
-  const isPrivate = await newClientDefaultsPrivate(supabase);
+  const isPrivate = await newClientDefaultsPrivate();
   const withOwner = base.map((r) => ({ ...r, assigned_user_id: owner }));
   let { error, count } = await supabase
     .from("clients")

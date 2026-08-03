@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 
 export type Firm = {
@@ -128,23 +129,19 @@ export type Firm = {
 };
 
 // React.cache() so multiple layouts/pages/components only hit the
-// firms row once per render.
+// firms row once per render. Rides on getCurrentUser (also cache'd) for the
+// firm_id instead of re-validating auth + re-reading the users row itself —
+// before that, every request that touched both helpers paid two network auth
+// validations and two users-row reads for one answer.
 export const getCurrentFirm = cache(async function _getCurrentFirm(): Promise<Firm | null> {
+  const user = await getCurrentUser();
+  if (!user?.firm_id) return null;
+
   const supabase = await getServerSupabase();
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) return null;
-
-  const { data: u } = await supabase
-    .from("users")
-    .select("firm_id")
-    .eq("id", user.user.id)
-    .maybeSingle();
-  if (!u?.firm_id) return null;
-
   const { data: firm } = await supabase
     .from("firms")
     .select("*")
-    .eq("id", u.firm_id)
+    .eq("id", user.firm_id)
     .maybeSingle();
   return (firm as Firm) ?? null;
 });
