@@ -5,16 +5,16 @@
 // history are deliberately not here.
 //
 // COLLECTED THIS MONTH IS THE AWKWARD ONE, and it is worth saying why. The
-// payment ledger (migration 1240) is the right source — it is the only thing
+// payment ledger (migration 1260) is the right source — it is the only thing
 // that knows about a partial payment, and the only thing with a real received
-// date. But invoices settled BEFORE 1240 have no ledger rows at all. Counting
+// date. But invoices settled BEFORE 1260 have no ledger rows at all. Counting
 // only the ledger would make the founder's collected figure drop to near zero
 // the day this ships, which is worse than useless: it is wrong in a direction
 // that looks like a bug in the money.
 //
 // So: ledger rows in the month, PLUS invoices marked paid in the month that
 // have no ledger row of their own. The second set empties itself as soon as
-// 1240 is applied (every rail payment writes a ledger row from then on), so
+// 1260 is applied (every rail payment writes a ledger row from then on), so
 // this is a bridge that retires quietly rather than a permanent double-count —
 // and the id exclusion makes double-counting impossible in the meantime.
 
@@ -63,7 +63,7 @@ export async function loadBillingStats(
   // rather than a view that would have to be kept in step with the status
   // rules in outstanding.ts.
   // Typed loosely on purpose: the two selects differ by one column (the tiered
-  // pre-1240 fallback), and PostgREST's inferred row types are structurally
+  // pre-1260 fallback), and PostgREST's inferred row types are structurally
   // incompatible as a result. Every field is read defensively below anyway.
   const openCols =
     "id, amount_cents, amount_paid_cents, status, due_date, paid_at, created_at";

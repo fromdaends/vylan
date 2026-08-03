@@ -9,7 +9,7 @@
 //
 // THE CADENCE: one reminder when the bill comes due, then every N days while it
 // is still owed, up to a maximum. Defaults 7 days and 4 reminders, per firm and
-// bounded in the database (migration 1240) as well as the UI.
+// bounded in the database (migration 1260) as well as the UI.
 //
 // THE WORKER RE-VALIDATES EVERYTHING. Queued jobs are never cancelled on
 // payment — they fire and find the invoice settled, and stop. That is
@@ -27,7 +27,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { outstandingCents, isChaseable, isoDay } from "@/lib/invoices/outstanding";
 import type { PaymentRequest } from "@/lib/db/payment-requests";
 
-// Bounds mirrored from the CHECK constraints in migration 1240. Exported so the
+// Bounds mirrored from the CHECK constraints in migration 1260. Exported so the
 // Settings form and the server action validate against the same numbers.
 export const CHASE_INTERVAL_MIN = 1;
 export const CHASE_INTERVAL_MAX = 60;

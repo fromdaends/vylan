@@ -12,7 +12,7 @@ import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server
 export type PaymentRequestStatus = "requested" | "paid" | "failed" | "canceled";
 export type PaymentDelivery = "portal" | "email" | "both";
 // Which rail collected the money (migration 0730). Stamped at the paid flip.
-// 'manual' (migration 1240) means it did not arrive by a rail at all — a
+// 'manual' (migration 1260) means it did not arrive by a rail at all — a
 // cheque, an Interac transfer, cash. WHICH of those it was lives on the
 // invoice_payments ledger row, because one invoice can be settled by two.
 export type PaidProvider = "stripe" | "paypal" | "manual";
@@ -381,10 +381,10 @@ export async function cancelPaymentRequest(id: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
-// Flip an invoice's auto-chase switch (migration 1240). No status guard: an
+// Flip an invoice's auto-chase switch (migration 1260). No status guard: an
 // accountant may reasonably switch chasing off on a paid or void invoice to
 // tidy the row, and the worker ignores the flag on those anyway. Returns true
-// only when a row actually changed, so a pre-1240 database (where the column
+// only when a row actually changed, so a pre-1260 database (where the column
 // does not exist) reports false rather than a phantom success.
 export async function setInvoiceAutoChase(
   id: string,

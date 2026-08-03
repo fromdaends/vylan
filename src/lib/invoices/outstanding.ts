@@ -8,7 +8,7 @@
 // Server Component.)
 //
 // ⚠ THE ONE RULE THAT IS NOT ARITHMETIC. Every invoice paid before migration
-// 1240 has status 'paid' and amount_paid_cents = 0, because the payment ledger
+// 1260 has status 'paid' and amount_paid_cents = 0, because the payment ledger
 // did not exist to record it. So outstanding is NOT amount_cents -
 // amount_paid_cents. It is:
 //
@@ -37,9 +37,9 @@ export type InvoiceDisplayStatus =
 export type InvoiceStateInput = {
   status: StoredInvoiceStatus;
   amount_cents: number;
-  // Undefined on a pre-1240 read (the column is dropped by the tiered select
+  // Undefined on a pre-1260 read (the column is dropped by the tiered select
   // when the migration hasn't been applied) — treated as nothing paid, which
-  // is the pre-1240 truth.
+  // is the pre-1260 truth.
   amount_paid_cents?: number | null;
   due_date?: string | null;
 };

@@ -29,8 +29,8 @@ export type FirmInvoiceSettings = {
   default_terms: string | null;
   default_notes: string | null;
   default_taxes_enabled: boolean;
-  // Invoice chasing defaults (migration 1240). Optional on the type so reads
-  // survive the pre-1240 window; callers pass them through
+  // Invoice chasing defaults (migration 1260). Optional on the type so reads
+  // survive the pre-1260 window; callers pass them through
   // normalizeChaseSettings, which supplies the defaults and the bounds.
   chase_enabled_default?: boolean;
   chase_interval_days?: number;
@@ -153,10 +153,10 @@ export async function upsertFirmInvoiceSettings(
   return { ok: true, settings: rowToSettings(data) };
 }
 
-// ── Invoice chasing defaults (migration 1240) ───────────────────────────────
+// ── Invoice chasing defaults (migration 1260) ───────────────────────────────
 
 // The firm's chase cadence, always bounded and never null. A firm with no
-// settings row, or a database without 1240, gets the shipped defaults — which
+// settings row, or a database without 1260, gets the shipped defaults — which
 // is the honest answer: chasing is on by default, and a missing row means
 // nobody has changed that.
 export function chaseSettingsFrom(

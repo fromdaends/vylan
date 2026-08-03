@@ -62,7 +62,7 @@ export type JobKind =
   // re-checks read/dismissed/already-sent state, so a retry can never
   // double-send and a notification the user already read is never emailed.
   | "send_notification_email"
-  // Chase an unpaid invoice (migration 1240). Payload:
+  // Chase an unpaid invoice (migration 1260). Payload:
   // { payment_request_id, occurrence }. Deliberately the SAME queue and cron as
   // send_reminder rather than a parallel scheduler. Queued jobs are never
   // cancelled on payment: the worker re-reads the invoice and stops if it is
