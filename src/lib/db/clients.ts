@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth-user";
 import { getCurrentUser } from "@/lib/db/users";
@@ -104,27 +105,45 @@ export type ClientFilters = {
   includeArchived?: boolean;
 };
 
-export async function listClients(filters: ClientFilters = {}): Promise<
-  Client[]
-> {
+// The real fetch, React.cache'd on PRIMITIVE keys — cache() compares object
+// arguments by reference, so caching the public function directly would never
+// dedupe two call sites passing equal-looking filter objects. Several pages
+// read the client list more than once per render (the table + a name map, or
+// a page plus the worklist loader); this collapses identical reads to one
+// query per request. Every caller is a page-render read (verified: nothing
+// creates a client and re-lists within one request).
+const listClientsCached = cache(async function _listClients(
+  search: string,
+  type: "individual" | "business" | "all",
+  includeArchived: boolean,
+): Promise<Client[]> {
   const supabase = await getServerSupabase();
   let query = supabase.from("clients").select("*");
 
-  if (!filters.includeArchived) {
+  if (!includeArchived) {
     query = query.is("archived_at", null);
   }
-  if (filters.type && filters.type !== "all") {
-    query = query.eq("type", filters.type);
+  if (type !== "all") {
+    query = query.eq("type", type);
   }
-  if (filters.search && filters.search.trim()) {
-    const s = filters.search.trim();
-    query = query.or(`display_name.ilike.%${s}%,email.ilike.%${s}%`);
+  if (search) {
+    query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
   }
   query = query.order("created_at", { ascending: false });
 
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as Client[];
+});
+
+export async function listClients(filters: ClientFilters = {}): Promise<
+  Client[]
+> {
+  return listClientsCached(
+    filters.search?.trim() ?? "",
+    filters.type ?? "all",
+    filters.includeArchived === true,
+  );
 }
 
 export async function getClient(id: string): Promise<Client | null> {

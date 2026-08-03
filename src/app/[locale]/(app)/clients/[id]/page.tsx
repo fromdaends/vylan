@@ -50,6 +50,7 @@ import {
   listFirmPaymentsWithNames,
 } from "@/lib/db/payment-requests";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
+import { shouldReconcile } from "@/lib/reconcile-throttle";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,19 +170,226 @@ export default async function ClientDetailPage({
     );
   }
 
-  // Relationships card data: this client's live links, plus the firm roster of
-  // clients — archived included so a link's NAME still resolves even when its
-  // other end is archived (the picker below re-filters to live clients only).
-  // OVERVIEW ONLY: the relationships card is the only thing that reads these,
-  // and listClients pulls the firm's WHOLE roster — an expensive query to run
-  // on a tab that shows a file list.
-  const [relationships, allClients] =
+  // Everything below is tab-gated exactly as before, but fanned out in ONE
+  // parallel batch instead of the strict await-chain this page used to run
+  // (~11-14 sequential round trips on the overview against the remote
+  // database). Each thunk keeps its own gate and chains its own dependents;
+  // getCurrentFirm / listFirmUsers / the signal loads are React.cache'd, so
+  // thunks that need them share one query no matter how many ask.
+  const needsMoney = tab === "overview" || tab === "engagements";
+  const onEngagementsTab = tab === "engagements";
+  const [
+    relationshipData,
+    engagementData,
+    firm,
+    firmUsers,
+    moneyData,
+    castRows,
+    organizerWorklist,
+    activeClientRows,
+    archivedClientRows,
+    clientNotes,
+    recentFiles,
+    bookkeeping,
+  ] = await Promise.all([
+    // Relationships card data: this client's live links, plus the firm roster
+    // of clients — archived included so a link's NAME still resolves even when
+    // its other end is archived (the picker re-filters to live clients only).
+    // OVERVIEW ONLY: the relationships card is the only thing that reads
+    // these, and listClients pulls the firm's WHOLE roster — an expensive
+    // query to run on a tab that shows a file list.
     tab === "overview"
-      ? await Promise.all([
+      ? Promise.all([
           listRelationshipsForClient(client.id),
           listClients({ includeArchived: true }),
         ])
-      : [[], []];
+      : ([[], []] as [
+          Awaited<ReturnType<typeof listRelationshipsForClient>>,
+          Awaited<ReturnType<typeof listClients>>,
+        ]),
+    // OVERVIEW only. The Engagements tab reads the worklist below instead — it
+    // needs progress, attention reasons and presence, none of which a raw
+    // engagement row carries. Signals are CLIENT-SCOPED: the pills only
+    // decorate this client's rows, and the firm-wide load was the single
+    // heaviest thing this page did.
+    (async () => {
+      const engagements =
+        tab === "overview" ? await listEngagements({ client_id: id }) : [];
+      const signals =
+        engagements.length > 0
+          ? await loadEngagementSignals("active", id)
+          : [];
+      return { engagements, signals };
+    })(),
+    getCurrentFirm(),
+    // Team roster for the owner picker. Include deactivated members so a
+    // former owner's name still renders (with a "please reassign" nudge);
+    // only ACTIVE members are valid reassignment targets.
+    listFirmUsers(),
+    // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ────────────────────────────
+    // One payments read (this used to run twice: once to find what to
+    // reconcile, once again for the history panel), the Stripe self-heal on
+    // still-"requested" rows — throttled, so tab switches and refreshes stop
+    // re-calling Stripe for an invoice that is simply still unpaid — then a
+    // re-read ONLY when a reconcile actually changed something.
+    (async () => {
+      if (!needsMoney) {
+        return {
+          clientPayments: [] as Awaited<
+            ReturnType<typeof listFirmPaymentsWithNames>
+          >,
+          paymentByEng: new Map() as Awaited<
+            ReturnType<typeof getLatestPaymentStatusByEngagementIds>
+          >,
+        };
+      }
+      const currentFirm = await getCurrentFirm();
+      const connectedAccountId = currentFirm?.stripe_connect_account_id ?? null;
+      let payments = await listFirmPaymentsWithNames({ clientId: id });
+      if (connectedAccountId) {
+        const changes = await Promise.all(
+          payments
+            .filter(
+              (p) =>
+                p.status === "requested" && shouldReconcile(`stripe:${p.id}`),
+            )
+            .map(async (p) => {
+              const status = await reconcilePaymentRequest(
+                p.id,
+                connectedAccountId,
+              );
+              return status != null && status !== p.status;
+            }),
+        );
+        if (changes.some(Boolean)) {
+          payments = await listFirmPaymentsWithNames({ clientId: id });
+        }
+      }
+      // Payment status per engagement (for the chip) — overview-only read: the
+      // Engagements tab's rows carry their own payment status from the
+      // worklist loader, and the history panel only renders on the overview.
+      const paymentByEng =
+        tab === "overview"
+          ? await getLatestPaymentStatusByEngagementIds(
+              (await listEngagements({ client_id: id })).map((e) => e.id),
+            )
+          : (new Map() as Awaited<
+              ReturnType<typeof getLatestPaymentStatusByEngagementIds>
+            >);
+      return {
+        clientPayments: tab === "overview" ? payments : [],
+        paymentByEng,
+      };
+    })(),
+    // Phase 3 slice 1: who works on this client. Descriptive only — nothing
+    // reads it for access control yet (see 1210_client_members.sql).
+    // ORGANIZERS ONLY — the one tab that lists them.
+    tab === "organizers"
+      ? listClientMembers(id)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listClientMembers>>),
+    // The Organizers tab's live-count column reads the active worklist —
+    // React.cache'd per scope. Team-gated inside the thunk (the roster +
+    // firm reads it needs are cache-shared with the destructured ones).
+    (async () => {
+      if (tab !== "organizers") return [];
+      const [f, users] = await Promise.all([
+        getCurrentFirm(),
+        listFirmUsers(),
+      ]);
+      const team = hasActiveTeam({
+        teamEnabled: f?.team_enabled === true,
+        activeMemberCount: users.filter((u) => !u.deactivated_at).length,
+      });
+      return team ? loadEngagementWorklist("active") : [];
+    })(),
+    // ── The Engagements tab's rows ─────────────────────────────────────────
+    // The SAME worklist every other engagement list in the app is built from,
+    // narrowed to this client. Two scopes at most: the active set plus, only
+    // when you are actually on it, the archived set.
+    onEngagementsTab
+      ? loadEngagementWorklist("active").then((rows) =>
+          selectForClient(rows, id),
+        )
+      : Promise.resolve([] as ReturnType<typeof selectForClient>),
+    onEngagementsTab && engView === "archived"
+      ? loadEngagementWorklist("archived").then((rows) =>
+          selectForClient(rows, id),
+        )
+      : Promise.resolve([] as ReturnType<typeof selectForClient>),
+    // The client's attributed notes (1270). Overview only — nothing else on
+    // the page shows them. Fails soft on its own: listClientNotes returns []
+    // when the migration hasn't landed.
+    tab === "overview"
+      ? listClientNotes(id)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listClientNotes>>),
+    // The overview's "Recent files" card. Fails soft: the Files view is gated
+    // on its own migration, and a client profile must not 500 because that is
+    // unapplied.
+    tab === "overview"
+      ? listDocuments({ clientId: id, sort: "date", page: 1 })
+          .then((page) => page.documents.slice(0, 5))
+          .catch(
+            () =>
+              [] as Awaited<
+                ReturnType<typeof listDocuments>
+              >["documents"],
+          )
+      : Promise.resolve(
+          [] as Awaited<ReturnType<typeof listDocuments>>["documents"],
+        ),
+    // Per-client bookkeeping connection status + health for the cards below.
+    // BOOKKEEPING TAB ONLY — the health probes are live calls out to the
+    // ledger. The two providers now probe in PARALLEL (status → health chained
+    // per provider); they used to run strictly one after the other.
+    (async () => {
+      if (tab !== "bookkeeping") {
+        return {
+          qboStatus: null as Awaited<
+            ReturnType<typeof getClientQuickbooksStatus>
+          >,
+          qboHealth: "ok" as Awaited<
+            ReturnType<typeof getQuickbooksConnectionHealth>
+          >,
+          xeroStatus: null as Awaited<ReturnType<typeof getClientXeroStatus>>,
+          xeroHealth: "ok" as Awaited<
+            ReturnType<typeof getXeroConnectionHealth>
+          >,
+        };
+      }
+      const currentFirm = await getCurrentFirm();
+      const [qbo, xero] = await Promise.all([
+        (async () => {
+          const status = await getClientQuickbooksStatus(client.id);
+          const health =
+            currentFirm && status?.connected
+              ? await getQuickbooksConnectionHealth(currentFirm.id, client.id)
+              : ("ok" as const);
+          return { status, health };
+        })(),
+        (async () => {
+          const status = await getClientXeroStatus(client.id);
+          // Health only probes when connected (it doubles as the keep-alive
+          // for Xero's 60-day idle expiry).
+          const health =
+            currentFirm && status?.connected
+              ? await getXeroConnectionHealth(currentFirm.id, client.id)
+              : ("ok" as const);
+          return { status, health };
+        })(),
+      ]);
+      return {
+        qboStatus: qbo.status,
+        qboHealth: qbo.health,
+        xeroStatus: xero.status,
+        xeroHealth: xero.health,
+      };
+    })(),
+  ]);
+
+  const [relationships, allClients] = relationshipData;
+  const { engagements, signals } = engagementData;
+  const { clientPayments, paymentByEng } = moneyData;
+  const me = viewer;
   const clientNameById = new Map(
     allClients.map((c) => [c.id, c.display_name]),
   );
@@ -217,32 +425,14 @@ export default async function ClientDetailPage({
       })),
   };
 
-  // OVERVIEW only. The Engagements tab reads the worklist below instead — it
-  // needs progress, attention reasons and presence, none of which a raw
-  // engagement row carries.
-  const engagements =
-    tab === "overview" ? await listEngagements({ client_id: id }) : [];
   // Unified status for the pills below — same derivation every other surface
-  // reads, via the cached active-scope signal load.
-  const signals =
-    engagements.length > 0 ? await loadEngagementSignals("active") : [];
+  // reads, via the cached signal load (client-scoped, fetched above).
   const derivedStatusById = new Map(
     signals.map((s) => [
       s.engagement.id,
       deriveEngagementStatus(s.engagement.status, s.attention),
     ]),
   );
-  // Self-heal: re-check this client's still-"requested" payments against Stripe
-  // (webhook-independent) so Paid shows even if the webhook never delivered, then
-  // read the now-correct statuses for display. Bounded to one client's payments.
-  const firm = await getCurrentFirm();
-  // Team roster for the owner picker. Include deactivated members so a
-  // former owner's name still renders (with a "please reassign" nudge);
-  // only ACTIVE members are valid reassignment targets.
-  const [firmUsers, me] = await Promise.all([
-    listFirmUsers(),
-    getCurrentUser(),
-  ]);
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: firmUsers.filter((u) => !u.deactivated_at).length,
@@ -253,10 +443,6 @@ export default async function ClientDetailPage({
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
 
-  // Phase 3 slice 1: who works on this client. Descriptive only — nothing
-  // reads it for access control yet (see 1210_client_members.sql).
-  // ORGANIZERS ONLY — the one tab that lists them.
-  const castRows = tab === "organizers" ? await listClientMembers(id) : [];
   const nameOf = new Map(firmUsers.map((u) => [u.id, userDisplayLabel(u)]));
   const cast = castRows
     // A member whose user row is gone from the roster read has been removed
@@ -286,10 +472,6 @@ export default async function ClientDetailPage({
   // The live count reads the active worklist — React.cache'd per scope, so on
   // any request that also drew the Engagements tab this is free, and on this
   // tab it is one query rather than one per person.
-  const organizerWorklist =
-    teamEnabled && tab === "organizers"
-      ? await loadEngagementWorklist("active")
-      : [];
   const organizerRows = (() => {
     if (!(teamEnabled && tab === "organizers")) return [];
     const liveByUser = new Map<string, number>();
@@ -342,45 +524,6 @@ export default async function ClientDetailPage({
       (a, b) => b.liveCount - a.liveCount || a.name.localeCompare(b.name),
     );
   })();
-  // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ──────────────────────────────────
-  //
-  // This block used to run on every render of this route, which after the tabs
-  // landed meant every tab SWITCH paid for it — including the Stripe
-  // reconciliation below, a live call out to Stripe for each still-"requested"
-  // payment. That is the latency the founder hit clicking between tabs: the
-  // Organizers tab was waiting on Stripe to render a list of names.
-  const needsMoney = tab === "overview" || tab === "engagements";
-  const connectedAccountId = needsMoney
-    ? (firm?.stripe_connect_account_id ?? null)
-    : null;
-  if (connectedAccountId) {
-    const pending = await listFirmPaymentsWithNames({ clientId: id });
-    await Promise.all(
-      pending
-        .filter((p) => p.status === "requested")
-        .map((p) => reconcilePaymentRequest(p.id, connectedAccountId)),
-    );
-  }
-  // Payment status per engagement (for the chip) + this client's payment history
-  // (so the accountant can backtrack what was paid on which engagement). BOTH
-  // are overview-only reads: the Engagements tab's rows carry their own payment
-  // status from the worklist loader, and the history panel only renders here.
-  // The reconcile above still runs for both, so the badge on either tab is
-  // reading a status Stripe has just confirmed.
-  const [paymentByEng, clientPayments] = tab === "overview"
-    ? await Promise.all([
-        getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
-        listFirmPaymentsWithNames({ clientId: id }),
-      ])
-    : [
-        // Typed off the real loader so the empty case can never drift from the
-        // populated one.
-        new Map() as Awaited<
-          ReturnType<typeof getLatestPaymentStatusByEngagementIds>
-        >,
-        [] as Awaited<ReturnType<typeof listFirmPaymentsWithNames>>,
-      ];
-
   // ── The Engagements tab's rows ─────────────────────────────────────────────
   //
   // The SAME worklist every other engagement list in the app is built from,
@@ -393,14 +536,6 @@ export default async function ClientDetailPage({
   // slice out of, and which the overview's signals load already warmed — it is
   // React.cache'd per scope) plus, only when you are actually on it, the
   // archived set. Selecting a filter never costs more than one extra query.
-  const onEngagementsTab = tab === "engagements";
-  const activeClientRows = onEngagementsTab
-    ? selectForClient(await loadEngagementWorklist("active"), id)
-    : [];
-  const archivedClientRows =
-    onEngagementsTab && engView === "archived"
-      ? selectForClient(await loadEngagementWorklist("archived"), id)
-      : [];
   const engagementRows = selectView(
     engView,
     engView === "archived" ? archivedClientRows : activeClientRows,
@@ -423,22 +558,6 @@ export default async function ClientDetailPage({
         )
       : {};
 
-  // The client's attributed notes (1270). Overview only — nothing else on the
-  // page shows them. Fails soft on its own: listClientNotes returns [] when the
-  // migration hasn't landed, so the composer still renders and a profile never
-  // 500s because a deployment ran ahead of its database.
-  const clientNotes = tab === "overview" ? await listClientNotes(id) : [];
-
-  // The overview's "Recent files" card. Only fetched for the overview — every
-  // other tab would pay for a query it never renders, which is the point of
-  // putting the tab in the URL. Fails soft: the Files view is gated on its own
-  // migration, and a client profile must not 500 because that is unapplied.
-  const recentFiles =
-    tab === "overview"
-      ? await listDocuments({ clientId: id, sort: "date", page: 1 })
-          .then((page) => page.documents.slice(0, 5))
-          .catch(() => [])
-      : [];
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -457,12 +576,7 @@ export default async function ClientDetailPage({
   // callback result from ?qbo=. Connect/disconnect inside the card are owner-only.
   // BOOKKEEPING TAB ONLY. The health probe in particular is a live call out to
   // the ledger, so every tab switch used to wait on Intuit before painting.
-  const qboStatus =
-    tab === "bookkeeping" ? await getClientQuickbooksStatus(client.id) : null;
-  const qboHealth =
-    firm && qboStatus?.connected
-      ? await getQuickbooksConnectionHealth(firm.id, client.id)
-      : "ok";
+  const { qboStatus, qboHealth, xeroStatus, xeroHealth } = bookkeeping;
   const qboCallbackStatus =
     qboParam === "done" ||
     qboParam === "denied" ||
@@ -483,12 +597,6 @@ export default async function ClientDetailPage({
   // Per-client Xero status — the sibling of the QuickBooks block above. Health
   // only probes when connected (it doubles as the keep-alive for Xero's 60-day
   // idle expiry).
-  const xeroStatus =
-    tab === "bookkeeping" ? await getClientXeroStatus(client.id) : null;
-  const xeroHealth =
-    firm && xeroStatus?.connected
-      ? await getXeroConnectionHealth(firm.id, client.id)
-      : "ok";
   const xeroCallbackStatus =
     xeroParam === "done" ||
     xeroParam === "denied" ||

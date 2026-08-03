@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -197,18 +198,24 @@ export function newMagicToken(): string {
 // surfacing archived / deleted engagements.
 export type EngagementScope = "active" | "archived" | "deleted" | "any";
 
-export async function listEngagements(filters?: {
-  client_id?: string;
-  status?: EngagementStatus | "all";
-  scope?: EngagementScope;
-}): Promise<Engagement[]> {
+// The real fetch, React.cache'd on PRIMITIVE keys. cache() compares object
+// arguments by reference, so caching the public function directly would never
+// dedupe two call sites both asking for `{ scope: "active" }` — which is
+// exactly what /clients did (its own listEngagements() plus the one inside
+// loadEngagementSignals), paying the full-table query twice per render. Every
+// caller is a page-render read (verified: nothing writes engagements and
+// re-lists within one request), so per-request memoization is safe.
+const listEngagementsCached = cache(async function _listEngagements(
+  clientId: string | null,
+  status: EngagementStatus | "all" | null,
+  scope: EngagementScope,
+): Promise<Engagement[]> {
   const supabase = await getServerSupabase();
   let q = supabase.from("engagements").select("*");
-  if (filters?.client_id) q = q.eq("client_id", filters.client_id);
-  if (filters?.status && filters.status !== "all") {
-    q = q.eq("status", filters.status);
+  if (clientId) q = q.eq("client_id", clientId);
+  if (status && status !== "all") {
+    q = q.eq("status", status);
   }
-  const scope = filters?.scope ?? "active";
   if (scope === "active") {
     q = q.is("deleted_at", null).is("archived_at", null);
   } else if (scope === "archived") {
@@ -226,6 +233,18 @@ export async function listEngagements(filters?: {
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Engagement[];
+});
+
+export async function listEngagements(filters?: {
+  client_id?: string;
+  status?: EngagementStatus | "all";
+  scope?: EngagementScope;
+}): Promise<Engagement[]> {
+  return listEngagementsCached(
+    filters?.client_id ?? null,
+    filters?.status ?? null,
+    filters?.scope ?? "active",
+  );
 }
 
 export async function getEngagement(id: string): Promise<Engagement | null> {

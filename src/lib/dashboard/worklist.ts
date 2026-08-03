@@ -48,11 +48,29 @@ export type EngagementSignal = {
   recencyAt: string;
 };
 
-export const loadEngagementSignals = cache(
+// Public wrapper normalizes the optional clientId so every call site hits the
+// cache with the same arity — cache() keys on the exact argument list, and
+// ("active") vs ("active", null) would be two entries for the same data.
+export function loadEngagementSignals(
+  scope: EngagementScope = "active",
+  clientId: string | null = null,
+): Promise<EngagementSignal[]> {
+  return loadEngagementSignalsCached(scope, clientId);
+}
+
+const loadEngagementSignalsCached = cache(
   async function _loadEngagementSignals(
-    scope: EngagementScope = "active",
+    scope: EngagementScope,
+    // When set, the whole load is scoped to ONE client's engagements — the
+    // client profile's overview needs status pills for a handful of rows and
+    // was paying for the firm's entire active book (all engagements + their
+    // items + files) to derive them.
+    clientId: string | null,
   ): Promise<EngagementSignal[]> {
-    const engagements = await listEngagements({ scope });
+    const engagements = await listEngagements({
+      scope,
+      client_id: clientId ?? undefined,
+    });
     const sb = await getServerSupabase();
     const liveIds = engagements
       .filter((e) => e.status === "sent" || e.status === "in_progress")
