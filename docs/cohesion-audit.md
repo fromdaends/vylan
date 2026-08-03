@@ -338,3 +338,111 @@ done it consistently.
 hardcoded spots at it.
 
 ---
+
+## Finding 10 — a shared component that can't be adapted will be copied
+
+**Severity: high. This is the most useful finding in the audit, because it
+explains the *mechanism* rather than just listing symptoms.**
+
+While this audit was running, another session shipped
+[src/components/ui/panel.tsx](src/components/ui/panel.tsx) — 34 seconds after
+this audit's first commit. Its own header comment reads:
+
+> "Extracted because the client page and the teammate profile had grown their
+> own byte-identical copies, and a third page was about to."
+
+So a second session independently hit this exact problem on the same day and
+reached the same conclusion. That is strong corroboration that the founder's
+instinct is describing something real and recurring, not a one-off.
+
+`Panel` is the canonical titled section box. It has **2 call sites**. Five other
+files hand-roll its exact outer shell instead:
+[engagements/[id]/page.tsx](src/app/[locale]/(app)/engagements/[id]/page.tsx),
+[quickbooks/drafts/page.tsx](src/app/[locale]/(app)/quickbooks/drafts/page.tsx),
+[relationships-card.tsx](src/components/clients/relationships-card.tsx),
+[roles-workbench.tsx](src/components/settings/team/roles-workbench.tsx),
+[team-manager.tsx](src/components/settings/team/team-manager.tsx).
+
+**And here is the part worth stopping on.** One of those forks carries this
+comment at [relationships-card.tsx:116](src/components/clients/relationships-card.tsx:116):
+
+> "Same anatomy as Panel in clients/[id]/page.tsx. The id anchors the engagement
+> header's 'linked clients' line."
+
+The author **knew `Panel` existed and copied it anyway** — because they needed an
+`id` on the element, and `Panel` accepts no `id`, no `className`, and no
+props passthrough at all (verified: zero occurrences in the file).
+
+So the fork wasn't laziness. It was forced. **A shared component that can't be
+adapted to a slightly different need will be copied, every time.** Telling
+people to reuse more doesn't fix that; making the shared thing flexible does.
+
+Fairness note: `Panel` is a day old, so the five hand-rolled copies *predate* it
+rather than ignore it. The lesson isn't that anyone did something wrong — it's
+about what has to be true for the new component to actually win.
+
+**Fix size:** small. Add `className` / `id` passthrough to `Panel`, then convert
+the five copies. Doing the passthrough *first* is what makes the conversion
+possible at all.
+
+---
+
+## Finding 11 — your exact example, found in the code
+
+**Severity: high. This is "I restyled settings and firm settings didn't follow,"
+located precisely.**
+
+The firm's settings live in two places the product's own menu treats as one
+thing: `/settings?tab=account` and `/settings/team?tab=settings`.
+
+The good news: the actual settings component, `TeamSettings`, **is properly
+shared** — one component, rendered in both places. The content is not duplicated.
+
+The problem is the box around it. Same component, two completely different
+wrappers:
+
+- In `/settings` — a heading and a hint line, no border:
+  `<h2 className="text-sm font-semibold">` + `<p className="mt-1 text-xs …">`
+- In `/settings/team` — a bordered card, no heading and no hint at all:
+  `<div className="rounded-xl border border-border/60 bg-card p-5">`
+
+They currently look plausible side by side only because both happen to use the
+same colour tokens — not because they share any code. Restyle one and the other
+cannot follow, which is exactly what you experienced.
+
+**Fix size:** medium. Pick which shell wins (`Panel` is the obvious candidate
+once Finding 10's passthrough lands) and point both call sites at it.
+
+---
+
+## Finding 12 — settings chrome is hand-written every time
+
+**Severity: medium-high.** Supporting detail for Finding 11 — this is *why*
+there was nothing shared to change.
+
+- **Section header** (title + hint underneath): hand-written in ~14 files, with
+  no shared component. Proof it's retyped rather than copied from one source:
+  `profile-form.tsx` contains *both* class orderings —
+  `"text-xs text-muted-foreground mt-1"` at lines 133 and 228, and
+  `"mt-1 text-xs text-muted-foreground"` at line 333. Same file, same
+  developer, two spellings of the identical style.
+- **Settings toggle row** (label + description + switch): five different
+  treatments, differing in border presence, border opacity, background tint,
+  padding and whether there's an icon. Three of the five have no box at all.
+- Within `settings-form.tsx` alone, **one identical row class string is repeated
+  five times** (lines 1040, 1057, 1079, 1100, 1129) for the five document
+  toggles.
+
+**Fix size:** small. One `<SettingsSection>` (header + hint) and one
+`<SettingRow>`. The `ToggleRow` in
+[team/firm-settings.tsx:15](src/components/settings/team/firm-settings.tsx:15)
+is already most of the way there and is the best candidate to promote.
+
+### Correcting one thing from the scan
+
+The scan listed "portal settings" as a surface it couldn't find and flagged that
+rather than inventing a finding. That was the right call — there is no
+firm-facing portal settings screen; `src/components/portal/**` is the
+client-facing portal itself. Noting it so nobody re-searches for it.
+
+---
