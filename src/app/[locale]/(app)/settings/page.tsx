@@ -302,7 +302,17 @@ export default async function SettingsPage({
 
   return (
     // 814px = 190px sub-nav + 64px gutter + 560px content column.
-    <div className="max-w-[814px] mx-auto space-y-12 animate-in-up">
+    // min-h keeps the window scrollbar on screen for EVERY tab. Without it a
+    // short tab (Security) fits and a tall one (Notifications) doesn't, so the
+    // scrollbar appears and disappears as you click between them, the viewport
+    // changes width, and this centered column slides ~7px sideways each time.
+    //
+    // The +1px is the whole point: the page must genuinely overflow, not merely
+    // draw a scrollbar. `scrollbar-gutter: stable` and `overflow-y: scroll` both
+    // kill the sideways jump too, but they reserve space on a page that doesn't
+    // actually scroll — and Radix's scroll lock only compensates for the
+    // scrollbar it can measure, so every modal then jumped 8px instead.
+    <div className="max-w-[814px] mx-auto min-h-[calc(100vh+1px)] space-y-12 animate-in-up">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>

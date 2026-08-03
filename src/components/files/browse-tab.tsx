@@ -4,7 +4,6 @@ import { FilesToolbar } from "@/components/files/files-toolbar";
 import { FileBrowser, type BrowserEntry } from "@/components/files/file-browser";
 import { PathBar } from "@/components/files/path-bar";
 import { FilesPagination } from "@/components/files/files-pagination";
-import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
 import { NewMenu } from "@/components/files/new-menu";
@@ -718,22 +717,21 @@ async function FileList({
       const raw = snippetByKey.get(`${doc.source}|${doc.id}`);
       return raw ? splitSnippet(raw) : undefined;
     })(),
-    actions: (
-      <DocumentActionsMenu
-        source={doc.source}
-        id={doc.id}
-        name={doc.name}
-        year={doc.year}
-        category={doc.category}
-        docType={doc.docType}
-        // Move is disabled only while the AI is genuinely mid-read; its answer
-        // would land on top of the person's. An imported or never-analysed
-        // document is always movable — hand-sorting is the whole point of them.
-        canMove={!doc.classificationPending}
-        visibility={doc.visibility}
-        locale={locale}
-      />
-    ),
+    // ONE identity feeds both menus (the ⋯ button and row right-click) —
+    // FileBrowser builds them from this so they can never drift apart.
+    docMeta: {
+      source: doc.source,
+      id: doc.id,
+      name: doc.name,
+      year: doc.year,
+      category: doc.category,
+      docType: doc.docType,
+      // Move is disabled only while the AI is genuinely mid-read; its answer
+      // would land on top of the person's. An imported or never-analysed
+      // document is always movable — hand-sorting is the whole point of them.
+      canMove: !doc.classificationPending,
+      visibility: doc.visibility,
+    },
   }));
 
   return (
