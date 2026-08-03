@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { ClientsToolbar } from "./clients-toolbar";
 import {
@@ -36,6 +37,9 @@ export function ClientsListView({
   activeOnly,
   teamEnabled,
   relationships,
+  title,
+  subtitle,
+  actions,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
@@ -51,6 +55,14 @@ export function ClientsListView({
   sort: SortKey;
   activeOnly: boolean;
   teamEnabled: boolean;
+  // The page HEADER is rendered here rather than in the page, because the
+  // search box belongs in it and the query is CLIENT state — the whole list is
+  // already loaded, so filtering is instant and must not become a server
+  // round-trip per keystroke just to reach the header. `actions` carries the
+  // server-rendered Import / Add client buttons straight through.
+  title: string;
+  subtitle: string;
+  actions: React.ReactNode;
   // Teammates (excluding the viewer) for the owner filter's per-person options.
 }) {
   const t = useTranslations("Clients");
@@ -69,6 +81,30 @@ export function ClientsListView({
 
   return (
     <div className="space-y-4">
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div>
+          <h1 className="text-[26px] font-[650] tracking-[-0.02em]">{title}</h1>
+          <p className="mt-[5px] text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("search_placeholder")}
+              aria-label={t("search_label")}
+              className="h-[42px] w-full rounded-[11px] border border-border bg-card pr-3.5 pl-9 text-sm text-foreground shadow-[0_1px_2px_rgba(10,10,20,0.03)] transition-colors placeholder:text-muted-foreground/75 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:w-[320px]"
+            />
+          </div>
+          {actions}
+        </div>
+      </header>
+
       <ClientsToolbar
         query={query}
         onQueryChange={setQuery}
