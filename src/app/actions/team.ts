@@ -1277,10 +1277,16 @@ export async function setMemberPermissions(
     return { ok: false, error: "update_failed" };
   }
 
-  await logUserActivity(firm.id, null, "team_permissions_changed", {
+  // Fire-and-forget. The permission change is already committed; the audit
+  // entry is a record OF it, and awaiting a second write here put an extra
+  // round-trip between the owner's click and the switch coming back to life.
+  // A lost log line is worth less than a switch that feels broken.
+  void logUserActivity(firm.id, null, "team_permissions_changed", {
     target_user_id: userId,
     preset,
     grants: clean,
+  }).catch((e) => {
+    console.error("[team] permissions activity log failed:", e);
   });
   revalidatePath("/settings/team");
   revalidatePath(`/settings/team/${userId}`);
