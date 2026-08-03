@@ -3787,6 +3787,7 @@
     "badge_imported": "Imported",
     "badge_firm_only": "Firm only",
     "match_name": "Name match",
+    "new_button": "New",
     "search_scope_hint": "Every file is searchable by name. Searching inside a document only works for files the AI has read — new client uploads are read automatically.",
     "match_content": "Content match",
     "action_make_firm_only": "Make firm-only",

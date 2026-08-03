@@ -3787,6 +3787,7 @@
     "badge_imported": "Importé",
     "badge_firm_only": "Interne",
     "match_name": "Nom du fichier",
+    "new_button": "Nouveau",
     "search_scope_hint": "Tous les fichiers sont trouvables par nom. La recherche dans le contenu ne fonctionne que pour les fichiers lus par l'IA — les nouveaux téléversements des clients sont lus automatiquement.",
     "match_content": "Dans le document",
     "action_make_firm_only": "Rendre interne",
