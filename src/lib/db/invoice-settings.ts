@@ -14,7 +14,7 @@ import { isProvinceCode, type ProvinceCode } from "@/lib/tax/canada";
 import {
   normalizeChaseSettings,
   type ChaseSettings,
-} from "@/lib/invoices/chase";
+} from "@/lib/invoices/chase-settings";
 
 export type FirmInvoiceSettings = {
   firm_id: string;

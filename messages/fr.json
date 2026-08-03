@@ -2688,7 +2688,8 @@
     "statement_title": "\u00c9tat de compte",
     "statement_pick_client": "Choisissez un client dans le filtre ci-dessus pour g\u00e9n\u00e9rer un \u00e9tat de compte.",
     "statement_generate": "T\u00e9l\u00e9charger l'\u00e9tat de compte",
-    "statement_range_hint": "Couvre la p\u00e9riode actuellement filtr\u00e9e."
+    "statement_range_hint": "Couvre la p\u00e9riode actuellement filtr\u00e9e.",
+    "amount_incl_tax": "dont {tax} de taxes"
   },
   "Footer": {
     "based_in": "Construit au Canada.",

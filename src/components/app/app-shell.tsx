@@ -21,6 +21,7 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
+  Receipt,
   Settings,
   Sparkles,
   UserCircle,
@@ -44,6 +45,9 @@ type Labels = {
   // because that is where it belongs in the mental model: the things you set up
   // (templates), the things you have (files), the work in flight (engagements).
   files: string;
+  // The firm's invoices to ITS clients. Not the Vylan subscription page, which
+  // is in Settings.
+  billing: string;
   bookkeeping: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
@@ -150,6 +154,15 @@ export function AppShell({
     // Files — every client document in one place, plus the filing settings that
     // decide where copies land in the firm's cloud storage.
     { href: "/files", label: labels.files, icon: FolderOpen },
+    // Billing — every invoice the firm has raised, what is owed, and who is
+    // being chased. Sits between Files and Engagements because it follows the
+    // same mental model as the rest of the rail: the things you have (files),
+    // the money they turned into (billing), the work in flight (engagements).
+    //
+    // NOTE: /billing is THIS section. The firm's own Vylan subscription lives
+    // at /settings/billing — it moved there when this shipped, because two
+    // things called Billing in one sidebar is how confusion starts.
+    { href: "/billing", label: labels.billing, icon: Receipt },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and

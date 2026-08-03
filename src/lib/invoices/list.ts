@@ -25,40 +25,25 @@ import {
   type InvoiceStateInput,
   type StoredInvoiceStatus,
 } from "@/lib/invoices/outstanding";
-import type { PaymentMethod } from "@/lib/db/invoice-payments";
+import {
+  INVOICE_PAGE_SIZE,
+  type InvoiceListFilters,
+  type PaymentMethod,
+} from "@/lib/invoices/filters";
 
-export const INVOICE_PAGE_SIZE = 25;
+// Re-exported so the existing import sites keep working; the definitions live
+// in ./filters because client components need them without the server client.
+export {
+  INVOICE_PAGE_SIZE,
+  INVOICE_STATUS_FILTERS,
+  isInvoiceStatusFilter,
+} from "@/lib/invoices/filters";
+export type {
+  InvoiceStatusFilter,
+  InvoiceListFilters,
+} from "@/lib/invoices/filters";
 
-// The filter values the UI offers. "all" is absence of a filter, kept explicit
-// so the query-string round-trip has something to say.
-export const INVOICE_STATUS_FILTERS = [
-  "all",
-  "unpaid",
-  "partly_paid",
-  "overdue",
-  "paid",
-  "failed",
-  "void",
-] as const;
-export type InvoiceStatusFilter = (typeof INVOICE_STATUS_FILTERS)[number];
 
-export function isInvoiceStatusFilter(v: unknown): v is InvoiceStatusFilter {
-  return (
-    typeof v === "string" &&
-    (INVOICE_STATUS_FILTERS as readonly string[]).includes(v)
-  );
-}
-
-export type InvoiceListFilters = {
-  status: InvoiceStatusFilter;
-  clientId: string | null;
-  // Inclusive ISO days against issue_date, falling back to created_at for rows
-  // that predate native invoices and have no issue_date.
-  from: string | null;
-  to: string | null;
-  search: string | null;
-  page: number;
-};
 
 export type InvoiceListRow = {
   id: string;
@@ -68,6 +53,14 @@ export type InvoiceListRow = {
   clientName: string | null;
   engagementId: string | null;
   engagementTitle: string | null;
+  // The engagement's portal token, for "Copy payment link". Null on a draft
+  // engagement that was never sent — there is no portal to link to yet, and
+  // the kebab hides the action rather than copying a broken URL.
+  portalToken: string | null;
+  // Can money still move on this invoice? Everything the kebab's settle-side
+  // actions gate on. Derived here so the table never re-derives it from a
+  // status string and gets it subtly different.
+  settleable: boolean;
   amountCents: number;
   taxTotalCents: number | null;
   amountPaidCents: number;
@@ -244,6 +237,7 @@ async function decorate(
 
   const clientName = new Map<string, string>();
   const engTitle = new Map<string, string>();
+  const engToken = new Map<string, string>();
   // paid_provider says 'manual' for anything that wasn't a rail, which is not
   // what the firm wants to read in a table — "was that the cheque or the
   // e-transfer?" is the whole question. The ledger holds the real method, so
@@ -267,11 +261,14 @@ async function decorate(
     engIds.length
       ? sb
           .from("engagements")
-          .select("id, title")
+          .select("id, title, magic_token")
           .in("id", engIds)
           .then(({ data }) => {
-            for (const e of data ?? [])
+            for (const e of data ?? []) {
               engTitle.set(e.id as string, e.title as string);
+              const token = e.magic_token as string | null;
+              if (token) engToken.set(e.id as string, token);
+            }
           })
       : Promise.resolve(),
     paidIds.length
@@ -313,6 +310,9 @@ async function decorate(
       engagementTitle: engagementId
         ? (engTitle.get(engagementId) ?? null)
         : null,
+      portalToken: engagementId ? (engToken.get(engagementId) ?? null) : null,
+      settleable:
+        state.status !== "paid" && state.status !== "canceled",
       amountCents: state.amount_cents,
       taxTotalCents: (r.tax_total_cents as number | null) ?? null,
       amountPaidCents: state.amount_paid_cents,

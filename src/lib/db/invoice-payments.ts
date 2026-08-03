@@ -11,36 +11,20 @@
 // (the 0650 rule).
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import type { PaymentMethod } from "@/lib/invoices/filters";
 
-// How the money arrived. The two rails write their own rows at the paid flip;
-// the rest are what a human recorded off a bank app or a cheque.
-export type PaymentMethod =
-  | "stripe"
-  | "paypal"
-  | "interac"
-  | "cheque"
-  | "cash"
-  | "other";
-
-// The ones a human can choose in the Record payment dialog. The rails are
-// excluded on purpose: claiming a card payment by hand would put an invoice in
-// a state no Stripe object backs.
-export const MANUAL_PAYMENT_METHODS = [
-  "interac",
-  "cheque",
-  "cash",
-  "other",
-] as const;
-export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
-
-export function isManualPaymentMethod(v: unknown): v is ManualPaymentMethod {
-  return (
-    typeof v === "string" &&
-    (MANUAL_PAYMENT_METHODS as readonly string[]).includes(v)
-  );
-}
-
-export const MAX_PAYMENT_REFERENCE = 300;
+// The method vocabulary lives in @/lib/invoices/filters — a neutral module —
+// because the Record payment dialog is a client component and importing these
+// from here would pull the server Supabase client into the browser bundle.
+export {
+  MANUAL_PAYMENT_METHODS,
+  isManualPaymentMethod,
+  MAX_PAYMENT_REFERENCE,
+} from "@/lib/invoices/filters";
+export type {
+  PaymentMethod,
+  ManualPaymentMethod,
+} from "@/lib/invoices/filters";
 
 export type InvoicePayment = {
   id: string;

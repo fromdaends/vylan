@@ -2688,7 +2688,8 @@
     "statement_title": "Statement of account",
     "statement_pick_client": "Pick a client from the filter above to generate a statement.",
     "statement_generate": "Download statement",
-    "statement_range_hint": "Covers the date range currently filtered."
+    "statement_range_hint": "Covers the date range currently filtered.",
+    "amount_incl_tax": "incl. {tax} tax"
   },
   "Footer": {
     "based_in": "Built in Canada.",

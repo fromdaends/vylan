@@ -24,11 +24,11 @@ import {
   getPaymentRequestById,
   type PaymentRequest,
 } from "@/lib/db/payment-requests";
+import { insertInvoicePayment } from "@/lib/db/invoice-payments";
 import {
-  insertInvoicePayment,
   MAX_PAYMENT_REFERENCE,
   type ManualPaymentMethod,
-} from "@/lib/db/invoice-payments";
+} from "@/lib/invoices/filters";
 import { recordInvoicePaid } from "@/lib/payments/paid-event";
 import { logUserActivity } from "@/lib/db/activity";
 import { outstandingCents, isoDay } from "@/lib/invoices/outstanding";
