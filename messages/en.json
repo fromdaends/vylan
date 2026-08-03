@@ -163,6 +163,7 @@
     "roles_tab_members": "Members ({count})",
     "roles_color_hint": "People show the colour of their highest role.",
     "roles_preview": "Preview",
+    "roles_preview_person": "A teammate",
     "roles_search_permissions": "Search permissions",
     "roles_clear_permissions": "Clear permissions",
     "roles_additive_note": "Turning something on here gives it to everyone with this role, on top of what they already have. Turning it off never takes away something they get another way.",

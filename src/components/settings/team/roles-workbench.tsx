@@ -27,6 +27,7 @@ import { Plus, Search, Trash2, UserPlus, X } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -373,8 +374,13 @@ function DisplayTab({
     }
   }
 
+  // Two columns once there is room: the fields you edit on the left, the badge
+  // you are editing on the right. One column with a preview stranded under it
+  // left the right half of the card empty and made you scroll to see the thing
+  // you were changing.
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)] lg:gap-10">
+      <div className="space-y-6">
       <div className="space-y-1.5">
         <label htmlFor="role-name" className="text-sm font-medium">
           {t("roles_name")} <span className="text-destructive">*</span>
@@ -417,18 +423,33 @@ function DisplayTab({
         </fieldset>
       </div>
 
-      <div className="space-y-1.5">
-        <p className="text-sm font-medium">{t("roles_preview")}</p>
-        <div className="rounded-lg border border-border/60 p-3">
-          <RoleBadge name={name.trim() || role.name} color={color} />
-        </div>
-      </div>
-
       {dirty && (
         <Button onClick={save} disabled={!name.trim() || busy}>
           {t("roles_save")}
         </Button>
       )}
+      </div>
+
+      {/* The preview shows the badge in the two places it actually appears —
+          on a roster row and beside a name — rather than floating alone, so
+          a colour you pick is judged where you will read it. */}
+      <div className="space-y-1.5 lg:sticky lg:top-6">
+        <p className="text-sm font-medium">{t("roles_preview")}</p>
+        <div className="space-y-3 rounded-lg border border-border/60 p-3">
+          <RoleBadge name={name.trim() || role.name} color={color} />
+          <div className="flex items-center gap-2.5 border-t border-border/60 pt-3">
+            <AvatarInitials name={role.name} size={30} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">
+                {t("roles_preview_person")}
+              </span>
+              <span className="mt-0.5 block">
+                <RoleBadge name={name.trim() || role.name} color={color} />
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -489,7 +510,7 @@ function PermissionsTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[14rem] flex-1">
           <Search
@@ -533,24 +554,17 @@ function PermissionsTab({
               <div className="min-w-0">
                 <p className="text-sm font-medium">{label(cap)}</p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={on}
-                aria-label={label(cap)}
-                onClick={() =>
-                  commit(on ? caps.filter((c) => c !== cap) : [...caps, cap])
+              {/* The app's own toggle, not a hand-rolled one. Its header even
+                  says "Discord-style toggle" — it was already the right piece
+                  and a second copy only meant a second set of bugs. */}
+              <Switch
+                checked={on}
+                ariaLabel={label(cap)}
+                disabled={busy}
+                onCheckedChange={(next) =>
+                  commit(next ? [...caps, cap] : caps.filter((c) => c !== cap))
                 }
-                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  on ? "bg-primary" : "bg-muted"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 size-4 rounded-full bg-background transition-transform ${
-                    on ? "translate-x-[1.125rem]" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+              />
             </li>
           );
         })}
@@ -610,7 +624,7 @@ function MembersTab({
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[14rem] flex-1">
           <Search
