@@ -23,7 +23,17 @@ import {
   PROVINCES,
   type Province,
 } from "@/app/actions/demo-request.schema";
-import { VylanBooking } from "@/components/vylan-landing/vylan-booking";
+// The Cal.com booking embed (@calcom/embed-react, a ~290KB chunk) loads only
+// when a qualified lead actually reaches the booking step — it used to ride
+// statically in the landing page's first-load bundle for every visitor.
+import dynamicImport from "next/dynamic";
+const VylanBooking = dynamicImport(
+  () =>
+    import("@/components/vylan-landing/vylan-booking").then(
+      (m) => m.VylanBooking,
+    ),
+  { ssr: false },
+);
 
 // Same view machine as the /demo flow: the 3 qualifying steps, then the
 // "you're qualified" choice screen (try the demo / book a call), the
