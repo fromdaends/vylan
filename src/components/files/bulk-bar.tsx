@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Download, FolderInput, Trash2, X } from "lucide-react";
+import { Download, FolderInput, FolderOpen, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -30,26 +30,40 @@ import { setDocumentsFolderAction } from "@/app/actions/folders";
 import { bulkSetVisibilityAction } from "@/app/actions/documents";
 import { BROWSE_CATEGORIES, categoryForDocType } from "@/lib/files/axes";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
-import { parseSelectionKey, useFileSelection } from "./file-selection";
+import {
+  parseSelectionKey,
+  useFileSelection,
+  type SelectedFolder,
+} from "./file-selection";
+import { DeleteFolderDialog, RenameFolderDialog } from "./folder-actions";
 import type { DocType } from "@/lib/db/templates";
 
-// The bulk action bar. Appears only once something is selected, pinned to the
-// bottom of the viewport so it stays reachable while scrolling a long folder —
-// which is the whole situation it exists for.
+// The selection action bar — Drive's strip. Pops up ABOVE the list the
+// moment anything is selected: files get the bulk actions, a folder gets
+// Open (+ Rename / Delete when it is one the firm made). It used to float
+// at the bottom of the viewport; the founder's review was that it should sit
+// on top of the list, full width, "very similar to My Drive" — and that
+// clicking a FOLDER must pop it too, not just files.
 export function BulkBar({
   locale,
   folders,
+  folderSelection,
+  onClearFolder,
 }: {
   locale: "en" | "fr";
   /** The current client's custom folders. Absent outside a client, where
    * "file into a folder" has no single destination to offer. */
   folders?: { id: string; name: string }[];
+  /** The selected folder row, when the selection is a folder. */
+  folderSelection?: SelectedFolder | null;
+  onClearFolder?: () => void;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
   const selection = useFileSelection();
   const [pending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<null | "move" | "delete">(null);
+  const [folderDialog, setFolderDialog] = useState<null | "rename" | "delete">(null);
 
   // "keep" is the explicit do-not-touch value. Bulk move must be able to set
   // ONLY the folder without also blanking the year of 200 documents, so an
@@ -58,8 +72,10 @@ export function BulkBar({
   const [moveYear, setMoveYear] = useState("keep");
   const [moveCategory, setMoveCategory] = useState("keep");
 
-  if (!selection || selection.selected.size === 0) return null;
-  const keys = [...selection.selected];
+  const folderSel = folderSelection ?? null;
+  const fileCount = selection?.selected.size ?? 0;
+  if (fileCount === 0 && !folderSel) return null;
+  const keys = selection ? [...selection.selected] : [];
   const targets = keys.map(parseSelectionKey);
   const count = targets.length;
 
@@ -209,13 +225,68 @@ export function BulkBar({
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const clearAll = () => {
+    selection?.clear();
+    onClearFolder?.();
+  };
+
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 sm:left-[var(--rail-width)]">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-lg">
-          <span className="px-1 text-sm font-medium">
-            {t("bulk_selected", { count })}
-          </span>
+      {/* Full-width, X on the left — Drive's strip. It OVERLAYS the column
+          header (absolute, same h-11) rather than inserting above it: adding
+          height pushed the rows down mid-double-click, so the second click
+          landed on the wrong row. Opaque bg-card so the header underneath
+          never shows through; overflow-x keeps one row on narrow screens. */}
+      <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center gap-1 overflow-x-auto border-b border-border/60 bg-card px-2 duration-150 animate-in fade-in-0 slide-in-from-top-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("bulk_clear")}
+          onClick={clearAll}
+        >
+          <X className="size-4" />
+        </Button>
+        <span className="px-1 text-sm font-medium">
+          {folderSel ? folderSel.name : t("bulk_selected", { count })}
+        </span>
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+
+        {folderSel ? (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => router.push(folderSel.href)}
+            >
+              <FolderOpen className="size-3.5" aria-hidden />
+              {t("action_open")}
+            </Button>
+            {folderSel.manage && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setFolderDialog("rename")}
+                >
+                  <Pencil className="size-3.5" aria-hidden />
+                  {t("action_rename")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                  onClick={() => setFolderDialog("delete")}
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                  {t("action_delete")}
+                </Button>
+              </>
+            )}
+          </>
+        ) : (
+          <>
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={downloadZip}>
             <Download className="size-3.5" aria-hidden />
             {t("action_download")}
@@ -270,16 +341,30 @@ export function BulkBar({
             <Trash2 className="size-3.5" aria-hidden />
             {t("action_delete")}
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("bulk_clear")}
-            onClick={() => selection.clear()}
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
+          </>
+        )}
       </div>
+
+      {folderSel?.manage && (
+        <>
+          <RenameFolderDialog
+            clientId={folderSel.manage.clientId}
+            folderId={folderSel.manage.folderId}
+            name={folderSel.name}
+            open={folderDialog === "rename"}
+            onOpenChange={(o) => !o && setFolderDialog(null)}
+            onDone={onClearFolder}
+          />
+          <DeleteFolderDialog
+            clientId={folderSel.manage.clientId}
+            folderId={folderSel.manage.folderId}
+            name={folderSel.name}
+            open={folderDialog === "delete"}
+            onOpenChange={(o) => !o && setFolderDialog(null)}
+            onDone={onClearFolder}
+          />
+        </>
+      )}
 
       <Dialog open={dialog === "move"} onOpenChange={(o) => !o && setDialog(null)}>
         <DialogContent className="sm:max-w-md">

@@ -26,6 +26,8 @@ import {
   computeEngagementWorkload,
   workloadForMember,
 } from "@/lib/team/workload";
+import { FirmRolesSection } from "@/components/settings/team/firm-roles-section";
+import { listFirmRoles, listRolesByUser } from "@/lib/db/firm-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +61,15 @@ export default async function TeamPage({
   // page. An unrecognised value falls back the same way.
   const view: "people" | "settings" =
     canManage && requestedTab === "settings" ? "settings" : "people";
-  const [members, invites, usage] = await Promise.all([
+  const [members, invites, usage, firmRoles, rolesByUser] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
     canManage ? getFirmSeatUsage(firm.id) : Promise.resolve(null),
+    // Empty until 1260 is applied, which is exactly what a firm with no roles
+    // should see either way.
+    listFirmRoles(),
+    // Who wears what — feeds the head counts AND the badges on the roster.
+    listRolesByUser(),
   ]);
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
@@ -170,8 +177,15 @@ export default async function TeamPage({
     needsAttention?: number;
     clients?: number;
     schedules?: number;
+    roles?: { id: string; name: string; color: string }[];
   };
-  let membersForManager: ManagerMember[] = activeMembers;
+  // The roster is where you scan the team, so the badges belong there as much
+  // as on a profile. Attached for owners and staff alike — a badge only some
+  // people can see is not a badge.
+  let membersForManager: ManagerMember[] = activeMembers.map((m) => ({
+    ...m,
+    roles: rolesByUser.get(m.id) ?? [],
+  }));
   if (canManage) {
     const [worklist, clientsRaw, seriesByAssignee] = await Promise.all([
       loadEngagementWorklist("active"),
@@ -198,7 +212,7 @@ export default async function TeamPage({
         );
       }
     }
-    membersForManager = activeMembers.map((m) => {
+    membersForManager = membersForManager.map((m) => {
       const w = workloadForMember(byMember, m.id);
       return {
         ...m,
@@ -236,6 +250,21 @@ export default async function TeamPage({
         pendingInvites={pendingInvites}
         locale={locale}
         unassignedWorkload={canManage ? workloadUnassigned : undefined}
+        rolesSection={
+          canManage ? (
+            <FirmRolesSection
+              roles={firmRoles.map((r) => ({
+                ...r,
+                // How many people wear it — the number that makes deleting one
+                // a decision rather than a guess.
+                count: [...rolesByUser.values()].filter((held) =>
+                  held.some((h) => h.id === r.id),
+                ).length,
+                capabilities: r.capabilities,
+              }))}
+            />
+          ) : null
+        }
         firmSettings={
           canManage ? (
             <TeamSettings

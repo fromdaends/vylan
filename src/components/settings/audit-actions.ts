@@ -109,6 +109,10 @@ export const AUDIT_ACTIONS = [
   // Phase 3 slice 1 — the client cast (#1210).
   "client_member_added",
   "client_member_removed",
+  // Firm roles (#1260).
+  "firm_role_created",
+  "firm_role_deleted",
+  "firm_role_permissions_changed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

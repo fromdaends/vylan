@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/cn";
 import { setMemberPermissions } from "@/app/actions/team";
-import type { Capability } from "@/lib/auth/capabilities";
+import { GRANTABLE_CAPABILITIES } from "@/lib/auth/grantable";
 
 // What one person is allowed to do — Phase 2's per-person switches.
 //
@@ -48,10 +48,7 @@ import type { Capability } from "@/lib/auth/capabilities";
 //                      per-person by nature; if a firm wants it delegated, that
 //                      is a co-owner, not a switch.
 //   time.approve     — Phase 8. The capability exists; the feature does not.
-const GRANTABLE: readonly Capability[] = [
-  "billing.manage",
-  "integrations.manage",
-];
+const GRANTABLE = GRANTABLE_CAPABILITIES;
 
 export function MemberPermissions({
   userId,

@@ -24,6 +24,17 @@ import {
 
 export type SelectionKey = string;
 
+/** A selected FOLDER row (single-select, lives in RowsSurface). Declared here
+ * so the row surface and the action bar can share it without importing each
+ * other. `manage` is present only for folders the firm made — the ones the
+ * bar can rename or delete. */
+export type SelectedFolder = {
+  key: string;
+  name: string;
+  href: string;
+  manage?: { clientId: string; folderId: string } | null;
+};
+
 export function selectionKey(source: string, id: string): SelectionKey {
   return `${source}:${id}`;
 }

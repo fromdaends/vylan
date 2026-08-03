@@ -28,6 +28,9 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { formatDate } from "@/lib/format";
+import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
+import { MemberRoles } from "@/components/settings/team/member-roles";
+import { RoleBadges } from "@/components/settings/team/role-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -124,7 +127,7 @@ export default async function TeamMemberProfilePage({
   // of (1210). Assignment alone was the whole answer until membership existed;
   // leaving it that way would have this page showing one list while their
   // actual access follows another — two answers to the same question, and after
-  // slice 3 the wrong one would be the louder.
+  // the list decides access, the wrong one would be the louder.
   const memberClientIds = await listClientIdsForMember(id);
   const assigned = filterClientsByOwner(clientsRaw, id, "");
   const assignedIds = new Set(assigned.map((c) => c.id));
@@ -134,6 +137,13 @@ export default async function TeamMemberProfilePage({
       (c) => memberClientIds.has(c.id) && !assignedIds.has(c.id),
     ),
   ];
+
+  // The firm's roles, and which of them this person wears. Both empty until
+  // 1260 is applied, which reads as "no roles yet" — the right answer either way.
+  const [firmRoles, heldRoleIds] = await Promise.all([
+    listFirmRoles(),
+    listRoleIdsForUser(id),
+  ]);
 
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
@@ -173,6 +183,12 @@ export default async function TeamMemberProfilePage({
             {member.deactivated_at && (
               <Badge variant="outline">{t("profile_deactivated")}</Badge>
             )}
+            {/* Their firm roles, beside their name and visible to everyone —
+                the whole point of a badge. Renders nothing when they have none
+                rather than leaving a gap. */}
+            <RoleBadges
+              roles={firmRoles.filter((r) => heldRoleIds.has(r.id))}
+            />
           </div>
           {member.job_title && (
             <p className="mt-0.5 text-sm text-muted-foreground">
@@ -232,6 +248,22 @@ export default async function TeamMemberProfilePage({
             )}
           </dl>
         </Panel>
+
+        {/* The badges this person wears. Owner-only to change, and shown to
+            everybody on the header above — a badge only the owner can see is
+            not a badge. Separate panel from Permissions on purpose: one says
+            what somebody IS, the other what they may DO, and this app has
+            already confused those two words once. */}
+        {isOwner && !member.deactivated_at && (
+          <Panel title={t("roles_title")}>
+            <MemberRoles
+              userId={id}
+              allRoles={firmRoles}
+              heldIds={[...heldRoleIds]}
+              disabled={firmRoles.length === 0}
+            />
+          </Panel>
+        )}
 
         {/* What this person is allowed to do. Owner-only, and never on the
             owner's own row or a deactivated one — the server refuses both, and

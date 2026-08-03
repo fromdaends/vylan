@@ -409,7 +409,16 @@ export function groupDocumentAxes(
 
 // ── Level 3: the paginated file list ────────────────────────────────────────
 
-export type DocumentSort = "date" | "name" | "size";
+// The bare values keep their historical directions (date newest-first, name
+// A→Z, size largest-first) so old URLs and links keep meaning what they meant;
+// the suffixed values are the Drive-style sort menu's other direction.
+export type DocumentSort =
+  | "date"
+  | "name"
+  | "size"
+  | "date_asc"
+  | "name_desc"
+  | "size_asc";
 
 export type DocumentFilters = {
   clientId?: string | null;
@@ -566,8 +575,18 @@ export async function listDocuments(
       q = q.order("display_name", { ascending: true, nullsFirst: false })
            .order("original_filename", { ascending: true });
       break;
+    case "name_desc":
+      q = q.order("display_name", { ascending: false, nullsFirst: false })
+           .order("original_filename", { ascending: false });
+      break;
     case "size":
       q = q.order("size_bytes", { ascending: false, nullsFirst: false });
+      break;
+    case "size_asc":
+      q = q.order("size_bytes", { ascending: true, nullsFirst: false });
+      break;
+    case "date_asc":
+      q = q.order("created_at", { ascending: true });
       break;
     default:
       q = q.order("created_at", { ascending: false });
