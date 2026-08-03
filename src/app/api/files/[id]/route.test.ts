@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const logUserActivityAs = vi.fn();
 const resolveServableDocument = vi.fn();
 const getCurrentFirm = vi.fn();
-const getUser = vi.fn();
 const afterCalls: Promise<unknown>[] = [];
 
 vi.mock("@/lib/db/activity", () => ({
@@ -17,10 +16,6 @@ vi.mock("@/lib/files/serve-document", async (importOriginal) => ({
   resolveServableDocument: (...a: unknown[]) => resolveServableDocument(...a),
 }));
 vi.mock("@/lib/db/firms", () => ({ getCurrentFirm: () => getCurrentFirm() }));
-vi.mock("@/lib/supabase/server", () => ({
-  getServerSupabase: async () => ({ auth: { getUser: () => getUser() } }),
-  getServiceRoleSupabase: () => ({}),
-}));
 vi.mock("@/lib/storage", () => ({
   signedUrl: async () => "https://storage.test/signed",
 }));
@@ -43,6 +38,7 @@ const DOC = {
   deletedAt: null,
   engagementId: "eng-1",
   clientId: null,
+  actorId: "user-1",
 };
 
 function get(url: string, headers: Record<string, string> = {}) {
@@ -61,7 +57,6 @@ describe("GET /api/files/[id] — the download audit trail", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     resolveServableDocument.mockResolvedValue(DOC);
     getCurrentFirm.mockResolvedValue({ id: "firm-1" });
-    getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("bytes", { status: 200 })),

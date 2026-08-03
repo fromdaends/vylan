@@ -19,7 +19,6 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { signedUrl } from "@/lib/storage";
-import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
 import {
@@ -109,12 +108,10 @@ export async function GET(
   // the viewer's own download button. See lib/files/download-audit.ts for why
   // an inline preview deliberately writes nothing.
   if (countsAsDownload({ wantsDownload, range })) {
-    // Both are already resolved for this request (React-cached inside
-    // resolveServableDocument), so neither costs a second round trip.
-    const [firm, { data: auth }] = await Promise.all([
-      getCurrentFirm(),
-      (await getServerSupabase()).auth.getUser(),
-    ]);
+    // React-cached inside resolveServableDocument a moment ago, so this is a
+    // cache hit rather than a second round trip. The actor comes back from the
+    // resolve for the same reason.
+    const firm = await getCurrentFirm();
     if (firm) {
       recordDocumentDownload({
         firmId: firm.id,
@@ -124,7 +121,7 @@ export async function GET(
         documentId: file.id,
         fileName: file.fileName,
         route: "files",
-        actorId: auth.user?.id ?? null,
+        actorId: file.actorId,
       });
     }
   }

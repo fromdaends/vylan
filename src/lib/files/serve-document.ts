@@ -55,6 +55,13 @@ export type ServableDocument = {
    */
   engagementId: string | null;
   clientId: string | null;
+  /**
+   * Who asked for it. Established here from the session, and handed back rather
+   * than re-derived by the caller: auth.getUser() re-validates against the auth
+   * server on every call, and a download's audit row must not cost the reader a
+   * second round trip before the first byte.
+   */
+  actorId: string;
 };
 
 /**
@@ -108,6 +115,7 @@ export async function resolveServableDocument(
       deletedAt: (file.deleted_at as string | null) ?? null,
       engagementId: (file.engagement_id as string | null) ?? null,
       clientId: null,
+      actorId: auth.user.id,
     };
   }
 
@@ -143,5 +151,6 @@ export async function resolveServableDocument(
       source === "imported"
         ? ((data as { client_id?: string | null }).client_id ?? null)
         : null,
+    actorId: auth.user.id,
   };
 }
