@@ -1,4 +1,5 @@
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 
 export type ActivityActor = "user" | "client" | "system";
 
@@ -329,12 +330,12 @@ export async function logUserActivity(
   metadata: Record<string, unknown> = {},
 ) {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+  const authUser = await getAuthUser();
   await supabase.from("activity_log").insert({
     firm_id: firmId,
     engagement_id: engagementId,
     actor_type: "user",
-    actor_id: auth.user?.id ?? null,
+    actor_id: authUser?.id ?? null,
     action,
     metadata,
   });

@@ -5,6 +5,8 @@
 // real work.
 
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { PLANS, type PlanId } from "./plans";
 import { isTrialExpired } from "./trial";
 
@@ -21,19 +23,11 @@ export type LimitState = {
 
 export async function getFirmLimits(): Promise<LimitState | null> {
   const sb = await getServerSupabase();
-  const { data: auth } = await sb.auth.getUser();
-  if (!auth.user) return null;
-  const { data: u } = await sb
-    .from("users")
-    .select("firm_id")
-    .eq("id", auth.user.id)
-    .single();
+  // Rides the request-cached user/firm lookups — this used to re-do auth +
+  // users + firms reads (3 round trips) that the layout had already paid for.
+  const u = await getCurrentUser();
   if (!u?.firm_id) return null;
-  const { data: firm } = await sb
-    .from("firms")
-    .select("plan, trial_ends_at, subscription_status, is_demo")
-    .eq("id", u.firm_id)
-    .single();
+  const firm = await getCurrentFirm();
   if (!firm) return null;
 
   const plan = (firm.plan as PlanId) ?? "trial";

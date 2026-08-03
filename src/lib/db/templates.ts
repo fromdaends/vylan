@@ -1,4 +1,5 @@
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
 
 export type EngagementType = "t1" | "t2" | "bookkeeping" | "custom";
 
@@ -77,14 +78,9 @@ export async function cloneTemplateToFirm(
   const supabase = await getServerSupabase();
   const source = await getTemplate(templateId);
   if (!source) throw new Error("Template not found");
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error("Not authenticated");
-  const { data: u } = await supabase
-    .from("users")
-    .select("firm_id")
-    .eq("id", user.user.id)
-    .single();
-  if (!u?.firm_id) throw new Error("No firm for user");
+  const u = await getCurrentUser();
+  if (!u) throw new Error("Not authenticated");
+  if (!u.firm_id) throw new Error("No firm for user");
 
   const { data, error } = await supabase
     .from("templates")

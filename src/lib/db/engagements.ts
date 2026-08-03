@@ -1,5 +1,7 @@
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import type { EngagementStage } from "@/lib/engagements/stage";
 import { buildRequestItemRow } from "@/lib/engagements/request-item-row";
@@ -283,27 +285,19 @@ export async function createEngagementWithItems(
   input: CreateEngagementInput,
 ): Promise<Engagement> {
   const supabase = await getServerSupabase();
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error("Not authenticated");
-  const { data: u } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.user.id)
-    .single();
-  if (!u?.firm_id) throw new Error("No firm for user");
+  const u = await getCurrentUser();
+  if (!u) throw new Error("Not authenticated");
+  if (!u.firm_id) throw new Error("No firm for user");
 
   // New engagements default to PRIVATE when the firm opted into "private by
   // default" AND the creator is an OWNER (staff can't set is_private — the
   // engagements_all WITH CHECK would reject the insert). Migration-gated + fails
-  // open: absent column/flag → public (today's behavior). select('*') never
-  // throws on the absent column.
+  // open: absent column/flag → public (today's behavior). Reads through the
+  // request-cached getCurrentUser/getCurrentFirm — no extra round trips on a
+  // request that already resolved them.
   let defaultPrivate = false;
   if (u.role === "owner") {
-    const { data: f } = await supabase
-      .from("firms")
-      .select("*")
-      .eq("id", u.firm_id)
-      .maybeSingle();
+    const f = await getCurrentFirm();
     defaultPrivate =
       (f as { clients_private_by_default?: boolean } | null)
         ?.clients_private_by_default === true;
@@ -335,7 +329,7 @@ export async function createEngagementWithItems(
     // The creator is the DEFAULT assignee-of-record (accountability, not access
     // control — every firm member still sees every engagement), but the caller
     // may name someone else so work can be created already handed over.
-    assigned_user_id: input.assigned_user_id ?? user.user.id,
+    assigned_user_id: input.assigned_user_id ?? u.id,
     assigned_at: new Date().toISOString(),
   };
   // Invoice-automation columns (migration 0590) ride along ONLY when the
