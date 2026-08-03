@@ -140,6 +140,7 @@ export function TeamManager({
   locale,
   unassignedWorkload,
   firmSettings,
+  rolesBoard,
   tabs,
   view = "people",
   teamEnabled = true,
@@ -174,10 +175,14 @@ export function TeamManager({
   // Firm-wide settings. Rendered INLINE on the Firm tab (and still available
   // from the ⋯ dialog, so the old muscle memory keeps working).
   firmSettings?: ReactNode;
+  // The Roles tab's body. A slot, like firmSettings, because the workbench
+  // needs server-loaded roles and this component is a client one.
+  rolesBoard?: ReactNode;
   // Which tab is showing. "people" = the roster, invitations and former members.
-  // "firm" = the firm itself: seats, its settings, ownership, leaving.
+  // "roles" = the badges and what each one may do.
+  // "settings" = the firm itself: seats, its settings, ownership, leaving.
   // Defaults to "people" so any caller that does not pass it behaves as before.
-  view?: "people" | "settings";
+  view?: "people" | "settings" | "roles";
   // Firm navigation, rendered directly under the header. Optional so every
   // other caller of this component is unaffected.
   tabs?: ReactNode;
@@ -243,9 +248,15 @@ export function TeamManager({
           <p className="mt-1 text-sm text-muted-foreground">
             {view === "settings"
               ? t("firm_settings_subtitle")
-              : canManage
-                ? t("subtitle")
-                : t("subtitle_readonly")}
+              : view === "roles"
+                ? // The standalone Roles page's own subtitle, reused rather
+                  // than reworded — it already said the right thing, and a
+                  // second sentence meaning the same would be one more string
+                  // to keep in step across two languages.
+                  t("roles_page_subtitle")
+                : canManage
+                  ? t("subtitle")
+                  : t("subtitle_readonly")}
           </p>
         </div>
         </div>
@@ -456,6 +467,14 @@ export function TeamManager({
 
       </>
       )}
+
+      {/* ── ROLES TAB ── the badges and what each one may do. It was a route of
+          its own, reachable only from the firm name's dropdown; a place you
+          look at belongs in the tab row, so it moved here and left the
+          dropdown in the same change. No Panel around it: the workbench draws
+          its own two-column list-and-detail shell, and a titled box around
+          that is a second frame. */}
+      {view === "roles" && canManage && rolesBoard}
 
       {/* ── FIRM TAB ── the firm's own settings, brought out of the ⋯ dialog and
           onto the page, because a switch nobody can find is a switch nobody

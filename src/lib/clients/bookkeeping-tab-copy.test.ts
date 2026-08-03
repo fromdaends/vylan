@@ -27,8 +27,13 @@ const KEYS_THE_TAB_READS = [
 
 describe("the client Bookkeeping tab's copy", () => {
   it("has an English and a French string for every key it reads", () => {
-    const enQb = (en as Record<string, Record<string, string>>).Quickbooks;
-    const frQb = (fr as Record<string, Record<string, string>>).Quickbooks;
+    // Via unknown: the message files have NESTED objects in some namespaces
+    // (InviteAccept.errors and friends), so they are not a flat
+    // Record<string, Record<string, string>> and tsc rejects the direct cast.
+    const enQb = (en as unknown as Record<string, Record<string, string>>)
+      .Quickbooks;
+    const frQb = (fr as unknown as Record<string, Record<string, string>>)
+      .Quickbooks;
     for (const key of KEYS_THE_TAB_READS) {
       expect(enQb[key], `en Quickbooks.${key}`).toBeTruthy();
       expect(frQb[key], `fr Quickbooks.${key}`).toBeTruthy();
