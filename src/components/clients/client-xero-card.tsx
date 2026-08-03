@@ -38,12 +38,12 @@ export function ClientXeroCard({
   clientId,
   clientName,
   status,
-  isOwner,
+  canManage,
 }: {
   clientId: string;
   clientName: string;
   status: ClientXeroStatus;
-  isOwner: boolean;
+  canManage: boolean;
 }) {
   const t = useTranslations("Clients");
   const [loading, setLoading] = useState(false);
@@ -119,7 +119,7 @@ export function ClientXeroCard({
     setDisconnecting(false);
   }
 
-  const disconnectControl = isOwner ? (
+  const disconnectControl = canManage ? (
     <div className="pt-1">
       {confirmingDisconnect ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -174,7 +174,7 @@ export function ClientXeroCard({
                 ? t("xero_reconnect_hint_company", { company: status.tenantName })
                 : t("xero_reconnect_hint", { client: clientName })}
             </p>
-            {isOwner ? (
+            {canManage ? (
               <>
                 <div className="pt-1">
                   <Button
@@ -234,7 +234,7 @@ export function ClientXeroCard({
   }
 
   // Not connected + owner: a small invitation to connect THIS client's Xero.
-  if (isOwner) {
+  if (canManage) {
     return (
       <div className="rounded-lg border border-border/50 p-4">
         <div className="flex items-start gap-3">

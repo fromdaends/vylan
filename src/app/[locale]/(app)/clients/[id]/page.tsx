@@ -466,6 +466,10 @@ export default async function ClientDetailPage({
     callbackStatus: xeroCallbackStatus,
   };
   const isOwner = me?.role === "owner";
+  // Connecting this client's books is integrations.manage, NOT the rank. Every
+  // connect/disconnect route already checks exactly that capability, so a role
+  // granting it worked on the server while this screen still hid the buttons.
+  const canConnectBooks = can(me, "integrations.manage");
   // Phase 2: the first two capabilities that actually withhold something. Both
   // are carried by the member preset, so every existing staff member keeps
   // exactly what they have — these only bite once an owner makes someone a
@@ -1008,28 +1012,28 @@ export default async function ClientDetailPage({
         {tab === "bookkeeping" &&
           (clientQuickbooks.connected ||
           clientXero.connected ||
-          (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
+          (canConnectBooks && (clientQuickbooks.configured || clientXero.configured))) && (
           <Panel title={t("bk_section_title")}>
             {(clientQuickbooks.connected ||
-              (isOwner &&
+              (canConnectBooks &&
                 clientQuickbooks.configured &&
                 !clientXero.connected)) && (
                 <ClientQuickbooksCard
                   clientId={client.id}
                   clientName={client.display_name}
                   status={clientQuickbooks}
-                  isOwner={isOwner}
+                  canManage={canConnectBooks}
                 />
               )}
             {(clientXero.connected ||
-              (isOwner &&
+              (canConnectBooks &&
                 clientXero.configured &&
                 !clientQuickbooks.connected)) && (
                 <ClientXeroCard
                   clientId={client.id}
                   clientName={client.display_name}
                   status={clientXero}
-                  isOwner={isOwner}
+                  canManage={canConnectBooks}
                 />
               )}
           </Panel>

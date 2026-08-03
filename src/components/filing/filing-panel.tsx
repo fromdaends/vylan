@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import {
   getFilingPreviewSample,
   getFirmFilingSettings,
@@ -62,7 +63,7 @@ export async function FilingPanel() {
           <ProviderGrid
             connection={connection}
             rootLink={rootLink}
-            isOwner={user?.role === "owner"}
+            isOwner={can(user, "integrations.manage")}
             configured={{
               google_drive:
                 isGoogleFilingConfigured() &&
@@ -117,7 +118,7 @@ export async function FilingPanel() {
             sample={sample.tokenContext}
             yearlessSample={sample.yearlessContext}
             sampleIsReal={sample.fromRealDocument}
-            isOwner={user?.role === "owner"}
+            isOwner={can(user, "integrations.manage")}
             available={settings.available}
           />
         </div>
