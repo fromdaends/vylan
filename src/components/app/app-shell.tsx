@@ -123,6 +123,11 @@ export function AppShell({
   const tApp = useTranslations("App");
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
+  // Routes that draw their own full-width canvas. Exact match on purpose:
+  // /files is full-bleed, but /files/organize is a normal review screen and
+  // keeps the shell's centered column.
+  const fullBleed = pathname === "/files";
+
   // Close the mobile account sheet on route change (e.g. user tapped
   // a menu link). Ref-guarded to avoid setting state on every render.
   const lastPathRef = useRef(pathname);
@@ -244,18 +249,30 @@ export function AppShell({
             // whole page left — the bug a Mac/Safari user hit on the Overview.
             // clip (not hidden) keeps overflow-y visible, so position:sticky
             // inside main still works. The sticky top bar is outside <main>.
-            "flex-1 mx-auto w-full overflow-x-clip px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade",
-            // The data-dense pages (Overview, Clients, Engagements list +
-            // detail) get a wider cap on large monitors (>=1800px) so they fill
-            // a 27" screen instead of letterboxing. Forms (New engagement) and
-            // every smaller screen (MacBooks, laptops, phones) stay at 1600px,
-            // byte-identical to before.
-            pathname === "/dashboard" ||
-            pathname === "/clients" ||
-            (pathname.startsWith("/engagements") &&
-              pathname !== "/engagements/new")
-              ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
-              : "max-w-[1600px]",
+            "flex-1 mx-auto w-full overflow-x-clip animate-in-fade",
+            // FULL-BLEED ROUTES own their entire content area: no width cap and
+            // no padding from the shell, because they set their own. /files is
+            // a file manager — capping it at 1600px on a 27" monitor letterboxes
+            // the one screen in the product that most wants the width, and the
+            // shell's px-8 fought the page's own 44px gutter.
+            fullBleed
+              ? // Mobile still needs clearance for the bottom tab bar; the page
+                // supplies its own bottom padding from `sm` up.
+                "max-w-none pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
+              : cn(
+                  "px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8",
+                  // The data-dense pages (Overview, Clients, Engagements list +
+                  // detail) get a wider cap on large monitors (>=1800px) so they
+                  // fill a 27" screen instead of letterboxing. Forms (New
+                  // engagement) and every smaller screen (MacBooks, laptops,
+                  // phones) stay at 1600px, byte-identical to before.
+                  pathname === "/dashboard" ||
+                    pathname === "/clients" ||
+                    (pathname.startsWith("/engagements") &&
+                      pathname !== "/engagements/new")
+                    ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
+                    : "max-w-[1600px]",
+                ),
           )}
         >
           {children}

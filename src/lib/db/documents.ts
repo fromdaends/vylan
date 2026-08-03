@@ -209,16 +209,39 @@ export const FOLDERS_PER_PAGE = 60;
  * aggregates disabled. The function is SECURITY INVOKER over the same RLS —
  * see migration 1080.
  */
+/**
+ * How many client folders a sorted view will pull in one go.
+ *
+ * Sorting the CLIENT list has to happen here rather than in the RPC, which
+ * orders by name and takes no sort argument (changing its signature would
+ * break every already-deployed caller mid-deploy). So a sorted request asks
+ * for the whole set at once and pages it in code. 2000 is far above any real
+ * firm's client count and keeps one bad query from pulling an unbounded table;
+ * past it, sorting degrades to "sorted within the first 2000", which is logged.
+ */
+const SORTABLE_FOLDER_LIMIT = 2000;
+
 export async function listClientFolders(opts: {
   search?: string | null;
   page?: number;
+  /** Omitted = the RPC's own order, server-paginated (the cheap default). */
+  sort?: DocumentSort | null;
 }): Promise<ClientFolderPage> {
   const page = Math.max(1, opts.page ?? 1);
+  // Only NAME and DATE mean anything for a folder — a client has no size, and
+  // asking the RPC for one would sort by nothing.
+  const sort =
+    opts.sort === "name" ||
+    opts.sort === "name_desc" ||
+    opts.sort === "date" ||
+    opts.sort === "date_asc"
+      ? opts.sort
+      : null;
   const sb = await getServerSupabase();
   const { data, error } = await sb.rpc("firm_document_folders", {
     p_search: opts.search?.trim() || null,
-    p_limit: FOLDERS_PER_PAGE,
-    p_offset: (page - 1) * FOLDERS_PER_PAGE,
+    p_limit: sort ? SORTABLE_FOLDER_LIMIT : FOLDERS_PER_PAGE,
+    p_offset: sort ? 0 : (page - 1) * FOLDERS_PER_PAGE,
   });
   if (error) {
     if (!isFilesSchemaMissing(error)) {
@@ -234,19 +257,50 @@ export async function listClientFolders(opts: {
     last_activity: string | null;
     total_count: number | string;
   }>;
-  return {
-    folders: rows.map((r) => ({
-      clientId: r.client_id,
-      name: r.display_name,
-      clientType: r.client_type === "business" ? "business" : "individual",
-      // bigint arrives as a string over PostgREST when it exceeds 2^53; Number
-      // is safe for a document count and keeps the UI types simple.
-      documentCount: Number(r.document_count) || 0,
-      lastActivity: r.last_activity,
-    })),
-    total: rows.length > 0 ? Number(rows[0].total_count) || 0 : 0,
-    available: true,
-  };
+  const total = rows.length > 0 ? Number(rows[0].total_count) || 0 : 0;
+  let folders = rows.map((r) => ({
+    clientId: r.client_id,
+    name: r.display_name,
+    clientType: (r.client_type === "business" ? "business" : "individual") as
+      | "business"
+      | "individual",
+    // bigint arrives as a string over PostgREST when it exceeds 2^53; Number
+    // is safe for a document count and keeps the UI types simple.
+    documentCount: Number(r.document_count) || 0,
+    lastActivity: r.last_activity,
+  }));
+
+  if (sort) {
+    if (total > SORTABLE_FOLDER_LIMIT) {
+      console.warn(
+        `[files] sorting only the first ${SORTABLE_FOLDER_LIMIT} of ${total} client folders`,
+      );
+    }
+    const byName = (a: (typeof folders)[number], b: (typeof folders)[number]) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    // A client with no documents yet has no activity date. They sort LAST
+    // whichever direction you pick — "never touched" is not the most recent
+    // thing that happened, and it is not the oldest either.
+    const byDate = (a: (typeof folders)[number], b: (typeof folders)[number]) => {
+      if (!a.lastActivity && !b.lastActivity) return byName(a, b);
+      if (!a.lastActivity) return 1;
+      if (!b.lastActivity) return -1;
+      return a.lastActivity.localeCompare(b.lastActivity);
+    };
+    folders = [...folders].sort((a, b) =>
+      sort === "name"
+        ? byName(a, b)
+        : sort === "name_desc"
+          ? byName(b, a)
+          : sort === "date_asc"
+            ? byDate(a, b)
+            : byDate(b, a),
+    );
+    const start = (page - 1) * FOLDERS_PER_PAGE;
+    folders = folders.slice(start, start + FOLDERS_PER_PAGE);
+  }
+
+  return { folders, total, available: true };
 }
 
 // ── Level 2: one client's year → category tree ──────────────────────────────

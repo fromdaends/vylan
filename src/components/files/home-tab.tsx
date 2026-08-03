@@ -84,20 +84,12 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
 
   return (
     <div className="flex flex-wrap items-start gap-5">
-      {/* MAIN COLUMN. flex-999 makes it take essentially all the spare width
-          while still being allowed to wrap; 560px is the basis below which the
-          rail drops underneath rather than squeezing the file names. */}
-      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5">
-        {organize.available && <OrganizeBar t={t} total={organize.total} />}
-        <RecentFiles
-          t={t}
-          locale={locale}
-          recent={recent}
-          clientNames={clientNames}
-        />
-      </div>
-
-      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
+      {/* SIDE RAIL, on the LEFT. The things you DO — drop files in, check that
+          filing is still connected, see who touched what — sit against the
+          navigation edge; the things you READ get the open width to their
+          right. Rail first in the DOM as well as on screen, so keyboard and
+          screen-reader order match what you see. */}
+      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-5 lg:max-w-[300px]">
         <UploadDropzone clients={clients} />
         <CloudFiling t={t} storage={storage} />
         <TeamActivity
@@ -105,6 +97,19 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
           tAudit={tAudit}
           locale={locale}
           entries={activity}
+        />
+      </div>
+
+      {/* MAIN COLUMN. flex-999 makes it take essentially all the spare width
+          while still being allowed to wrap; 560px is the basis below which it
+          drops under the rail rather than squeezing the file names. */}
+      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5">
+        {organize.available && <OrganizeBar t={t} total={organize.total} />}
+        <RecentFiles
+          t={t}
+          locale={locale}
+          recent={recent}
+          clientNames={clientNames}
         />
       </div>
     </div>
@@ -188,7 +193,7 @@ function RecentFiles({
       <div className="flex h-13 items-center justify-between px-5">
         <h2 className="text-[14.5px] font-semibold">{t("home_recent_title")}</h2>
         <Link
-          href="/files?tab=browse&sort=date"
+          href="/files?tab=browse&view=files&sort=date"
           className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
         >
           {t("home_view_all")}
