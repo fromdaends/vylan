@@ -16,6 +16,10 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
+// PLAIN module, not a "use client" one: this Server Component CALLS these, and
+// a client-module export would be a client reference that throws (#959).
+import { parseClientTab, clientTabHref } from "@/lib/clients/tabs";
+import { listDocuments } from "@/lib/db/documents";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
@@ -61,10 +65,18 @@ export default async function ClientDetailPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ qbo?: string; xero?: string }>;
+  searchParams: Promise<{ qbo?: string; xero?: string; tab?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
-  const { qbo: qboParam, xero: xeroParam } = await searchParams;
+  const {
+    qbo: qboParam,
+    xero: xeroParam,
+    tab: tabParam,
+  } = await searchParams;
+  // Which facet of this client we are looking at. The tab is a URL rather than
+  // client state, so a tab is linkable, opens in a new tab, and the back
+  // button works — and each tab's data loads only when that tab is asked for.
+  const tab = parseClientTab(tabParam);
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -179,6 +191,17 @@ export default async function ClientDetailPage({
     getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
     listFirmPaymentsWithNames({ clientId: id }),
   ]);
+
+  // The overview's "Recent files" card. Only fetched for the overview — every
+  // other tab would pay for a query it never renders, which is the point of
+  // putting the tab in the URL. Fails soft: the Files view is gated on its own
+  // migration, and a client profile must not 500 because that is unapplied.
+  const recentFiles =
+    tab === "overview"
+      ? await listDocuments({ clientId: id, sort: "date", page: 1 })
+          .then((page) => page.documents.slice(0, 5))
+          .catch(() => [])
+      : [];
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -363,21 +386,34 @@ export default async function ClientDetailPage({
           asked to leave out. They NAVIGATE (Documents is its own route) rather
           than toggling a client-side panel, so a link still opens in a new tab
           and the back button still works. */}
-      <nav className="flex gap-1 border-t border-border/60 px-2">
+      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[
-          { key: "overview", href: `/clients/${client.id}`, label: t("tab_overview"), active: true },
-          { key: "documents", href: `/clients/${client.id}/archive`, label: t("document_archive"), active: false },
-        ].map((tab) => (
+          { key: "overview", href: clientTabHref(client.id, "overview"), label: t("tab_overview"), active: tab === "overview" },
+          { key: "engagements", href: clientTabHref(client.id, "engagements"), label: t("engagements"), active: tab === "engagements" },
+          // "Team" rather than "Who works on it": on a client, the firm's own
+          // people ARE the team on that client, and the shorter noun is what
+          // Canopy's tab row is made of.
+          ...(teamEnabled
+            ? [{ key: "team", href: clientTabHref(client.id, "team"), label: t("tab_team"), active: tab === "team" }]
+            : []),
+          ...(clientQuickbooks.configured || clientXero.configured
+            ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
+            : []),
+          // Files is a real route of its own, so this tab NAVIGATES rather than
+          // switching a panel — a link that still opens in a new tab.
+          { key: "documents", href: `/clients/${client.id}/archive`, label: t("tab_files"), active: false },
+        ].map((item) => (
           <Link
-            key={tab.key}
-            href={tab.href}
+            key={item.key}
+            href={item.href}
+            aria-current={item.active ? "page" : undefined}
             className={
-              tab.active
-                ? "-mb-px border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
-                : "-mb-px border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              item.active
+                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
+                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
             }
           >
-            {tab.label}
+            {item.label}
           </Link>
         ))}
       </nav>
@@ -394,10 +430,11 @@ export default async function ClientDetailPage({
           across to the work. Sticky, so a long engagements table no longer
           scrolls the rail away into whitespace. */}
       <div className="space-y-4 lg:sticky lg:top-6">
-      {/* Who can see this client. First in the rail: on somebody else's client
-          that is the first question, and since slice 2 this list is part of the
-          answer rather than a note beside it. */}
-      {teamEnabled && (
+      {/* Who can see this client — the whole Team tab. It used to sit first in
+          the rail on every view; as its own tab it stops competing with the
+          work for the top of the page, and gets room to breathe when you do
+          want it. */}
+      {teamEnabled && tab === "team" && (
         <Panel title={t("access_title")}>
           <ClientAccess
             clientId={id}
@@ -412,6 +449,7 @@ export default async function ClientDetailPage({
         </Panel>
       )}
 
+      {tab === "overview" && (
       <Panel title={t("details_title")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
@@ -456,18 +494,21 @@ export default async function ClientDetailPage({
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
       </Panel>
+      )}
 
       {/* Relationships — the entity tree (spec §2). Between About and
           Bookkeeping, always rendered (the empty state keeps the feature
           discoverable). Renders its own Panel-identical section because the
           [+], kebabs and View-all need client state. */}
-      <RelationshipsCard
-        clientId={client.id}
-        clientType={client.type}
-        rows={relationshipRows}
-        candidates={pickerCandidates}
-        canManage={canManageClients && !client.archived_at}
-      />
+      {tab === "overview" && (
+        <RelationshipsCard
+          clientId={client.id}
+          clientType={client.type}
+          rows={relationshipRows}
+          candidates={pickerCandidates}
+          canManage={canManageClients && !client.archived_at}
+        />
+      )}
 
       {/* Portal access — the optional 6-digit code that gates this client's
           portal link. Off for everyone by default; the frictionless link stays
@@ -488,6 +529,7 @@ export default async function ClientDetailPage({
           is it, who has it, when is it due — and the status reads as a coloured
           dot plus a word, which is Canopy's treatment and quieter than a row of
           filled pills. */}
+      {(tab === "overview" || tab === "engagements") && (
       <Panel
         title={`${t("engagements")} (${engagements.length})`}
         action={
@@ -588,6 +630,7 @@ export default async function ClientDetailPage({
           </div>
         )}
       </Panel>
+      )}
 
         {/* Moved out of the rail. Connecting a client's books and setting
             their portal PIN are ACTIONS on the client, and the rail is
@@ -600,7 +643,8 @@ export default async function ClientDetailPage({
             QuickBooks is connected the Xero card hides (and vice versa) — a
             receipt can only belong in one set of books. Hidden entirely for
             staff on a not-yet-connected client. */}
-        {(clientQuickbooks.connected ||
+        {tab === "bookkeeping" &&
+          (clientQuickbooks.connected ||
           clientXero.connected ||
           (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
           <Panel title={t("bk_section_title")}>
@@ -629,17 +673,54 @@ export default async function ClientDetailPage({
           </Panel>
         )}
 
+        {tab === "overview" && (
         <Panel title={t("portal_access_title")}>
           <ClientPortalPinCard
             clientId={client.id}
             initialEnabled={client.portal_pin_enabled === true}
           />
         </Panel>
+        )}
+
+      {/* Recent files — Canopy's overview card: the last handful, newest
+          first, with a quiet "View all" to the full archive. The overview
+          should answer "what has been coming in from this client lately"
+          without making you leave it. */}
+      {tab === "overview" && recentFiles.length > 0 && (
+        <Panel
+          title={t("recent_files")}
+          action={
+            <Link
+              href={`/clients/${client.id}/archive`}
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t("view_all_files")}
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-border/50">
+            {recentFiles.map((file) => (
+              <li key={file.id} className="flex items-center gap-3 py-2.5">
+                <FileText
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{file.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatDate(file.createdAt, locale, "medium")}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       {/* Money. A Junior sees the WORK on a client and not what it was billed
           for — the payments history is amounts, dates and status, which is
           exactly the thing money.view withholds. */}
-      {canSeeMoney && clientPayments.length > 0 && (
+      {tab === "overview" && canSeeMoney && clientPayments.length > 0 && (
         <Panel title={tEng("payments_history")} flush>
           <PaymentsList
             rows={clientPayments}
