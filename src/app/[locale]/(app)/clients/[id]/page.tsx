@@ -13,9 +13,9 @@ import {
   loadEngagementWorklist,
 } from "@/lib/dashboard/worklist";
 import { selectForClient } from "@/lib/dashboard/worklist-select";
-import { selectView } from "@/lib/engagements/views";
-import { ClientEngagementsView } from "@/components/clients/client-engagements-view";
-import { ClientEngagementFilters } from "@/components/clients/client-engagement-filters";
+import { selectView, viewLabelKey } from "@/lib/engagements/views";
+import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
+import { FilterLinks } from "@/components/ui/filter-links";
 import { deriveEngagementStatus } from "@/lib/attention";
 import {
 } from "@/lib/engagements/status-pill";
@@ -30,6 +30,7 @@ import {
   clientTabHref,
   parseClientEngagementView,
   CLIENT_ENGAGEMENT_VIEWS,
+  clientEngagementViewHref,
   type ClientEngagementView,
 } from "@/lib/clients/tabs";
 import { listDocuments } from "@/lib/db/documents";
@@ -57,6 +58,7 @@ import { formatDate } from "@/lib/format";
 import { Plus, Pencil, Lock, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Panel } from "@/components/ui/panel";
+import { ProfileTabs } from "@/components/ui/profile-tabs";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -507,43 +509,29 @@ export default async function ClientDetailPage({
       </div>
 
       {/* The tab row, sitting on the card's bottom edge with the active tab
-          underlined — Canopy's exact treatment. TWO tabs, not their ten: these
-          are the only two places a client's own content actually lives in
-          Vylan, and a tab that opens an empty section is the bloat the founder
-          asked to leave out. They NAVIGATE (Documents is its own route) rather
-          than toggling a client-side panel, so a link still opens in a new tab
-          and the back button still works. */}
-      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {[
+          underlined — Canopy's exact treatment. Rendered by the SHARED
+          ProfileTabs: the teammate profile has the identical row, and two
+          copies of it is precisely the drift the repo's Cohesion rule names.
+          A tab that would open an empty section isn't offered at all (no
+          bookkeeping provider configured → no Bookkeeping tab). */}
+      <ProfileTabs
+        label={client.display_name}
+        items={[
           { key: "overview", href: clientTabHref(client.id, "overview"), label: t("tab_overview"), active: tab === "overview" },
           { key: "engagements", href: clientTabHref(client.id, "engagements"), label: t("engagements"), active: tab === "engagements" },
-          // "Team" rather than "Who works on it": on a client, the firm's own
-          // people ARE the team on that client, and the shorter noun is what
-          // Canopy's tab row is made of.
+          // "Organizers" rather than "Who works on it": the founder asked for
+          // the Canopy word, and "team" reads as the firm's own staff list,
+          // which is a different page.
           ...(teamEnabled
             ? [{ key: "team", href: clientTabHref(client.id, "organizers"), label: t("tab_organizers"), active: tab === "organizers" }]
             : []),
           ...(clientQuickbooks.configured || clientXero.configured
             ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
             : []),
-          // Files is a real route of its own, so this tab NAVIGATES rather than
-          // switching a panel — a link that still opens in a new tab.
+          // Files is still a route of its own, so this tab NAVIGATES away.
           { key: "documents", href: `/clients/${client.id}/archive`, label: t("tab_files"), active: false },
-        ].map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            aria-current={item.active ? "page" : undefined}
-            className={
-              item.active
-                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
-                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+        ]}
+      />
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
@@ -662,16 +650,15 @@ export default async function ClientDetailPage({
         <Panel
           title={t("engagements")}
           aside={
-            <ClientEngagementFilters
-              clientId={client.id}
-              current={engView}
-              counts={engagementCounts}
-              labels={{
-                active: tEng("view_active_label"),
-                ready: tEng("view_ready_label"),
-                completed: tEng("view_completed_label"),
-                archived: tEng("view_archived_label"),
-              }}
+            <FilterLinks
+              label={t("engagements")}
+              items={CLIENT_ENGAGEMENT_VIEWS.map((v) => ({
+                key: v,
+                href: clientEngagementViewHref(client.id, v),
+                label: tEng(viewLabelKey(v) as Parameters<typeof tEng>[0]),
+                active: v === engView,
+                count: engagementCounts[v],
+              }))}
             />
           }
           action={
@@ -686,7 +673,7 @@ export default async function ClientDetailPage({
           }
           flush
         >
-          <ClientEngagementsView
+          <WorklistBrowser
             rows={engagementRows}
             locale={locale}
             emptyText={tEng(`view_${engView}_empty`)}
