@@ -55,7 +55,7 @@ export async function FilingPanel() {
       <section aria-labelledby="filing-connect">
         <h2
           id="filing-connect"
-          className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+          className="text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground"
         >
           {t("connect_section")}
         </h2>
@@ -95,18 +95,18 @@ export async function FilingPanel() {
 
       <section
         aria-labelledby="filing-settings"
-        className="mt-10 border-t border-border/60 pt-8"
+        className="mt-8"
       >
         <h2
           id="filing-settings"
-          className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+          className="text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground"
         >
           {t("settings_section")}
         </h2>
-        <p className="mt-1.5 text-sm text-muted-foreground">
+        <p className="mt-1.5 text-[13.5px] text-muted-foreground">
           {t("settings_intro")}
         </p>
-        <div className="mt-5">
+        <div className="mt-4">
           <FilingSettingsForm
             initial={{
               folderTemplate: settings.folderTemplate,
