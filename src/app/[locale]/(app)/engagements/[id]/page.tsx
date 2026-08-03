@@ -509,7 +509,7 @@ export default async function EngagementDetailPage({
       : Promise.resolve(null),
   ]);
 
-  // ── Per-job access (1310) ────────────────────────────────────────────────
+  // ── Per-job access (1320) ────────────────────────────────────────────────
   // Owner-only, team-only, and only once the engagement is more than a draft.
   // Placed AFTER the second batch on purpose: `client` is resolved in it, and
   // this needs the client's assignee to work out who is already covered.

@@ -1,5 +1,13 @@
 -- Let one person into ONE job, without opening the whole client.
 --
+-- ⚠️ RENUMBERED 1310 -> 1320. This shipped as 1310 and so did another session's
+-- 1310_billing_section.sql (#1193), merged an hour apart. Supabase's ledger
+-- keys on the NUMBER, so the second of a pair can never be tracked and a
+-- from-scratch replay cannot apply both — the exact failure that had the
+-- Supabase check red on every migration PR for months (repaired in #1137).
+-- Renamed rather than deleted, and safe to rename because it had not been
+-- applied to any database yet: verified against production before moving it.
+--
 -- The last item of phase 3. Membership so far has been a property of the
 -- CLIENT: you are on the client, so you see everything under it. That is the
 -- right default and the wrong only option — "have a look at this one return"
