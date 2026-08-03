@@ -2794,7 +2794,14 @@
     "statement_generate": "T\u00e9l\u00e9charger l'\u00e9tat de compte",
     "statement_range_hint": "Couvre la p\u00e9riode actuellement filtr\u00e9e.",
     "amount_incl_tax": "dont {tax} de taxes",
-    "statement_all_time_hint": "Toutes les factures de {client} \u00e0 ce jour."
+    "statement_all_time_hint": "Toutes les factures de {client} \u00e0 ce jour.",
+    "settings_terms_title": "Conditions de paiement",
+    "settings_terms_body": "Le d\u00e9lai accord\u00e9 \u00e0 une nouvelle facture avant qu'elle soit en retard. C'est ce qui fait appara\u00eetre une facture comme en retard et ce \u00e0 partir de quoi les relances sont calcul\u00e9es. La modification ne touche que les factures cr\u00e9\u00e9es \u00e0 partir de maintenant.",
+    "settings_terms_days": "Jours pour payer",
+    "settings_terms_none_placeholder": "Aucune \u00e9ch\u00e9ance",
+    "settings_terms_summary": "Les nouvelles factures seront dues {days} jours apr\u00e8s leur envoi.",
+    "settings_terms_summary_receipt": "Les nouvelles factures seront dues le jour de leur envoi.",
+    "settings_terms_summary_none": "Les nouvelles factures n'auront aucune \u00e9ch\u00e9ance : aucune ne pourra \u00eatre en retard et les relances commenceront plut\u00f4t une semaine apr\u00e8s l'envoi."
   },
   "Footer": {
     "based_in": "Construit au Canada.",

@@ -262,6 +262,9 @@ async function SettingsTab() {
   return (
     <BillingSettings
       chase={chase}
+      // `undefined` on a pre-1330 read collapses to null, which reads as "no
+      // due date" — exactly how the app behaved before this setting existed.
+      defaultDueDays={settings?.default_due_days ?? null}
       taxProvince={settings?.province ?? null}
       invoicingConfigured={Boolean(settings)}
       numbering={
