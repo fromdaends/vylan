@@ -3908,6 +3908,12 @@
     "folder_file_into": "File into…",
     "folder_remove_from": "Take out of folder",
     "drop_done": "{count, plural, one {# file moved} other {# files moved}} to {folder}.",
-    "undo": "Undo"
+    "undo": "Undo",
+    "upload_title": "Upload files",
+    "upload_intro": "Add files to a client. They land in the client's imported files, visible to your firm only.",
+    "upload_pick": "Choose files",
+    "upload_picked": "{count, plural, one {# file selected} other {# files selected}}",
+    "upload_start": "Upload {count}",
+    "import_folder_button": "Import a folder"
   }
 }

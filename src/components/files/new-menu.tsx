@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { FolderPlus, FolderUp, Plus } from "lucide-react";
+import { FolderPlus, FolderUp, Plus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ImportWizard } from "./import-wizard";
+import { QuickUpload } from "./quick-upload";
 import { NewFolderButton } from "./folder-actions";
 
 // THE "+ NEW" BUTTON (Files v2 §7) — Drive's one entry point for putting
@@ -37,8 +38,8 @@ export function NewMenu({
   folderParentId: string | null;
 }) {
   const t = useTranslations("Files");
-  const [dialog, setDialog] = useState<null | "import" | "folder">(null);
-  const pendingDialog = useRef<null | "import" | "folder">(null);
+  const [dialog, setDialog] = useState<null | "upload" | "import" | "folder">(null);
+  const pendingDialog = useRef<null | "upload" | "import" | "folder">(null);
 
   return (
     <>
@@ -64,6 +65,17 @@ export function NewMenu({
             }
           }}
         >
+          {/* Quick upload first — "the client just handed me three PDFs" is
+              the everyday case; migrating a whole folder tree is not. */}
+          <DropdownMenuItem
+            className="gap-3 rounded-lg px-3 py-2.5 text-[15px]"
+            onSelect={() => {
+              pendingDialog.current = "upload";
+            }}
+          >
+            <Upload className="size-5 text-muted-foreground" aria-hidden />
+            {t("upload_title")}
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="gap-3 rounded-lg px-3 py-2.5 text-[15px]"
             onSelect={() => {
@@ -71,7 +83,7 @@ export function NewMenu({
             }}
           >
             <FolderUp className="size-5 text-muted-foreground" aria-hidden />
-            {t("import_button")}
+            {t("import_folder_button")}
           </DropdownMenuItem>
           {clientId && (
             <DropdownMenuItem
@@ -87,6 +99,12 @@ export function NewMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <QuickUpload
+        clients={clients}
+        defaultClientId={clientId}
+        externalOpen={dialog === "upload"}
+        onExternalOpenChange={(o) => setDialog(o ? "upload" : null)}
+      />
       <ImportWizard
         clients={clients}
         externalOpen={dialog === "import"}

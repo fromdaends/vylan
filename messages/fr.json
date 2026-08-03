@@ -3908,6 +3908,12 @@
     "folder_file_into": "Classer dans…",
     "folder_remove_from": "Retirer du dossier",
     "drop_done": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}} vers {folder}.",
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "upload_title": "Téléverser des fichiers",
+    "upload_intro": "Ajoutez des fichiers à un client. Ils sont ajoutés aux fichiers importés du client, visibles par votre cabinet seulement.",
+    "upload_pick": "Choisir des fichiers",
+    "upload_picked": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}",
+    "upload_start": "Téléverser {count}",
+    "import_folder_button": "Importer un dossier"
   }
 }
