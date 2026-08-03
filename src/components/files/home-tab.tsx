@@ -13,6 +13,8 @@ import { listDocuments, type BrowseDocument } from "@/lib/db/documents";
 import { listActivityForFirm, type FirmActivityEntry } from "@/lib/db/activity";
 import { openSuggestionCounts } from "@/lib/files/organize";
 import { ScanNowButton } from "@/components/files/organize-review";
+import { DocumentRowContextMenu } from "@/components/files/document-actions-menu";
+import { docMenuMeta } from "@/lib/files/doc-menu-meta";
 import { UploadDropzone } from "@/components/files/upload-dropzone";
 import { ProviderLogo } from "@/components/filing/provider-logos";
 import { getFirmStorageConnection } from "@/lib/db/filing";
@@ -208,6 +210,17 @@ function RecentFiles({
         <ul>
           {recent.map((d) => (
             <li key={`${d.source}-${d.id}`}>
+              {/* Right-click gets the SAME menu as a row in Browse — rename,
+                  move, visibility, delete. A row that looks like a file row
+                  and answers a right-click with the browser's own menu reads
+                  as "this one isn't really a file", so both surfaces share one
+                  menu and one identity builder. */}
+              <DocumentRowContextMenu {...docMenuMeta(d)} locale={locale}>
+              {/* The plain div is the ContextMenuTrigger's `asChild` target.
+                  Radix clones its handlers onto whatever child it is given,
+                  and handing it the Link directly renders an EMPTY row — the
+                  same reason FileBrowser wraps its rows this way. */}
+              <div>
               <Link
                 href={docHref(d)}
                 className="flex items-center gap-3 border-t border-border/50 px-5 py-[11px] transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -237,6 +250,8 @@ function RecentFiles({
                   {formatDate(d.createdAt, locale, "compact")}
                 </span>
               </Link>
+              </div>
+              </DocumentRowContextMenu>
             </li>
           ))}
         </ul>

@@ -32,6 +32,7 @@ import {
   type ReviewStatus,
 } from "@/lib/db/documents";
 import { listClientOptions } from "@/lib/db/clients";
+import { docMenuMeta } from "@/lib/files/doc-menu-meta";
 import type { StatusTone } from "@/components/ui/status-capsule";
 import { splitSnippet } from "@/lib/files/search-snippet";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -753,19 +754,7 @@ async function FileList({
     })(),
     // ONE identity feeds both menus (the ⋯ button and row right-click) —
     // FileBrowser builds them from this so they can never drift apart.
-    docMeta: {
-      source: doc.source,
-      id: doc.id,
-      name: doc.name,
-      year: doc.year,
-      category: doc.category,
-      docType: doc.docType,
-      // Move is disabled only while the AI is genuinely mid-read; its answer
-      // would land on top of the person's. An imported or never-analysed
-      // document is always movable — hand-sorting is the whole point of them.
-      canMove: !doc.classificationPending,
-      visibility: doc.visibility,
-    },
+    docMeta: docMenuMeta(doc),
   }));
 
   return (
