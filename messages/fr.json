@@ -2821,7 +2821,14 @@
     "settings_terms_none_placeholder": "Aucune échéance",
     "settings_terms_summary": "Les nouvelles factures seront dues {days} jours après leur envoi.",
     "settings_terms_summary_receipt": "Les nouvelles factures seront dues le jour de leur envoi.",
-    "settings_terms_summary_none": "Les nouvelles factures n'auront aucune échéance : aucune ne pourra être en retard et les relances commenceront plutôt une semaine après l'envoi."
+    "settings_terms_summary_none": "Les nouvelles factures n'auront aucune échéance : aucune ne pourra être en retard et les relances commenceront plutôt une semaine après l'envoi.",
+    "filter_button": "Trier et filtrer",
+    "filter_period": "Période",
+    "filter_period_all": "Depuis toujours",
+    "filter_period_30": "30 derniers jours",
+    "filter_period_month": "Ce mois-ci",
+    "filter_period_custom": "Période personnalisée",
+    "filter_active": "Filtré : {list}"
   },
   "Footer": {
     "based_in": "Construit au Canada.",
