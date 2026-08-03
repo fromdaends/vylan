@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { EyeOff } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 // Tab switch for the engagement body: Checklist (default) <-> Signatures, so the
@@ -25,6 +26,9 @@ export function EngagementTabs({
   checklist,
   signatures,
   final,
+  work,
+  workCount,
+  showWork,
 }: {
   checklistCount: number;
   signaturesCount: number;
@@ -41,11 +45,16 @@ export function EngagementTabs({
   checklist: ReactNode;
   signatures: ReactNode;
   final: ReactNode;
+  // OUR side of the wall — the firm's own steps. The only tab here the client
+  // never sees, which is why it carries a mark the other three do not.
+  work: ReactNode;
+  workCount: number;
+  showWork: boolean;
 }) {
   const t = useTranslations("Engagements");
-  const [active, setActive] = useState<"checklist" | "signatures" | "final">(
-    "checklist",
-  );
+  const [active, setActive] = useState<
+    "checklist" | "signatures" | "final" | "work"
+  >("checklist");
 
   // If the selected tab is no longer shown (e.g. the Signatures tab disappears
   // when a signature-free engagement is marked complete, while `active` is still
@@ -53,12 +62,13 @@ export function EngagementTabs({
   // body is never blank.
   const effectiveActive =
     (active === "signatures" && !showSignatures) ||
-    (active === "final" && !showFinal)
+    (active === "final" && !showFinal) ||
+    (active === "work" && !showWork)
       ? "checklist"
       : active;
 
   // No extra tabs apply → plain single-section checklist, no tab bar.
-  if (!showSignatures && !showFinal) {
+  if (!showSignatures && !showFinal && !showWork) {
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
@@ -103,6 +113,25 @@ export function EngagementTabs({
               count={finalCount}
             />
           )}
+          {/* Set apart from the other three, with a rule before it and an icon
+              on it. They are all about documents moving between the firm and
+              the client; this one is the firm talking to itself, and a tab that
+              looks identical to its neighbours will be treated as one. */}
+          {showWork && (
+            <span
+              aria-hidden
+              className="h-4 w-px shrink-0 self-center bg-border"
+            />
+          )}
+          {showWork && (
+            <TabButton
+              active={effectiveActive === "work"}
+              onClick={() => setActive("work")}
+              label={t("work_tab")}
+              count={workCount}
+              icon={<EyeOff className="size-3.5 shrink-0" aria-hidden />}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2 pb-1.5">
           {effectiveActive === "checklist"
@@ -120,6 +149,7 @@ export function EngagementTabs({
       {showFinal && (
         <div hidden={effectiveActive !== "final"}>{final}</div>
       )}
+      {showWork && <div hidden={effectiveActive !== "work"}>{work}</div>}
     </section>
   );
 }
@@ -129,11 +159,14 @@ function TabButton({
   onClick,
   label,
   count,
+  icon,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   count: number;
+  /** Only the internal-work tab carries one — see the note at its call site. */
+  icon?: ReactNode;
 }) {
   return (
     <button
@@ -149,14 +182,17 @@ function TabButton({
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
-      {label}{" "}
-      <span
-        className={cn(
-          "font-normal",
-          active ? "text-muted-foreground" : "text-muted-foreground/70",
-        )}
-      >
-        ({count})
+      <span className="inline-flex items-center gap-1.5">
+        {icon}
+        {label}{" "}
+        <span
+          className={cn(
+            "font-normal",
+            active ? "text-muted-foreground" : "text-muted-foreground/70",
+          )}
+        >
+          ({count})
+        </span>
       </span>
     </button>
   );
