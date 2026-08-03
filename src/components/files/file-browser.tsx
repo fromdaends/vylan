@@ -198,7 +198,16 @@ export async function FileBrowser({
        pushed every row down by the bar's height on the first click — which
        moved the row out from under the second click of a double-click. */
     <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card">
-      <RowsSurface locale={locale} folders={barFolders}>
+      <RowsSurface
+        locale={locale}
+        folders={barFolders}
+        // The render order Shift-click ranges are computed against.
+        orderedFiles={entries.flatMap((e) =>
+          e.kind === "file" && e.selectSource && e.selectId
+            ? [{ source: e.selectSource, id: e.selectId }]
+            : [],
+        )}
+      >
       <BrowserHeader t={t} />
       <ul className="divide-y divide-border/50">
         {entries.map((entry) => (
