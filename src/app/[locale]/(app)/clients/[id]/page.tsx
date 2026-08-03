@@ -8,7 +8,14 @@ import {
   type RelationshipCardRow,
 } from "@/components/clients/relationships-card";
 import { listEngagements } from "@/lib/db/engagements";
-import { loadEngagementSignals } from "@/lib/dashboard/worklist";
+import {
+  loadEngagementSignals,
+  loadEngagementWorklist,
+} from "@/lib/dashboard/worklist";
+import { selectForClient } from "@/lib/dashboard/worklist-select";
+import { selectView } from "@/lib/engagements/views";
+import { ClientEngagementsView } from "@/components/clients/client-engagements-view";
+import { ClientEngagementFilters } from "@/components/clients/client-engagement-filters";
 import { deriveEngagementStatus } from "@/lib/attention";
 import {
 } from "@/lib/engagements/status-pill";
@@ -18,7 +25,13 @@ import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
 // PLAIN module, not a "use client" one: this Server Component CALLS these, and
 // a client-module export would be a client reference that throws (#959).
-import { parseClientTab, clientTabHref } from "@/lib/clients/tabs";
+import {
+  parseClientTab,
+  clientTabHref,
+  parseClientEngagementView,
+  CLIENT_ENGAGEMENT_VIEWS,
+  type ClientEngagementView,
+} from "@/lib/clients/tabs";
 import { listDocuments } from "@/lib/db/documents";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
@@ -61,23 +74,37 @@ import { isXeroConfigured } from "@/lib/xero/client";
 import { ClientXeroCard } from "@/components/clients/client-xero-card";
 import { ClientPortalPinCard } from "@/components/clients/client-portal-pin-card";
 
+// How many engagements the OVERVIEW shows before deferring to the tab. Five is
+// the same cut the Recent files card takes, so the two summary cards on the
+// overview stay the same height as each other.
+const OVERVIEW_ENGAGEMENT_PREVIEW = 5;
+
 export default async function ClientDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ qbo?: string; xero?: string; tab?: string }>;
+  searchParams: Promise<{
+    qbo?: string;
+    xero?: string;
+    tab?: string;
+    ev?: string;
+  }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const {
     qbo: qboParam,
     xero: xeroParam,
     tab: tabParam,
+    ev: evParam,
   } = await searchParams;
   // Which facet of this client we are looking at. The tab is a URL rather than
   // client state, so a tab is linkable, opens in a new tab, and the back
   // button works — and each tab's data loads only when that tab is asked for.
   const tab = parseClientTab(tabParam);
+  // The Engagements tab's lifecycle slice. Server-side, because Archived is a
+  // different database scope — see the note on CLIENT_ENGAGEMENT_VIEWS.
+  const engView = parseClientEngagementView(evParam);
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -132,11 +159,11 @@ export default async function ClientDetailPage({
       })),
   };
 
-  // OVERVIEW + ENGAGEMENTS only. Nothing else on the page lists them.
+  // OVERVIEW only. The Engagements tab reads the worklist below instead — it
+  // needs progress, attention reasons and presence, none of which a raw
+  // engagement row carries.
   const engagements =
-    tab === "overview" || tab === "engagements"
-      ? await listEngagements({ client_id: id })
-      : [];
+    tab === "overview" ? await listEngagements({ client_id: id }) : [];
   // Unified status for the pills below — same derivation every other surface
   // reads, via the cached active-scope signal load.
   const signals =
@@ -209,8 +236,12 @@ export default async function ClientDetailPage({
     );
   }
   // Payment status per engagement (for the chip) + this client's payment history
-  // (so the accountant can backtrack what was paid on which engagement).
-  const [paymentByEng, clientPayments] = needsMoney
+  // (so the accountant can backtrack what was paid on which engagement). BOTH
+  // are overview-only reads: the Engagements tab's rows carry their own payment
+  // status from the worklist loader, and the history panel only renders here.
+  // The reconcile above still runs for both, so the badge on either tab is
+  // reading a status Stripe has just confirmed.
+  const [paymentByEng, clientPayments] = tab === "overview"
     ? await Promise.all([
         getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
         listFirmPaymentsWithNames({ clientId: id }),
@@ -223,6 +254,48 @@ export default async function ClientDetailPage({
         >,
         [] as Awaited<ReturnType<typeof listFirmPaymentsWithNames>>,
       ];
+
+  // ── The Engagements tab's rows ─────────────────────────────────────────────
+  //
+  // The SAME worklist every other engagement list in the app is built from,
+  // narrowed to this client. Not a second loader and not a second table: the
+  // founder's note on the first attempt was that the tab was the overview's
+  // little block moved across, and the fix for that is to render the real
+  // thing, not to grow the block.
+  //
+  // Two scopes at most: the active set (which Active / Ready / Completed all
+  // slice out of, and which the overview's signals load already warmed — it is
+  // React.cache'd per scope) plus, only when you are actually on it, the
+  // archived set. Selecting a filter never costs more than one extra query.
+  const onEngagementsTab = tab === "engagements";
+  const activeClientRows = onEngagementsTab
+    ? selectForClient(await loadEngagementWorklist("active"), id)
+    : [];
+  const archivedClientRows =
+    onEngagementsTab && engView === "archived"
+      ? selectForClient(await loadEngagementWorklist("archived"), id)
+      : [];
+  const engagementRows = selectView(
+    engView,
+    engView === "archived" ? archivedClientRows : activeClientRows,
+  );
+  // Counts for the filter links. Archived's is deliberately absent unless you
+  // are on it — printing a number we did not load would be a guess, and loading
+  // it to print would be a query on every other filter (see the component).
+  const engagementCounts: Partial<Record<ClientEngagementView, number>> =
+    onEngagementsTab
+      ? Object.fromEntries(
+          CLIENT_ENGAGEMENT_VIEWS.filter(
+            (v) => v !== "archived" || engView === "archived",
+          ).map((v) => [
+            v,
+            selectView(
+              v,
+              v === "archived" ? archivedClientRows : activeClientRows,
+            ).length,
+          ]),
+        )
+      : {};
 
   // The overview's "Recent files" card. Only fetched for the overview — every
   // other tab would pay for a query it never renders, which is the point of
@@ -240,6 +313,7 @@ export default async function ClientDetailPage({
   // The worklist column labels already exist in Dashboard and read identically
   // here — reusing them keeps one wording for "Assigned to" across the app.
   const tWl = await getTranslations("Dashboard");
+  const tStage = await getTranslations("Stage");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
@@ -563,9 +637,70 @@ export default async function ClientDetailPage({
           is it, who has it, when is it due — and the status reads as a coloured
           dot plus a word, which is Canopy's treatment and quieter than a row of
           filled pills. */}
-      {(tab === "overview" || tab === "engagements") && (
+      {/* The ENGAGEMENTS TAB — the real list, not this preview. Same table the
+          /engagements section renders (progress, attention, presence, the row
+          menu), narrowed to this client, with the lifecycle filter and a search
+          box of its own. */}
+      {tab === "engagements" && (
+        <Panel
+          title={t("engagements")}
+          aside={
+            <ClientEngagementFilters
+              clientId={client.id}
+              current={engView}
+              counts={engagementCounts}
+              labels={{
+                active: tEng("view_active_label"),
+                ready: tEng("view_ready_label"),
+                completed: tEng("view_completed_label"),
+                archived: tEng("view_archived_label"),
+              }}
+            />
+          }
+          action={
+            !client.archived_at ? (
+              <Link href={`/engagements/new?client=${client.id}`}>
+                <Button size="sm">
+                  <Plus className="size-4" />
+                  {tEng("new")}
+                </Button>
+              </Link>
+            ) : null
+          }
+          flush
+        >
+          <ClientEngagementsView
+            rows={engagementRows}
+            locale={locale}
+            emptyText={tEng(`view_${engView}_empty`)}
+            emptySearchText={tWl("wl_empty_search")}
+            emptyStageText={tStage("empty_for_stage")}
+            canDelete={canManageClients}
+            teamEnabled={teamEnabled}
+            assignMembers={assignableMembers}
+            viewerId={me?.id ?? null}
+            firmId={firm?.id ?? null}
+          />
+        </Panel>
+      )}
+
+      {tab === "overview" && (
       <Panel
         title={`${t("engagements")} (${engagements.length})`}
+        aside={
+          // The overview is a SUMMARY, so it shows the five most recent and
+          // hands the rest to the tab. It used to print every engagement a
+          // client has ever had, which on a long-standing client pushed the
+          // rest of the overview off the screen.
+          engagements.length > OVERVIEW_ENGAGEMENT_PREVIEW ? (
+            <Link
+              href={clientTabHref(client.id, "engagements")}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {tWl("view_all")}
+            </Link>
+          ) : null
+        }
         action={
           !client.archived_at ? (
             <Link href={`/engagements/new?client=${client.id}`}>
@@ -600,7 +735,7 @@ export default async function ClientDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {engagements.map((e) => {
+                {engagements.slice(0, OVERVIEW_ENGAGEMENT_PREVIEW).map((e) => {
                   const derived = derivedStatusById.get(e.id) ?? e.status;
                   const pay = paymentByEng.get(e.id);
                   const holder = firmUsers.find(
