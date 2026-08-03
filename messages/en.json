@@ -288,7 +288,7 @@
     "handover_scope_note": "Live work, clients and repeating schedules move. Completed and archived work keeps {name}'s name on it.",
     "handover_confirm": "Hand it over",
     "handover_done": "Moved {engagements, plural, one {1 engagement} other {# engagements}} and {clients, plural, one {1 client} other {# clients}} to {name}",
-    "tab_people": "People",
+    "tab_people": "Members",
     "profile_about_title": "About",
     "permissions_title": "Permissions",
     "permissions_roles_first": "Access comes from the roles you give someone. You can also hand this one person something extra below.",
