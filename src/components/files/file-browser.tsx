@@ -15,6 +15,11 @@ import type { SnippetPart } from "@/lib/files/search-snippet";
 import { RowCheckbox } from "./row-checkbox";
 import { RowsSurface, SelectableRow } from "./selectable-row";
 import {
+  DocumentActionsMenu,
+  DocumentRowContextMenu,
+  type DocumentMenuMeta,
+} from "./document-actions-menu";
+import {
   DraggableFile,
   DraggableFolder,
   FolderDropTarget,
@@ -86,8 +91,13 @@ export type BrowserEntry =
       from?: { label: string; href?: string; muted?: boolean } | null;
       /** Small trailing badges: status, Imported, Duplicate… */
       badges?: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[];
-      /** The per-file actions menu, built by the page (it is a client island). */
+      /** Custom actions node (the recycle bin's Restore). Regular file rows
+       * pass `docMeta` instead and get the ⋯ menu AND right-click for free. */
       actions?: React.ReactNode;
+      /** The document identity the shared actions menus need. When present,
+       * the row renders the ⋯ menu in its actions cell and the whole row
+       * becomes a right-click target with the SAME items. */
+      docMeta?: Omit<DocumentMenuMeta, "locale">;
       /** Identity for multi-select. Both are needed: an id is only unique
        * within its own table, so selection is keyed on the pair. */
       selectSource?: string;
@@ -116,6 +126,26 @@ function iconForMime(mime: string | null): LucideIcon {
     return FileText;
   }
   return File;
+}
+
+/** Wraps a file row in the right-click menu when it carries its document
+ * identity. The plain div is the ContextMenuTrigger's `asChild` target —
+ * Radix needs a child that accepts the handlers it clones on. */
+function MaybeRowContext({
+  meta,
+  locale,
+  children,
+}: {
+  meta?: Omit<DocumentMenuMeta, "locale">;
+  locale: AppLocale;
+  children: React.ReactNode;
+}) {
+  if (!meta) return <>{children}</>;
+  return (
+    <DocumentRowContextMenu {...meta} locale={locale}>
+      <div>{children}</div>
+    </DocumentRowContextMenu>
+  );
 }
 
 /** Wraps a row in a drop target only when it declares one. */
@@ -246,6 +276,7 @@ export async function FileBrowser({
                     : undefined
                 }
               >
+              <MaybeRowContext meta={entry.docMeta} locale={locale}>
               <div className={ROW_CLASS}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {/* Renders nothing outside a selection provider (the recycle
@@ -304,7 +335,12 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
-                <span className="w-8 shrink-0 text-right">{entry.actions}</span>
+                <span className="w-8 shrink-0 text-right">
+                  {entry.actions ??
+                    (entry.docMeta && (
+                      <DocumentActionsMenu {...entry.docMeta} locale={locale} />
+                    ))}
+                </span>
               </div>
               {entry.snippet && entry.snippet.length > 0 && (
                 <p className="-mt-1 truncate px-4 pb-2 pl-[3.75rem] text-xs text-muted-foreground">
@@ -322,6 +358,7 @@ export async function FileBrowser({
                   )}
                 </p>
               )}
+              </MaybeRowContext>
               </SelectableRow>
               </DraggableFile>
             )}
