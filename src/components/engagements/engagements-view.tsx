@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Briefcase, Search, Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
 // ROUTER must be the i18n one. usePathname (i18n) returns a locale-STRIPPED path
 // ("/engagements"), and feeding that to next/navigation's router navigates to the
@@ -142,11 +142,6 @@ export function EngagementsView({
   // "All firm" survives because it is not a question about a person.
   const [scope, setScope] = useState<string>(teamEnabled ? "mine" : "all");
   const chooseScope = (s: string) => setScope(s);
-  // WHOSE CLIENTS, not whose work — the last piece of phase 3. "Everything on
-  // Ashley's clients" and "everything Ashley is doing" are different questions
-  // and a firm needs both, so this filter sits BESIDE the assignee scope rather
-  // than replacing it. "" means no filter.
-  const [clientOwner, setClientOwner] = useState<string>("");
 
   const q = query.trim().toLowerCase();
 
@@ -169,26 +164,8 @@ export function EngagementsView({
     if (teamEnabled && scopedUserId) {
       base = selectAssignedTo(base, scopedUserId);
     }
-    if (teamEnabled && clientOwner) {
-      base = base.filter((r) => r.clientOwnerUserId === clientOwner);
-    }
     return base;
-  }, [rows, q, scope, clientOwner, currentUserId, teamEnabled]);
-
-  // Only the people who actually OWN a client in this row set get offered.
-  // Listing the whole roster would put names in the picker that can only ever
-  // return nothing, which reads as a broken filter rather than an empty firm.
-  const clientOwners = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const r of rows) {
-      if (r.clientOwnerUserId && r.clientOwnerName) {
-        byId.set(r.clientOwnerUserId, r.clientOwnerName);
-      }
-    }
-    return [...byId.entries()]
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows]);
+  }, [rows, q, scope, currentUserId, teamEnabled]);
 
   const stageCounts = useMemo(
     () => countByStage(beforeStageFilter),
@@ -288,31 +265,6 @@ export function EngagementsView({
               <SelectContent>
                 <SelectItem value="all">{t("scope_all")}</SelectItem>
                 <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {/* Whose CLIENTS. Hidden entirely when nobody owns a client in this
-              set — a picker whose only option is "anyone" is furniture. */}
-          {teamEnabled && clientOwners.length > 1 && (
-            <Select
-              value={clientOwner || "any"}
-              onValueChange={(v) => setClientOwner(v === "any" ? "" : v)}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-[13rem] self-start"
-                aria-label={t("client_owner_label")}
-              >
-                <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder={t("client_owner_label")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">{t("client_owner_any")}</SelectItem>
-                {clientOwners.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.name}
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
           )}
