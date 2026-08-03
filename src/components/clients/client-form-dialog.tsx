@@ -167,8 +167,10 @@ export function ClientFormDialog({
               {t("edit_client")}
             </Button>
           ) : (
-            <Button size="sm">
-              <Plus className="size-4" />
+            /* The one coloured button on the Clients list (UI kit rule 1),
+               sized to match the search box it sits beside. */
+            <Button className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">
+              <Plus className="size-[18px]" />
               {t("add_client")}
             </Button>
           ))}

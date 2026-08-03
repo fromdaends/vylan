@@ -201,18 +201,12 @@ export default async function ClientsPage({
     };
   }
 
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {t("title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5 font-mono tabular-nums">
-            {t("count", { count: clients.length })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+  // The header lives INSIDE ClientsListView: its search box drives the live
+  // client-side filter, so it has to sit next to that state rather than in a
+  // Server Component above it. These buttons are still rendered here (they need
+  // the firm, the trial state and the teammate list) and passed straight in.
+  const headerActions = (
+    <>
           {!canManageClients ? null : trialLocked ? (
             <>
               <DemoBlockButton
@@ -232,7 +226,10 @@ export default async function ClientsPage({
           ) : (
             <>
               <Link href="/clients/import">
-                <Button variant="ghost" size="sm">
+                <Button
+                  variant="ghost"
+                  className="h-[42px] gap-[7px] rounded-[10px] px-3.5 text-sm font-medium text-muted-foreground"
+                >
                   <Upload className="h-4 w-4" />
                   {t("import_csv")}
                 </Button>
@@ -252,10 +249,15 @@ export default async function ClientsPage({
               />
             </>
           )}
-        </div>
-      </header>
+    </>
+  );
 
+  return (
+    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
       <ClientsListView
+        title={t("title")}
+        subtitle={t("count", { count: clients.length })}
+        actions={headerActions}
         clients={clients}
         summaries={summaries}
         engagementsByClient={engagementsByClient}

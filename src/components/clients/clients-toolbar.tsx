@@ -64,7 +64,10 @@ export function ClientsToolbar({
   return (
     <div className="flex flex-wrap items-center gap-3 justify-between">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative">
+        {/* The page HEADER owns the one search box now (it sits beside Import
+            and Add client, per the handoff). Kept mounted but hidden so the
+            live-filter state has exactly one input driving it. */}
+        <div className="relative hidden">
           <Search
             className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
             aria-hidden
