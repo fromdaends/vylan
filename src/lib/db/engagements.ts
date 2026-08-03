@@ -2,6 +2,7 @@ import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import type { EngagementStage } from "@/lib/engagements/stage";
+import { buildRequestItemRow } from "@/lib/engagements/request-item-row";
 import type { EngagementType, TemplateItem } from "./templates";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 
@@ -455,16 +456,22 @@ export async function createEngagementWithItems(
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
   if (input.items.length > 0) {
-    const rows = input.items.map((item, idx) => ({
-      engagement_id: engagement.id,
-      label: item.label_en,
-      label_fr: item.label_fr,
-      description: item.description_en ?? null,
-      description_fr: item.description_fr ?? null,
-      doc_type: item.doc_type,
-      required: item.required,
-      order_index: idx,
-    }));
+    // Shared with addItemToEngagement so the two ways an item is born cannot
+    // fill different columns — see src/lib/engagements/request-item-row.ts.
+    const rows = input.items.map((item, idx) =>
+      buildRequestItemRow(
+        engagement.id,
+        {
+          label: item.label_en,
+          label_fr: item.label_fr,
+          description: item.description_en,
+          description_fr: item.description_fr,
+          doc_type: item.doc_type,
+          required: item.required,
+        },
+        idx,
+      ),
+    );
     const { error: itemsErr } = await supabase
       .from("request_items")
       .insert(rows);
