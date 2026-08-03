@@ -125,7 +125,7 @@ export function buildSystemPrompt(ctx: AssistantContext): string {
     // This line used to say the firm had "full access to the real product",
     // which is the opposite of true and buried the single most useful thing
     // this assistant can know. is_demo is what puts reminders_paused on every
-    // engagement (see convertToLiveAction in app/actions/firm-mode.ts, which
+    // engagement (see the retired demo-mode go-live flow, which
     // flips is_demo AND clears reminders_paused together) and what raises the
     // demo-block modals. A demo-mode user asking "why has my client heard
     // nothing?" was being answered by an assistant told they had full access.
