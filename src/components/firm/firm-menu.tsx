@@ -8,77 +8,52 @@
 // heading and every firm-level action scattered across tabs and a "⋯" nobody
 // opens.
 //
-// The name itself is still just a name — the chevron is the affordance, and it
-// rotates on open so the menu's state is legible without reading it.
+// The trigger itself lives in NameMenu, shared with the client page — the
+// founder asked for "the exact same thing" there, and the way to make that
+// true in six months is for it to be the same component today.
 
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import {
   Building2,
-  ChevronDown,
   ScrollText,
   Settings,
   ShieldHalf,
   UserPlus,
   Users,
 } from "lucide-react";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { NameMenu } from "@/components/ui/name-menu";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  MembersDialog,
+  type DialogMember,
+} from "@/components/settings/team/members-dialog";
 
 export function FirmMenu({
   firmName,
   canManage,
   onInvite,
+  members = [],
 }: {
   firmName: string;
   canManage: boolean;
   /** Opens the invite dialog the team page already owns. */
   onInvite?: () => void;
+  /** Everyone active, for the Members panel. */
+  members?: DialogMember[];
 }) {
   const t = useTranslations("Team");
-  const [open, setOpen] = useState(false);
-
-  // Staff get the name and nothing else. A chevron that opens a menu of things
-  // you cannot do is worse than no chevron.
-  if (!canManage) {
-    return (
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-        {firmName}
-      </h1>
-    );
-  }
+  const [membersOpen, setMembersOpen] = useState(false);
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="group flex items-center gap-1.5 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {firmName}
-          </span>
-          <ChevronDown
-            className={`mt-1 size-5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground ${
-              open ? "rotate-180" : ""
-            }`}
-            aria-hidden
-          />
-          <span className="sr-only">{t("firm_menu_label")}</span>
-        </button>
-      </DropdownMenuTrigger>
-      {/* Anchored to the END of the trigger, which is where the chevron is.
-          align="start" hung the menu off the first letter of the firm name —
-          with a long name that put the menu a whole heading away from the
-          arrow you just clicked. The affordance and the thing it opens have
-          to be in the same place. */}
-      <DropdownMenuContent align="end" sideOffset={6} className="w-60">
+    <>
+      <NameMenu
+        name={firmName}
+        label={t("firm_menu_label")}
+        enabled={canManage}
+        className="text-2xl sm:text-3xl"
+      >
         {onInvite && (
           <>
             <DropdownMenuItem onSelect={() => onInvite()} className="gap-2">
@@ -111,11 +86,15 @@ export function FirmMenu({
             {t("roles_title")}
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild className="gap-2">
-          <Link href="/settings/team?tab=people">
-            <Users className="size-4" aria-hidden />
-            {t("firm_menu_members")}
-          </Link>
+        {/* Opens a PANEL, not a link. This item used to point at
+            /settings/team?tab=people — the page you are standing on when the
+            menu is open, so clicking it did nothing at all. */}
+        <DropdownMenuItem
+          onSelect={() => setMembersOpen(true)}
+          className="gap-2"
+        >
+          <Users className="size-4" aria-hidden />
+          {t("firm_menu_members")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="gap-2">
@@ -124,7 +103,14 @@ export function FirmMenu({
             {t("firm_menu_audit")}
           </Link>
         </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </NameMenu>
+
+      <MembersDialog
+        open={membersOpen}
+        onOpenChange={setMembersOpen}
+        members={members}
+        canOpenProfiles={canManage}
+      />
+    </>
   );
 }
