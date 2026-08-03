@@ -1933,6 +1933,8 @@
     "assign_confirm": "Assigner",
     "scope_label": "Filtrer par assignation",
     "scope_mine": "Mes engagements",
+    "client_owner_label": "Clients de qui",
+    "client_owner_any": "Clients de tout le monde",
     "scope_all": "Tous les engagements",
     "new": "Nouvel engagement",
     "new_title": "Nouvel engagement",
