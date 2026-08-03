@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Check, HelpCircle, Loader2, AlertTriangle } from "lucide-react";
 import type { RequestItem } from "@/lib/db/request-items";
 import { logPortalActivity } from "@/lib/portal/activity-log";
+import { pickItemText } from "@/lib/engagements/request-item-row";
 
 type LocalState = "idle" | "sending" | "error";
 
@@ -49,11 +50,12 @@ export function QuestionItemCard({
     item.answer_text?.trim() ? item.answer_text : null,
   );
 
-  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
-  const description =
-    locale === "fr" && item.description_fr
-      ? item.description_fr
-      : item.description;
+  const label = pickItemText(locale, item.label_fr, item.label);
+  const description = pickItemText(
+    locale,
+    item.description_fr,
+    item.description,
+  );
 
   const answered = Boolean(answer);
   const canSend = draft.trim().length > 0 && local !== "sending";

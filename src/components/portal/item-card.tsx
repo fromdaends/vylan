@@ -40,6 +40,7 @@ import type { PortalFile } from "@/lib/db/portal";
 import { PortalImageLightbox } from "./portal-image-lightbox";
 import { isCameraSupported } from "./use-camera-stream";
 import { enhancePickedImage } from "@/lib/portal/enhance-image";
+import { pickItemText } from "@/lib/engagements/request-item-row";
 
 // The scanner pulls in the edge-detection and perspective maths, which nobody
 // who only ever taps "Upload" should have to download. Loaded the first time a
@@ -296,11 +297,19 @@ export function ItemCard({
     }
   }
 
-  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
-  const description =
-    locale === "fr" && item.description_fr
-      ? item.description_fr
-      : item.description;
+  // Prefer the client's language, then fall back to the other one. The fallback
+  // has to run in BOTH directions: items created with an engagement (rather than
+  // added later) stored their instructions only in description_fr, so an English
+  // client was shown nothing at all. New items mirror into both columns now, but
+  // every engagement created before that fix still has the one-sided rows and
+  // there is no migration to repair them — reading defensively fixes those too.
+  // Showing the other language beats showing a client no instructions.
+  const label = pickItemText(locale, item.label_fr, item.label);
+  const description = pickItemText(
+    locale,
+    item.description_fr,
+    item.description,
+  );
 
   // Preferred upload path: the file travels as sequential ~3.5 MB parts
   // through OUR domain (each request fits the hosting platform's ~4.5 MB

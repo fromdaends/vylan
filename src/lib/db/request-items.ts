@@ -1,6 +1,7 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 import { setAllFilesReviewForItem } from "./file-review";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import { buildRequestItemRow } from "@/lib/engagements/request-item-row";
 import type { DocType } from "./templates";
 import type { SetAssessment } from "@/lib/ai/set-assessment";
 
@@ -135,14 +136,20 @@ export async function addItemToEngagement(
   const { data, error } = await supabase
     .from("request_items")
     .insert({
-      engagement_id: input.engagement_id,
-      label: input.label,
-      label_fr: input.label_fr ?? null,
-      description: input.description ?? null,
-      description_fr: input.description_fr ?? null,
-      doc_type: input.doc_type,
-      required: input.required,
-      order_index: nextIdx,
+      // Shared with createEngagementWithItems so the two ways an item is born
+      // cannot fill different columns — see lib/engagements/request-item-row.ts.
+      ...buildRequestItemRow(
+        input.engagement_id,
+        {
+          label: input.label,
+          label_fr: input.label_fr,
+          description: input.description,
+          description_fr: input.description_fr,
+          doc_type: input.doc_type,
+          required: input.required,
+        },
+        nextIdx,
+      ),
       status: "pending",
     })
     .select("*")
