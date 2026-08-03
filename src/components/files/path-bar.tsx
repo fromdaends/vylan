@@ -33,6 +33,7 @@ function MaybeDropTarget({
 export async function PathBar({
   segments,
   clientProfileId,
+  trailing,
 }: {
   /**
    * Root first. The last segment is the current folder and is not a link.
@@ -45,10 +46,19 @@ export async function PathBar({
   segments: { label: string; href?: string; drop?: DropTarget }[];
   /** When inside a client, the id for the one allowed cross-link to Clients. */
   clientProfileId?: string | null;
+  /** Controls that belong on the path row's right edge — Browse passes its
+   * Sort menu here so sorting sits with the folder you are sorting, rather
+   * than in a second toolbar strip below it. */
+  trailing?: React.ReactNode;
 }) {
   const t = await getTranslations("Files");
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      {/* GOOGLE-DRIVE-SIZED. The path is the biggest text on Browse, not a
+          line of fine print above the list: in a file manager it is the one
+          thing that answers "where am I", and Drive, Finder and Explorer all
+          set it at heading scale. It used to render at 14px and read as a
+          caption. */}
       <nav aria-label={t("path_label")} className="flex min-w-0 items-center">
         <ol className="flex min-w-0 flex-wrap items-center gap-0.5">
           {segments.map((seg, i) => {
@@ -57,7 +67,7 @@ export async function PathBar({
               <li key={`${seg.label}-${i}`} className="flex min-w-0 items-center">
                 {i > 0 && (
                   <ChevronRight
-                    className="mx-0.5 size-3.5 shrink-0 text-muted-foreground/60"
+                    className="mx-[3px] size-5 shrink-0 text-muted-foreground/55"
                     aria-hidden
                   />
                 )}
@@ -72,7 +82,7 @@ export async function PathBar({
                   <MaybeDropTarget drop={seg.drop} label={seg.label}>
                     <Link
                       href={seg.href}
-                      className="truncate rounded px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="truncate rounded-full px-3 py-[5px] text-[22px] font-[450] tracking-[-0.01em] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {seg.label}
                     </Link>
@@ -81,8 +91,10 @@ export async function PathBar({
                   <span
                     aria-current={last ? "page" : undefined}
                     className={cn(
-                      "truncate px-1.5 py-1 text-sm",
-                      last ? "font-medium text-foreground" : "text-muted-foreground",
+                      "truncate rounded-full px-3 py-[5px] text-[22px] tracking-[-0.01em]",
+                      last
+                        ? "font-semibold text-foreground"
+                        : "font-[450] text-muted-foreground",
                     )}
                   >
                     {seg.label}
@@ -94,14 +106,19 @@ export async function PathBar({
         </ol>
       </nav>
 
-      {clientProfileId && (
-        <Link
-          href={`/clients/${clientProfileId}`}
-          className="inline-flex shrink-0 items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline"
-        >
-          {t("view_client_profile")}
-          <ExternalLink className="size-3.5" aria-hidden />
-        </Link>
+      {(clientProfileId || trailing) && (
+        <div className="flex shrink-0 items-center gap-3.5">
+          {clientProfileId && (
+            <Link
+              href={`/clients/${clientProfileId}`}
+              className="inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+            >
+              {t("view_client_profile")}
+              <ExternalLink className="size-3" aria-hidden />
+            </Link>
+          )}
+          {trailing}
+        </div>
       )}
     </div>
   );

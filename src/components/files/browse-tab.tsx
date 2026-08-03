@@ -31,6 +31,7 @@ import {
   type DocumentSort,
   type ReviewStatus,
 } from "@/lib/db/documents";
+import { listClientOptions } from "@/lib/db/clients";
 import { splitSnippet } from "@/lib/files/search-snippet";
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
@@ -59,6 +60,7 @@ export async function BrowseTab({
   basePath = "/files",
   baseParams,
   lockedClientId = null,
+  hostedChrome = false,
 }: {
   locale: AppLocaleish;
   sp: Record<string, string | undefined>;
@@ -76,6 +78,16 @@ export async function BrowseTab({
   // browser embedded in a client that could wander to another client's files
   // would be a quiet access surprise, even with RLS behind it.
   lockedClientId?: string | null;
+  // True when the HOST page's header already carries the search box and the
+  // "+ New" menu (that is /files). The browser then draws neither, so there is
+  // exactly one of each on screen.
+  //
+  // This is the one thing that legitimately differs between the two places
+  // this browser renders: /files has a section header with room for them, the
+  // client page does not and keeps them inline. Everything below this line —
+  // the path bar, the list, sorting, the footer — is identical in both, which
+  // is the point of there being one component.
+  hostedChrome?: boolean;
 }) {
   const t = await getTranslations("Files");
 
@@ -182,16 +194,9 @@ export async function BrowseTab({
     : undefined;
 
   // Every client the firm can see — the import wizard maps folders onto these.
-  // Deliberately NOT the folder list from the RPC: that only includes clients
-  // who already have documents, and importing history is exactly how a client
-  // with none gets their first.
-  const { data: allClients } = await (await getServerSupabase())
-    .from("clients")
-    .select("id, display_name")
-    .order("display_name", { ascending: true })
-    .limit(1000);
-  const importClients = ((allClients ?? []) as Array<{ id: string; display_name: string }>)
-    .map((c) => ({ id: c.id, name: c.display_name }));
+  // Skipped entirely when the host page owns the "+ New" menu: this is a
+  // 1000-row query, and fetching it to render nothing is pure latency.
+  const importClients = hostedChrome ? [] : await listClientOptions();
 
   // The path: root → client → year → category. Each ancestor is a link back up,
   // which is how you leave a folder in a file manager.
@@ -294,6 +299,8 @@ export async function BrowseTab({
 
   return (
     <div className="space-y-4">
+      {/* Sort rides on the path row, beside the folder it sorts, rather than
+          in a second strip underneath it — the redesign's one toolbar. */}
       <PathBar
         segments={segments}
         // No "View client profile" link when the browser is EMBEDDED in that
@@ -301,31 +308,36 @@ export async function BrowseTab({
         // The link earns its place on /files, where the client is a folder you
         // drilled into and their profile is genuinely elsewhere.
         clientProfileId={lockedClientId ? null : (clientHeader?.id ?? null)}
+        trailing={
+          <FilesToolbar
+            search={search}
+            sort={sp.sort ?? "date"}
+            docType={sp.type ?? ""}
+            status={sp.status ?? ""}
+            year={yearParam ?? ""}
+            years={firmYears}
+            docTypes={docTypeOptions}
+            scope={clientId || showFiles ? "documents" : "folders"}
+            // On /files the page header carries the one search box. Rendering
+            // the toolbar's copy too would put two search fields on one screen
+            // writing the same ?q= param.
+            hideSearch={hostedChrome}
+          />
+        }
       />
 
-      {/* Import sits beside the search, per the spec — and is the ONLY way
-          documents enter Vylan outside the engagement/portal pipeline. There is
-          deliberately no plain "upload file" action anywhere on Browse. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <FilesToolbar
-        search={search}
-        sort={sp.sort ?? "date"}
-        docType={sp.type ?? ""}
-        status={sp.status ?? ""}
-        year={yearParam ?? ""}
-        years={firmYears}
-        docTypes={docTypeOptions}
-          scope={clientId || showFiles ? "documents" : "folders"}
-        />
-        {/* Drive's one entry point for putting things in (§7): Import, and
-            New folder when inside a client. Replaces the standalone Import
-            button. */}
-        <NewMenu
-          clients={importClients}
-          clientId={clientId}
-          folderParentId={folderId}
-        />
-      </div>
+      {/* Drive's one entry point for putting things in (§7): Import, and New
+          folder when inside a client. On /files this lives in the page header
+          instead, so Home can reach it as well. */}
+      {!hostedChrome && (
+        <div className="flex justify-end">
+          <NewMenu
+            clients={importClients}
+            clientId={clientId}
+            folderParentId={folderId}
+          />
+        </div>
+      )}
 
       {/* Selection only wraps the FILE list. Folder rows are navigation, and a
           checkbox on a folder would promise a bulk action on its contents that
