@@ -1553,6 +1553,10 @@
     "open_button": "Clavardage d'équipe"
   },
   "Clients": {
+    "tab_team": "Équipe",
+    "tab_files": "Fichiers",
+    "recent_files": "Fichiers récents",
+    "view_all_files": "Voir tout",
     "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",
     "title": "Clients",
     "document_archive": "Documents",
