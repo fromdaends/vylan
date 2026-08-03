@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
+// Value + type live in a PLAIN module: a "use client" component imports the
+// function, and anything reachable from this file drags in next/headers.
+import type { ClientVisibility } from "@/lib/clients/visibility";
 import { addClientMember } from "@/lib/db/client-members";
 
 // New clients default to PRIVATE only when the firm opted in
@@ -77,7 +80,22 @@ export type Client = {
   // portal_pin_salt are server-only and must never reach a browser. See
   // src/lib/portal/gate.ts.
   portal_pin_enabled: boolean;
+  // How far this client is discoverable (migration 1280).
+  //
+  //   "members"  only owners, the assignee and people on its list see it at
+  //              all — the 1240 behaviour, and the default for every row.
+  //   "listed"   the whole firm sees the ROW, so they know it exists and who
+  //              to ask. The work stays shut: engagement, document and payment
+  //              policies gate on membership, not on this.
+  //
+  // Possibly undefined at runtime until 1280 is applied — ALWAYS read it
+  // through clientVisibility() below, which resolves anything unrecognised to
+  // "members". Fail CLOSED here, unlike is_private: a read blip must not turn
+  // a members-only client into a firm-wide directory entry.
+  visibility?: ClientVisibility | null;
 };
+
+
 
 // PostgREST raises PGRST204 ("column not found in schema cache") when asked to
 // write a column it doesn't know about. We use this to make client writes safe
@@ -372,6 +390,37 @@ export async function setClientPrivacy(
   if (error) {
     if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
     console.error("[clients] set privacy failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+  return { ok: true };
+}
+
+/**
+ * The middle privacy level (migration 1280): whether the whole firm can see
+ * this client's ROW.
+ *
+ * Deliberately a SEPARATE writer from setClientPrivacy rather than another
+ * argument on it. They answer different questions — is_private decides who may
+ * WRITE the row, visibility decides who may SEE it — and the two have already
+ * been confused once by living on the same menu.
+ *
+ * "unavailable" when 1280 is unapplied, so the caller can say so plainly
+ * instead of reporting a generic failure.
+ */
+export async function setClientVisibility(
+  clientId: string,
+  visibility: ClientVisibility,
+  firmId: string,
+): Promise<{ ok: boolean; error?: "update_failed" | "unavailable" }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("clients")
+    .update({ visibility })
+    .eq("id", clientId)
+    .eq("firm_id", firmId);
+  if (error) {
+    if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
+    console.error("[clients] set visibility failed:", error.message);
     return { ok: false, error: "update_failed" };
   }
   return { ok: true };

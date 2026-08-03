@@ -11,6 +11,7 @@ import {
   bulkCreateClients,
   reassignClient,
   setClientPrivacy,
+  setClientVisibility,
   canReceiveClientAssignment,
 } from "@/lib/db/clients";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
@@ -252,6 +253,53 @@ export async function setClientPrivacyAction(
   await logUserActivity(firm.id, null, "client_privacy_changed", {
     client_id: clientId,
     is_private: isPrivate,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * The middle privacy level: make a client discoverable to the whole firm, or
+ * put it back to members-only.
+ *
+ * Owner-only, and RLS says so too (1280's WITH CHECK) — this is a privacy
+ * decision about who may learn a client exists, and staff must not be able to
+ * take it. The check here is so the UI gets a clean error instead of a silent
+ * no-op from a policy refusal.
+ */
+export async function setClientVisibilityAction(
+  clientId: string,
+  listed: boolean,
+): Promise<{
+  ok: boolean;
+  error?: "no_session" | "owner_only" | "not_team" | "unavailable" | "update_failed";
+}> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // In a solo firm there is nobody to be discoverable TO, so the control is not
+  // offered and the action refuses — same rule the privacy toggle follows.
+  if (
+    !hasActiveTeam({ teamEnabled: firm.team_enabled === true, activeMemberCount: 0 })
+  ) {
+    return { ok: false, error: "not_team" };
+  }
+
+  const res = await setClientVisibility(
+    clientId,
+    listed ? "listed" : "members",
+    firm.id,
+  );
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: res.error === "unavailable" ? "unavailable" : "update_failed",
+    };
+  }
+
+  await logUserActivity(firm.id, null, "client_privacy_changed", {
+    client_id: clientId,
+    visibility: listed ? "listed" : "members",
   });
   revalidatePath("/", "layout");
   return { ok: true };
