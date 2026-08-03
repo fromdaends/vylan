@@ -89,6 +89,13 @@ export type Firm = {
   // applied; getFirmAiUsage defaults it to 400.
   ai_monthly_cap: number;
   is_demo: boolean;
+  // Comped pilot account (migration 1240). Metered by ai_monthly_cap per
+  // calendar month instead of the trial's small lifetime ceiling, while
+  // is_demo + trial_ends_at still end the pilot on schedule. Service-role-only
+  // — deliberately NOT in the updateCurrentFirm whitelist, so a firm can never
+  // lift its own AI ceiling. Possibly undefined at runtime until 1240 is
+  // applied; ALWAYS read as `firm.is_pilot === true`.
+  is_pilot?: boolean;
   // Optional collaboration mode (migration 0530). Existing firms default to
   // enabled; owners can leave/disband a one-person team without deleting any
   // firm data, then create the team again later.

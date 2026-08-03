@@ -64,6 +64,22 @@ describe("isTrialExpired", () => {
       isTrialExpired({ ...base, subscription_status: "canceled" }, NOW),
     ).toBe(true);
   });
+
+  // Migration 1240 — a pilot is metered monthly like a paid firm, but it must
+  // still END. isTrialExpired deliberately never reads is_pilot: that flag
+  // picks which AI meter applies, never whether the clock runs. If this stops
+  // holding, a pilot quietly becomes a free account forever.
+  it("runs the clock on a PILOT exactly like any other trial", () => {
+    const midPilot = {
+      ...base,
+      trial_ends_at: iso(NOW + 60 * DAY),
+      is_pilot: true,
+    };
+    expect(isTrialExpired(midPilot, NOW)).toBe(false);
+
+    const endedPilot = { ...base, is_pilot: true };
+    expect(isTrialExpired(endedPilot, NOW)).toBe(true);
+  });
 });
 
 describe("trialDaysLeft", () => {
