@@ -295,7 +295,14 @@ export async function BrowseTab({
 
   return (
     <div className="space-y-4">
-      <PathBar segments={segments} clientProfileId={clientHeader?.id ?? null} />
+      <PathBar
+        segments={segments}
+        // No "View client profile" link when the browser is EMBEDDED in that
+        // client's profile — it would point at the page you are already on.
+        // The link earns its place on /files, where the client is a folder you
+        // drilled into and their profile is genuinely elsewhere.
+        clientProfileId={lockedClientId ? null : (clientHeader?.id ?? null)}
+      />
 
       {/* Import sits beside the search, per the spec — and is the ONLY way
           documents enter Vylan outside the engagement/portal pipeline. There is
