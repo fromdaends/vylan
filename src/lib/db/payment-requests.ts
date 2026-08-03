@@ -501,36 +501,35 @@ export async function listFirmPaymentsWithNames(
   const engTitle = new Map<string, string>();
   const cliName = new Map<string, string>();
   const userName = new Map<string, string>();
-  if (engIds.length) {
-    const { data } = await sb
-      .from("engagements")
-      .select("id, title")
-      .in("id", engIds);
-    for (const e of data ?? []) engTitle.set(e.id as string, e.title as string);
+  // The three name lookups are independent — run them as one parallel batch
+  // instead of the three sequential round trips this used to cost on every
+  // /settings and client-profile money render.
+  const [engRes, cliRes, userRes] = await Promise.all([
+    engIds.length
+      ? sb.from("engagements").select("id, title").in("id", engIds)
+      : Promise.resolve({ data: null }),
+    cliIds.length
+      ? sb.from("clients").select("id, display_name").in("id", cliIds)
+      : Promise.resolve({ data: null }),
+    userIds.length
+      ? // RLS scopes users to the firm, so this only resolves firm members.
+        // Name preference mirrors userDisplayLabel: display_name > name > email.
+        sb.from("users").select("id, name, display_name, email").in("id", userIds)
+      : Promise.resolve({ data: null }),
+  ]);
+  for (const e of engRes.data ?? []) {
+    engTitle.set(e.id as string, e.title as string);
   }
-  if (cliIds.length) {
-    const { data } = await sb
-      .from("clients")
-      .select("id, display_name")
-      .in("id", cliIds);
-    for (const c of data ?? [])
-      cliName.set(c.id as string, c.display_name as string);
+  for (const c of cliRes.data ?? []) {
+    cliName.set(c.id as string, c.display_name as string);
   }
-  if (userIds.length) {
-    // RLS scopes users to the firm, so this only resolves firm members. Name
-    // preference mirrors userDisplayLabel: display_name > name > email.
-    const { data } = await sb
-      .from("users")
-      .select("id, name, display_name, email")
-      .in("id", userIds);
-    for (const u of data ?? []) {
-      const label =
-        (u.display_name as string | null)?.trim() ||
-        (u.name as string | null)?.trim() ||
-        (u.email as string | null) ||
-        null;
-      if (label) userName.set(u.id as string, label);
-    }
+  for (const u of userRes.data ?? []) {
+    const label =
+      (u.display_name as string | null)?.trim() ||
+      (u.name as string | null)?.trim() ||
+      (u.email as string | null) ||
+      null;
+    if (label) userName.set(u.id as string, label);
   }
   return rows.map((r) => ({
     id: r.id as string,

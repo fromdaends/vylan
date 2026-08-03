@@ -452,10 +452,23 @@ export async function listFirmConversations(
   sb: SupabaseClient,
 ): Promise<FirmConversation[] | MessagingSchemaMissing> {
   // Threads (one per engagement that's ever had a message) + the firm read
-  // stamp. RLS scopes to the caller's firm.
-  const threadsRes = await sb
-    .from("client_message_threads")
-    .select("engagement_id, firm_last_read_at");
+  // stamp, and the active-scope engagement list — independent reads, one
+  // parallel batch (this loader runs every 10s while the messages panel is
+  // open, so its depth is a recurring cost, not a one-off).
+  //
+  // Engagement `.is()` filters are the ENGAGEMENT's own flags; archiving a
+  // CLIENT never sets those, so the client's stamp comes back here and
+  // buildFirmConversations drops its rows.
+  const [threadsRes, engRes] = await Promise.all([
+    sb.from("client_message_threads").select("engagement_id, firm_last_read_at"),
+    sb
+      .from("engagements")
+      .select("id, title, status, created_at, clients(display_name, archived_at)")
+      .is("deleted_at", null)
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(300),
+  ]);
   if (threadsRes.error) {
     if (isClientMessagingSchemaMissing(threadsRes.error)) {
       return CLIENT_MESSAGING_SCHEMA_MISSING;
@@ -466,18 +479,6 @@ export async function listFirmConversations(
     engagement_id: string;
     firm_last_read_at: string | null;
   }[];
-
-  // Active-scope engagements (same lifecycle scope as the board/selector) with
-  // the client's display name and archive stamp. The `.is()` filters below are
-  // the ENGAGEMENT's own flags; archiving a CLIENT never sets those, so the
-  // client's stamp comes back here and buildFirmConversations drops its rows.
-  const engRes = await sb
-    .from("engagements")
-    .select("id, title, status, created_at, clients(display_name, archived_at)")
-    .is("deleted_at", null)
-    .is("archived_at", null)
-    .order("created_at", { ascending: false })
-    .limit(300);
   if (engRes.error) throw engRes.error;
   type EngRow = {
     id: string;

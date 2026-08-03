@@ -79,7 +79,12 @@ const loadEngagementSignalsCached = cache(
     const [allItemsResp, filesResp] = await Promise.all([
       sb
         .from("request_items")
-        .select("*")
+        // Exactly the fields the two consumers read — computeAttention
+        // (status, rejection_reason, required) and computeActionSignals
+        // (id, kind) — plus the grouping key. This was select("*"), which
+        // dragged every column of every live item (descriptions included)
+        // across the wire on each dashboard/worklist render.
+        .select("id, engagement_id, kind, status, rejection_reason, required")
         .in("engagement_id", liveIds.length ? liveIds : [""]),
       // Per-file review/AI state for the action signals + the last-activity
       // stamp. Still one query; just a few more small columns than before.
