@@ -20,10 +20,23 @@ import {
   updateEngagementTask,
   deleteEngagementTask,
   listEngagementTasks,
+  setTaskAssignee,
   EngagementTasksUnsupportedError,
   type TaskStatus,
 } from "@/lib/db/engagement-tasks";
 import { revalidateAllLocales } from "@/lib/revalidate";
+
+/**
+ * Refresh both places a task can be read from.
+ *
+ * The Work list ALWAYS, because that is the point of the feature — a task
+ * changed on a job must not leave the firm-wide list stale. The job's own page
+ * only when there is a job; a client-only task has no second home.
+ */
+function revalidateWork(engagementId?: string | null) {
+  revalidateAllLocales("/work");
+  if (engagementId) revalidateAllLocales(`/engagements/${engagementId}`);
+}
 
 export type TaskActionResult = {
   ok: boolean;
@@ -57,9 +70,11 @@ function handle(err: unknown, what: string): TaskActionResult {
 }
 
 export async function addTaskAction(input: {
-  engagementId: string;
+  /** Required — every task is for somebody. */
+  clientId: string;
+  /** Omit for work that belongs to the client and no job. */
+  engagementId?: string | null;
   title: string;
-  assignedUserId?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -70,12 +85,15 @@ export async function addTaskAction(input: {
     // Appended. Read the list first rather than keeping a counter: two people
     // adding at once would otherwise collide on the same index, and the order
     // is cosmetic enough that one extra read is the cheaper correctness.
-    const existing = await listEngagementTasks(input.engagementId);
+    // A client-only task has no list to append to, so it starts at zero.
+    const existing = input.engagementId
+      ? await listEngagementTasks(input.engagementId)
+      : [];
     await createEngagementTask({
-      engagementId: input.engagementId,
+      clientId: input.clientId,
+      engagementId: input.engagementId ?? null,
       firmId: g.firm.id,
       title,
-      assignedUserId: input.assignedUserId ?? null,
       createdBy: g.user.id,
       orderIndex: existing.length,
     });
@@ -83,15 +101,44 @@ export async function addTaskAction(input: {
     return handle(err, "add");
   }
 
-  revalidateAllLocales(`/engagements/${input.engagementId}`);
+  revalidateWork(input.engagementId);
+  return { ok: true };
+}
+
+/**
+ * Put somebody on a task, or take them off.
+ *
+ * Its own action rather than a field on the update: assignment is a separate
+ * table now (1350), and folding it into a patch would mean every caller had to
+ * send the whole list to change one name.
+ */
+export async function setTaskAssigneeAction(input: {
+  taskId: string;
+  userId: string;
+  on: boolean;
+  engagementId?: string | null;
+}): Promise<TaskActionResult> {
+  const g = await guard();
+  if ("error" in g) return { ok: false, error: g.error };
+  try {
+    await setTaskAssignee({
+      taskId: input.taskId,
+      userId: input.userId,
+      firmId: g.firm.id,
+      on: input.on,
+    });
+  } catch (err) {
+    return handle(err, "assign");
+  }
+  revalidateWork(input.engagementId);
   return { ok: true };
 }
 
 export async function updateTaskAction(input: {
-  engagementId: string;
   taskId: string;
+  /** Only so the job's page can be revalidated too. Optional like the link. */
+  engagementId?: string | null;
   title?: string;
-  assignedUserId?: string | null;
   status?: TaskStatus;
   dueDate?: string | null;
 }): Promise<TaskActionResult> {
@@ -103,9 +150,6 @@ export async function updateTaskAction(input: {
     const title = cleanTitle(input.title);
     if (!title) return { ok: false, error: "bad_title" };
     patch.title = title;
-  }
-  if (input.assignedUserId !== undefined) {
-    patch.assignedUserId = input.assignedUserId;
   }
   if (input.status !== undefined) patch.status = input.status;
   if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
@@ -121,13 +165,13 @@ export async function updateTaskAction(input: {
     return handle(err, "update");
   }
 
-  revalidateAllLocales(`/engagements/${input.engagementId}`);
+  revalidateWork(input.engagementId);
   return { ok: true };
 }
 
 export async function deleteTaskAction(input: {
-  engagementId: string;
   taskId: string;
+  engagementId?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -138,6 +182,6 @@ export async function deleteTaskAction(input: {
     return handle(err, "delete");
   }
 
-  revalidateAllLocales(`/engagements/${input.engagementId}`);
+  revalidateWork(input.engagementId);
   return { ok: true };
 }

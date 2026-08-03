@@ -16,7 +16,7 @@ import {
   BookOpenCheck,
   Building2,
   FileText,
-  Folder,
+  CircleCheckBig,
   FolderOpen,
   Gauge,
   LayoutDashboard,
@@ -39,6 +39,7 @@ type Labels = {
   dashboard: string;
   clients: string;
   engagements: string;
+  work: string;
   engagementsToggle: string;
   templates: string;
   // The firm-wide document browser. Sits between Templates and Engagements
@@ -169,7 +170,12 @@ export function AppShell({
     // at /settings/billing — it moved there when this shipped, because two
     // things called Billing in one sidebar is how confusion starts.
     { href: "/billing", label: labels.billing, icon: Receipt },
-    { href: "/engagements", label: labels.engagements, icon: Folder },
+    // WORK — the firm's whole workload. Replaces the Engagements item rather
+    // than sitting beside it: two doors into one room is what the founder
+    // objected to on the firm menu, and it is the same mistake here. The
+    // engagements list is one tab inside it and keeps its own URL, so every
+    // existing link and bookmark still lands.
+    { href: "/work", label: labels.work, icon: CircleCheckBig },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
     // hiding it would be a regression for a connected firm. Absent until a

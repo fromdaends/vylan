@@ -18,6 +18,11 @@ import { viewHref, type EngagementView } from "@/lib/engagements/views";
 // merely shares the prefix (e.g. a hypothetical /engagements-archive).
 export function isNavItemActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === href;
+  // WORK owns two URL trees. The rail item points at /work (the task list) and
+  // the engagements list keeps /engagements, so without this the rail goes dark
+  // on half its own section — which reads as "you have navigated away" when you
+  // have not.
+  if (href === "/work" && isNavItemActive(pathname, "/engagements")) return true;
   return pathname === href || pathname.startsWith(href + "/");
 }
 

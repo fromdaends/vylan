@@ -131,6 +131,7 @@ export default async function AppLayout({
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
         engagements: t("nav_engagements"),
+        work: t("nav_work"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
         files: t("nav_files"),
