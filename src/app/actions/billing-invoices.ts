@@ -26,7 +26,11 @@ import {
   cancelInvoiceChase,
   rescheduleInvoiceChase,
 } from "@/lib/invoices/chase";
-import { getChaseSettings, updateChaseSettings } from "@/lib/db/invoice-settings";
+import {
+  getChaseSettings,
+  updateChaseSettings,
+  updateDefaultDueDays,
+} from "@/lib/db/invoice-settings";
 import { logUserActivity } from "@/lib/db/activity";
 import { outstandingCents } from "@/lib/invoices/outstanding";
 
@@ -164,6 +168,21 @@ export async function voidInvoiceAction(
     // this entry answerable later ("we wrote off $1,400 that quarter").
     written_off_cents: outstandingCents(invoice),
   });
+  revalidatePath("/billing");
+  return { ok: true };
+}
+
+// null = "don't put a due date on my invoices at all", which is a real choice
+// and deliberately distinct from 0 (due on receipt).
+export async function saveDefaultDueDaysAction(
+  days: number | null,
+): Promise<ActionResult> {
+  const gate = await requireMoneyAccess();
+  if ("error" in gate) return { ok: false, reason: gate.error };
+  const result = await updateDefaultDueDays(days);
+  if (!result.ok) return { ok: false, reason: result.reason };
+  // Only the Billing surfaces read this; an invoice already issued keeps the
+  // date it was issued with, so nothing else needs revalidating.
   revalidatePath("/billing");
   return { ok: true };
 }

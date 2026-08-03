@@ -15,6 +15,7 @@ import {
   normalizeChaseSettings,
   type ChaseSettings,
 } from "@/lib/invoices/chase-settings";
+import { normalizeDueDays } from "@/lib/invoices/terms";
 
 export type FirmInvoiceSettings = {
   firm_id: string;
@@ -35,6 +36,11 @@ export type FirmInvoiceSettings = {
   chase_enabled_default?: boolean;
   chase_interval_days?: number;
   chase_max?: number;
+  // Default payment terms (migration 1330): days after issue that a NEW invoice
+  // is due. Optional on the type so reads survive the pre-1330 window;
+  // null means "no due date at all", which is NOT the same as 0 (due on
+  // receipt) and is why this is nullable rather than defaulted in code.
+  default_due_days?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -121,6 +127,7 @@ export type UpsertInvoiceSettingsInput = {
   chase_enabled_default?: boolean;
   chase_interval_days?: number;
   chase_max?: number;
+  default_due_days?: number | null;
 };
 
 export type UpsertInvoiceSettingsResult =
@@ -177,6 +184,37 @@ export async function getChaseSettingsSR(
   firmId: string,
 ): Promise<ChaseSettings> {
   return chaseSettingsFrom(await getFirmInvoiceSettingsSR(firmId));
+}
+
+// Save ONLY the default payment terms, from the Billing → Settings tab. Same
+// reasoning as updateChaseSettings below: routing this through
+// upsertFirmInvoiceSettings would blank the province and tax numbers, because
+// that function takes the whole settings object.
+//
+// `days` of null is a real choice ("don't date my invoices") and is stored as
+// null, not coerced to the default.
+export async function updateDefaultDueDays(
+  days: number | null,
+): Promise<{ ok: true } | { ok: false; reason: "unauthenticated" | "migration_pending" | "save_failed" }> {
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, reason: "unauthenticated" };
+  const sb = await getServerSupabase();
+  const { error } = await sb.from("firm_invoice_settings").upsert(
+    {
+      firm_id: firm.id,
+      default_due_days: normalizeDueDays(days),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "firm_id" },
+  );
+  if (error) {
+    if (isInvoiceSettingsSchemaMissing(error)) {
+      return { ok: false, reason: "migration_pending" };
+    }
+    console.error("[invoice-settings] updateDefaultDueDays failed:", error);
+    return { ok: false, reason: "save_failed" };
+  }
+  return { ok: true };
 }
 
 // Save ONLY the chase columns, from the Billing → Settings tab. Deliberately

@@ -18,7 +18,11 @@ import {
   CHASE_MAX_MAX,
   type ChaseSettings,
 } from "@/lib/invoices/chase-settings";
-import { saveChaseSettingsAction } from "@/app/actions/billing-invoices";
+import { DUE_DAYS_MIN, DUE_DAYS_MAX } from "@/lib/invoices/terms";
+import {
+  saveChaseSettingsAction,
+  saveDefaultDueDaysAction,
+} from "@/app/actions/billing-invoices";
 
 // The Settings tab.
 //
@@ -29,6 +33,7 @@ import { saveChaseSettingsAction } from "@/app/actions/billing-invoices";
 // is a second place for it to be wrong.
 export function BillingSettings({
   chase,
+  defaultDueDays,
   taxProvince,
   invoicingConfigured,
   numbering,
@@ -36,6 +41,9 @@ export function BillingSettings({
   books,
 }: {
   chase: ChaseSettings;
+  // null = the firm has chosen not to date its invoices at all. Distinct from
+  // 0, which means due on receipt.
+  defaultDueDays: number | null;
   taxProvince: string | null;
   invoicingConfigured: boolean;
   numbering: { prefix: string; nextNumber: string } | null;
@@ -74,7 +82,13 @@ export function BillingSettings({
 
   return (
     <div className="max-w-2xl space-y-6">
-      {/* ── The one editable thing ───────────────────────────────────── */}
+      {/* ── Payment terms ─────────────────────────────────────────────
+          First card because it is the one that switches everything else on:
+          without a due date nothing can be overdue, so the Overdue card, the
+          warning rows and the chase cadence all sit inert. */}
+      <PaymentTermsCard initialDays={defaultDueDays} />
+
+      {/* ── The other editable thing ─────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
@@ -272,6 +286,83 @@ export function BillingSettings({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// "New invoices are due in N days."
+//
+// An EMPTY field is a real answer, not a missing one: it means "don't put a due
+// date on my invoices", and it saves as null. Zero is also real and means due
+// on receipt. Those two being different is the whole reason this is a text
+// input whose emptiness is meaningful rather than a number spinner.
+//
+// Changing this only affects invoices raised from now on. An issued invoice
+// keeps the date it was issued with — moving a client's due date retroactively
+// because someone edited a setting would be indefensible.
+function PaymentTermsCard({ initialDays }: { initialDays: number | null }) {
+  const t = useTranslations("FirmBilling");
+  const [pending, startTransition] = useTransition();
+  const [value, setValue] = useState(
+    initialDays == null ? "" : String(initialDays),
+  );
+
+  const trimmed = value.trim();
+  const asNumber = Number(trimmed);
+  const parsed: number | null = trimmed === "" ? null : asNumber;
+  const valid =
+    parsed === null ||
+    (Number.isInteger(asNumber) &&
+      asNumber >= DUE_DAYS_MIN &&
+      asNumber <= DUE_DAYS_MAX);
+
+  const save = () => {
+    if (!valid) return;
+    startTransition(async () => {
+      const res = await saveDefaultDueDaysAction(parsed);
+      toast[res.ok ? "success" : "error"](
+        res.ok ? t("settings_saved") : t("settings_save_err"),
+      );
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("settings_terms_title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          {t("settings_terms_body")}
+        </p>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="due-days">{t("settings_terms_days")}</Label>
+          <Input
+            id="due-days"
+            type="number"
+            min={DUE_DAYS_MIN}
+            max={DUE_DAYS_MAX}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-32"
+            placeholder={t("settings_terms_none_placeholder")}
+          />
+          {/* Says the setting back as a sentence, because "0" and "" in a
+              number box do not read as two different decisions. */}
+          <p className="text-xs text-muted-foreground">
+            {parsed === null
+              ? t("settings_terms_summary_none")
+              : parsed === 0
+                ? t("settings_terms_summary_receipt")
+                : t("settings_terms_summary", { days: parsed })}
+          </p>
+        </div>
+
+        <Button onClick={save} disabled={pending || !valid} size="sm">
+          {t("settings_save")}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

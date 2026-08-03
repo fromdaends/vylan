@@ -33,6 +33,7 @@ import { getInvoiceAttachmentForEngagementSR } from "@/lib/db/final-documents";
 import { firmPaymentRails } from "@/lib/payments/rails";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { formatCurrency } from "@/lib/format";
+import { dueDateFrom, todayIsoDay } from "@/lib/invoices/terms";
 
 export type InvoiceSendReason =
   | "no_engagement"
@@ -204,7 +205,13 @@ export async function sendEngagementInvoice(
         tax_breakdown: computed.taxLines,
         subtotal_cents: computed.subtotalCents,
         tax_total_cents: computed.taxTotalCents,
-        issue_date: new Date().toISOString().slice(0, 10),
+        issue_date: todayIsoDay(),
+        // The automated path never set a due date, so every invoice the
+        // automation raised was permanently un-chaseable and could never read
+        // as overdue — and this is the path nobody is watching. Same helper the
+        // builder uses, so a hand-raised and an automatic invoice issued on the
+        // same day under the same terms are due on the same day.
+        due_date: dueDateFrom(todayIsoDay(), settings.default_due_days),
         invoice_terms: settings.default_terms,
         invoice_notes: settings.default_notes,
         invoice_language: client.locale === "en" ? "en" : "fr",

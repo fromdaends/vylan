@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/format";
+import { dueDateFrom, todayIsoDay } from "@/lib/invoices/terms";
 import {
   PROVINCE_TAXES,
   taxComponentLabel,
@@ -42,6 +43,9 @@ export type InvoiceBuilderSettings = {
   defaultTerms: string | null;
   defaultNotes: string | null;
   defaultTaxesEnabled: boolean;
+  // Days after issue that a new invoice is due (migration 1330). null = the
+  // firm has chosen not to date its invoices; 0 = due on receipt.
+  defaultDueDays: number | null;
 };
 
 export type InvoiceBuilderPreset = {
@@ -197,7 +201,19 @@ export function InvoiceBuilder({
       .map((c) => c.id)
       .filter((id) => !stored.has(id));
   });
-  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  // A NEW invoice is pre-filled from the firm's default payment terms; an
+  // invoice being EDITED keeps the date it already has. Same shape as terms and
+  // notes below — `initial` always wins, so re-opening an invoice can never
+  // silently move its due date because a setting changed since it was issued.
+  //
+  // Before this defaulted, the field started blank and almost nobody filled it
+  // in, which left the whole Overdue apparatus (status, stat card, warning
+  // rows, chase cadence) permanently inert.
+  const [dueDate, setDueDate] = useState(
+    initial
+      ? (initial.dueDate ?? "")
+      : (dueDateFrom(todayIsoDay(), settings?.defaultDueDays) ?? ""),
+  );
   const [terms, setTerms] = useState(
     initial ? (initial.terms ?? "") : (settings?.defaultTerms ?? ""),
   );

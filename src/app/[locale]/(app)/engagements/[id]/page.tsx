@@ -669,6 +669,10 @@ export default async function EngagementDetailPage({
           defaultTerms: invoiceSettings.default_terms,
           defaultNotes: invoiceSettings.default_notes,
           defaultTaxesEnabled: invoiceSettings.default_taxes_enabled,
+          // Pre-fills the builder's due date (migration 1330). `undefined` on a
+          // pre-1330 read collapses to null, which the builder reads as "leave
+          // the field blank" — exactly the old behaviour.
+          defaultDueDays: invoiceSettings.default_due_days ?? null,
         }
       : null,
     presets: presetDefs.flatMap(({ key, label }) => {
