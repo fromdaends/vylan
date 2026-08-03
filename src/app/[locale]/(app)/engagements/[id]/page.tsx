@@ -114,6 +114,7 @@ import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementAccess } from "@/components/engagements/engagement-access";
+import { InternalWork } from "@/components/engagements/internal-work";
 import { EngagementPresence } from "@/components/engagements/engagement-presence";
 import { getLatestHandoffNote } from "@/lib/db/activity";
 import {
@@ -170,6 +171,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
+import { listEngagementTasks } from "@/lib/db/engagement-tasks";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
@@ -523,6 +525,11 @@ export default async function EngagementDetailPage({
         listClientMembers(engagement.client_id),
       ])
     : [[], []];
+
+  // The FIRM's own steps (1340). Read for everybody who can open the page —
+  // unlike the access control above, this is the work itself, not a permission
+  // screen. Empty until the migration lands, which reads as "nothing planned".
+  const internalTasks = await listEngagementTasks(id);
   const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
   // Anyone who can ALREADY see this through the client is not a candidate:
   // adding them would grant nothing, and removing them later would take
@@ -1391,6 +1398,23 @@ export default async function EngagementDetailPage({
           tab keeps its own controls. The Activity feed lives in the Assistant
           panel's Activity tab, opened from the header. */}
       <EngagementTabs
+        // Shown once the engagement is real. A draft has no work to plan yet,
+        // and a fourth tab on an empty draft is furniture.
+        showWork={!isDraft}
+        workCount={internalTasks.length}
+        work={
+          <InternalWork
+            engagementId={engagement.id}
+            tasks={internalTasks.map((x) => ({
+              id: x.id,
+              title: x.title,
+              assignedUserId: x.assignedUserId,
+              status: x.status,
+            }))}
+            members={activeMembers}
+            canEdit={isLive}
+          />
+        }
         checklistCount={collectionItems.length}
         signaturesCount={signatureItems.length}
         showSignatures={isLive || signatureItems.length > 0}
