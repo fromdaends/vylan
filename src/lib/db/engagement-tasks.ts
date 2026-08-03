@@ -1,15 +1,22 @@
-// The firm's own work on an engagement — reading and writing its internal steps.
+// The firm's own work — reading and writing tasks.
 //
-// Phase 4, step 1. Deliberately NOT part of items.ts: that module owns
-// request_items, which is the CLIENT'S checklist, and the entire point of this
-// table is that the two lists are different objects with different audiences.
-// One file that read both would be one refactor away from a query that returns
-// the firm's private notes to a portal route.
+// A task belongs to a CLIENT. A job is optional (1350). That is the founder's
+// call and the example that settles it: a client gets a CRA notice and somebody
+// has to phone about it. Real work, belongs to that client, part of no tax
+// return. Before 1350 it had nowhere to live but a fake job invented to hold it.
 //
-// READS DEGRADE, WRITES REFUSE, the same shape as client-members.ts and
-// engagement-members.ts. Before 1340 is applied there is no table: a read
-// returns "no internal work yet", which is exactly what a job nobody has
-// planned should show, and a write names the file to run.
+// Deliberately NOT part of items.ts: that module owns request_items, which is
+// the CLIENT'S checklist. The two lists have different audiences, and one file
+// that read both would be one refactor away from a query returning the firm's
+// private notes to a portal route.
+//
+// THE TABLE IS STILL CALLED engagement_tasks. The founder asked for no renames
+// and is right that it buys nothing — a table name is not a user-facing word.
+// The name is now slightly wrong; that is the trade.
+//
+// READS DEGRADE, WRITES REFUSE, the same shape as client-members.ts. Before
+// 1340/1350 there is no table: a read returns "no work yet", which is the
+// truth, and a write names the file to run.
 
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
@@ -19,44 +26,62 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export type EngagementTask = {
   id: string;
-  engagementId: string;
+  /** Always set. The task's real parent. */
+  clientId: string;
+  /** Null for a task that belongs to the client alone. */
+  engagementId: string | null;
   title: string;
   notes: string | null;
-  assignedUserId: string | null;
+  /** Everybody on it. Empty is a real state — "somebody needs to do this". */
+  assigneeIds: string[];
   status: TaskStatus;
   dueDate: string | null;
   orderIndex: number;
   completedAt: string | null;
 };
 
+/** A task plus the names around it — what a firm-wide list needs to render. */
+export type FirmTask = EngagementTask & {
+  clientName: string | null;
+  engagementTitle: string | null;
+};
+
 export class EngagementTasksUnsupportedError extends Error {
   constructor() {
     super(
-      "Internal work needs database update 1340. Run supabase/migrations/1340_engagement_tasks.sql, then try again.",
+      "Tasks need database updates 1340 and 1350. Run supabase/migrations/1340_engagement_tasks.sql then 1350_tasks_belong_to_clients.sql, and try again.",
     );
     this.name = "EngagementTasksUnsupportedError";
   }
 }
 
-/** Anything unrecognised reads as "todo" rather than throwing — a task with a
- *  status from a newer build must still render in an older one. */
+/** Anything unrecognised reads as "todo" rather than throwing — a task written
+ *  by a newer build must still render in an older one during a rollout. */
 export function toTaskStatus(v: unknown): TaskStatus {
   return v === "doing" || v === "done" ? v : "todo";
 }
 
+const SELECT =
+  "id, client_id, engagement_id, title, notes, status, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
+
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
-  const engagementId =
-    typeof r.engagement_id === "string" ? r.engagement_id : null;
+  const clientId = typeof r.client_id === "string" ? r.client_id : null;
   const title = typeof r.title === "string" ? r.title : null;
-  if (!id || !engagementId || !title) return null;
+  if (!id || !clientId || !title) return null;
+  // PostgREST returns an embedded set as an array; be defensive about the
+  // single-object shape too rather than assuming one.
+  const raw = r.engagement_task_assignees;
+  const rows = Array.isArray(raw) ? raw : raw ? [raw] : [];
   return {
     id,
-    engagementId,
+    clientId,
+    engagementId: typeof r.engagement_id === "string" ? r.engagement_id : null,
     title,
     notes: typeof r.notes === "string" && r.notes.trim() ? r.notes : null,
-    assignedUserId:
-      typeof r.assigned_user_id === "string" ? r.assigned_user_id : null,
+    assigneeIds: rows
+      .map((a) => (a as { user_id?: unknown }).user_id)
+      .filter((u): u is string => typeof u === "string"),
     status: toTaskStatus(r.status),
     dueDate: typeof r.due_date === "string" ? r.due_date : null,
     orderIndex: typeof r.order_index === "number" ? r.order_index : 0,
@@ -64,16 +89,14 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
   };
 }
 
-/** One engagement's internal steps, in display order. */
+/** One job's tasks, in display order. */
 export async function listEngagementTasks(
   engagementId: string,
 ): Promise<EngagementTask[]> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("engagement_tasks")
-    .select(
-      "id, engagement_id, title, notes, assigned_user_id, status, due_date, order_index, completed_at",
-    )
+    .select(SELECT)
     .eq("engagement_id", engagementId)
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
@@ -86,39 +109,87 @@ export async function listEngagementTasks(
     .filter((t): t is EngagementTask => t !== null);
 }
 
+/**
+ * EVERY task in the firm — the query the Work list is built on, and the reason
+ * this is a first-class object rather than a tab on one job.
+ *
+ * Joins the client and (when there is one) the job, so a row can say who it is
+ * for. ONE query, not one per row: a firm-wide list resolving names per task
+ * would open with a round trip per row.
+ *
+ * RLS does the scoping, and 1350 taught it both shapes — a task with a job
+ * follows the job, a task without one follows the client's list. Nothing here
+ * has to know that.
+ */
+export async function listFirmTasks(): Promise<FirmTask[]> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_tasks")
+    .select(`${SELECT}, clients(display_name), engagements(title)`)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) {
+    if (isMissingSchema(error)) return [];
+    throw error;
+  }
+  const out: FirmTask[] = [];
+  for (const row of data ?? []) {
+    const r = row as Record<string, unknown>;
+    const base = toTask(r);
+    if (!base) continue;
+    const c = (Array.isArray(r.clients) ? r.clients[0] : r.clients) as
+      | Record<string, unknown>
+      | undefined;
+    const e = (Array.isArray(r.engagements)
+      ? r.engagements[0]
+      : r.engagements) as Record<string, unknown> | undefined;
+    out.push({
+      ...base,
+      clientName: typeof c?.display_name === "string" ? c.display_name : null,
+      engagementTitle: typeof e?.title === "string" ? e.title : null,
+    });
+  }
+  return out;
+}
+
 export async function createEngagementTask(input: {
-  engagementId: string;
+  clientId: string;
+  /** Omit for a task that belongs to the client alone. */
+  engagementId?: string | null;
   firmId: string;
   title: string;
-  assignedUserId?: string | null;
   dueDate?: string | null;
   createdBy?: string | null;
   /** Appended, so a new step lands at the bottom rather than the top. */
   orderIndex: number;
-}): Promise<void> {
+}): Promise<string> {
   const supabase = await getServerSupabase();
-  const { error } = await supabase.from("engagement_tasks").insert({
-    engagement_id: input.engagementId,
-    firm_id: input.firmId,
-    title: input.title,
-    assigned_user_id: input.assignedUserId ?? null,
-    due_date: input.dueDate ?? null,
-    order_index: input.orderIndex,
-    created_by: input.createdBy ?? null,
-  });
+  const { data, error } = await supabase
+    .from("engagement_tasks")
+    .insert({
+      client_id: input.clientId,
+      engagement_id: input.engagementId ?? null,
+      firm_id: input.firmId,
+      title: input.title,
+      due_date: input.dueDate ?? null,
+      order_index: input.orderIndex,
+      created_by: input.createdBy ?? null,
+    })
+    .select("id")
+    .single();
   if (error) {
     if (isMissingSchema(error)) throw new EngagementTasksUnsupportedError();
     throw error;
   }
+  return (data as { id: string }).id;
 }
 
 /**
  * Change one field, or several.
  *
  * completed_at is derived here rather than trusted from the caller: it is the
- * only field whose value has to agree with `status`, and a row that says "done"
- * with no completion time is the kind of thing a report quietly gets wrong six
- * months later.
+ * only field whose value has to agree with `status`, and a row saying "done"
+ * with no completion time is what a report quietly gets wrong six months later.
  */
 export async function updateEngagementTask(input: {
   taskId: string;
@@ -126,7 +197,6 @@ export async function updateEngagementTask(input: {
   patch: {
     title?: string;
     notes?: string | null;
-    assignedUserId?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
   };
@@ -137,7 +207,6 @@ export async function updateEngagementTask(input: {
   const p = input.patch;
   if (p.title !== undefined) row.title = p.title;
   if (p.notes !== undefined) row.notes = p.notes;
-  if (p.assignedUserId !== undefined) row.assigned_user_id = p.assignedUserId;
   if (p.dueDate !== undefined) row.due_date = p.dueDate;
   if (p.status !== undefined) {
     row.status = p.status;
@@ -151,6 +220,38 @@ export async function updateEngagementTask(input: {
     .update(row)
     .eq("id", input.taskId)
     .eq("firm_id", input.firmId);
+  if (error) {
+    if (isMissingSchema(error)) throw new EngagementTasksUnsupportedError();
+    throw error;
+  }
+}
+
+/**
+ * Put somebody on a task, or take them off.
+ *
+ * A row per person rather than a column, because a task genuinely has more than
+ * one name on it — preparer and reviewer is the ordinary case, not the
+ * exception. Adding this after the table had rows would have meant rewriting
+ * every read of it, which is why it went in while the table was still empty.
+ */
+export async function setTaskAssignee(input: {
+  taskId: string;
+  userId: string;
+  firmId: string;
+  on: boolean;
+}): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = input.on
+    ? await supabase.from("engagement_task_assignees").upsert(
+        { task_id: input.taskId, user_id: input.userId, firm_id: input.firmId },
+        { onConflict: "task_id,user_id" },
+      )
+    : await supabase
+        .from("engagement_task_assignees")
+        .delete()
+        .eq("task_id", input.taskId)
+        .eq("user_id", input.userId)
+        .eq("firm_id", input.firmId);
   if (error) {
     if (isMissingSchema(error)) throw new EngagementTasksUnsupportedError();
     throw error;

@@ -1,31 +1,30 @@
 "use client";
 
-// OUR side of the wall — the firm's own steps on a job.
+// The firm's own work — ONE list, used in two places.
 //
-// The roadmap calls this "the most consequential UI decision in the plan", and
-// it is right. The job page's other three tabs are all about documents moving
-// between the firm and the client. This one is the only thing on the page the
-// client will never see, and if it reads like a fourth checklist people will
-// treat it as one — the separation would hold in the database and collapse in
-// practice, which is the worse of the two failures because nobody notices.
+// On a job it shows that job's steps, drawn as "our side of the wall". On /work
+// it shows every task in the firm and adds a line saying who each one is for.
+// Same component, one prop apart, because two copies of a task list is exactly
+// how two screens start disagreeing about what "done" looks like.
 //
-// So it is drawn differently ON PURPOSE, and every difference is doing a job:
+// ── WHY IT IS DRAWN APART FROM THE REST OF A JOB ────────────────────────────
 //
-//   * a dashed border, where every other section on the page is solid — the
-//     universal "this is not the same kind of thing" signal
-//   * a muted, slightly inset panel instead of the page's card white
-//   * one line at the top saying, in words, that the client cannot see it
+// The job page's other three tabs are all about documents moving between the
+// firm and the client. This is the only thing on that page the client never
+// sees, and if it read like a fourth checklist people would treat it as one —
+// the separation would hold in the database and collapse in practice, which is
+// the worse failure because nobody notices.
 //
-// None of that is decoration; it is all the same sentence said three ways,
-// because a person scanning a page reads the shape before they read the text.
+// So on a job: a dashed border where everything else is solid, a muted inset
+// panel, and one line saying in words that the client cannot see it. Three ways
+// of saying the same thing, because people read shape before text.
 //
-// STATUS IS A CLICK, NOT A MENU. Three states cycle on the checkbox — empty,
-// half, done — so ticking something off is one gesture. A dropdown for three
-// values is a dropdown nobody opens.
+// STATUS IS A CLICK, NOT A MENU. Three states cycle on the box — empty, half,
+// done. A dropdown for three values is a dropdown nobody opens.
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import { Check, EyeOff, Minus, Plus, Trash2, UserPlus } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -41,20 +40,26 @@ import {
   addTaskAction,
   updateTaskAction,
   deleteTaskAction,
+  setTaskAssigneeAction,
   type TaskActionResult,
 } from "@/app/actions/engagement-tasks";
 
 type TaskStatus = "todo" | "doing" | "done";
-type Task = {
+export type WorkRow = {
   id: string;
   title: string;
-  assignedUserId: string | null;
   status: TaskStatus;
+  assigneeIds: string[];
+  clientId: string;
+  engagementId: string | null;
+  /** Only supplied on the firm-wide list. */
+  clientName?: string | null;
+  engagementTitle?: string | null;
 };
 type Person = { id: string; name: string };
 
-// todo -> doing -> done -> todo. One click moves you along; three clicks bring
-// you back, which is the whole reason it is a cycle and not a toggle.
+// todo → doing → done → todo. One click moves you along; three bring you back,
+// which is the whole reason it is a cycle and not a toggle.
 const NEXT: Record<TaskStatus, TaskStatus> = {
   todo: "doing",
   doing: "done",
@@ -62,15 +67,23 @@ const NEXT: Record<TaskStatus, TaskStatus> = {
 };
 
 export function InternalWork({
-  engagementId,
   tasks,
   members,
   canEdit,
+  clientId,
+  engagementId = null,
+  variant = "job",
 }: {
-  engagementId: string;
-  tasks: Task[];
+  tasks: WorkRow[];
   members: Person[];
   canEdit: boolean;
+  /** Which client a NEW task is for. Absent on the firm-wide list, where the
+   *  quick-add is not offered — a task needs a client and that list spans all
+   *  of them. */
+  clientId?: string;
+  engagementId?: string | null;
+  /** "job" draws the wall; "firm" is a plain list with a context line. */
+  variant?: "job" | "firm";
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -79,6 +92,7 @@ export function InternalWork({
   const [busy, setBusy] = useState<string | null>(null);
 
   const nameById = new Map(members.map((m) => [m.id, m.name]));
+  const firmWide = variant === "firm";
 
   function report(res: TaskActionResult) {
     if (res.ok) {
@@ -97,22 +111,24 @@ export function InternalWork({
 
   async function add() {
     const title = draft.trim();
-    if (!title || busy) return;
+    if (!title || busy || !clientId) return;
     setBusy("new");
     try {
-      if (report(await addTaskAction({ engagementId, title }))) setDraft("");
+      if (report(await addTaskAction({ clientId, engagementId, title }))) {
+        setDraft("");
+      }
     } finally {
       setBusy(null);
     }
   }
 
-  async function cycle(task: Task) {
+  async function cycle(task: WorkRow) {
     setBusy(task.id);
     try {
       report(
         await updateTaskAction({
-          engagementId,
           taskId: task.id,
+          engagementId: task.engagementId,
           status: NEXT[task.status],
         }),
       );
@@ -121,21 +137,31 @@ export function InternalWork({
     }
   }
 
-  async function assign(taskId: string, userId: string | null) {
-    setBusy(taskId);
+  async function toggleAssignee(task: WorkRow, userId: string) {
+    setBusy(task.id);
     try {
       report(
-        await updateTaskAction({ engagementId, taskId, assignedUserId: userId }),
+        await setTaskAssigneeAction({
+          taskId: task.id,
+          userId,
+          on: !task.assigneeIds.includes(userId),
+          engagementId: task.engagementId,
+        }),
       );
     } finally {
       setBusy(null);
     }
   }
 
-  async function remove(taskId: string) {
-    setBusy(taskId);
+  async function remove(task: WorkRow) {
+    setBusy(task.id);
     try {
-      report(await deleteTaskAction({ engagementId, taskId }));
+      report(
+        await deleteTaskAction({
+          taskId: task.id,
+          engagementId: task.engagementId,
+        }),
+      );
     } finally {
       setBusy(null);
     }
@@ -144,36 +170,44 @@ export function InternalWork({
   const done = tasks.filter((x) => x.status === "done").length;
 
   return (
-    <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4">
-      {/* Said in words as well as in shape. Somebody who has just been added to
-          this firm has no reason to know which lists the client can read. */}
-      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <EyeOff className="size-3.5 shrink-0" aria-hidden />
-        {t("work_private_note")}
-        {tasks.length > 0 && (
-          <span className="ml-auto shrink-0 tabular-nums">
-            {t("work_progress", { done, total: tasks.length })}
-          </span>
-        )}
-      </p>
+    <div
+      className={
+        firmWide
+          ? ""
+          : "rounded-xl border border-dashed border-border bg-muted/30 p-4"
+      }
+    >
+      {/* On a job, said in words as well as in shape — somebody just added to
+          the firm has no reason to know which lists the client can read. */}
+      {!firmWide && (
+        <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <EyeOff className="size-3.5 shrink-0" aria-hidden />
+          {t("work_private_note")}
+          {tasks.length > 0 && (
+            <span className="ml-auto shrink-0 tabular-nums">
+              {t("work_progress", { done, total: tasks.length })}
+            </span>
+          )}
+        </p>
+      )}
 
-      {tasks.length === 0 && !canEdit && (
-        <p className="py-4 text-sm text-muted-foreground">{t("work_empty")}</p>
+      {tasks.length === 0 && (
+        <p className="py-6 text-sm text-muted-foreground">{t("work_empty")}</p>
       )}
 
       <ul className="divide-y divide-border/50">
         {tasks.map((task) => {
-          const assignee = task.assignedUserId
-            ? nameById.get(task.assignedUserId)
-            : null;
+          const assignees = task.assigneeIds
+            .map((id) => ({ id, name: nameById.get(id) }))
+            .filter((a): a is Person => Boolean(a.name));
           return (
-            <li key={task.id} className="flex items-center gap-3 py-2">
+            <li key={task.id} className="flex items-start gap-3 py-2">
               <button
                 type="button"
                 disabled={!canEdit || busy === task.id}
                 onClick={() => cycle(task)}
                 aria-label={t("work_toggle", { title: task.title })}
-                className={`flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-50 ${
+                className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-50 ${
                   task.status === "done"
                     ? "border-foreground bg-foreground text-background"
                     : task.status === "doing"
@@ -189,14 +223,39 @@ export function InternalWork({
                 )}
               </button>
 
-              <span
-                className={`min-w-0 flex-1 text-sm ${
-                  task.status === "done"
-                    ? "text-muted-foreground line-through decoration-border"
-                    : ""
-                }`}
-              >
-                {task.title}
+              <span className="min-w-0 flex-1">
+                <span
+                  className={`block text-sm ${
+                    task.status === "done"
+                      ? "text-muted-foreground line-through decoration-border"
+                      : ""
+                  }`}
+                >
+                  {task.title}
+                </span>
+                {/* WHO IT IS FOR. Only on the firm-wide list: on a job every
+                    row has the same answer, and repeating it is noise. */}
+                {firmWide && (
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    <Link
+                      href={`/clients/${task.clientId}`}
+                      className="hover:text-foreground hover:underline"
+                    >
+                      {task.clientName ?? "—"}
+                    </Link>
+                    {task.engagementId && task.engagementTitle && (
+                      <>
+                        {" · "}
+                        <Link
+                          href={`/engagements/${task.engagementId}`}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          {task.engagementTitle}
+                        </Link>
+                      </>
+                    )}
+                  </span>
+                )}
               </span>
 
               {canEdit ? (
@@ -205,14 +264,20 @@ export function InternalWork({
                     <button
                       type="button"
                       disabled={busy === task.id}
-                      className="flex shrink-0 items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {assignee ? (
+                      {assignees.length > 0 ? (
                         <>
-                          <AvatarInitials name={assignee} size={18} />
-                          <span className="max-w-[8rem] truncate">
-                            {assignee}
-                          </span>
+                          {/* Faces, not names: two people on a task is the
+                              ordinary case and two full names do not fit. */}
+                          {assignees.slice(0, 3).map((a) => (
+                            <AvatarInitials key={a.id} name={a.name} size={18} />
+                          ))}
+                          {assignees.length > 3 && (
+                            <span className="tabular-nums">
+                              +{assignees.length - 3}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <>
@@ -223,26 +288,41 @@ export function InternalWork({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
-                    <DropdownMenuItem onSelect={() => assign(task.id, null)}>
-                      {t("work_unassigned")}
-                    </DropdownMenuItem>
-                    {members.map((m) => (
-                      <DropdownMenuItem
-                        key={m.id}
-                        onSelect={() => assign(task.id, m.id)}
-                        className="gap-2"
-                      >
-                        <AvatarInitials name={m.name} size={18} />
-                        {m.name}
-                      </DropdownMenuItem>
-                    ))}
+                    {members.map((m) => {
+                      const on = task.assigneeIds.includes(m.id);
+                      return (
+                        <DropdownMenuItem
+                          key={m.id}
+                          onSelect={(e) => {
+                            // Keep the menu open: putting two people on a task
+                            // should not cost two trips to the same button.
+                            e.preventDefault();
+                            toggleAssignee(task, m.id);
+                          }}
+                          className="gap-2"
+                        >
+                          <span
+                            className={`flex size-4 shrink-0 items-center justify-center rounded-[4px] border ${
+                              on
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-border"
+                            }`}
+                          >
+                            {on && <Check className="size-3" aria-hidden />}
+                          </span>
+                          <AvatarInitials name={m.name} size={18} />
+                          {m.name}
+                        </DropdownMenuItem>
+                      );
+                    })}
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                assignee && (
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                    <AvatarInitials name={assignee} size={18} />
-                    {assignee}
+                assignees.length > 0 && (
+                  <span className="flex shrink-0 items-center gap-1">
+                    {assignees.slice(0, 3).map((a) => (
+                      <AvatarInitials key={a.id} name={a.name} size={18} />
+                    ))}
                   </span>
                 )
               )}
@@ -251,9 +331,9 @@ export function InternalWork({
                 <button
                   type="button"
                   disabled={busy === task.id}
-                  onClick={() => remove(task.id)}
+                  onClick={() => remove(task)}
                   aria-label={t("work_delete", { title: task.title })}
-                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 md:opacity-0"
+                  className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Trash2 className="size-3.5" aria-hidden />
                 </button>
@@ -263,7 +343,9 @@ export function InternalWork({
         })}
       </ul>
 
-      {canEdit && (
+      {/* Quick-add only where a new task has an obvious client. The firm-wide
+          list spans every client, so it cannot guess one. */}
+      {canEdit && clientId && (
         <div className="mt-3 flex items-center gap-2">
           <Input
             value={draft}

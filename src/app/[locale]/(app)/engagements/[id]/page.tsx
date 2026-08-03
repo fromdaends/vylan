@@ -1408,11 +1408,14 @@ export default async function EngagementDetailPage({
             tasks={internalTasks.map((x) => ({
               id: x.id,
               title: x.title,
-              assignedUserId: x.assignedUserId,
               status: x.status,
+              assigneeIds: x.assigneeIds,
+              clientId: x.clientId,
+              engagementId: x.engagementId,
             }))}
             members={activeMembers}
             canEdit={isLive}
+            clientId={engagement.client_id}
           />
         }
         checklistCount={collectionItems.length}

@@ -16,6 +16,7 @@ import {
 } from "@/lib/engagements/views";
 import { getEngagementBadges } from "@/lib/engagements/badges";
 import { EngagementsView } from "@/components/engagements/engagements-view";
+import { WorkTabs } from "@/components/work/work-tabs";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -63,6 +64,11 @@ export async function renderEngagementsView({
           </Link>
         </Button>
       </header>
+
+      {/* The other half of Work. This list keeps its own URL — every existing
+          link and bookmark still lands — and gains the section header so the
+          two halves read as one place rather than two unrelated screens. */}
+      <WorkTabs current="engagements" />
 
       <EngagementsView
         view={view}
