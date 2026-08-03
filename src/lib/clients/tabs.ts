@@ -87,3 +87,45 @@ export function clientEngagementViewHref(
     ? base
     : `${base}&${CLIENT_ENGAGEMENT_VIEW_PARAM}=${view}`;
 }
+
+// ── The Bookkeeping tab's working lists ─────────────────────────────────────
+//
+// The firm-wide Bookkeeping page shows these two as tabs of one panel, and for
+// the same reason they are tabs here rather than both on screen at once: each
+// is a LIVE read of the client's ledger, so rendering both would make every
+// visit to this tab pay for two QuickBooks scans when you only ever read one.
+//
+// The month-end close sits above them and is not a tab — it costs database
+// reads only, and it is the thing you came to look at.
+export const CLIENT_BOOKKEEPING_VIEWS = ["receipts", "uncategorized"] as const;
+
+export type ClientBookkeepingView = (typeof CLIENT_BOOKKEEPING_VIEWS)[number];
+
+// Its own param name (`bk`), for exactly the reason `ev` above has one: this
+// page already spends `tab` on its own tab row, and the shared components
+// rendered inside it write `client`, `from`, `to` and `period` of their own.
+// A second `tab` would navigate you off the client page mid-click.
+export const CLIENT_BOOKKEEPING_VIEW_PARAM = "bk";
+
+export function parseClientBookkeepingView(
+  value: string | null | undefined,
+): ClientBookkeepingView {
+  return (CLIENT_BOOKKEEPING_VIEWS as readonly string[]).includes(value ?? "")
+    ? (value as ClientBookkeepingView)
+    : "receipts";
+}
+
+export function clientBookkeepingViewHref(
+  clientId: string,
+  view: ClientBookkeepingView,
+  // The month currently on the close board above, carried across so switching
+  // list does not silently reset which month you were closing.
+  period?: string,
+): string {
+  const base = `/clients/${clientId}?tab=bookkeeping`;
+  const parts = [
+    view === "receipts" ? "" : `${CLIENT_BOOKKEEPING_VIEW_PARAM}=${view}`,
+    period ? `period=${period}` : "",
+  ].filter(Boolean);
+  return parts.length > 0 ? `${base}&${parts.join("&")}` : base;
+}

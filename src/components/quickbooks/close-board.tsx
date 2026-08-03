@@ -62,6 +62,14 @@ export function CloseBoard(props: {
   period: string;
   locale: string;
   rows: Row[];
+  // "client" = rendered on ONE client's page, where the firm-wide board's
+  // shape stops making sense in two specific ways: the Client column repeats
+  // the name in the page header above it, and the two ledger figures link to
+  // the firm-wide lists when the very same lists are on screen directly
+  // below. Everything else — the month stepper, Check, Close/Reopen, the bank
+  // rec cell — is identical, which is the point of it being a prop and not a
+  // second board.
+  scope?: "firm" | "client";
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
@@ -72,6 +80,7 @@ export function CloseBoard(props: {
   const [migrationNote, setMigrationNote] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
 
+  const scoped = props.scope === "client";
   const loc = props.locale === "fr" ? "fr" : "en";
   const from = useMemo(() => periodStart(props.period), [props.period]);
   const to = useMemo(() => periodEnd(props.period), [props.period]);
@@ -191,12 +200,17 @@ export function CloseBoard(props: {
             <ChevronRight className="h-4 w-4" aria-hidden />
           </Button>
         </div>
-        <span className="text-sm text-muted-foreground">
-          {t("close_progress", {
-            closed: closedCount,
-            total: props.rows.length,
-          })}
-        </span>
+        {/* "1 of 1 closed" and a "Check all" beside a single row's own Check
+            are both counting to one. Firm-wide they are the whole point. */}
+        {!scoped && (
+          <span className="text-sm text-muted-foreground">
+            {t("close_progress", {
+              closed: closedCount,
+              total: props.rows.length,
+            })}
+          </span>
+        )}
+        {!scoped && (
         <Button
           size="sm"
           variant="secondary"
@@ -208,6 +222,7 @@ export function CloseBoard(props: {
           )}
           {t("close_check_all")}
         </Button>
+        )}
         {pending && (
           <Loader2
             className="h-4 w-4 animate-spin text-muted-foreground"
@@ -224,10 +239,16 @@ export function CloseBoard(props: {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table
+          className={
+            "w-full text-sm " + (scoped ? "min-w-[560px]" : "min-w-[720px]")
+          }
+        >
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="py-2 font-medium">{t("close_col_client")}</th>
+              {!scoped && (
+                <th className="py-2 font-medium">{t("close_col_client")}</th>
+              )}
               <th className="py-2 font-medium">{t("close_col_owed")}</th>
               <th className="py-2 font-medium">{t("close_col_books")}</th>
               <th className="py-2 font-medium">{t("close_col_bank_rec")}</th>
@@ -243,7 +264,9 @@ export function CloseBoard(props: {
                   key={row.clientId}
                   className="border-b border-border/50 last:border-0"
                 >
-                  <td className="py-2.5 align-top font-medium">{row.name}</td>
+                  {!scoped && (
+                    <td className="py-2.5 align-top font-medium">{row.name}</td>
+                  )}
 
                   <td className="py-2.5 align-top">
                     {row.openRequests === 0 ? (
@@ -304,26 +327,45 @@ export function CloseBoard(props: {
                             </span>
                           ) : (
                             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                              {state.uncategorized > 0 && (
-                                <Link
-                                  href={`/quickbooks/drafts?tab=uncategorized&client=${row.clientId}&from=${from}&to=${to}`}
-                                  className="underline-offset-4 hover:underline"
-                                >
-                                  {t("close_uncategorized", {
-                                    count: state.uncategorized,
-                                  })}
-                                </Link>
-                              )}
-                              {state.missingReceipts > 0 && (
-                                <Link
-                                  href={`/quickbooks/drafts?tab=receipts&client=${row.clientId}&from=${from}&to=${to}`}
-                                  className="underline-offset-4 hover:underline"
-                                >
-                                  {t("close_missing_receipts", {
-                                    count: state.missingReceipts,
-                                  })}
-                                </Link>
-                              )}
+                              {/* Firm-wide these are links INTO the two working
+                                  lists. On a client's page those same lists are
+                                  already rendered below this board, so a link
+                                  would scroll you to a different copy of the
+                                  page you are on. */}
+                              {state.uncategorized > 0 &&
+                                (scoped ? (
+                                  <span>
+                                    {t("close_uncategorized", {
+                                      count: state.uncategorized,
+                                    })}
+                                  </span>
+                                ) : (
+                                  <Link
+                                    href={`/quickbooks/drafts?tab=uncategorized&client=${row.clientId}&from=${from}&to=${to}`}
+                                    className="underline-offset-4 hover:underline"
+                                  >
+                                    {t("close_uncategorized", {
+                                      count: state.uncategorized,
+                                    })}
+                                  </Link>
+                                ))}
+                              {state.missingReceipts > 0 &&
+                                (scoped ? (
+                                  <span>
+                                    {t("close_missing_receipts", {
+                                      count: state.missingReceipts,
+                                    })}
+                                  </span>
+                                ) : (
+                                  <Link
+                                    href={`/quickbooks/drafts?tab=receipts&client=${row.clientId}&from=${from}&to=${to}`}
+                                    className="underline-offset-4 hover:underline"
+                                  >
+                                    {t("close_missing_receipts", {
+                                      count: state.missingReceipts,
+                                    })}
+                                  </Link>
+                                ))}
                               {state.truncated && (
                                 <span className="text-xs text-amber-600 dark:text-amber-500">
                                   {t("close_truncated")}

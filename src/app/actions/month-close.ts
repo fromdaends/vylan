@@ -64,7 +64,13 @@ export async function closeMonthAction(input: {
   } catch (err) {
     console.error("[month close] audit log failed (month closed):", err);
   }
-  revalidateAllLocales("/quickbooks/close");
+  // /quickbooks/close is a REDIRECT stub — the close board moved onto
+  // /quickbooks/drafts, and this path was never updated with it, so this call
+  // has been revalidating a route that only issues a 307. The board itself
+  // calls router.refresh() after a successful close, which is why nobody saw
+  // it. The client page's Bookkeeping tab renders the same board and is
+  // covered by that same refresh.
+  revalidateAllLocales("/quickbooks/drafts");
   return { ok: true };
 }
 
@@ -95,6 +101,12 @@ export async function reopenMonthAction(input: {
   } catch (err) {
     console.error("[month close] audit log failed (month reopened):", err);
   }
-  revalidateAllLocales("/quickbooks/close");
+  // /quickbooks/close is a REDIRECT stub — the close board moved onto
+  // /quickbooks/drafts, and this path was never updated with it, so this call
+  // has been revalidating a route that only issues a 307. The board itself
+  // calls router.refresh() after a successful close, which is why nobody saw
+  // it. The client page's Bookkeeping tab renders the same board and is
+  // covered by that same refresh.
+  revalidateAllLocales("/quickbooks/drafts");
   return { ok: true };
 }
