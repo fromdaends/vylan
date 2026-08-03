@@ -24,17 +24,37 @@ vi.mock("@/lib/quickbooks/client", () => {
   class QuickbooksError extends Error {
     code: string;
     status?: number;
-    constructor(code: string, message: string, status?: number) {
+    intuitCodes: string[];
+    constructor(
+      code: string,
+      message: string,
+      status?: number,
+      tid?: string,
+      intuitCodes: string[] = [],
+    ) {
       super(message);
       this.code = code;
       this.status = status;
+      this.intuitCodes = intuitCodes;
+    }
+    // Mirrors the real class — post.ts calls this inside its catch, so a mock
+    // without it turns every posting failure into a TypeError.
+    hasIntuitCode(...codes: string[]) {
+      return this.intuitCodes.some((c) => codes.includes(c));
     }
   }
   return {
     QuickbooksError,
+    INTUIT_PERIOD_CLOSED_CODES: ["6200", "6210"],
     quickbooksUploadAttachment: vi.fn(),
     quickbooksCreate: vi.fn(),
     quickbooksTaxLinesEnabled: vi.fn(() => false),
+    // Read fresh at the moment of a closed-period rejection, to name the date.
+    fetchCurrencyPrefs: vi.fn(async () => ({
+      homeCurrency: null,
+      multicurrencyEnabled: null,
+      bookCloseDate: null,
+    })),
     // QuickBooks supplies the rate for a foreign transaction; these tests are all
     // home-currency, so it must never be reached.
     fetchExchangeRate: vi.fn(async () => null),
@@ -46,7 +66,9 @@ vi.mock("@/lib/db/quickbooks", () => ({
   readQuickbooksCurrencyPrefs: vi.fn(async () => ({
     homeCurrency: null,
     multicurrencyEnabled: null,
+    bookCloseDate: null,
   })),
+  updateQuickbooksCurrencyPrefs: vi.fn(async () => {}),
 }));
 vi.mock("@/lib/quickbooks/register-match", () => ({
   findRegisterCandidates: vi.fn(),
@@ -78,9 +100,11 @@ import { downloadObject } from "@/lib/storage";
 import {
   quickbooksUploadAttachment,
   quickbooksCreate,
+  fetchCurrencyPrefs,
   QuickbooksError,
 } from "@/lib/quickbooks/client";
 
+const mockPrefs = vi.mocked(fetchCurrencyPrefs);
 const mockGetFile = vi.mocked(getUploadedFileById);
 const mockDownload = vi.mocked(downloadObject);
 const mockUpload = vi.mocked(quickbooksUploadAttachment);
@@ -579,6 +603,110 @@ describe("postApprovedDraft — connection revoked mid-post (401)", () => {
     // No register match — fall through to the create.
     mockFind.mockResolvedValue({ candidates: [], truncated: false });
     mockClassify.mockReturnValue({ kind: "none" });
+  });
+
+  // ── Intuit fault 6200/6210: the client closed their books ────────────────
+  //
+  // The trap this covers: a QuickBooks closing date is only a WARNING inside
+  // Intuit's own UI (a human clicks through it, or types the password), but over
+  // the API it is an unconditional refusal — "Please use the QBO website to make
+  // these changes". So this can NEVER be retried into success, and reporting it
+  // as a generic post_failed reads to the accountant as "Vylan is broken" when
+  // the truth is "your client locked the month".
+  for (const code of ["6200", "6210"]) {
+    it(`returns period_closed on Intuit fault ${code}`, async () => {
+      mockCreate.mockRejectedValue(
+        new QuickbooksError(
+          "write_failed",
+          "QuickBooks create failed (400)",
+          400,
+          undefined,
+          [code],
+        ),
+      );
+
+      const r = await postApprovedDraft("file-1", "user-1");
+
+      expect(r.kind).toBe("period_closed");
+      // The accountant is told what to DO, not shown Intuit's raw JSON.
+      expect(r.detail).toMatch(/books are closed/i);
+      expect(r.detail).toMatch(/closing date|date this entry/i);
+      // Never resolved as a dead connection — the grant is perfectly healthy.
+      expect(mockReAuth).not.toHaveBeenCalled();
+    });
+  }
+
+  it("names the closing date, read FRESH at the rejection", async () => {
+    // The cached date only refreshes on connect/sync, so it can predate this
+    // close entirely. Intuit has just proven the books are shut, which is the
+    // one moment the real date is worth a call.
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "closed", 400, undefined, ["6210"]),
+    );
+    mockPrefs.mockResolvedValue({
+      homeCurrency: null,
+      multicurrencyEnabled: null,
+      bookCloseDate: "2026-06-30",
+    });
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("period_closed");
+    expect(r.closeDate).toBe("2026-06-30");
+    expect(r.detail).toContain("2026-06-30");
+    expect(mockPrefs).toHaveBeenCalled();
+  });
+
+  it("still refuses clearly when the closing date cannot be read", async () => {
+    // Best-effort: a failed read drops the date from the message. It must never
+    // turn a clear refusal into a crash or a generic post_failed.
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "closed", 400, undefined, ["6210"]),
+    );
+    mockPrefs.mockRejectedValue(new Error("network"));
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("period_closed");
+    expect(r.closeDate).toBeNull();
+    expect(r.detail).toMatch(/books are closed/i);
+  });
+
+  it("records a closed period on the draft, so the queue can show why", async () => {
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "closed", 400, undefined, ["6210"]),
+    );
+
+    await postApprovedDraft("file-1", "user-1");
+
+    // Unlike a revoked connection (which is not the draft's fault and is NOT
+    // recorded), this one belongs on the draft: it is about THIS entry's date.
+    expect(mockRecordPostError).toHaveBeenCalled();
+  });
+
+  it("keeps an ordinary failure in post_failed — only 6200/6210 are period_closed", async () => {
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "boom", 400, undefined, ["6000"]),
+    );
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("post_failed");
+  });
+
+  it("a closed period beats the 401 branch when both could apply", async () => {
+    // Defensive: 6210 is checked FIRST, so a rejection carrying the closed-period
+    // code is never mistaken for a revoked grant and never triggers a pointless
+    // token refresh.
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "closed", 401, undefined, ["6210"]),
+    );
+    mockReAuth.mockResolvedValue({ token: null, dead: true });
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("period_closed");
+    expect(mockReAuth).not.toHaveBeenCalled();
   });
 
   it("returns reconnect_required when a 401 + forced refresh confirms a dead grant", async () => {

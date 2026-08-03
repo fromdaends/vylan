@@ -160,6 +160,7 @@ export function PostDraftControls({
         detail?: string;
         problems?: string[];
         candidates?: MatchCandidateView[];
+        closeDate?: string | null;
       } | null;
       if (r.ok && res?.ok) {
         setOpen(false);
@@ -169,6 +170,25 @@ export function PostDraftControls({
         // Not a failure: the server wants the accountant to decide. Swap the
         // dialog to the candidate list (kept open).
         setMatchCandidates(res.candidates ?? []);
+      } else if (res?.error === "period_closed") {
+        // The client locked the month in QuickBooks. Not our failure and NOT
+        // retriable — Intuit refuses this over the API no matter how many times
+        // we ask, even though a human clicking in QuickBooks can push past the
+        // same warning. Use OUR translated string rather than the server's
+        // English detail, and leave `reconnect` false so no CTA appears: there
+        // is nothing for us to link to, the fix is inside QuickBooks.
+        setFailed(true);
+        setFailMessage(
+          // Name the date when the server could read it — "closed through 30
+          // June" tells the accountant what to change; "closed on or before
+          // this date" only tells them something is wrong.
+          res.closeDate
+            ? t("post_period_closed_on", {
+                date: formatDate(res.closeDate, locale),
+              })
+            : t("post_period_closed"),
+        );
+        router.refresh();
       } else if (res?.error === "reconnect_required") {
         // The connection was revoked mid-post — prompt to reconnect (not retry),
         // and refresh so the page's reconnect banner can appear too.

@@ -28,13 +28,17 @@ import {
   quickbooksCreate,
   quickbooksUploadAttachment,
   quickbooksTaxLinesEnabled,
+  fetchCurrencyPrefs,
   INTUIT_PERIOD_CLOSED_CODES,
   QuickbooksError,
   type QboTxnEntity,
   fetchExchangeRate,
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
-import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
+import {
+  readQuickbooksCurrencyPrefs,
+  updateQuickbooksCurrencyPrefs,
+} from "@/lib/db/quickbooks";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
@@ -107,6 +111,10 @@ export type PostOutcome = {
   firmId: string | null;
   postedQboId?: string | null;
   detail?: string;
+  // The client's QuickBooks closing date (YYYY-MM-DD) on a `period_closed`
+  // outcome, read fresh at the moment of the rejection. Null when that read
+  // failed — the outcome still stands, it just cannot name the date.
+  closeDate?: string | null;
   // Bill/Purchase (expense) or Invoice (income) postability problems — informational.
   problems?: (
     PostabilityProblem | InvoicePostabilityProblem | PurchasePostabilityProblem
@@ -611,12 +619,38 @@ export async function postApprovedDraft(
         detail,
       );
       await recordDraftPostError({ uploadedFileId: fileId, error: detail });
+      // Intuit has just PROVEN the books are closed, so this is the one moment a
+      // closing date is worth reading: fetch it fresh (never from the cache,
+      // which only refreshes on connect/sync and may predate this close) so the
+      // accountant is told WHICH date to work around rather than just "some date
+      // on or before this one". Best-effort — a failed read simply drops the
+      // date from the message, it never turns a clear refusal into an error.
+      let closeDate: string | null = null;
+      try {
+        const fresh = await fetchCurrencyPrefs(
+          ctx.accessToken,
+          ctx.realmId,
+          ctx.environment,
+        );
+        closeDate = fresh.bookCloseDate;
+        if (closeDate) {
+          await updateQuickbooksCurrencyPrefs(
+            draft.firmId,
+            { homeCurrency: null, multicurrencyEnabled: null, bookCloseDate: closeDate },
+            draft.clientId,
+          );
+        }
+      } catch {
+        // Leave closeDate null; the generic message still says what to do.
+      }
       return {
         kind: "period_closed",
         ...base,
+        closeDate,
         detail:
-          "This client's books are closed in QuickBooks on or before this date. " +
-          "Move the closing date in QuickBooks, or change this entry's date to after it, then post again.",
+          "This client's books are closed in QuickBooks" +
+          (closeDate ? ` through ${closeDate}` : " on or before this date") +
+          ". Move the closing date in QuickBooks, or date this entry after it, then post again.",
       };
     }
     if (e instanceof QuickbooksError && e.status === 401) {

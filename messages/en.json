@@ -3600,6 +3600,8 @@
     "post_go": "Post",
     "post_cancel": "Cancel",
     "post_failed": "Couldn't post. Try again.",
+    "post_period_closed": "This client's books are closed in QuickBooks on or before this date. Move the closing date in QuickBooks, or date this entry after it, then post again.",
+    "post_period_closed_on": "This client's books are closed in QuickBooks through {date}. Move the closing date in QuickBooks, or date this entry after it, then post again.",
     "post_reconnect": "Your QuickBooks connection was disconnected. Please reconnect and try again.",
     "post_reconnect_cta": "Reconnect QuickBooks",
     "post_problem_generic": "Something in this draft is no longer valid in QuickBooks. Check the highlighted fields and try again.",

@@ -576,6 +576,16 @@ export type QuickbooksCurrencyPrefs = {
   // company cannot take a CurrencyRef, which is different information from
   // "we never looked".
   multicurrencyEnabled: boolean | null;
+  // The company's closing date (YYYY-MM-DD), or null when the books are open /
+  // we never looked. Intuit recommends reading this at connection time rather
+  // than discovering a closed period from a failed post.
+  //
+  // ADVISORY ONLY — it must never gate a post. This value is CACHED and only
+  // refreshed when the client reconnects or syncs, so it goes stale the moment
+  // the client changes their closing date, and a stale "closed" would block a
+  // post that would actually succeed. The authoritative answer is Intuit
+  // rejecting the write with 6200/6210, which is always current.
+  bookCloseDate: string | null;
 };
 
 export async function fetchCurrencyPrefs(
@@ -586,6 +596,7 @@ export async function fetchCurrencyPrefs(
   const empty: QuickbooksCurrencyPrefs = {
     homeCurrency: null,
     multicurrencyEnabled: null,
+    bookCloseDate: null,
   };
   const url =
     `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
@@ -622,11 +633,22 @@ export async function fetchCurrencyPrefs(
           MultiCurrencyEnabled?: boolean;
           HomeCurrency?: { value?: string };
         };
+        // Rides along on the request we were already making — Intuit returns
+        // every preference group in one response, so the closing date costs no
+        // extra call. minorversion is 75, well past the 21 Intuit's docs name
+        // as the minimum for this field.
+        AccountingInfoPrefs?: { BookCloseDate?: string };
       };
     };
     const prefs = json.Preferences?.CurrencyPrefs;
     const code = prefs?.HomeCurrency?.value?.trim().toUpperCase();
+    const closeRaw = json.Preferences?.AccountingInfoPrefs?.BookCloseDate?.trim();
+    // Only a real YYYY-MM-DD counts. Anything else stays null rather than
+    // becoming a date we would then reason about wrongly.
+    const bookCloseDate =
+      closeRaw && /^\d{4}-\d{2}-\d{2}$/.test(closeRaw) ? closeRaw : null;
     return {
+      bookCloseDate,
       homeCurrency: code && code.length > 0 ? code : null,
       // Only a real boolean counts; anything else stays unknown.
       multicurrencyEnabled:
