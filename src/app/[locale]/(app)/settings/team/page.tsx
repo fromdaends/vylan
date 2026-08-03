@@ -115,6 +115,7 @@ export default async function TeamPage({
       role: m.role,
       isSelf: m.id === user.id,
       avatarUrl: avatarById.get(m.id) ?? null,
+      isExternal: m.is_external === true,
     }))
     // Owner first, then the rest alphabetically.
     .sort((a, b) =>

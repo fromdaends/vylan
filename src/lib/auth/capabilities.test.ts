@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CAPABILITIES,
   STAFF_CAPABILITIES,
+  EXTERNAL_CAPABILITIES,
   can,
   capabilitiesFor,
   isCapability,
@@ -279,5 +280,59 @@ describe("a real users row is a valid subject", () => {
     expect(can(before, "money.view")).toBe(true);
     expect(can(before, "clients.manage")).toBe(true);
     expect(can(before, "billing.manage")).toBe(false);
+  });
+});
+
+// ── THE OUTSIDER (migration 1300) ────────────────────────────────────────────
+//
+// Restricted on the OPPOSITE axis from everyone else: a contractor may need to
+// do everything on one file and is limited in which files exist for them. The
+// file-level half is RLS (1300); this module owns the capability half, and its
+// job is to start them at NOTHING so a role or a grant is what hands anything
+// over.
+describe("outside collaborators", () => {
+  const outsider: CapabilitySubject = { role: "staff", is_external: true };
+
+  it("starts with an empty floor, not the staff floor", () => {
+    expect([...capabilitiesFor(outsider)]).toEqual([]);
+    // Specifically NOT the two the staff floor carries — they are exactly the
+    // wrong pair to hand a contractor by default.
+    expect(can(outsider, "money.view")).toBe(false);
+    expect(can(outsider, "clients.manage")).toBe(false);
+  });
+
+  it("still takes what a role or a grant gives them", () => {
+    // The point of the opposite axis: an outsider can be trusted with the WORK
+    // on the files they are on. They are limited in which files, not in skill.
+    const equipped: CapabilitySubject = {
+      role: "staff",
+      is_external: true,
+      role_capabilities: ["integrations.manage"],
+      extra_capabilities: ["money.view"],
+    };
+    expect(can(equipped, "integrations.manage")).toBe(true);
+    expect(can(equipped, "money.view")).toBe(true);
+    expect(can(equipped, "team.manage")).toBe(false);
+  });
+
+  it("NEVER applies to an owner, whatever the column says", () => {
+    // An owner locked out of their own firm has no recovery path in the UI, so
+    // users.role wins over every other input — this one included.
+    const impossible: CapabilitySubject = { role: "owner", is_external: true };
+    for (const c of CAPABILITIES) expect(can(impossible, c)).toBe(true);
+  });
+
+  it("treats a missing column as NOT an outsider", () => {
+    // The flag only ever narrows, so an unapplied 1300 must leave everybody on
+    // the staff floor rather than restricting people nobody marked.
+    expect(can({ role: "staff" }, "money.view")).toBe(true);
+    expect(can({ role: "staff", is_external: null }, "money.view")).toBe(true);
+    expect(can({ role: "staff", is_external: false }, "money.view")).toBe(true);
+  });
+
+  it("keeps the outsider floor a strict subset of the staff floor", () => {
+    const s = new Set(STAFF_CAPABILITIES);
+    for (const c of EXTERNAL_CAPABILITIES) expect(s.has(c)).toBe(true);
+    expect(EXTERNAL_CAPABILITIES.length).toBeLessThan(STAFF_CAPABILITIES.length);
   });
 });

@@ -99,6 +99,43 @@ export async function getFirmSeatCap(firmId: string): Promise<number> {
   return resolveSeatCap(data.plan, data.seat_cap_override);
 }
 
+/**
+ * Active members who occupy a SEAT.
+ *
+ * OUTSIDE COLLABORATORS DO NOT (1300) — the founder's call and the industry
+ * default: Notion, Slack, GitHub and Linear all either exclude guests from the
+ * licence count or bill them apart.
+ *
+ * `.not("is_external", "is", true)` rather than `.eq(false)` so a row written
+ * before the column existed — which reads as null, not false — still counts.
+ * Getting that backwards would silently stop charging for real staff.
+ *
+ * FALLS BACK when 1300 is unapplied. The column does not exist yet on a
+ * deployment that ships before the migration, and PostgREST answers 42703; the
+ * retry counts everybody, which is exactly today's behaviour. A seat count that
+ * throws would take the whole team page down, and it would do it during the
+ * window between a deploy and a migration — the one moment nobody is watching.
+ */
+async function countSeatUsers(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  firmId: string,
+): Promise<{ count: number | null }> {
+  const base = () =>
+    sb
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("firm_id", firmId)
+      .is("deactivated_at", null);
+  const res = await base().not("is_external", "is", true);
+  if (!res.error) return { count: res.count };
+  if (res.error.code === "42703" || res.error.code === "PGRST204") {
+    const fallback = await base();
+    return { count: fallback.count };
+  }
+  console.error("[seats] active-user count failed:", res.error.message);
+  return { count: res.count };
+}
+
 // Full seat-usage snapshot: active members + pending invites vs the cap.
 export async function getFirmSeatUsage(firmId: string): Promise<SeatUsage> {
   const sb = getServiceRoleSupabase();
@@ -110,11 +147,7 @@ export async function getFirmSeatUsage(firmId: string): Promise<SeatUsage> {
       .eq("id", firmId)
       .maybeSingle(),
     // Active = not deactivated. The owner counts as a seat too.
-    sb
-      .from("users")
-      .select("id", { count: "exact", head: true })
-      .eq("firm_id", firmId)
-      .is("deactivated_at", null),
+    countSeatUsers(sb, firmId),
     // Pending = sent, not yet accepted, not revoked, not expired.
     sb
       .from("firm_invites")

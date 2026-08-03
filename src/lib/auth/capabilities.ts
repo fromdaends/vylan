@@ -123,9 +123,25 @@ export const STAFF_CAPABILITIES: readonly Capability[] = [
   "clients.manage",
 ];
 
+// THE OUTSIDER FLOOR — empty (migration 1300).
+//
+// An outside collaborator is restricted on the opposite axis from everybody
+// else: they may need to do everything on one file, and are limited in which
+// files exist for them at all. So the axis this module controls starts them at
+// nothing, and a role or a grant is what hands them anything.
+//
+// Empty rather than the staff floor because the two staff capabilities are
+// exactly the wrong ones to give a contractor by default: money.view is the
+// firm's invoice amounts, and clients.manage creates and archives clients.
+//
+// This takes nothing away from anybody: no user has is_external until an owner
+// invites one as an outsider, and the flag did not exist before 1300.
+export const EXTERNAL_CAPABILITIES: readonly Capability[] = [];
+
 // Pre-built sets so `can()` is a hash lookup rather than a scan of an array.
 const OWNER_SET: ReadonlySet<Capability> = new Set(CAPABILITIES);
 const STAFF_SET: ReadonlySet<Capability> = new Set(STAFF_CAPABILITIES);
+const EXTERNAL_SET: ReadonlySet<Capability> = new Set(EXTERNAL_CAPABILITIES);
 
 export function isCapability(value: unknown): value is Capability {
   return (
@@ -161,6 +177,14 @@ export type CapabilitySubject = {
   // is the exact mess deleting the presets escaped. The staff floor is the
   // floor; roles and grants stack on top of it.
   role_capabilities?: readonly string[] | null;
+  // users.is_external — an OUTSIDE COLLABORATOR (1300). Narrows the floor to
+  // nothing; roles and grants still stack on top exactly as they do for staff.
+  //
+  // Absent until 1300 is applied, which reads as false, so deploying this code
+  // before the migration leaves every existing person on the staff floor.
+  // Fail OPEN here on purpose: the flag's job is to narrow, and a missing
+  // column must not restrict somebody nobody marked.
+  is_external?: boolean | null;
 };
 
 // Everything this person can do: the floor, plus their roles, plus their own
@@ -172,8 +196,11 @@ export type CapabilitySubject = {
 export function capabilitiesFor(
   subject: CapabilitySubject,
 ): ReadonlySet<Capability> {
+  // An OWNER is an owner even if some other column disagrees — the rank is
+  // what RLS enforces, and an owner locked out of their own firm has no way
+  // back. The external flag is deliberately not consulted here.
   if (subject.role === "owner") return OWNER_SET;
-  const base = STAFF_SET;
+  const base = subject.is_external === true ? EXTERNAL_SET : STAFF_SET;
   const grants = subject.extra_capabilities;
   const fromRoles = subject.role_capabilities;
   const hasGrants = grants && grants.length > 0;
