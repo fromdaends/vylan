@@ -20,20 +20,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Check, Eye, Plus, X } from "lucide-react";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Check, Eye } from "lucide-react";
+import { ClientTeamEditor } from "@/components/clients/client-team-editor";
 import {
   addClientMemberAction,
   removeClientMemberAction,
 } from "@/app/actions/client-members";
 
-type Member = { userId: string; name: string; position: string | null };
+import type { TeamRow as Member } from "@/components/clients/client-team-editor";
 type Person = { id: string; name: string };
 
 export function ClientAccess({
@@ -62,8 +56,6 @@ export function ClientAccess({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
 
   async function run(fn: () => Promise<{ ok: boolean; needsMigration?: boolean }>, key: string) {
     setBusy(key);
@@ -80,14 +72,6 @@ export function ClientAccess({
     }
   }
 
-  const savePosition = async (userId: string) => {
-    const position = draft.trim() || null;
-    const ok = await run(
-      () => addClientMemberAction({ clientId, userId, position }),
-      userId,
-    );
-    if (ok) setEditing(null);
-  };
 
   // Everyone who can see the client today, and WHY — deduplicated, because an
   // owner who is also on the team is one person, not two.
@@ -105,95 +89,21 @@ export function ClientAccess({
   return (
     <div className="space-y-4">
       {/* ── The team ───────────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        {members.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("team_empty")}</p>
-        ) : (
-          <ul className="space-y-2">
-            {members.map((m) => (
-              <li key={m.userId} className="group flex items-center gap-2.5">
-                <AvatarInitials name={m.name} size={26} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{m.name}</span>
-                  {editing === m.userId ? (
-                    <input
-                      autoFocus
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={() => savePosition(m.userId)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") savePosition(m.userId);
-                        if (e.key === "Escape") setEditing(null);
-                      }}
-                      placeholder={t("team_position_placeholder")}
-                      maxLength={60}
-                      aria-label={t("team_position")}
-                      className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  ) : canEdit ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(m.userId);
-                        setDraft(m.position ?? "");
-                      }}
-                      className="block truncate rounded text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {m.position ?? t("team_position_add")}
-                    </button>
-                  ) : (
-                    m.position && (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {m.position}
-                      </span>
-                    )
-                  )}
-                </span>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      run(() => removeClientMemberAction({ clientId, userId: m.userId }), m.userId)
-                    }
-                    disabled={busy === m.userId}
-                    aria-label={t("team_remove", { name: m.name })}
-                    title={t("team_remove", { name: m.name })}
-                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
-                  >
-                    <X className="size-3.5" aria-hidden />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {canEdit && candidates.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Plus className="size-3.5" aria-hidden />
-                {t("team_add")}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {candidates.map((c) => (
-                <DropdownMenuItem
-                  key={c.id}
-                  onSelect={() => run(() => addClientMemberAction({ clientId, userId: c.id }), c.id)}
-                  className="gap-2"
-                >
-                  <AvatarInitials name={c.name} size={20} />
-                  <span className="flex-1 truncate">{c.name}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      <ClientTeamEditor
+        rows={members}
+        candidates={candidates}
+        canEdit={canEdit}
+        busyId={busy}
+        emptyLabel={t("team_empty")}
+        mode="live"
+        onAdd={(userId) => run(() => addClientMemberAction({ clientId, userId }), userId)}
+        onRemove={(userId) =>
+          run(() => removeClientMemberAction({ clientId, userId }), userId)
+        }
+        onPosition={(userId, position) =>
+          run(() => addClientMemberAction({ clientId, userId, position }), userId)
+        }
+      />
 
       {/* ── The effect ─────────────────────────────────────────────────── */}
       <div className="border-t border-border/60 pt-3">

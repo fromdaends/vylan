@@ -21,6 +21,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
 import { addClientMemberAction } from "@/app/actions/client-members";
+import { parseDraftTeam } from "@/lib/clients/draft-team";
 
 export type ClientFormState = {
   ok?: boolean;
@@ -96,6 +97,7 @@ function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
   return out;
 }
 
+
 export async function createClientAction(
   _prev: ClientFormState,
   formData: FormData,
@@ -119,18 +121,23 @@ export async function createClientAction(
     return { error: "create_failed" };
   }
 
-  // Anyone else picked at creation. Best-effort and AFTER the client exists:
-  // the client is the thing that must not be lost, and a team can be fixed on
-  // its page in two clicks. Ids are validated against the caller's own firm by
-  // addClientMemberAction, so a crafted form field cannot add a stranger.
-  const rawMembers = formData.get("member_ids");
-  if (typeof rawMembers === "string" && rawMembers.trim()) {
-    for (const userId of rawMembers.split(",").map((x) => x.trim()).filter(Boolean)) {
-      try {
-        await addClientMemberAction({ clientId: created.id, userId });
-      } catch (err) {
-        console.error("[clients] could not add a chosen teammate:", err);
-      }
+  // Anyone else picked at creation, with the position typed beside their name.
+  // Best-effort and AFTER the client exists: the client is the thing that must
+  // not be lost, and a team is fixable on its page in two clicks.
+  //
+  // Every id is validated against the caller's own firm inside
+  // addClientMemberAction, so a crafted form field cannot add a stranger — and
+  // the JSON is parsed defensively for the same reason. A malformed payload
+  // creates the client with no team rather than failing the whole action.
+  for (const row of parseDraftTeam(formData.get("members"))) {
+    try {
+      await addClientMemberAction({
+        clientId: created.id,
+        userId: row.userId,
+        position: row.position,
+      });
+    } catch (err) {
+      console.error("[clients] could not add a chosen teammate:", err);
     }
   }
   revalidatePath("/", "layout");
