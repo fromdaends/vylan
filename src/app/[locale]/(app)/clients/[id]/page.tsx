@@ -41,7 +41,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus, FileText, Lock } from "lucide-react";
+import { Plus, Pencil, Lock, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
@@ -59,6 +59,9 @@ import { getXeroConnectionHealth } from "@/lib/xero/connection";
 import { isXeroConfigured } from "@/lib/xero/client";
 import { ClientXeroCard } from "@/components/clients/client-xero-card";
 import { ClientPortalPinCard } from "@/components/clients/client-portal-pin-card";
+
+// Shared by the hidden archive/restore form and the ⋯ menu item that submits it.
+const CLIENT_ARCHIVE_FORM_ID = "client-archive-form";
 
 export default async function ClientDetailPage({
   params,
@@ -340,9 +343,32 @@ export default async function ClientDetailPage({
         <div className="flex min-w-0 items-start gap-3">
           <AvatarInitials name={client.display_name} size={44} />
           <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {client.display_name}
-          </h1>
+          {/* The pen sits with the name because that IS what it edits. As a
+              labelled button on the right it read as a primary action of the
+              page, which it isn't — the page is for reading the client. */}
+          <div className="flex items-center gap-1">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {client.display_name}
+            </h1>
+            {canManageClients && (
+              <ClientFormDialog
+                mode="edit"
+                locale={locale}
+                client={client}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t("edit_client")}
+                    className="size-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                }
+              />
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-2 text-sm">
             <Badge variant="secondary">
               {client.type === "individual"
@@ -380,37 +406,28 @@ export default async function ClientDetailPage({
           )}
           </div>
         </div>
+        {/* One control left in the corner. The Documents button went because
+            the Files tab below already goes to the same route, and archiving is
+            a once-a-year action that doesn't deserve permanent real estate.
+            The form lives outside the menu and is reached by id, because a
+            <form> cannot be a dropdown item and still submit cleanly. */}
         <div className="flex items-center gap-2">
-          <Link href={`/clients/${client.id}/archive`}>
-            <Button variant="outline" size="sm">
-              <FileText className="size-4" />
-              {t("document_archive")}
-            </Button>
-          </Link>
-          {canManageClients && (
-            <ClientFormDialog mode="edit" locale={locale} client={client} />
-          )}
-          {client.archived_at ? (
-            <form action={restoreClientAction}>
-              <input type="hidden" name="id" value={client.id} />
-              <Button type="submit" variant="outline" size="sm">
-                {t("restore")}
-              </Button>
-            </form>
-          ) : (
-            <form action={archiveClientAction}>
-              <input type="hidden" name="id" value={client.id} />
-              <Button type="submit" variant="outline" size="sm">
-                {t("archive")}
-              </Button>
-            </form>
-          )}
-          {isOwner && teamEnabled && (
-            <ClientActionsMenu
-              clientId={client.id}
-              isPrivate={client.is_private ?? false}
-            />
-          )}
+          <form
+            id={CLIENT_ARCHIVE_FORM_ID}
+            action={client.archived_at ? restoreClientAction : archiveClientAction}
+            className="hidden"
+          >
+            <input type="hidden" name="id" value={client.id} />
+          </form>
+          <ClientActionsMenu
+            clientId={client.id}
+            isPrivate={client.is_private ?? false}
+            showPrivacy={isOwner && teamEnabled}
+            archive={{
+              formId: CLIENT_ARCHIVE_FORM_ID,
+              archived: client.archived_at != null,
+            }}
+          />
         </div>
       </div>
 
