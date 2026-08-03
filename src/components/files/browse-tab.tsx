@@ -71,8 +71,8 @@ export async function BrowseTab({
   basePath?: string;
   // Params the HOST route needs on every link (the client page's ?tab=files).
   // Kept separate from the browser's own params so the two can never collide:
-  // the browser writes client/folder/year/category/q/type/status/sort/page and
-  // nothing else, so a host param named anything outside that list is safe.
+  // the browser writes client/folder/year/category/q/type/status/sort/view/page
+  // and nothing else, so a host param outside that list is safe.
   baseParams?: Record<string, string>;
   // Pins the browser inside ONE client. The client folder level is skipped
   // entirely (you are already in it), and no link can navigate out of it — a
@@ -133,6 +133,7 @@ export async function BrowseTab({
       type: sp.type ?? null,
       status: sp.status ?? null,
       sort: sp.sort ?? null,
+      view: sp.view ?? null,
       page: sp.page ?? null,
       ...overrides,
     };
@@ -169,10 +170,19 @@ export async function BrowseTab({
   const hasDocumentFilter = !!docType || !!status;
   // A custom folder shows its own contents directly — it is a real folder
   // holding real documents, not a derived bucket to drill further into.
-  // An explicit sort also lists files: it is what Home's "View all" links to
-  // (/files?sort=date = the firm's documents, newest first, flat).
+  //
+  // `?view=files` is the flat firm-wide document list — what Home's "View all"
+  // links to. This used to be inferred from `?sort=` being present, which was
+  // fine while sorting only existed once you were already among documents. Now
+  // that the CLIENT LIST has a Sort button too, that inference would throw you
+  // out of the client folders the moment you sorted them. The intent gets its
+  // own param instead of riding on a side effect of another one.
   const showFiles =
-    categorySet || hasDocumentFilter || !!search || !!folderId || !!sp.sort?.trim();
+    categorySet ||
+    hasDocumentFilter ||
+    !!search ||
+    !!folderId ||
+    sp.view === "files";
 
   const docTypeOptions = Object.entries(DOC_TYPE_LABELS)
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
@@ -435,6 +445,7 @@ export async function BrowseTab({
           locale={locale}
           search={search}
           page={page}
+          sort={sort}
           buildQuery={buildQuery}
         />
       )}
@@ -469,15 +480,21 @@ async function ClientLevel({
   locale,
   search,
   page,
+  sort,
   buildQuery,
 }: {
   locale: AppLocaleish;
   search: string;
   page: number;
+  sort: DocumentSort;
   buildQuery: (o?: Record<string, string | null>) => string;
 }) {
   const t = await getTranslations("Files");
-  const { folders, total, available } = await listClientFolders({ search, page });
+  const { folders, total, available } = await listClientFolders({
+    search,
+    page,
+    sort,
+  });
   if (!available) return <Dormant message={t("unavailable")} />;
 
   const entries: BrowserEntry[] = folders.map((f) => ({

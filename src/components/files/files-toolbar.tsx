@@ -176,17 +176,20 @@ export function FilesToolbar({
         </TooltipProvider>
       )}
 
-      {scope === "documents" && (
-        <SortFilterMenu
-          sort={sort}
-          docType={docType}
-          status={status}
-          year={year}
-          years={years}
-          docTypes={docTypes}
-          setParam={setParam}
-        />
-      )}
+      {/* Sort renders at EVERY level, including the client list. A file
+          manager whose sort control appears only once you are two folders deep
+          reads as broken — the founder's note. The menu narrows itself to what
+          the level can actually sort by. */}
+      <SortFilterMenu
+        sort={sort}
+        docType={docType}
+        status={status}
+        year={year}
+        years={years}
+        docTypes={docTypes}
+        setParam={setParam}
+        scope={scope}
+      />
     </div>
   );
 }
@@ -210,6 +213,7 @@ function SortFilterMenu({
   years,
   docTypes,
   setParam,
+  scope,
 }: {
   sort: string;
   docType: string;
@@ -218,6 +222,7 @@ function SortFilterMenu({
   years: number[];
   docTypes: { code: string; label: string }[];
   setParam: (key: string, value: string | null) => void;
+  scope: "folders" | "documents";
 }) {
   const t = useTranslations("Files");
   const field = sort.startsWith("name")
@@ -241,15 +246,25 @@ function SortFilterMenu({
     return nextField === "name";
   }
 
-  const fields = [
-    { key: "name", label: t("sort_field_name") },
-    { key: "date", label: t("sort_field_date") },
-    { key: "size", label: t("sort_field_size") },
-  ];
+  // A CLIENT FOLDER has a name and a last-activity date, and nothing else the
+  // list can be ordered by. Offering "Size" on the client list would be a
+  // control that silently does nothing.
+  const fields =
+    scope === "folders"
+      ? [
+          { key: "name", label: t("sort_field_name") },
+          { key: "date", label: t("sort_field_date") },
+        ]
+      : [
+          { key: "name", label: t("sort_field_name") },
+          { key: "date", label: t("sort_field_date") },
+          { key: "size", label: t("sort_field_size") },
+        ];
 
   // Applied FILTERS surface on the button as a count — with the dropdowns
   // gone, an invisible active filter would read as "my files disappeared".
-  const activeFilters = [docType, year, status].filter(Boolean).length;
+  const activeFilters =
+    scope === "folders" ? 0 : [docType, year, status].filter(Boolean).length;
 
   const check = (on: boolean) => (
     <Check className={cn("size-4", on ? "opacity-100" : "opacity-0")} aria-hidden />
@@ -305,83 +320,89 @@ function SortFilterMenu({
           {t("sort_za")}
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="gap-2">
-            <FileType2 className="size-4 text-muted-foreground" aria-hidden />
-            {t("filter_type")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
-            <DropdownMenuItem className="gap-2" onSelect={() => setParam("type", null)}>
-              {check(!docType)}
-              {t("filter_type_all")}
-            </DropdownMenuItem>
-            {docTypes.map((d) => (
-              <DropdownMenuItem
-                key={d.code}
-                className="gap-2"
-                onSelect={() => setParam("type", d.code)}
-              >
-                {check(docType === d.code)}
-                {d.label}
+        {/* Type / year / status filter only DOCUMENTS. On the client list
+            there is nothing to filter by — a client has no doc type. */}
+        {scope === "documents" && (
+          <>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <FileType2 className="size-4 text-muted-foreground" aria-hidden />
+              {t("filter_type")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
+              <DropdownMenuItem className="gap-2" onSelect={() => setParam("type", null)}>
+                {check(!docType)}
+                {t("filter_type_all")}
               </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="gap-2">
-            <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
-            {t("filter_year")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-80 w-44 overflow-y-auto">
-            <DropdownMenuItem className="gap-2" onSelect={() => setParam("year", null)}>
-              {check(!year)}
-              {t("filter_year_all")}
-            </DropdownMenuItem>
-            {years.map((y) => (
-              <DropdownMenuItem
-                key={y}
-                className="gap-2"
-                onSelect={() => setParam("year", String(y))}
-              >
-                {check(year === String(y))}
-                {y}
+              {docTypes.map((d) => (
+                <DropdownMenuItem
+                  key={d.code}
+                  className="gap-2"
+                  onSelect={() => setParam("type", d.code)}
+                >
+                  {check(docType === d.code)}
+                  {d.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
+              {t("filter_year")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-80 w-44 overflow-y-auto">
+              <DropdownMenuItem className="gap-2" onSelect={() => setParam("year", null)}>
+                {check(!year)}
+                {t("filter_year_all")}
               </DropdownMenuItem>
-            ))}
-            {/* "unsorted" is a real, selectable bucket, not the absence of a
-                filter — a firm needs to be able to go straight to the pile
-                that still needs a year. */}
-            <DropdownMenuItem
-              className="gap-2"
-              onSelect={() => setParam("year", "unsorted")}
-            >
-              {check(year === "unsorted")}
-              {t("unsorted")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="gap-2">
-            <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
-            {t("filter_status")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-48">
-            <DropdownMenuItem className="gap-2" onSelect={() => setParam("status", null)}>
-              {check(!status)}
-              {t("filter_status_all")}
-            </DropdownMenuItem>
-            {(["approved", "pending", "rejected"] as const).map((s) => (
+              {years.map((y) => (
+                <DropdownMenuItem
+                  key={y}
+                  className="gap-2"
+                  onSelect={() => setParam("year", String(y))}
+                >
+                  {check(year === String(y))}
+                  {y}
+                </DropdownMenuItem>
+              ))}
+              {/* "unsorted" is a real, selectable bucket, not the absence of a
+                  filter — a firm needs to be able to go straight to the pile
+                  that still needs a year. */}
               <DropdownMenuItem
-                key={s}
                 className="gap-2"
-                onSelect={() => setParam("status", s)}
+                onSelect={() => setParam("year", "unsorted")}
               >
-                {check(status === s)}
-                {t(`status_${s}`)}
+                {check(year === "unsorted")}
+                {t("unsorted")}
               </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="gap-2">
+              <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
+              {t("filter_status")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-48">
+              <DropdownMenuItem className="gap-2" onSelect={() => setParam("status", null)}>
+                {check(!status)}
+                {t("filter_status_all")}
+              </DropdownMenuItem>
+              {(["approved", "pending", "rejected"] as const).map((s) => (
+                <DropdownMenuItem
+                  key={s}
+                  className="gap-2"
+                  onSelect={() => setParam("status", s)}
+                >
+                  {check(status === s)}
+                  {t(`status_${s}`)}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
