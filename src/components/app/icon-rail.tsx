@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import {
@@ -27,6 +27,7 @@ import {
 import { openCommandPalette } from "@/components/app/sidebar-search";
 import { logoutAction } from "@/app/actions/auth";
 import { isNavItemActive } from "@/lib/navigation/active-nav";
+import { RailFlyout, type FlyoutItem } from "@/components/app/rail-flyout";
 
 // The primary desktop navigation: a FIXED 76px icon rail (Canopy-style), from
 // the founder's Claude Design import. It replaced the old expandable 64/256px
@@ -56,6 +57,16 @@ export type RailItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * When present the item OPENS a second sidebar instead of navigating.
+   *
+   * The rail was built flat on purpose (see the note at the top of this file),
+   * and this is the one deliberate exception: a section that genuinely holds
+   * more than one list should let you choose which, rather than landing you on
+   * whichever one happened to be picked as the default. `href` stays set — it
+   * is what the rail highlights against.
+   */
+  panel?: { title: string; items: FlyoutItem[] };
 };
 
 export function IconRail({
@@ -86,6 +97,8 @@ export function IconRail({
     // duplicate destination), so the accessible name has to say where it goes —
     // the brand mark alone tells a screen-reader user nothing about the target.
     dashboard: string;
+    /** Names the button that dismisses a section's second sidebar. */
+    closePanel: string;
   };
   userDisplayName: string;
   userEmail: string;
@@ -94,6 +107,8 @@ export function IconRail({
 }) {
   const tHome = useTranslations("Home");
   const pathname = usePathname();
+  // Which section's second sidebar is open, if any. Null is the ordinary case.
+  const [panel, setPanel] = useState<RailItem | null>(null);
   // Logout submits through this ref: a submit button nested in a Radix
   // DropdownMenuItem has its click swallowed by the menu's selection handling,
   // so requestSubmit() from onSelect is what actually posts (carried over from
@@ -163,9 +178,27 @@ export function IconRail({
             key={item.href}
             item={item}
             active={isNavItemActive(pathname, item.href)}
+            onOpenPanel={item.panel ? () => setPanel(item) : undefined}
           />
         ))}
       </nav>
+
+      {/* The second sidebar, when a section has one. Rendered here rather than
+          at the page level so it sits against the rail it belongs to and does
+          not have to know what page is behind it. */}
+      {panel?.panel && (
+        <RailFlyout
+          open
+          title={panel.panel.title}
+          items={panel.panel.items}
+          activeHref={
+            panel.panel.items.find((i) => isNavItemActive(pathname, i.href))
+              ?.href ?? null
+          }
+          closeLabel={labels.closePanel}
+          onClose={() => setPanel(null)}
+        />
+      )}
 
       {/* Firm sits here rather than in the list above: it is a firm-level
           destination — the same spot the old sidebar kept its quiet firm button
@@ -267,19 +300,31 @@ export function IconRail({
 // One rail destination. Extracted so the scrolling list and the pinned footer
 // item render byte-identically — if they drifted, the pinned one would quietly
 // stop looking like a nav item.
-function RailLink({ item, active }: { item: RailItem; active: boolean }) {
+function RailLink({
+  item,
+  active,
+  onOpenPanel,
+}: {
+  item: RailItem;
+  active: boolean;
+  /** Set for a section that opens a second sidebar rather than navigating. */
+  onOpenPanel?: () => void;
+}) {
   const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "relative flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
-        // The selected item is marked by the underline bar below, never by a
-        // filled pill — hover keeps its wash so the rail still feels clickable.
-        active ? "text-white" : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
-      )}
-    >
+  // Same classes either way — a button that looked unlike its neighbours would
+  // read as a different kind of thing, and it is not. Written as two branches
+  // rather than one polymorphic tag because Link and button disagree about
+  // their props, and casting that away is how a typo becomes a runtime error.
+  const className = cn(
+    "relative flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+    // The selected item is marked by the underline bar below, never by a
+    // filled pill — hover keeps its wash so the rail still feels clickable.
+    active
+      ? "text-white"
+      : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
+  );
+  const inner = (
+    <>
       <Icon className="size-[22px]" aria-hidden />
       <span
         className={cn(
@@ -295,6 +340,28 @@ function RailLink({ item, active }: { item: RailItem; active: boolean }) {
           className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-sm bg-white"
         />
       ) : null}
+    </>
+  );
+
+  if (onOpenPanel) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenPanel}
+        aria-haspopup="dialog"
+        aria-current={active ? "page" : undefined}
+        className={className}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={item.href} aria-current={active ? "page" : undefined} className={className}>
+      {inner}
     </Link>
   );
 }
+
+
