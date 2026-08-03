@@ -403,7 +403,7 @@ export async function updateQuickbooksCurrencyPrefs(
   prefs: {
     homeCurrency: string | null;
     multicurrencyEnabled: boolean | null;
-    // Advisory closing date (migration 1350). Absent on callers that predate it.
+    // Advisory closing date (migration 1360). Absent on callers that predate it.
     bookCloseDate?: string | null;
   },
   clientId?: QuickbooksClientScope,
@@ -437,7 +437,7 @@ export async function updateQuickbooksCurrencyPrefs(
     );
   };
   let { error } = await write(patch);
-  // Same reason as the read: naming book_close_date before migration 1350 is
+  // Same reason as the read: naming book_close_date before migration 1360 is
   // applied fails the WHOLE update, which would take the currency prefs with it.
   // Drop the new column and write the rest rather than losing both.
   if (error && isMissingSchema(error) && "book_close_date" in patch) {
@@ -468,7 +468,7 @@ export async function readQuickbooksCurrencyPrefs(
     bookCloseDate: null,
   };
   const sb = getServiceRoleSupabase();
-  // Two column lists, not one. Naming book_close_date (migration 1350) in a
+  // Two column lists, not one. Naming book_close_date (migration 1360) in a
   // database that does not have it yet fails the WHOLE query, which would take
   // the currency prefs down with it and silently turn multicurrency off for
   // every firm until the SQL is applied. So: ask for it, and on a missing-column
@@ -507,7 +507,7 @@ export async function readQuickbooksCurrencyPrefs(
       typeof row?.multicurrency_enabled === "boolean"
         ? row.multicurrency_enabled
         : null,
-    // Absent before 1350 is applied — null, i.e. "we cannot state a closing
+    // Absent before 1360 is applied — null, i.e. "we cannot state a closing
     // date", which is exactly how the advisory treats it.
     bookCloseDate: row?.book_close_date ?? null,
   };
