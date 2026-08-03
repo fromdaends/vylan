@@ -114,7 +114,25 @@ async function AiPerformancePanel({
   // control. `performance_reset_at` may be undefined until 0880 is applied —
   // treated as "no reset". Unchanged from the retired Performance page.
   const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
-  const resetAt = firm?.performance_reset_at ?? null;
+
+  // Signed out? Render nothing and, crucially, run no loaders.
+  //
+  // The app layout redirects an unauthenticated request to /login, but a Next
+  // layout and the page below it render CONCURRENTLY — the redirect does not
+  // preempt this component, so without this guard the loaders below fire first
+  // as the `anon` role. The performance RPCs are definer functions with
+  // `revoke all ... from public, anon` (0820), so every one of those calls is
+  // correctly denied with 42501, and the console fills with
+  // "permission denied for function perf_action_count" on requests that were
+  // never going to render anything.
+  //
+  // That noise is what it looks like: alarming, and entirely self-inflicted.
+  // The permissions are right, the fallback keeps the numbers right, and the
+  // only real defect was doing the work at all for a request already on its
+  // way to the login page.
+  if (!firm || !user) return null;
+
+  const resetAt = firm.performance_reset_at ?? null;
   const parsedReset = resetAt ? Date.parse(resetAt) : NaN;
   const resetAtMs = Number.isFinite(parsedReset) ? parsedReset : null;
 
@@ -132,7 +150,7 @@ async function AiPerformancePanel({
       ai={ai}
       automation={automation}
       resetAt={resetAt}
-      isOwner={user?.role === "owner"}
+      isOwner={user.role === "owner"}
     />
   );
 }
