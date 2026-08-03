@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/select";
 import {
   deleteDocumentAction,
-  logDocumentDownloadAction,
   moveDocumentAction,
   renameDocumentAction,
   setDocumentVisibilityAction,
@@ -95,11 +94,11 @@ export function DocumentActionsMenu({
   const bytesUrl = `/api/files/${id}?source=${source}`;
 
   function download() {
-    // Point the browser at the bytes first so the download starts immediately,
-    // THEN record it. The log is best-effort by design (see the server action)
-    // — a slow audit write must never sit between a click and a file.
+    // Just fetch the bytes. Recording the download is the ROUTE's job now — it
+    // used to be a server-action call from right here, which meant this menu
+    // was the only download in the whole product that appeared in the audit
+    // log. Logging it again from the browser would double-count it.
     window.location.href = `${bytesUrl}&download=1`;
-    void logDocumentDownloadAction({ source, id });
   }
 
   function toggleVisibility() {

@@ -23,10 +23,8 @@ import { isTrialExpired } from "@/lib/trial";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { can } from "@/lib/auth/capabilities";
 import { getBrandingImageUrl } from "@/lib/storage";
-import type {
-  ClientEngagementSummary,
-  ClientEngagementRow,
-} from "@/components/clients/clients-table";
+import { buildClientEngagementIndex } from "@/lib/clients/engagement-index";
+import type { ClientEngagementSummary } from "@/components/clients/clients-table";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { assertLocale } from "@/lib/locale";
 import { Upload } from "lucide-react";
@@ -64,9 +62,16 @@ export default async function ClientsPage({
     : "recent";
   const activeOnly = sp.active === "1";
 
-  const [clientsRaw, engagements, firm, currentUser, members, signals] =
+  // ONE clients query for the whole page: the relationships name map below
+  // needs every client (archived included), and the table's type/archived view
+  // is a pure subset of that — so fetch the superset once and filter in
+  // memory, instead of the two overlapping table scans this page used to run.
+  // listEngagements() here and the one inside loadEngagementSignals("active")
+  // are the identical query — the request-level cache in lib/db/engagements
+  // collapses them to one.
+  const [allClients, engagements, firm, currentUser, members, signals] =
     await Promise.all([
-      listClients({ type, includeArchived }),
+      listClients({ includeArchived: true }),
       listEngagements(),
       getCurrentFirm(),
       getCurrentUser(),
@@ -75,6 +80,10 @@ export default async function ClientsPage({
       // Overview uses, so a "Ready to review" engagement reads ready here too.
       loadEngagementSignals("active"),
     ]);
+  const clientsRaw = allClients.filter(
+    (c) =>
+      (includeArchived || !c.archived_at) && (type === "all" || c.type === type),
+  );
   const derivedStatusById = new Map(
     signals.map((s) => [
       s.engagement.id,
@@ -121,67 +130,13 @@ export default async function ClientsPage({
     };
   });
 
-  // Group engagement counts by client_id (for the summary badge in the
-  // row's "Engagements" column) AND group the full engagement rows by
-  // client_id so the expanded drawer can list them without another
-  // fetch. Single pass over the engagements array.
-  const summaries: Record<string, ClientEngagementSummary> = {};
-  const engagementsByClient: Record<string, ClientEngagementRow[]> = {};
-  for (const e of engagements) {
-    const s =
-      summaries[e.client_id] ??
-      ({
-        draft: 0,
-        sent: 0,
-        in_progress: 0,
-        complete: 0,
-        cancelled: 0,
-        total_live: 0,
-      } as ClientEngagementSummary);
-    s[e.status] += 1;
-    if (e.status === "sent" || e.status === "in_progress") s.total_live += 1;
-    summaries[e.client_id] = s;
-
-    const list = engagementsByClient[e.client_id] ?? [];
-    list.push({
-      id: e.id,
-      title: e.title,
-      type: e.type,
-      status: derivedStatusById.get(e.id) ?? e.status,
-      due_date: e.due_date,
-    });
-    engagementsByClient[e.client_id] = list;
-  }
-  // Sort each client's engagements: live first (ready to review /
-  // in progress / sent), then drafts, then completed, then cancelled.
-  // Within a status group, newest first by id (ids are uuids but
-  // listEngagements already returns newest first, so we just preserve
-  // insertion order in each status bucket). ready_to_review is the unified
-  // display status a live engagement gets when the accountant holds the
-  // ball — it leads the list, never trails it.
-  const STATUS_RANK: Record<string, number> = {
-    ready_to_review: 0,
-    in_progress: 1,
-    sent: 2,
-    draft: 3,
-    complete: 4,
-    cancelled: 5,
-  };
-  for (const id of Object.keys(engagementsByClient)) {
-    engagementsByClient[id].sort(
-      (a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9),
-    );
-  }
-
-  // Last-activity timestamp per client = newest engagement created_at
-  // for that client. Used by the `most_active` sort. Engagements are
-  // already newest-first from listEngagements, so the first one wins.
-  const lastActivityByClient: Record<string, string> = {};
-  for (const e of engagements) {
-    if (!(e.client_id in lastActivityByClient)) {
-      lastActivityByClient[e.client_id] = e.created_at;
-    }
-  }
+  // Everything the table needs to know about engagements, in one pass: the
+  // per-client status tallies behind the row badge, the rows the expanded
+  // drawer lists (so opening one costs no fetch), and the newest timestamp the
+  // `most_active` sort reads. Shared with the teammate profile's Clients tab —
+  // it renders the same table, so it must count the same way.
+  const { summaries, engagementsByClient, lastActivityByClient } =
+    buildClientEngagementIndex(engagements, derivedStatusById);
 
   // Apply the "Active only" filter — only clients with at least one
   // engagement in sent / in_progress (= total_live > 0).
@@ -206,16 +161,14 @@ export default async function ClientsPage({
 
   const t = await getTranslations("Clients");
 
-  // Relationships indicator (spec §3): one query for the firm's live links,
-  // one for names (archived included so a link to an archived client still
-  // reads as a name, and unaffected by this page's type filter). Turned into
-  // a per-client {count, one-line summary} map for the row badge + tooltip.
-  const [firmRelationships, allClientsForNames] = await Promise.all([
-    listLiveRelationshipsForFirm(),
-    listClients({ includeArchived: true }),
-  ]);
+  // Relationships indicator (spec §3): one query for the firm's live links;
+  // the name map reuses the superset fetched above (archived included so a
+  // link to an archived client still reads as a name, and unaffected by this
+  // page's type filter). Turned into a per-client {count, one-line summary}
+  // map for the row badge + tooltip.
+  const firmRelationships = await listLiveRelationshipsForFirm();
   const relNameById = new Map(
-    allClientsForNames.map((c) => [c.id, c.display_name]),
+    allClients.map((c) => [c.id, c.display_name]),
   );
   const relScopeSummary = (scopes: readonly string[] | null) =>
     (scopes ?? []).map((s) => t(`rel_scope_${s}`)).join(", ");

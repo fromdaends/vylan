@@ -13,10 +13,9 @@ import {
   Clock,
   Check,
   Lock,
-  Building2,
   Users,
   LogOut,
-  SlidersHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -47,6 +46,7 @@ import {
 } from "@/app/actions/team";
 import { BookCallButton } from "@/components/booking/book-call-button";
 import { RoleBadges } from "./role-badge";
+import { FirmMenu } from "@/components/firm/firm-menu";
 
 type Seat = { used: number; cap: number | null; atCap: boolean };
 type ActiveMember = {
@@ -68,6 +68,9 @@ type ActiveMember = {
   schedules?: number;
   // Firm role badges (1260). Shown beside the name on the roster.
   roles?: { id: string; name: string; color: string }[];
+  // OUTSIDE COLLABORATOR (1300) — scoped to the clients they are on, and not
+  // counted against the firm's seats.
+  isExternal?: boolean;
 };
 type DeactivatedMember = {
   id: string;
@@ -135,7 +138,6 @@ export function TeamManager({
   locale,
   unassignedWorkload,
   firmSettings,
-  rolesSection,
   tabs,
   view = "people",
 }: {
@@ -162,8 +164,6 @@ export function TeamManager({
   // Firm-wide settings. Rendered INLINE on the Firm tab (and still available
   // from the ⋯ dialog, so the old muscle memory keeps working).
   firmSettings?: ReactNode;
-  // The firm's roles list, shown inline on the Settings tab (owners only).
-  rolesSection?: ReactNode;
   // Which tab is showing. "people" = the roster, invitations and former members.
   // "firm" = the firm itself: seats, its settings, ownership, leaving.
   // Defaults to "people" so any caller that does not pass it behaves as before.
@@ -174,7 +174,6 @@ export function TeamManager({
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [firmOpen, setFirmOpen] = useState(false);
   const showStats = canManage;
 
   const seatLabel =
@@ -195,9 +194,20 @@ export function TeamManager({
       <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
       <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {firmName}
-          </h1>
+          {/* The firm name IS the menu — Discord's server dropdown, which is
+              the founder's reference. Everything you can do to the firm now
+              hangs off the name instead of being scattered across a tab row
+              and a "⋯" nobody opens. */}
+          <FirmMenu
+            firmName={firmName}
+            canManage={canManage}
+            members={activeMembers}
+            onInvite={
+              canManage && !onTrial && !seat.atCap
+                ? () => setInviteOpen(true)
+                : undefined
+            }
+          />
           {/* The subtitle follows the TAB. It used to be pinned to the People
               copy — "Invite teammates and manage who has access to your firm" —
               which sat above the Settings tab describing a screen you were not
@@ -234,40 +244,11 @@ export function TeamManager({
               )}
               {t("invite_button")}
             </Button>
-            {/* Firm-level config lives behind this ⋯ menu (top-right), not inline:
-                "Firm settings" opens the settings dialog; "Edit firm details"
-                jumps to Settings > Account (logo/name/brand/language). */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t("firm_menu_label")}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <MoreHorizontal className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                {firmSettings && (
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      setFirmOpen(true);
-                    }}
-                    className="gap-2"
-                  >
-                    <SlidersHorizontal className="size-4" />
-                    {t("firm_settings_title")}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem asChild className="gap-2">
-                  <Link href="/settings?tab=account">
-                    <Building2 className="size-4" />
-                    {t("edit_firm")}
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* The ⋯ menu that used to sit here is gone. It held "Firm
+                settings" and "Edit firm details", and both now hang off the
+                firm name — which was the founder's whole point: one place you
+                open to act on the firm, not a second anonymous button beside
+                it. */}
             </>
           )}
         </div>
@@ -276,19 +257,6 @@ export function TeamManager({
           underlined — FirmTabs draws it. */}
       {tabs}
       </div>
-
-      {/* Firm settings dialog (opened from the ⋯ menu). */}
-      {firmSettings && (
-        <Dialog open={firmOpen} onOpenChange={setFirmOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("firm_settings_title")}</DialogTitle>
-              <DialogDescription>{t("firm_settings_subtitle")}</DialogDescription>
-            </DialogHeader>
-            {firmSettings}
-          </DialogContent>
-        </Dialog>
-      )}
 
 
       {/* Seat usage — a fact about the FIRM (what you are paying for), not about
@@ -472,11 +440,6 @@ export function TeamManager({
         />
       )}
 
-      {/* Roles — made here, handed out on a person's own page. Rendered inline
-          rather than in the firm-settings dialog: a dialog is for a handful of
-          switches, and this is a list you add to over time. */}
-      {view === "settings" && canManage && rolesSection}
-
       {view === "settings" && canManage && <LeaveTeamSection />}
 
       {canManage && (
@@ -484,6 +447,7 @@ export function TeamManager({
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           defaultLocale={locale}
+          canInviteExternal={canManage}
         />
       )}
     </section>
@@ -691,6 +655,14 @@ function MemberRow({
                     className="size-1.5 shrink-0 rounded-full bg-accent"
                   />
                   {t("role_owner")}
+                </span>
+              ) : member.isExternal ? (
+                // Named rather than left as an ordinary member: an outsider
+                // sees a different firm from everyone else on this list, and
+                // a roster that does not say so is a roster that misleads.
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <ExternalLink className="size-3" aria-hidden />
+                  {t("role_external")}
                 </span>
               ) : (
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -975,10 +947,13 @@ function InviteModal({
   open,
   onOpenChange,
   defaultLocale,
+  canInviteExternal = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultLocale: "fr" | "en";
+  /** Owner-only (1300): an outsider is a privacy and a billing decision. */
+  canInviteExternal?: boolean;
 }) {
   const t = useTranslations("Team");
   const errorMessage = useErrorMessage();
@@ -986,17 +961,20 @@ function InviteModal({
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [inviteLocale, setInviteLocale] = useState<"fr" | "en">(defaultLocale);
+  const [external, setExternal] = useState(false);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const fd = new FormData();
     fd.set("email", email);
     fd.set("locale", inviteLocale);
+    if (external) fd.set("external", "on");
     startTransition(async () => {
       const res = await createInvite(fd);
       if (res.ok) {
         toast.success(res.emailSent ? t("invite_sent") : t("invite_sent_no_email"));
         setEmail("");
+        setExternal(false);
         onOpenChange(false);
         router.refresh();
       } else {
@@ -1049,6 +1027,27 @@ function InviteModal({
               ))}
             </div>
           </div>
+          {/* Colleague or outsider, decided HERE rather than flipped after the
+              fact — somebody who is briefly a full member is somebody who
+              briefly saw the whole roster. */}
+          {canInviteExternal && (
+            <label className="flex items-start gap-3 rounded-lg border border-border/60 p-3">
+              <input
+                type="checkbox"
+                checked={external}
+                onChange={(e) => setExternal(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">
+                  {t("invite_external_label")}
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                  {t("invite_external_hint")}
+                </span>
+              </span>
+            </label>
+          )}
           <DialogFooter>
             <Button
               type="button"

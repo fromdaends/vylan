@@ -304,3 +304,92 @@ describe("ItemCard — the two upload paths", () => {
     expect(input!.hasAttribute("capture")).toBe(false);
   });
 });
+
+// What the CLIENT actually reads on their checklist line.
+//
+// Finding 17 / #1166: items created WITH an engagement stored their
+// instructions only in description_fr, because the builder's single
+// description box fed that column alone. The portal then read the English
+// column for an English client, so those clients saw a blank where their
+// instructions should be — and the firm never noticed, because the firm-side
+// editor always renders the French text either way.
+//
+// There is no migration repairing the engagements that already exist, so the
+// read has to fall back in BOTH directions. That is what makes old engagements
+// correct again, and it is the case worth pinning hardest.
+function renderDescription(
+  item: Partial<RequestItem>,
+  locale: "en" | "fr" = "en",
+) {
+  return render(
+    <NextIntlClientProvider locale={locale} messages={en}>
+      <ItemCard
+        token="tok_test"
+        item={{ ...ITEM, status: "pending", ai_set_assessment: null, ...item }}
+        locale={locale}
+        uploadedCount={0}
+        files={[]}
+        rejection={null}
+        autoRequestMissingPages={false}
+        onUploaded={vi.fn()}
+        onStatusChange={vi.fn()}
+      />
+    </NextIntlClientProvider>,
+  );
+}
+
+describe("ItemCard — the instructions a client can actually read", () => {
+  it("shows an English client the instructions on a normal item", () => {
+    renderDescription({
+      description: "Send every page of the slip",
+      description_fr: "Envoyez toutes les pages du feuillet",
+    });
+    expect(screen.getByText("Send every page of the slip")).toBeTruthy();
+  });
+
+  it("shows an English client the FRENCH text rather than a blank on a legacy item", () => {
+    // THE REGRESSION, from the client's side. Every engagement created before
+    // #1166 has description_fr only. Before the two-way fallback this rendered
+    // nothing at all. Showing the other language beats showing no instructions.
+    renderDescription({
+      description: null,
+      description_fr: "Envoyez toutes les pages du feuillet",
+    });
+    expect(
+      screen.getByText("Envoyez toutes les pages du feuillet"),
+    ).toBeTruthy();
+  });
+
+  it("shows a French client the English text when only that side was written", () => {
+    renderDescription(
+      { description: "Send every page of the slip", description_fr: null },
+      "fr",
+    );
+    expect(screen.getByText("Send every page of the slip")).toBeTruthy();
+  });
+
+  it("prefers the client's own language when both sides exist", () => {
+    renderDescription(
+      {
+        description: "Send every page of the slip",
+        description_fr: "Envoyez toutes les pages du feuillet",
+      },
+      "fr",
+    );
+    expect(
+      screen.getByText("Envoyez toutes les pages du feuillet"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Send every page of the slip")).toBeNull();
+  });
+
+  it("renders nothing when the firm wrote no instructions at all", () => {
+    // A description is optional, and an empty block would be noise on a card
+    // the client is meant to scan.
+    const { container } = renderDescription({
+      description: null,
+      description_fr: null,
+    });
+    expect(container.textContent).not.toContain("Envoyez");
+    expect(container.textContent).not.toContain("Send every page");
+  });
+});

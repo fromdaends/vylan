@@ -43,6 +43,47 @@ describe("formatCurrency", () => {
     expect(formatCurrency(undefined, "en")).toBe("—");
     expect(formatCurrency(Number.NaN, "en")).toBe("—");
   });
+
+  // THE REGRESSION. This hardcoded CAD, so every amount in the app rendered
+  // with a Canadian dollar sign regardless of what it was actually denominated
+  // in — including the ledger of a Xero organisation that banks in USD.
+  it("formats in the currency it is given", () => {
+    expect(formatCurrency(1234.56, "en", { currency: "USD" })).toBe(
+      "US$1,234.56",
+    );
+    expect(formatCurrency(1234.56, "en", { currency: "EUR" })).toBe(
+      "€1,234.56",
+    );
+    // French names the foreign currency rather than symbolising it, which is
+    // the behaviour we want: no bare "$" that could mean either dollar.
+    expect(formatCurrency(1234.56, "fr", { currency: "USD" })).toMatch(/US/);
+  });
+
+  it("still defaults to CAD when no currency is given", () => {
+    // Billing, plans and invoices are genuinely CAD and pass nothing.
+    expect(formatCurrency(1234.56, "en")).toBe("$1,234.56");
+    expect(formatCurrency(1234.56, "en", {})).toBe("$1,234.56");
+  });
+
+  it("treats a missing or blank currency as the firm's own", () => {
+    // Ledger rows often have no currency recorded. That is not a reason to
+    // refuse to render, and it is not a reason to guess something foreign.
+    expect(formatCurrency(1234.56, "en", { currency: null })).toBe("$1,234.56");
+    expect(formatCurrency(1234.56, "en", { currency: "   " })).toBe(
+      "$1,234.56",
+    );
+  });
+
+  it("keeps the old numeric third argument working", () => {
+    // ~7 call sites pass a digit count positionally (plan prices use 0).
+    expect(formatCurrency(1234.56, "en", 0)).toBe("$1,235");
+    expect(formatCurrency(1234.5, "en", 2)).toBe("$1,234.50");
+  });
+
+  it("takes digits and currency together", () => {
+    expect(formatCurrency(1234.56, "en", { fractionDigits: 0, currency: "USD" }))
+      .toBe("US$1,235");
+  });
 });
 
 describe("formatNumber", () => {

@@ -48,11 +48,29 @@ export type EngagementSignal = {
   recencyAt: string;
 };
 
-export const loadEngagementSignals = cache(
+// Public wrapper normalizes the optional clientId so every call site hits the
+// cache with the same arity — cache() keys on the exact argument list, and
+// ("active") vs ("active", null) would be two entries for the same data.
+export function loadEngagementSignals(
+  scope: EngagementScope = "active",
+  clientId: string | null = null,
+): Promise<EngagementSignal[]> {
+  return loadEngagementSignalsCached(scope, clientId);
+}
+
+const loadEngagementSignalsCached = cache(
   async function _loadEngagementSignals(
-    scope: EngagementScope = "active",
+    scope: EngagementScope,
+    // When set, the whole load is scoped to ONE client's engagements — the
+    // client profile's overview needs status pills for a handful of rows and
+    // was paying for the firm's entire active book (all engagements + their
+    // items + files) to derive them.
+    clientId: string | null,
   ): Promise<EngagementSignal[]> {
-    const engagements = await listEngagements({ scope });
+    const engagements = await listEngagements({
+      scope,
+      client_id: clientId ?? undefined,
+    });
     const sb = await getServerSupabase();
     const liveIds = engagements
       .filter((e) => e.status === "sent" || e.status === "in_progress")
@@ -61,7 +79,12 @@ export const loadEngagementSignals = cache(
     const [allItemsResp, filesResp] = await Promise.all([
       sb
         .from("request_items")
-        .select("*")
+        // Exactly the fields the two consumers read — computeAttention
+        // (status, rejection_reason, required) and computeActionSignals
+        // (id, kind) — plus the grouping key. This was select("*"), which
+        // dragged every column of every live item (descriptions included)
+        // across the wire on each dashboard/worklist render.
+        .select("id, engagement_id, kind, status, rejection_reason, required")
         .in("engagement_id", liveIds.length ? liveIds : [""]),
       // Per-file review/AI state for the action signals + the last-activity
       // stamp. Still one query; just a few more small columns than before.
@@ -151,6 +174,19 @@ export const loadEngagementWorklist = cache(
         id: e.id,
         title: e.title,
         clientName: clientsById.get(e.client_id)?.display_name ?? "—",
+        clientId: e.client_id,
+        // WHO OWNS THE RELATIONSHIP, as distinct from who is doing this job.
+        // Free: `clients` is already loaded above, so this is a map lookup, not
+        // a query. The distinction is the whole point of the filter it feeds —
+        // "show me everything on Ashley's clients" is a different question from
+        // "show me everything Ashley is doing", and a firm needs both.
+        clientOwnerUserId: clientsById.get(e.client_id)?.assigned_user_id ?? null,
+        clientOwnerName:
+          clientsById.get(e.client_id)?.assigned_user_id != null
+            ? (userLabelById.get(
+                clientsById.get(e.client_id)!.assigned_user_id!,
+              ) ?? null)
+            : null,
         status: e.status,
         derivedStatus: deriveEngagementStatus(e.status, a),
         flaggedFilesCount: action.flaggedFiles,

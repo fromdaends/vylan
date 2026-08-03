@@ -1,4 +1,5 @@
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 
 export type ActivityActor = "user" | "client" | "system";
 
@@ -329,15 +330,50 @@ export async function logUserActivity(
   metadata: Record<string, unknown> = {},
 ) {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+  const authUser = await getAuthUser();
   await supabase.from("activity_log").insert({
     firm_id: firmId,
     engagement_id: engagementId,
     actor_type: "user",
-    actor_id: auth.user?.id ?? null,
+    actor_id: authUser?.id ?? null,
     action,
     metadata,
   });
+}
+
+/**
+ * The same user-attributed row logUserActivity writes, but with the actor
+ * passed IN and the insert done with the service role.
+ *
+ * For callers that no longer hold the session cookies: a Next `after()`
+ * callback runs once the response has been sent, so a session-client write
+ * from inside one cannot be relied on (see the same note in lib/welcome.ts).
+ * The actor is resolved on the request path, where it is still trustworthy,
+ * and handed here.
+ *
+ * Only ever pass an actor id the server itself established from the session —
+ * an explicit actor id is a claim about who did something, and a caller that
+ * can choose it freely can forge audit history.
+ */
+export async function logUserActivityAs(
+  firmId: string,
+  engagementId: string | null,
+  actorId: string | null,
+  action: string,
+  metadata: Record<string, unknown> = {},
+) {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb.from("activity_log").insert({
+    firm_id: firmId,
+    engagement_id: engagementId,
+    actor_type: "user",
+    actor_id: actorId,
+    action,
+    metadata,
+  });
+  if (error) {
+    console.error("[activity] logUserActivityAs failed:", error);
+  }
 }
 
 export async function logSystemActivity(

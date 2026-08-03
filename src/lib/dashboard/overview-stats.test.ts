@@ -16,6 +16,7 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id">): WorklistRow 
   return {
     title: `Engagement ${over.id}`,
     clientName: "Client",
+    clientId: "client-1",
     status: "in_progress",
     derivedStatus,
     dueDate: null,

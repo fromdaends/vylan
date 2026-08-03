@@ -34,6 +34,7 @@ import { PortalMessages } from "./portal-messages";
 import { PortalSplit } from "./portal-split";
 import { PortalEngagementSwitcher } from "./portal-engagement-switcher";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { computeInitials } from "@/components/ui/avatar-initials";
 import {
   logPortalActivity,
   type PortalActivityAction,
@@ -215,13 +216,7 @@ export function PortalShell({
 
   const brand = ctx.firm.brand_color;
 
-  const initials = ctx.firm.name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = computeInitials(ctx.firm.name);
 
   const otherLocale = locale === "fr" ? "en" : "fr";
   const helpSubject = `${ctx.firm.name}: ${ctx.engagement.title}`;

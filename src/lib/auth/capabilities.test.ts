@@ -1,136 +1,127 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   CAPABILITIES,
-  PRESETS,
-  FALLBACK_PRESET,
+  STAFF_CAPABILITIES,
+  EXTERNAL_CAPABILITIES,
   can,
   capabilitiesFor,
   isCapability,
-  isPreset,
-  resolvePreset,
   type Capability,
   type CapabilitySubject,
 } from "./capabilities";
 
 const owner: CapabilitySubject = { role: "owner" };
-const member: CapabilitySubject = { role: "staff", permission_preset: "member" };
-const junior: CapabilitySubject = { role: "staff", permission_preset: "junior" };
+const staff: CapabilitySubject = { role: "staff" };
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("the preset ladder", () => {
-  it("nests: owner ⊇ member ⊇ junior", () => {
-    const o = capabilitiesFor(owner);
-    const m = capabilitiesFor(member);
-    const j = capabilitiesFor(junior);
-    for (const c of m) expect(o.has(c)).toBe(true);
-    for (const c of j) expect(m.has(c)).toBe(true);
-    // And each step is a real step, not an alias for the one above.
-    expect(o.size).toBeGreaterThan(m.size);
-    expect(m.size).toBeGreaterThan(j.size);
-  });
-
+describe("the two ranks", () => {
   it("gives the owner everything", () => {
     for (const c of CAPABILITIES) expect(can(owner, c)).toBe(true);
   });
 
-  it("keeps firm administration out of every staff preset", () => {
-    for (const c of ["team.manage", "billing.manage", "firm.settings"] as const) {
-      expect(can(member, c)).toBe(false);
-      expect(can(junior, c)).toBe(false);
-    }
+  it("gives staff the floor and nothing else", () => {
+    const set = capabilitiesFor(staff);
+    expect([...set].sort()).toEqual([...STAFF_CAPABILITIES].sort());
   });
 
-  it("keeps the money away from a junior but not a member", () => {
-    expect(can(member, "money.view")).toBe(true);
-    expect(can(junior, "money.view")).toBe(false);
-    expect(can(member, "clients.manage")).toBe(true);
-    expect(can(junior, "clients.manage")).toBe(false);
+  it("nests: owner ⊇ staff, and it is a real step", () => {
+    const o = capabilitiesFor(owner);
+    const s = capabilitiesFor(staff);
+    for (const c of s) expect(o.has(c)).toBe(true);
+    expect(o.size).toBeGreaterThan(s.size);
+  });
+
+  it("keeps firm administration off the staff floor", () => {
+    for (const c of [
+      "team.manage",
+      "billing.manage",
+      "firm.settings",
+      "clients.private",
+      "integrations.manage",
+      "audit.view",
+    ] as const) {
+      expect(can(staff, c)).toBe(false);
+    }
   });
 
   it("keeps the activity log to the owner", () => {
-    // Reversed after PR #1044. The model said Member and Junior could read it,
-    // which contradicted the shipped app — and would have silently re-opened
-    // the log the moment the audit page's inline check was converted.
+    // Reversed after PR #1044. The model briefly said staff could read it,
+    // which contradicted the shipped app.
     expect(can(owner, "audit.view")).toBe(true);
-    expect(can(member, "audit.view")).toBe(false);
-    expect(can(junior, "audit.view")).toBe(false);
+    expect(can(staff, "audit.view")).toBe(false);
   });
 
-  it("hands private clients to nobody but the owner", () => {
-    expect(can(owner, "clients.private")).toBe(true);
-    expect(can(member, "clients.private")).toBe(false);
-    expect(can(junior, "clients.private")).toBe(false);
+  it("puts time approval on nobody's floor — it is granted", () => {
+    expect(can(staff, "time.approve")).toBe(false);
   });
 
-  it("files integrations under bookkeeping, still owner-only for now", () => {
-    // Grouped away from firm-admin so it can be handed to a bookkeeper later
-    // without handing over billing. No staff preset carries it yet.
-    expect(can(owner, "integrations.manage")).toBe(true);
-    expect(can(member, "integrations.manage")).toBe(false);
-  });
-
-  it("puts time approval in no preset at all — it is a named grant", () => {
-    expect(can(member, "time.approve")).toBe(false);
-    expect(can(junior, "time.approve")).toBe(false);
+  it("answers no for a rank that is neither owner nor staff", () => {
+    // Not reachable through the schema, but a bad cast or a future enum value
+    // must land on the FLOOR, never on everything.
+    expect(can({ role: "superuser" }, "team.manage")).toBe(false);
+    expect(can({ role: "superuser" }, "billing.manage")).toBe(false);
   });
 });
 
-describe("resolvePreset", () => {
-  it("treats a plain staff row as a member", () => {
-    // Every existing row reads this way before the backfill runs, so this is
-    // what makes converting call sites a no-op.
-    expect(resolvePreset({ role: "staff" })).toBe("member");
-    expect(resolvePreset({ role: "staff", permission_preset: null })).toBe("member");
-    expect(resolvePreset({ role: "staff", permission_preset: "" })).toBe("member");
+// ── MEMBER / JUNIOR ARE GONE ─────────────────────────────────────────────────
+//
+// The founder deleted the presets. These pin the two things that could have
+// gone wrong in doing so: somebody losing access they had, and a leftover
+// database value still steering the answer.
+describe("removing the presets moved nobody", () => {
+  it("keeps exactly what an untouched staff member had", () => {
+    // Every staff row in every firm read as the old "member" preset unless an
+    // owner had changed it, and member carried these two.
+    expect(can(staff, "money.view")).toBe(true);
+    expect(can(staff, "clients.manage")).toBe(true);
   });
 
-  it("FAILS CLOSED on an unrecognised preset instead of promoting", () => {
-    // The dangerous bug this whole function exists to prevent: falling back to
-    // "member" would mean one typo in one database cell hands a junior the
-    // money. Anything unknown lands on the most restrictive preset.
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    for (const bogus of ["Member", "MEMBER", "limited", "admin", "  ", "1"]) {
-      expect(resolvePreset({ role: "staff", permission_preset: bogus })).toBe(
-        FALLBACK_PRESET,
-      );
-    }
-    expect(log).toHaveBeenCalled();
-    expect(can({ role: "staff", permission_preset: "membre" }, "money.view")).toBe(false);
+  it("IGNORES a leftover permission_preset column value entirely", () => {
+    // users.permission_preset is still in the database, unread. A row left
+    // saying "junior" must not restrict anybody — that value no longer means
+    // anything, and honouring it would be the preset system surviving its own
+    // deletion.
+    const leftover = {
+      role: "staff" as const,
+      permission_preset: "junior",
+    } as CapabilitySubject & { permission_preset: string };
+    expect(can(leftover, "money.view")).toBe(true);
+    expect(can(leftover, "clients.manage")).toBe(true);
   });
 
-  it("refuses to promote a staff row whose preset column says owner", () => {
-    // The rank is what RLS reads. A staff row calling itself an owner preset
-    // would render owner controls that every database policy then rejects.
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(resolvePreset({ role: "staff", permission_preset: "owner" })).toBe(
-      FALLBACK_PRESET,
-    );
-    expect(log).not.toHaveBeenCalled(); // a known value, just not an allowed one
-  });
-
-  it("never lets a preset value demote the actual owner", () => {
+  it("never lets any stored value demote the actual owner", () => {
     // Locking an owner out of their own firm has no recovery path in the UI.
-    for (const stored of ["junior", "member", "nonsense", null, ""]) {
-      expect(resolvePreset({ role: "owner", permission_preset: stored })).toBe("owner");
-    }
-    expect(can({ role: "owner", permission_preset: "junior" }, "team.manage")).toBe(true);
+    const demoted = {
+      role: "owner" as const,
+      permission_preset: "junior",
+      extra_capabilities: [],
+      role_capabilities: [],
+    } as CapabilitySubject & { permission_preset: string };
+    expect(can(demoted, "team.manage")).toBe(true);
+    for (const c of CAPABILITIES) expect(can(demoted, c)).toBe(true);
   });
 });
 
-describe("named grants", () => {
-  it("adds one capability without changing the rest of the preset", () => {
+describe("grants and roles both add", () => {
+  it("adds one capability without touching the rest of the floor", () => {
     const approver: CapabilitySubject = {
       role: "staff",
-      permission_preset: "junior",
       extra_capabilities: ["time.approve"],
     };
     expect(can(approver, "time.approve")).toBe(true);
-    // Still a junior in every other respect — this is the point of a grant.
-    expect(can(approver, "money.view")).toBe(false);
     expect(can(approver, "team.manage")).toBe(false);
+    // Floor intact.
+    expect(can(approver, "money.view")).toBe(true);
+  });
+
+  it("unions a role's capabilities with a person's own grants", () => {
+    const both: CapabilitySubject = {
+      role: "staff",
+      extra_capabilities: ["billing.manage"],
+      role_capabilities: ["integrations.manage"],
+    };
+    expect(can(both, "billing.manage")).toBe(true);
+    expect(can(both, "integrations.manage")).toBe(true);
+    expect(can(both, "team.manage")).toBe(false);
   });
 
   it("ignores a grant string that is not a capability", () => {
@@ -138,26 +129,34 @@ describe("named grants", () => {
     // the person opens.
     const subject: CapabilitySubject = {
       role: "staff",
-      extra_capabilities: ["not.a.capability", "", "money.view"],
+      extra_capabilities: ["not.a.capability", ""],
+      role_capabilities: ["also.not.real"],
     };
-    expect(can(subject, "money.view")).toBe(true);
     expect(capabilitiesFor(subject).has("not.a.capability" as Capability)).toBe(
       false,
     );
+    expect(can(subject, "money.view")).toBe(true);
   });
 
-  it("does not mutate the shared preset set", () => {
-    // capabilitiesFor returns the preset's own Set when there are no grants;
-    // a grant must copy it, or one granted user rewrites the preset for the
+  it("does not mutate the shared staff set", () => {
+    // capabilitiesFor returns the floor's own Set when there is nothing to add;
+    // a grant must copy it, or one granted user rewrites the floor for the
     // whole process.
-    can({ role: "staff", permission_preset: "junior", extra_capabilities: ["money.view"] }, "money.view");
-    expect(can(junior, "money.view")).toBe(false);
+    can(
+      { role: "staff", extra_capabilities: ["billing.manage"] },
+      "billing.manage",
+    );
+    expect(can(staff, "billing.manage")).toBe(false);
   });
 
-  it("treats an empty grant list as no grants", () => {
-    expect(capabilitiesFor({ role: "staff", extra_capabilities: [] })).toBe(
-      capabilitiesFor({ role: "staff" }),
-    );
+  it("treats empty lists as nothing to add", () => {
+    expect(
+      capabilitiesFor({
+        role: "staff",
+        extra_capabilities: [],
+        role_capabilities: [],
+      }),
+    ).toBe(capabilitiesFor(staff));
   });
 });
 
@@ -168,30 +167,17 @@ describe("can", () => {
       expect(can(undefined, c)).toBe(false);
     }
   });
-
-  it("answers no for a rank that is neither owner nor staff", () => {
-    // Not reachable through the schema, but a bad cast or a future enum value
-    // must not fall through to something permissive.
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(can({ role: "superuser", permission_preset: "root" }, "team.manage")).toBe(
-      false,
-    );
-    expect(log).toHaveBeenCalled();
-  });
 });
 
 describe("the vocabulary itself", () => {
-  it("has no duplicate capability or preset names", () => {
+  it("has no duplicate capability names", () => {
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
-    expect(new Set(PRESETS).size).toBe(PRESETS.length);
   });
 
   it("recognises exactly the listed names", () => {
     for (const c of CAPABILITIES) expect(isCapability(c)).toBe(true);
-    for (const p of PRESETS) expect(isPreset(p)).toBe(true);
     for (const junk of ["", "money", "money.View", null, undefined, 7, {}]) {
       expect(isCapability(junk)).toBe(false);
-      expect(isPreset(junk)).toBe(false);
     }
   });
 
@@ -199,22 +185,22 @@ describe("the vocabulary itself", () => {
     // Keeps grep useful: `grep '"money\.' ` should find the whole money story.
     for (const c of CAPABILITIES) expect(c).toMatch(/^[a-z]+\.[a-z]+$/);
   });
+
+  it("puts every floor capability in the vocabulary", () => {
+    for (const c of STAFF_CAPABILITIES) expect(isCapability(c)).toBe(true);
+  });
 });
 
 // ── THE MIGRATION SAFETY NET ─────────────────────────────────────────────────
 //
-// Converting ~98 inline `role === "owner"` checks to can() is only safe while
-// those two things mean EXACTLY the same for every capability an owner-only
-// check is being replaced by. These tests pin that equivalence, so a future
-// change to a preset that would quietly widen an already-converted call site
-// fails here instead of in production.
+// Converting the remaining inline `role === "owner"` checks to can() is only
+// safe while those two things mean EXACTLY the same for the capability being
+// substituted. These pin that equivalence, so a change that would quietly widen
+// an already-converted call site fails here instead of in production.
 //
 // Delete a line from OWNER_ONLY_TODAY only when the corresponding call sites
 // are deliberately being opened up — never to make a red test go green.
 describe("owner-only equivalence (guards the call-site migration)", () => {
-  // Every capability that, TODAY, is granted to the owner and to nobody else.
-  // A call site currently written `role === "owner"` may be converted to one of
-  // these and behave identically.
   const OWNER_ONLY_TODAY: Capability[] = [
     "billing.manage",
     "firm.settings",
@@ -227,14 +213,8 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
 
   it("each behaves exactly like role === 'owner' for both real ranks", () => {
     for (const c of OWNER_ONLY_TODAY) {
-      // The only two values users.role can hold. A staff row reads as `member`
-      // until the preset column exists, which is what makes the conversion a
-      // no-op on today's data.
       expect(can({ role: "owner" }, c)).toBe(true);
       expect(can({ role: "staff" }, c)).toBe(false);
-      // ...and for every preset a staff row could resolve to, once it does.
-      expect(can({ role: "staff", permission_preset: "member" }, c)).toBe(false);
-      expect(can({ role: "staff", permission_preset: "junior" }, c)).toBe(false);
     }
   });
 
@@ -250,8 +230,8 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
   it("payments maps to billing.manage, never money.view", () => {
     // The specific trap: the /settings payments section spans the firm's own
     // subscription AND client payment collection. Mapping it to money.view
-    // (which every member has) would open the payments tab to all staff inside
-    // a release that claims to change nothing.
+    // (which every staff member has) would open the payments tab to all staff
+    // inside a release that claims to change nothing.
     expect(can({ role: "staff" }, "billing.manage")).toBe(false);
     expect(can({ role: "staff" }, "money.view")).toBe(true);
   });
@@ -260,15 +240,12 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
 // ── THE WIRING TEST ──────────────────────────────────────────────────────────
 //
 // The bug this exists to prevent, caught during Phase 2 and worth a permanent
-// guard: CapabilitySubject's fields were named `preset` and `grants` while the
-// database columns are `permission_preset` and `extra_capabilities`. Passing a
-// real user row into can() therefore read BOTH as undefined — every stored
-// preset silently ignored, and the per-person switches would have written to
-// the database and changed nothing at all. Nothing failed; it just quietly did
-// not work.
+// guard: CapabilitySubject's field was named `grants` while the database column
+// is `extra_capabilities`. Passing a real user row into can() therefore read it
+// as undefined — every stored grant silently ignored, and the per-person
+// switches would have written to the database and changed nothing at all.
+// Nothing failed; it just quietly did not work.
 describe("a real users row is a valid subject", () => {
-  // Shaped like AppUser, with the fields that matter spelled exactly as the
-  // columns are. If someone renames either side, this stops compiling or fails.
   const row = (over: Record<string, unknown> = {}) => ({
     id: "u-1",
     firm_id: "f-1",
@@ -284,24 +261,20 @@ describe("a real users row is a valid subject", () => {
     ...over,
   });
 
-  it("honours a stored preset straight off the row", () => {
-    expect(can(row({ permission_preset: "junior" }), "money.view")).toBe(false);
-    expect(can(row({ permission_preset: "member" }), "money.view")).toBe(true);
+  it("honours a stored grant straight off the row", () => {
+    const manager = row({ extra_capabilities: ["billing.manage"] });
+    expect(can(manager, "billing.manage")).toBe(true);
+    expect(can(manager, "team.manage")).toBe(false);
   });
 
-  it("honours a stored grant straight off the row", () => {
-    // The office-manager case: a Junior who may also manage billing.
-    const approver = row({
-      permission_preset: "junior",
-      extra_capabilities: ["billing.manage"],
-    });
-    expect(can(approver, "billing.manage")).toBe(true);
-    expect(can(approver, "money.view")).toBe(false);
+  it("honours role capabilities straight off the row", () => {
+    const wearer = row({ role_capabilities: ["integrations.manage"] });
+    expect(can(wearer, "integrations.manage")).toBe(true);
   });
 
   it("behaves as today when migration 1120 has not been applied", () => {
-    // Both columns come back undefined. That must read as "member", not as
-    // "restricted" — otherwise deploying the code before the migration would
+    // extra_capabilities comes back undefined. That must read as "the floor",
+    // not as "restricted" — otherwise deploying before the migration would
     // quietly take access away from every staff member in every firm.
     const before = row();
     expect(can(before, "money.view")).toBe(true);
@@ -310,39 +283,56 @@ describe("a real users row is a valid subject", () => {
   });
 });
 
-// ── THE ONES THAT ACTUALLY WITHHOLD SOMETHING ────────────────────────────────
+// ── THE OUTSIDER (migration 1300) ────────────────────────────────────────────
 //
-// Everything in Phase 2 until now was invisible by design. money.view and
-// clients.manage are the first two that TAKE something away — and only from a
-// Junior. These pin the exact shape of that, because the failure mode is
-// silent in both directions: gate too much and every existing staff member
-// loses access on deploy; gate too little and the Junior role is decoration.
-describe("what a Junior actually loses", () => {
-  it("loses the money and the client list; a Member keeps both", () => {
-    expect(can(junior, "money.view")).toBe(false);
-    expect(can(junior, "clients.manage")).toBe(false);
-    expect(can(member, "money.view")).toBe(true);
-    expect(can(member, "clients.manage")).toBe(true);
+// Restricted on the OPPOSITE axis from everyone else: a contractor may need to
+// do everything on one file and is limited in which files exist for them. The
+// file-level half is RLS (1300); this module owns the capability half, and its
+// job is to start them at NOTHING so a role or a grant is what hands anything
+// over.
+describe("outside collaborators", () => {
+  const outsider: CapabilitySubject = { role: "staff", is_external: true };
+
+  it("starts with an empty floor, not the staff floor", () => {
+    expect([...capabilitiesFor(outsider)]).toEqual([]);
+    // Specifically NOT the two the staff floor carries — they are exactly the
+    // wrong pair to hand a contractor by default.
+    expect(can(outsider, "money.view")).toBe(false);
+    expect(can(outsider, "clients.manage")).toBe(false);
   });
 
-  it("keeps everything an untouched staff member has today", () => {
-    // The deploy-safety assertion. A staff row with no preset stored — which is
-    // every row in every firm until an owner changes one — must still carry
-    // both, or shipping this takes access away from people nobody demoted.
-    const untouched = { role: "staff" as const };
-    expect(can(untouched, "money.view")).toBe(true);
-    expect(can(untouched, "clients.manage")).toBe(true);
-  });
-
-  it("still lets a Junior be handed one of them back", () => {
-    // The escape hatch has to work on exactly these, since they are the two an
-    // owner is most likely to want to make an exception for.
-    const withMoney = {
-      role: "staff" as const,
-      permission_preset: "junior",
+  it("still takes what a role or a grant gives them", () => {
+    // The point of the opposite axis: an outsider can be trusted with the WORK
+    // on the files they are on. They are limited in which files, not in skill.
+    const equipped: CapabilitySubject = {
+      role: "staff",
+      is_external: true,
+      role_capabilities: ["integrations.manage"],
       extra_capabilities: ["money.view"],
     };
-    expect(can(withMoney, "money.view")).toBe(true);
-    expect(can(withMoney, "clients.manage")).toBe(false);
+    expect(can(equipped, "integrations.manage")).toBe(true);
+    expect(can(equipped, "money.view")).toBe(true);
+    expect(can(equipped, "team.manage")).toBe(false);
+  });
+
+  it("NEVER applies to an owner, whatever the column says", () => {
+    // An owner locked out of their own firm has no recovery path in the UI, so
+    // users.role wins over every other input — this one included.
+    const impossible: CapabilitySubject = { role: "owner", is_external: true };
+    for (const c of CAPABILITIES) expect(can(impossible, c)).toBe(true);
+  });
+
+  it("treats a missing column as NOT an outsider", () => {
+    // The flag only ever narrows, so an unapplied 1300 must leave everybody on
+    // the staff floor rather than restricting people nobody marked.
+    expect(can({ role: "staff" }, "money.view")).toBe(true);
+    expect(can({ role: "staff", is_external: null }, "money.view")).toBe(true);
+    expect(can({ role: "staff", is_external: false }, "money.view")).toBe(true);
+  });
+
+  it("keeps the outsider floor a strict subset of the staff floor", () => {
+    const s = new Set(STAFF_CAPABILITIES);
+    for (const c of EXTERNAL_CAPABILITIES) expect(s.has(c)).toBe(true);
+    expect(EXTERNAL_CAPABILITIES.length).toBeLessThan(STAFF_CAPABILITIES.length);
   });
 });

@@ -19,11 +19,16 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { signedUrl } from "@/lib/storage";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
 import {
   resolveServableDocument,
   sourceFromParam,
 } from "@/lib/files/serve-document";
+import {
+  countsAsDownload,
+  recordDocumentDownload,
+} from "@/lib/files/download-audit";
 
 export const runtime = "nodejs";
 // Streaming a range chunk is fast; the ceiling only matters if the upstream
@@ -96,6 +101,30 @@ export async function GET(
   if (len) headers.set("Content-Length", len);
   const contentRange = upstream.headers.get("content-range");
   if (contentRange) headers.set("Content-Range", contentRange);
+
+  // Every download of a client's documents is audited HERE, past the
+  // authorization above, so it is recorded whichever surface linked at it — the
+  // Files grid, an engagement's file row, the preview card or detail pane, or
+  // the viewer's own download button. See lib/files/download-audit.ts for why
+  // an inline preview deliberately writes nothing.
+  if (countsAsDownload({ wantsDownload, range })) {
+    // React-cached inside resolveServableDocument a moment ago, so this is a
+    // cache hit rather than a second round trip. The actor comes back from the
+    // resolve for the same reason.
+    const firm = await getCurrentFirm();
+    if (firm) {
+      recordDocumentDownload({
+        firmId: firm.id,
+        engagementId: file.engagementId,
+        clientId: file.clientId,
+        source: file.source,
+        documentId: file.id,
+        fileName: file.fileName,
+        route: "files",
+        actorId: file.actorId,
+      });
+    }
+  }
 
   return new Response(upstream.body, {
     status: upstream.status === 206 ? 206 : 200,

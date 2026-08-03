@@ -43,6 +43,7 @@ import {
   Sparkles,
   UploadCloud,
 } from "lucide-react";
+import { can } from "@/lib/auth/capabilities";
 
 // The documents log: everything arriving FROM clients, on its way into the
 // books. Extracted from the old /quickbooks/drafts page unchanged — it is now
@@ -68,7 +69,7 @@ export async function DocumentsTab({
     getCurrentFirm(),
   ]);
   const connected = qbConnected || xeroConnected;
-  const isOwner = user?.role === "owner";
+  const isOwner = can(user, "integrations.manage");
 
   if (!connected) {
     // Not-connected state = a welcoming CONNECT prompt (not a bare empty box).

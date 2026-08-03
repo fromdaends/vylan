@@ -1,0 +1,212 @@
+"use client";
+
+// The client's name, with a dropdown — the same object as the firm name.
+//
+// The founder's instruction was literal: "the same process of the down arrow,
+// that should exist on the client page with the exact same process that it is
+// on the member's page. So literally do the exact same thing." So this shares
+// NameMenu with FirmMenu and only supplies its own items.
+//
+// It replaces BOTH the pen beside the name and the "⋯" in the corner. Those
+// were two anonymous controls for one question — what can I do to this client —
+// which is exactly the shape the firm page just got rid of.
+
+import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { Link, useRouter } from "@/i18n/navigation";
+import { toast } from "sonner";
+import {
+  Archive,
+  ArchiveRestore,
+  Eye,
+  EyeOff,
+  FolderOpen,
+  Lock,
+  LockOpen,
+  Pencil,
+  ScrollText,
+  Users,
+} from "lucide-react";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { NameMenu } from "@/components/ui/name-menu";
+import { ClientFormDialog } from "@/components/clients/client-form-dialog";
+import {
+  setClientPrivacyAction,
+  setClientVisibilityAction,
+} from "@/app/actions/clients";
+import { clientTabHref } from "@/lib/clients/tabs";
+import type { Client } from "@/lib/db/clients";
+import { clientVisibility } from "@/lib/clients/visibility";
+
+export function ClientNameMenu({
+  client,
+  locale,
+  canManage,
+  showPrivacy,
+  isOwner,
+  /** Submits the archive/restore <form> the page renders outside the menu — a
+   *  form cannot be a dropdown item, but a button can point at one by id. */
+  archiveFormId,
+}: {
+  client: Client;
+  locale: "fr" | "en";
+  canManage: boolean;
+  showPrivacy: boolean;
+  isOwner: boolean;
+  archiveFormId: string;
+}) {
+  const t = useTranslations("Clients");
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [editOpen, setEditOpen] = useState(false);
+  const [priv, setPriv] = useState(client.is_private ?? false);
+  // The MIDDLE privacy level (1280). Separate state from `priv` because they
+  // answer separate questions: is_private decides who may WRITE the row,
+  // visibility decides who may SEE it exists.
+  const [listed, setListed] = useState(clientVisibility(client) === "listed");
+  const archived = client.archived_at != null;
+
+  function togglePrivacy() {
+    const next = !priv;
+    setPriv(next); // optimistic
+    startTransition(async () => {
+      const res = await setClientPrivacyAction(client.id, next);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setPriv(!next); // revert
+        if (res.error === "unavailable") toast.info(t("private_unavailable"));
+        else toast.error(t("private_failed"));
+      }
+    });
+  }
+
+  function toggleListed() {
+    const next = !listed;
+    setListed(next); // optimistic
+    startTransition(async () => {
+      const res = await setClientVisibilityAction(client.id, next);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setListed(!next); // revert
+        if (res.error === "unavailable") toast.info(t("listed_unavailable"));
+        else toast.error(t("private_failed"));
+      }
+    });
+  }
+
+  return (
+    <>
+      <NameMenu
+        name={client.display_name}
+        label={t("more_actions")}
+        enabled={canManage}
+        className="text-2xl"
+      >
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            setEditOpen(true);
+          }}
+          className="gap-2"
+        >
+          <Pencil className="size-4" aria-hidden />
+          {t("edit_client")}
+        </DropdownMenuItem>
+        {/* Two destinations that were only reachable by finding the right tab
+            first. They are things you DO to this client, so they belong with
+            the rest of them. */}
+        <DropdownMenuItem asChild className="gap-2">
+          <Link href={clientTabHref(client.id, "organizers")}>
+            <Users className="size-4" aria-hidden />
+            {t("tab_organizers")}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="gap-2">
+          <Link href={`/clients/${client.id}/archive`}>
+            <FolderOpen className="size-4" aria-hidden />
+            {t("tab_files")}
+          </Link>
+        </DropdownMenuItem>
+        {/* Owner-only, matching the audit log's own gate — offering it to
+            somebody who would land on a 404 is worse than not offering it. */}
+        {isOwner && (
+          <DropdownMenuItem asChild className="gap-2">
+            <Link href={`/settings/audit?client=${client.id}`}>
+              <ScrollText className="size-4" aria-hidden />
+              {t("menu_activity")}
+            </Link>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        {showPrivacy && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              togglePrivacy();
+            }}
+            className="gap-2"
+          >
+            {priv ? (
+              <LockOpen className="size-4" aria-hidden />
+            ) : (
+              <Lock className="size-4" aria-hidden />
+            )}
+            {priv ? t("make_public") : t("make_private")}
+          </DropdownMenuItem>
+        )}
+        {/* Discoverable to the whole firm, or only to the people on it. Owner
+            only, and RLS agrees (1280) — deciding who may learn a client
+            exists is a privacy call, not a working one. */}
+        {showPrivacy && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              toggleListed();
+            }}
+            className="gap-2"
+          >
+            {listed ? (
+              <EyeOff className="size-4" aria-hidden />
+            ) : (
+              <Eye className="size-4" aria-hidden />
+            )}
+            {listed ? t("make_members_only") : t("make_listed")}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onSelect={() => {
+            // A plain <button form="..."> does NOT work here: closing the menu
+            // unmounts the button before the browser performs the click's
+            // default action, so the submit is silently dropped. Submitting the
+            // form ourselves is the only reliable path.
+            const form = document.getElementById(archiveFormId);
+            if (form instanceof HTMLFormElement) form.requestSubmit();
+          }}
+          className="gap-2"
+        >
+          {archived ? (
+            <ArchiveRestore className="size-4" aria-hidden />
+          ) : (
+            <Archive className="size-4" aria-hidden />
+          )}
+          {archived ? t("restore") : t("archive")}
+        </DropdownMenuItem>
+      </NameMenu>
+
+      {/* Controlled: a DialogTrigger inside a dropdown item never fires,
+          because selecting the item unmounts it first. */}
+      <ClientFormDialog
+        mode="edit"
+        locale={locale}
+        client={client}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+    </>
+  );
+}

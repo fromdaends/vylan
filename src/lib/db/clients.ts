@@ -1,5 +1,11 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
+// Value + type live in a PLAIN module: a "use client" component imports the
+// function, and anything reachable from this file drags in next/headers.
+import type { ClientVisibility } from "@/lib/clients/visibility";
 import { addClientMember } from "@/lib/db/client-members";
 
 // New clients default to PRIVATE only when the firm opted in
@@ -7,38 +13,22 @@ import { addClientMember } from "@/lib/db/client-members";
 // can't set is_private (the clients_all WITH CHECK would reject the insert), and
 // "clients private by default" is the OWNER's posture. Migration-gated + fails
 // open: if the column/role isn't there yet, this is false = public = today's
-// behavior (select('*') never throws on the absent column).
-async function newClientDefaultsPrivate(
-  supabase: SupabaseClient,
-): Promise<boolean> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return false;
-  const { data: u } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", auth.user.id)
-    .maybeSingle();
-  if (!u || u.role !== "owner") return false;
-  const { data: f } = await supabase
-    .from("firms")
-    .select("*")
-    .eq("id", u.firm_id)
-    .maybeSingle();
-  return (f as { clients_private_by_default?: boolean } | null)
+// behavior (select('*') never throws on the absent column). Reads through the
+// request-cached getCurrentUser/getCurrentFirm, so it costs nothing on a
+// request that already resolved them.
+async function newClientDefaultsPrivate(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "owner") return false;
+  const firm = await getCurrentFirm();
+  return (firm as { clients_private_by_default?: boolean } | null)
     ?.clients_private_by_default === true;
 }
 
 async function currentFirmId(): Promise<string> {
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Not authenticated");
-  const { data: u, error } = await supabase
-    .from("users")
-    .select("firm_id")
-    .eq("id", auth.user.id)
-    .single();
-  if (error || !u?.firm_id) throw new Error("No firm for user");
-  return u.firm_id as string;
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Not authenticated");
+  if (!user.firm_id) throw new Error("No firm for user");
+  return user.firm_id;
 }
 
 export type Client = {
@@ -77,7 +67,22 @@ export type Client = {
   // portal_pin_salt are server-only and must never reach a browser. See
   // src/lib/portal/gate.ts.
   portal_pin_enabled: boolean;
+  // How far this client is discoverable (migration 1280).
+  //
+  //   "members"  only owners, the assignee and people on its list see it at
+  //              all — the 1240 behaviour, and the default for every row.
+  //   "listed"   the whole firm sees the ROW, so they know it exists and who
+  //              to ask. The work stays shut: engagement, document and payment
+  //              policies gate on membership, not on this.
+  //
+  // Possibly undefined at runtime until 1280 is applied — ALWAYS read it
+  // through clientVisibility() below, which resolves anything unrecognised to
+  // "members". Fail CLOSED here, unlike is_private: a read blip must not turn
+  // a members-only client into a firm-wide directory entry.
+  visibility?: ClientVisibility | null;
 };
+
+
 
 // PostgREST raises PGRST204 ("column not found in schema cache") when asked to
 // write a column it doesn't know about. We use this to make client writes safe
@@ -91,9 +96,7 @@ function isMissingColumn(
 }
 
 async function currentAuthUserId(): Promise<string | null> {
-  const supabase = await getServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+  return (await getAuthUser())?.id ?? null;
 }
 
 export type ClientFilters = {
@@ -102,27 +105,45 @@ export type ClientFilters = {
   includeArchived?: boolean;
 };
 
-export async function listClients(filters: ClientFilters = {}): Promise<
-  Client[]
-> {
+// The real fetch, React.cache'd on PRIMITIVE keys — cache() compares object
+// arguments by reference, so caching the public function directly would never
+// dedupe two call sites passing equal-looking filter objects. Several pages
+// read the client list more than once per render (the table + a name map, or
+// a page plus the worklist loader); this collapses identical reads to one
+// query per request. Every caller is a page-render read (verified: nothing
+// creates a client and re-lists within one request).
+const listClientsCached = cache(async function _listClients(
+  search: string,
+  type: "individual" | "business" | "all",
+  includeArchived: boolean,
+): Promise<Client[]> {
   const supabase = await getServerSupabase();
   let query = supabase.from("clients").select("*");
 
-  if (!filters.includeArchived) {
+  if (!includeArchived) {
     query = query.is("archived_at", null);
   }
-  if (filters.type && filters.type !== "all") {
-    query = query.eq("type", filters.type);
+  if (type !== "all") {
+    query = query.eq("type", type);
   }
-  if (filters.search && filters.search.trim()) {
-    const s = filters.search.trim();
-    query = query.or(`display_name.ilike.%${s}%,email.ilike.%${s}%`);
+  if (search) {
+    query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
   }
   query = query.order("created_at", { ascending: false });
 
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as Client[];
+});
+
+export async function listClients(filters: ClientFilters = {}): Promise<
+  Client[]
+> {
+  return listClientsCached(
+    filters.search?.trim() ?? "",
+    filters.type ?? "all",
+    filters.includeArchived === true,
+  );
 }
 
 export async function getClient(id: string): Promise<Client | null> {
@@ -180,7 +201,7 @@ export async function createClient(input: ClientInput): Promise<Client> {
   const withProfile = {
     ...withProfileNoPrivate,
     // Honor the firm's "clients private by default" switch (owner-created only).
-    is_private: await newClientDefaultsPrivate(supabase),
+    is_private: await newClientDefaultsPrivate(),
   };
   const insertClient = (row: object) =>
     supabase.from("clients").insert(row).select("*").single();
@@ -245,7 +266,7 @@ export async function bulkCreateClients(
   // by default" switch. Degrade one column-set per tier (like createClient), so an
   // unknown is_private (0810 pending) doesn't also drop owner attribution (0210):
   // owner+private -> owner only -> base.
-  const isPrivate = await newClientDefaultsPrivate(supabase);
+  const isPrivate = await newClientDefaultsPrivate();
   const withOwner = base.map((r) => ({ ...r, assigned_user_id: owner }));
   let { error, count } = await supabase
     .from("clients")
@@ -372,6 +393,37 @@ export async function setClientPrivacy(
   if (error) {
     if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
     console.error("[clients] set privacy failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+  return { ok: true };
+}
+
+/**
+ * The middle privacy level (migration 1280): whether the whole firm can see
+ * this client's ROW.
+ *
+ * Deliberately a SEPARATE writer from setClientPrivacy rather than another
+ * argument on it. They answer different questions — is_private decides who may
+ * WRITE the row, visibility decides who may SEE it — and the two have already
+ * been confused once by living on the same menu.
+ *
+ * "unavailable" when 1280 is unapplied, so the caller can say so plainly
+ * instead of reporting a generic failure.
+ */
+export async function setClientVisibility(
+  clientId: string,
+  visibility: ClientVisibility,
+  firmId: string,
+): Promise<{ ok: boolean; error?: "update_failed" | "unavailable" }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("clients")
+    .update({ visibility })
+    .eq("id", clientId)
+    .eq("firm_id", firmId);
+  if (error) {
+    if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
+    console.error("[clients] set visibility failed:", error.message);
     return { ok: false, error: "update_failed" };
   }
   return { ok: true };

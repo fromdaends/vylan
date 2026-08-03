@@ -122,3 +122,17 @@ export function selectAssignedTo(
   if (!userId) return [];
   return rows.filter((r) => r.assigneeUserId === userId);
 }
+
+// One client's rows, for the client page's Engagements tab.
+//
+// Matches on the ID, never the display name: two clients can be called
+// "Smith Holdings", and a name filter would quietly put one firm's work on
+// another's page. Returns nothing for a missing id rather than everything —
+// the safe direction when the caller has lost track of whose page this is.
+export function selectForClient(
+  rows: WorklistRow[],
+  clientId: string | null,
+): WorklistRow[] {
+  if (!clientId) return [];
+  return rows.filter((r) => r.clientId === clientId);
+}

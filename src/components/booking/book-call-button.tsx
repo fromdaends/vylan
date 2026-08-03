@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { getCalApi } from "@calcom/embed-react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 // Founder's public Cal.com link. Bookings go to whatever calendar is
@@ -10,9 +9,28 @@ import { Button } from "@/components/ui/button";
 export const CAL_LINK = "vylan.app";
 const CAL_NAMESPACE = "book-call";
 
+// Loads the Cal.com embed ON CLICK and opens the booking modal
+// programmatically. It used to import @calcom/embed-react statically and
+// initialize on MOUNT — which injected Cal's third-party embed.js into every
+// page that merely RENDERED one of these buttons (the trial banner puts one on
+// every app page for trial firms, the billing page for everyone) whether or
+// not anyone ever booked. Now nothing Cal-related is fetched until the click.
+async function openCalModal(): Promise<void> {
+  const { getCalApi } = await import("@calcom/embed-react");
+  const cal = await getCalApi({ namespace: CAL_NAMESPACE });
+  cal("ui", {
+    theme: "auto",
+    hideEventTypeDetails: false,
+    layout: "month_view",
+  });
+  cal("modal", {
+    calLink: CAL_LINK,
+    config: { layout: "month_view" },
+  });
+}
+
 // Opens the Cal.com booking flow as a centered modal overlay on top
-// of the current page (no redirect / new tab). The cal.com bootstrap
-// is initialized once per page mount via getCalApi.
+// of the current page (no redirect / new tab).
 export function BookCallButton({
   label,
   icon,
@@ -32,26 +50,25 @@ export function BookCallButton({
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
 }) {
-  useEffect(() => {
-    (async () => {
-      const cal = await getCalApi({ namespace: CAL_NAMESPACE });
-      cal("ui", {
-        theme: "auto",
-        hideEventTypeDetails: false,
-        layout: "month_view",
-      });
-    })();
-  }, []);
-
+  const [loading, setLoading] = useState(false);
   return (
     <Button
       type="button"
       variant={variant}
       size={size}
       className={className}
-      data-cal-namespace={CAL_NAMESPACE}
-      data-cal-link={CAL_LINK}
-      data-cal-config='{"layout":"month_view"}'
+      disabled={loading}
+      onClick={async () => {
+        // The first click pays the embed download (~a beat on a normal
+        // connection); the button dims while it loads so the click visibly
+        // took. Later clicks reuse the loaded embed and open instantly.
+        setLoading(true);
+        try {
+          await openCalModal();
+        } finally {
+          setLoading(false);
+        }
+      }}
     >
       {icon}
       {label}
@@ -69,18 +86,10 @@ export function BookCallLink({
   children: ReactNode;
   className?: string;
 }) {
-  useEffect(() => {
-    (async () => {
-      const cal = await getCalApi({ namespace: CAL_NAMESPACE });
-      cal("ui", { theme: "auto", layout: "month_view" });
-    })();
-  }, []);
   return (
     <button
       type="button"
-      data-cal-namespace={CAL_NAMESPACE}
-      data-cal-link={CAL_LINK}
-      data-cal-config='{"layout":"month_view"}'
+      onClick={() => void openCalModal()}
       className={
         "text-primary hover:underline font-medium " + (className ?? "")
       }

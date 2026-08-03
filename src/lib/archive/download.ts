@@ -14,11 +14,6 @@ import type { AppLocale } from "@/lib/format";
 import type { ArchiveCategoryKey } from "@/lib/db/client-archive";
 import { asciiFilePart, macZipEntryName } from "@/lib/zip";
 
-export type ResolvedArchiveFile = {
-  storagePath: string;
-  filename: string;
-  mimeType: string | null;
-};
 
 // Signed PDFs carry no size in the DB; use a generous nominal size so the
 // whole-client size cap still accounts for them.
@@ -196,144 +191,12 @@ function itemLabelMap(
 
 // Resolve ONE archive file to its storage location + download name, only if it
 // belongs to this firm's client. Returns null for anything out of scope.
-export async function resolveArchiveFile(input: {
-  firmId: string;
-  clientId: string;
-  category: ArchiveCategoryKey;
-  fileId: string;
-  locale: AppLocale;
-}): Promise<ResolvedArchiveFile | null> {
-  const { firmId, clientId, category, fileId, locale } = input;
-  const sb = getServiceRoleSupabase();
-
-  if (!(await clientInFirm(sb, clientId, firmId))) return null;
-
-  if (category === "checklist") {
-    // uploaded_files has no firm_id — scope via its engagement.
-    const { data: f } = await sb
-      .from("uploaded_files")
-      .select("storage_path, original_filename, display_name, mime_type, engagement_id, is_duplicate")
-      .is("deleted_at", null)
-      .eq("id", fileId)
-      .maybeSingle();
-    if (!f || !f.storage_path || f.is_duplicate) return null;
-    if (!(await engagementInScope(sb, f.engagement_id as string, clientId, firmId))) return null;
-    return {
-      storagePath: f.storage_path as string,
-      filename: (f.display_name as string | null) ?? (f.original_filename as string),
-      mimeType: (f.mime_type as string | null) ?? null,
-    };
-  }
-
-  if (category === "final") {
-    const { data: d } = await sb
-      .from("final_documents")
-      .select("storage_path, original_filename, display_name, mime_type, engagement_id")
-      .is("deleted_at", null)
-      .eq("id", fileId)
-      .eq("firm_id", firmId)
-      .maybeSingle();
-    if (!d || !d.storage_path) return null;
-    // Invoices live in final_documents but are never part of the archive.
-    if (isInvoiceAttachment(d.storage_path as string)) return null;
-    if (!(await engagementInScope(sb, d.engagement_id as string, clientId, firmId))) return null;
-    return {
-      storagePath: d.storage_path as string,
-      filename: (d.display_name as string | null) ?? (d.original_filename as string),
-      mimeType: (d.mime_type as string | null) ?? null,
-    };
-  }
-
-  // signed
-  const { data: s } = await sb
-    .from("signature_requests")
-    .select("signed_file_path, engagement_id, request_item_id")
-    .eq("id", fileId)
-    .eq("firm_id", firmId)
-    .maybeSingle();
-  if (!s || !s.signed_file_path) return null;
-  if (!(await engagementInScope(sb, s.engagement_id as string, clientId, firmId))) return null;
-  const { data: item } = await sb
-    .from("request_items")
-    .select("label, label_fr")
-    .eq("id", s.request_item_id as string)
-    .maybeSingle();
-  const label = item
-    ? locale === "fr"
-      ? (item.label_fr as string | null) || (item.label as string)
-      : (item.label as string)
-    : "Document";
-  return {
-    storagePath: s.signed_file_path as string,
-    filename: `${label || "Document"}.pdf`,
-    mimeType: "application/pdf",
-  };
-}
 
 export type ArchiveBundle = {
   archiveName: string; // suggested .zip filename (without extension logic)
   files: ArchiveZipFile[];
   estimatedBytes: number;
 };
-
-// Gather every archivable file for ONE engagement (all three categories),
-// firm+client scoped. Files sit under "<Category>/..." (no engagement folder).
-export async function collectEngagementArchive(input: {
-  firmId: string;
-  clientId: string;
-  engagementId: string;
-  locale: AppLocale;
-}): Promise<ArchiveBundle | null> {
-  const { firmId, clientId, engagementId, locale } = input;
-  const sb = getServiceRoleSupabase();
-
-  const { data: engagement } = await sb
-    .from("engagements")
-    .select("id, title, client_id")
-    .eq("id", engagementId)
-    .eq("client_id", clientId)
-    .eq("firm_id", firmId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!engagement) return null;
-
-  const { data: client } = await sb
-    .from("clients")
-    .select("display_name")
-    .eq("id", clientId)
-    .maybeSingle();
-
-  const [uploadedRes, sigRes, finalRes, itemRes] = await Promise.all([
-    sb
-      .from("uploaded_files")
-      .select("storage_path, original_filename, display_name, is_duplicate, review_status, size_bytes")
-      .is("deleted_at", null)
-      .eq("engagement_id", engagementId),
-    sb.from("signature_requests").select("signed_file_path, request_item_id").eq("engagement_id", engagementId),
-    sb
-      .from("final_documents")
-      .select("storage_path, original_filename, display_name, size_bytes")
-      .is("deleted_at", null)
-      .eq("engagement_id", engagementId),
-    sb.from("request_items").select("id, label, label_fr").eq("engagement_id", engagementId),
-  ]);
-
-  const { files, bytes } = buildEngagementZipFiles({
-    uploaded: (uploadedRes.data ?? []) as UploadedZipRow[],
-    signatures: (sigRes.data ?? []) as SignatureZipRow[],
-    finals: (finalRes.data ?? []) as FinalZipRow[],
-    itemLabel: itemLabelMap(itemRes.data, locale),
-    locale,
-  });
-
-  return {
-    archiveName: `${asciiFilePart((engagement.title as string) ?? "")} - ${asciiFilePart(
-      (client?.display_name as string | null) ?? "client",
-    )}.zip`,
-    files,
-    estimatedBytes: bytes,
-  };
-}
 
 // Gather every archivable file across ALL of a client's engagements, nested
 // under one folder per engagement ("<Engagement>/<Category>/<file>"). Engagement

@@ -1,7 +1,11 @@
+import { cache } from "react";
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import type { EngagementStage } from "@/lib/engagements/stage";
+import { buildRequestItemRow } from "@/lib/engagements/request-item-row";
 import type { EngagementType, TemplateItem } from "./templates";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 
@@ -194,18 +198,24 @@ export function newMagicToken(): string {
 // surfacing archived / deleted engagements.
 export type EngagementScope = "active" | "archived" | "deleted" | "any";
 
-export async function listEngagements(filters?: {
-  client_id?: string;
-  status?: EngagementStatus | "all";
-  scope?: EngagementScope;
-}): Promise<Engagement[]> {
+// The real fetch, React.cache'd on PRIMITIVE keys. cache() compares object
+// arguments by reference, so caching the public function directly would never
+// dedupe two call sites both asking for `{ scope: "active" }` — which is
+// exactly what /clients did (its own listEngagements() plus the one inside
+// loadEngagementSignals), paying the full-table query twice per render. Every
+// caller is a page-render read (verified: nothing writes engagements and
+// re-lists within one request), so per-request memoization is safe.
+const listEngagementsCached = cache(async function _listEngagements(
+  clientId: string | null,
+  status: EngagementStatus | "all" | null,
+  scope: EngagementScope,
+): Promise<Engagement[]> {
   const supabase = await getServerSupabase();
   let q = supabase.from("engagements").select("*");
-  if (filters?.client_id) q = q.eq("client_id", filters.client_id);
-  if (filters?.status && filters.status !== "all") {
-    q = q.eq("status", filters.status);
+  if (clientId) q = q.eq("client_id", clientId);
+  if (status && status !== "all") {
+    q = q.eq("status", status);
   }
-  const scope = filters?.scope ?? "active";
   if (scope === "active") {
     q = q.is("deleted_at", null).is("archived_at", null);
   } else if (scope === "archived") {
@@ -223,6 +233,18 @@ export async function listEngagements(filters?: {
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Engagement[];
+});
+
+export async function listEngagements(filters?: {
+  client_id?: string;
+  status?: EngagementStatus | "all";
+  scope?: EngagementScope;
+}): Promise<Engagement[]> {
+  return listEngagementsCached(
+    filters?.client_id ?? null,
+    filters?.status ?? null,
+    filters?.scope ?? "active",
+  );
 }
 
 export async function getEngagement(id: string): Promise<Engagement | null> {
@@ -282,27 +304,19 @@ export async function createEngagementWithItems(
   input: CreateEngagementInput,
 ): Promise<Engagement> {
   const supabase = await getServerSupabase();
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) throw new Error("Not authenticated");
-  const { data: u } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.user.id)
-    .single();
-  if (!u?.firm_id) throw new Error("No firm for user");
+  const u = await getCurrentUser();
+  if (!u) throw new Error("Not authenticated");
+  if (!u.firm_id) throw new Error("No firm for user");
 
   // New engagements default to PRIVATE when the firm opted into "private by
   // default" AND the creator is an OWNER (staff can't set is_private — the
   // engagements_all WITH CHECK would reject the insert). Migration-gated + fails
-  // open: absent column/flag → public (today's behavior). select('*') never
-  // throws on the absent column.
+  // open: absent column/flag → public (today's behavior). Reads through the
+  // request-cached getCurrentUser/getCurrentFirm — no extra round trips on a
+  // request that already resolved them.
   let defaultPrivate = false;
   if (u.role === "owner") {
-    const { data: f } = await supabase
-      .from("firms")
-      .select("*")
-      .eq("id", u.firm_id)
-      .maybeSingle();
+    const f = await getCurrentFirm();
     defaultPrivate =
       (f as { clients_private_by_default?: boolean } | null)
         ?.clients_private_by_default === true;
@@ -334,7 +348,7 @@ export async function createEngagementWithItems(
     // The creator is the DEFAULT assignee-of-record (accountability, not access
     // control — every firm member still sees every engagement), but the caller
     // may name someone else so work can be created already handed over.
-    assigned_user_id: input.assigned_user_id ?? user.user.id,
+    assigned_user_id: input.assigned_user_id ?? u.id,
     assigned_at: new Date().toISOString(),
   };
   // Invoice-automation columns (migration 0590) ride along ONLY when the
@@ -455,16 +469,22 @@ export async function createEngagementWithItems(
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
   if (input.items.length > 0) {
-    const rows = input.items.map((item, idx) => ({
-      engagement_id: engagement.id,
-      label: item.label_en,
-      label_fr: item.label_fr,
-      description: item.description_en ?? null,
-      description_fr: item.description_fr ?? null,
-      doc_type: item.doc_type,
-      required: item.required,
-      order_index: idx,
-    }));
+    // Shared with addItemToEngagement so the two ways an item is born cannot
+    // fill different columns — see src/lib/engagements/request-item-row.ts.
+    const rows = input.items.map((item, idx) =>
+      buildRequestItemRow(
+        engagement.id,
+        {
+          label: item.label_en,
+          label_fr: item.label_fr,
+          description: item.description_en,
+          description_fr: item.description_fr,
+          doc_type: item.doc_type,
+          required: item.required,
+        },
+        idx,
+      ),
+    );
     const { error: itemsErr } = await supabase
       .from("request_items")
       .insert(rows);

@@ -11,9 +11,26 @@
 // ?download=1 forces an attachment (the portal's Download link); otherwise the
 // browser renders it inline (PDF preview), using the stored, upload-validated MIME
 // plus the global nosniff header.
+//
+// A download here is recorded as `client_downloaded_deliverable` on the CLIENT
+// activity feed, and deliberately NOT as `file_downloaded` on the firm audit
+// log. Two different ledgers, two different actors: the firm audit answers "who
+// at this firm touched a client's documents", and its rows carry a firm user as
+// the actor. A portal visitor has no firm session, so a `file_downloaded` row
+// for one would carry a null actor and read on /settings/audit as an
+// unattributed member of staff — worse than silence. The client's own action
+// already has its own registered, filterable audit action, and it shows up on
+// that screen under its own name.
+//
+// It is recorded HERE rather than from the Download link's onClick for the same
+// reason /api/files/[id] does it: a beacon fired from a component only covers
+// the one component that fires it, and misses "Save link as", a copied URL, or
+// a page that navigates away before the beacon leaves.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { isValidTokenShape } from "@/lib/db/portal";
+import { after } from "next/server";
+import { isValidTokenShape, logActivity } from "@/lib/db/portal";
+import { countsAsDownload } from "@/lib/files/download-audit";
 import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
   isDeliverableDownloadAllowed,
@@ -73,7 +90,7 @@ export async function GET(
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")
-    .select("id, status, magic_expires_at, invoice_locks_deliverables")
+    .select("id, firm_id, status, magic_expires_at, invoice_locks_deliverables")
     .eq("magic_token", token)
     .maybeSingle();
   const deliverable = await getFinalDocumentForDownloadSR(id);
@@ -146,6 +163,27 @@ export async function GET(
   if (len) headers.set("Content-Length", len);
   const contentRange = upstream.headers.get("content-range");
   if (contentRange) headers.set("Content-Range", contentRange);
+
+  // Same gate as the firm-side routes — only ?download=1, and only the first
+  // byte range, so an inline preview writes nothing and a resumed transfer
+  // writes one row rather than one per chunk.
+  const firmId = (engagement as { firm_id?: string | null } | null)?.firm_id;
+  if (firmId && countsAsDownload({ wantsDownload: asDownload, range })) {
+    const engagementId = engagement!.id as string;
+    const name = deliverable!.display_name || deliverable!.original_filename;
+    // Off the response path and best-effort: the client's file must never wait
+    // on, or be denied by, the row that records it.
+    after(async () => {
+      try {
+        await logActivity(firmId, engagementId, "client_downloaded_deliverable", {
+          name,
+          ref: id,
+        });
+      } catch (e) {
+        console.error("[portal] could not record a deliverable download:", e);
+      }
+    });
+  }
 
   return new Response(upstream.body, {
     status: upstream.status === 206 ? 206 : 200,

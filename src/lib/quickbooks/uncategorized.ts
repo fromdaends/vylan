@@ -35,6 +35,7 @@ import {
   quickbooksQuery,
   type QuickbooksEnvironment,
 } from "@/lib/quickbooks/client";
+import { formatLedgerAmount } from "./amount-label";
 
 // QuickBooks' /query page cap. Hitting it means the read was TRUNCATED and the
 // answer is incomplete — reported rather than presented as "that's everything",
@@ -352,7 +353,7 @@ export function describeUncatForClient(
   txn: UncatTxn,
   opts: { locale?: "en" | "fr" } = {},
 ): string {
-  const amount = formatAmount(Math.abs(txn.uncatAmt), txn.currency);
+  const amount = formatLedgerAmount(Math.abs(txn.uncatAmt), txn.currency);
   const who = txn.partyName?.trim() || txn.memo?.trim() || null;
   const when = txn.txnDate ? formatDate(txn.txnDate, opts.locale) : null;
   if (opts.locale === "fr") {
@@ -361,11 +362,6 @@ export function describeUncatForClient(
   }
   const head = who ? `${amount} — ${who}` : `${amount} payment`;
   return when ? `${head} on ${when}` : head;
-}
-
-function formatAmount(n: number, currency: string | null): string {
-  const s = n.toFixed(2);
-  return currency ? `${s} ${currency}` : `$${s}`;
 }
 
 // Deliberately not Intl-with-a-timezone: an ISO date from QuickBooks is a

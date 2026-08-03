@@ -85,6 +85,14 @@ export type WorklistRow = {
   id: string;
   title: string;
   clientName: string;
+  // Which client's work this is. The name alone cannot scope a list — two
+  // clients can share a display name, and a filter that matches on text is a
+  // filter that eventually shows someone else's engagements.
+  clientId: string;
+  // Who owns the CLIENT relationship, as distinct from who is doing this job.
+  // Both nullable: a client can be unowned, and the row still renders.
+  clientOwnerUserId?: string | null;
+  clientOwnerName?: string | null;
   status: EngagementStatus;
   // The unified display status (deriveEngagementStatus in lib/attention):
   // same as `status` except a live engagement whose checklist puts the ball

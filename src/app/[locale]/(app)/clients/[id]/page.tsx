@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getClient, listClients } from "@/lib/db/clients";
+import { clientVisibility } from "@/lib/clients/visibility";
 import { listRelationshipsForClient } from "@/lib/db/relationships";
 import { resolveRelationshipRows } from "@/lib/relationships/validate";
 import {
@@ -8,7 +9,14 @@ import {
   type RelationshipCardRow,
 } from "@/components/clients/relationships-card";
 import { listEngagements } from "@/lib/db/engagements";
-import { loadEngagementSignals } from "@/lib/dashboard/worklist";
+import {
+  loadEngagementSignals,
+  loadEngagementWorklist,
+} from "@/lib/dashboard/worklist";
+import { selectForClient } from "@/lib/dashboard/worklist-select";
+import { selectView, viewLabelKey } from "@/lib/engagements/views";
+import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
+import { FilterLinks } from "@/components/ui/filter-links";
 import { deriveEngagementStatus } from "@/lib/attention";
 import {
 } from "@/lib/engagements/status-pill";
@@ -16,33 +24,49 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
+import { ClientNotes } from "@/components/clients/client-notes";
+import { listClientNotes } from "@/lib/db/client-notes";
 // PLAIN module, not a "use client" one: this Server Component CALLS these, and
 // a client-module export would be a client reference that throws (#959).
-import { parseClientTab, clientTabHref } from "@/lib/clients/tabs";
+import {
+  parseClientTab,
+  clientTabHref,
+  parseClientEngagementView,
+  CLIENT_ENGAGEMENT_VIEWS,
+  clientEngagementViewHref,
+  type ClientEngagementView,
+} from "@/lib/clients/tabs";
 import { listDocuments } from "@/lib/db/documents";
+// The SAME browser /files renders. Not a client-scoped copy of it — see the
+// Files tab below and the repo's Cohesion rule.
+import { BrowseTab } from "@/components/files/browse-tab";
+import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
-import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
+import { ClientNameMenu } from "@/components/clients/client-name-menu";
+import { ClientLocked } from "@/components/clients/client-locked";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
 } from "@/lib/db/payment-requests";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
+import { shouldReconcile } from "@/lib/reconcile-throttle";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/payments/payment-badge";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 import { PaymentsList } from "@/components/payments/payments-list";
-import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import {
   archiveClientAction,
   restoreClientAction,
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus, Pencil, Lock, FileText } from "lucide-react";
+import { Plus, Lock, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Panel } from "@/components/ui/panel";
+import { ProfileTabs } from "@/components/ui/profile-tabs";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -63,42 +87,309 @@ import { ClientPortalPinCard } from "@/components/clients/client-portal-pin-card
 // Shared by the hidden archive/restore form and the ⋯ menu item that submits it.
 const CLIENT_ARCHIVE_FORM_ID = "client-archive-form";
 
+// How many engagements the OVERVIEW shows before deferring to the tab. Five is
+// the same cut the Recent files card takes, so the two summary cards on the
+// overview stay the same height as each other.
+const OVERVIEW_ENGAGEMENT_PREVIEW = 5;
+
 export default async function ClientDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ qbo?: string; xero?: string; tab?: string }>;
+  // Open-ended because the Files tab hosts the firm's file browser, which owns
+  // its own set of params (folder / year / category / q / type / status / sort /
+  // page). Naming them all here would mean this signature has to be edited every
+  // time that browser grows one.
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { locale: rawLocale, id } = await params;
+  const sp = await searchParams;
   const {
     qbo: qboParam,
     xero: xeroParam,
     tab: tabParam,
-  } = await searchParams;
+    ev: evParam,
+  } = sp;
   // Which facet of this client we are looking at. The tab is a URL rather than
   // client state, so a tab is linkable, opens in a new tab, and the back
   // button works — and each tab's data loads only when that tab is asked for.
   const tab = parseClientTab(tabParam);
+  // The Engagements tab's lifecycle slice. Server-side, because Archived is a
+  // different database scope — see the note on CLIENT_ENGAGEMENT_VIEWS.
+  const engView = parseClientEngagementView(evParam);
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
   const client = await getClient(id);
   if (!client) notFound();
 
-  // Relationships card data: this client's live links, plus the firm roster of
-  // clients — archived included so a link's NAME still resolves even when its
-  // other end is archived (the picker below re-filters to live clients only).
-  // OVERVIEW ONLY: the relationships card is the only thing that reads these,
-  // and listClients pulls the firm's WHOLE roster — an expensive query to run
-  // on a tab that shows a file list.
-  const [relationships, allClients] =
+  // ── The middle privacy level (migration 1280) ────────────────────────────
+  //
+  // RLS let us READ this row for one of two very different reasons: either the
+  // viewer is entitled to the client, or the client is 'listed' and the whole
+  // firm can see that it exists. Those look identical from here, so the page
+  // has to ask the second question itself.
+  //
+  // Done BEFORE every other fetch on purpose. A locked viewer must not pay for
+  // the relationships query, the Stripe reconcile or the provider health
+  // probes — and, more importantly, must never have them run at all.
+  const viewer = await getCurrentUser();
+  const listedCast =
+    clientVisibility(client) === "listed" ? await listClientMembers(id) : [];
+  const mayOpen =
+    clientVisibility(client) !== "listed" ||
+    viewer?.role === "owner" ||
+    (viewer != null && client.assigned_user_id === viewer.id) ||
+    listedCast.some((m) => m.userId === viewer?.id);
+
+  if (!mayOpen) {
+    const tCommonLocked = await getTranslations("Common");
+    const tAppLocked = await getTranslations("App");
+    const roster = await listFirmUsers();
+    const nameOf = new Map(roster.map((u) => [u.id, userDisplayLabel(u)]));
+    // The assignee first — they are the person actually accountable — then
+    // everyone else on the list, in the order they were added.
+    const ordered = [
+      ...listedCast.filter((m) => m.userId === client.assigned_user_id),
+      ...listedCast.filter((m) => m.userId !== client.assigned_user_id),
+    ];
+    return (
+      <ClientLocked
+        clientName={client.display_name}
+        breadcrumbLabel={tCommonLocked("breadcrumb")}
+        clientsLabel={tAppLocked("nav_clients")}
+        people={ordered
+          .filter((m) => nameOf.has(m.userId))
+          .map((m) => ({
+            id: m.userId,
+            name: nameOf.get(m.userId)!,
+            position: m.position,
+          }))}
+      />
+    );
+  }
+
+  // Everything below is tab-gated exactly as before, but fanned out in ONE
+  // parallel batch instead of the strict await-chain this page used to run
+  // (~11-14 sequential round trips on the overview against the remote
+  // database). Each thunk keeps its own gate and chains its own dependents;
+  // getCurrentFirm / listFirmUsers / the signal loads are React.cache'd, so
+  // thunks that need them share one query no matter how many ask.
+  const needsMoney = tab === "overview" || tab === "engagements";
+  const onEngagementsTab = tab === "engagements";
+  const [
+    relationshipData,
+    engagementData,
+    firm,
+    firmUsers,
+    moneyData,
+    castRows,
+    organizerWorklist,
+    activeClientRows,
+    archivedClientRows,
+    clientNotes,
+    recentFiles,
+    bookkeeping,
+  ] = await Promise.all([
+    // Relationships card data: this client's live links, plus the firm roster
+    // of clients — archived included so a link's NAME still resolves even when
+    // its other end is archived (the picker re-filters to live clients only).
+    // OVERVIEW ONLY: the relationships card is the only thing that reads
+    // these, and listClients pulls the firm's WHOLE roster — an expensive
+    // query to run on a tab that shows a file list.
     tab === "overview"
-      ? await Promise.all([
+      ? Promise.all([
           listRelationshipsForClient(client.id),
           listClients({ includeArchived: true }),
         ])
-      : [[], []];
+      : ([[], []] as [
+          Awaited<ReturnType<typeof listRelationshipsForClient>>,
+          Awaited<ReturnType<typeof listClients>>,
+        ]),
+    // OVERVIEW only. The Engagements tab reads the worklist below instead — it
+    // needs progress, attention reasons and presence, none of which a raw
+    // engagement row carries. Signals are CLIENT-SCOPED: the pills only
+    // decorate this client's rows, and the firm-wide load was the single
+    // heaviest thing this page did.
+    (async () => {
+      const engagements =
+        tab === "overview" ? await listEngagements({ client_id: id }) : [];
+      const signals =
+        engagements.length > 0
+          ? await loadEngagementSignals("active", id)
+          : [];
+      return { engagements, signals };
+    })(),
+    getCurrentFirm(),
+    // Team roster for the owner picker. Include deactivated members so a
+    // former owner's name still renders (with a "please reassign" nudge);
+    // only ACTIVE members are valid reassignment targets.
+    listFirmUsers(),
+    // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ────────────────────────────
+    // One payments read (this used to run twice: once to find what to
+    // reconcile, once again for the history panel), the Stripe self-heal on
+    // still-"requested" rows — throttled, so tab switches and refreshes stop
+    // re-calling Stripe for an invoice that is simply still unpaid — then a
+    // re-read ONLY when a reconcile actually changed something.
+    (async () => {
+      if (!needsMoney) {
+        return {
+          clientPayments: [] as Awaited<
+            ReturnType<typeof listFirmPaymentsWithNames>
+          >,
+          paymentByEng: new Map() as Awaited<
+            ReturnType<typeof getLatestPaymentStatusByEngagementIds>
+          >,
+        };
+      }
+      const currentFirm = await getCurrentFirm();
+      const connectedAccountId = currentFirm?.stripe_connect_account_id ?? null;
+      let payments = await listFirmPaymentsWithNames({ clientId: id });
+      if (connectedAccountId) {
+        const changes = await Promise.all(
+          payments
+            .filter(
+              (p) =>
+                p.status === "requested" && shouldReconcile(`stripe:${p.id}`),
+            )
+            .map(async (p) => {
+              const status = await reconcilePaymentRequest(
+                p.id,
+                connectedAccountId,
+              );
+              return status != null && status !== p.status;
+            }),
+        );
+        if (changes.some(Boolean)) {
+          payments = await listFirmPaymentsWithNames({ clientId: id });
+        }
+      }
+      // Payment status per engagement (for the chip) — overview-only read: the
+      // Engagements tab's rows carry their own payment status from the
+      // worklist loader, and the history panel only renders on the overview.
+      const paymentByEng =
+        tab === "overview"
+          ? await getLatestPaymentStatusByEngagementIds(
+              (await listEngagements({ client_id: id })).map((e) => e.id),
+            )
+          : (new Map() as Awaited<
+              ReturnType<typeof getLatestPaymentStatusByEngagementIds>
+            >);
+      return {
+        clientPayments: tab === "overview" ? payments : [],
+        paymentByEng,
+      };
+    })(),
+    // Phase 3 slice 1: who works on this client. Descriptive only — nothing
+    // reads it for access control yet (see 1210_client_members.sql).
+    // ORGANIZERS ONLY — the one tab that lists them.
+    tab === "organizers"
+      ? listClientMembers(id)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listClientMembers>>),
+    // The Organizers tab's live-count column reads the active worklist —
+    // React.cache'd per scope. Team-gated inside the thunk (the roster +
+    // firm reads it needs are cache-shared with the destructured ones).
+    (async () => {
+      if (tab !== "organizers") return [];
+      const [f, users] = await Promise.all([
+        getCurrentFirm(),
+        listFirmUsers(),
+      ]);
+      const team = hasActiveTeam({
+        teamEnabled: f?.team_enabled === true,
+        activeMemberCount: users.filter((u) => !u.deactivated_at).length,
+      });
+      return team ? loadEngagementWorklist("active") : [];
+    })(),
+    // ── The Engagements tab's rows ─────────────────────────────────────────
+    // The SAME worklist every other engagement list in the app is built from,
+    // narrowed to this client. Two scopes at most: the active set plus, only
+    // when you are actually on it, the archived set.
+    onEngagementsTab
+      ? loadEngagementWorklist("active").then((rows) =>
+          selectForClient(rows, id),
+        )
+      : Promise.resolve([] as ReturnType<typeof selectForClient>),
+    onEngagementsTab && engView === "archived"
+      ? loadEngagementWorklist("archived").then((rows) =>
+          selectForClient(rows, id),
+        )
+      : Promise.resolve([] as ReturnType<typeof selectForClient>),
+    // The client's attributed notes (1270). Overview only — nothing else on
+    // the page shows them. Fails soft on its own: listClientNotes returns []
+    // when the migration hasn't landed.
+    tab === "overview"
+      ? listClientNotes(id)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listClientNotes>>),
+    // The overview's "Recent files" card. Fails soft: the Files view is gated
+    // on its own migration, and a client profile must not 500 because that is
+    // unapplied.
+    tab === "overview"
+      ? listDocuments({ clientId: id, sort: "date", page: 1 })
+          .then((page) => page.documents.slice(0, 5))
+          .catch(
+            () =>
+              [] as Awaited<
+                ReturnType<typeof listDocuments>
+              >["documents"],
+          )
+      : Promise.resolve(
+          [] as Awaited<ReturnType<typeof listDocuments>>["documents"],
+        ),
+    // Per-client bookkeeping connection status + health for the cards below.
+    // BOOKKEEPING TAB ONLY — the health probes are live calls out to the
+    // ledger. The two providers now probe in PARALLEL (status → health chained
+    // per provider); they used to run strictly one after the other.
+    (async () => {
+      if (tab !== "bookkeeping") {
+        return {
+          qboStatus: null as Awaited<
+            ReturnType<typeof getClientQuickbooksStatus>
+          >,
+          qboHealth: "ok" as Awaited<
+            ReturnType<typeof getQuickbooksConnectionHealth>
+          >,
+          xeroStatus: null as Awaited<ReturnType<typeof getClientXeroStatus>>,
+          xeroHealth: "ok" as Awaited<
+            ReturnType<typeof getXeroConnectionHealth>
+          >,
+        };
+      }
+      const currentFirm = await getCurrentFirm();
+      const [qbo, xero] = await Promise.all([
+        (async () => {
+          const status = await getClientQuickbooksStatus(client.id);
+          const health =
+            currentFirm && status?.connected
+              ? await getQuickbooksConnectionHealth(currentFirm.id, client.id)
+              : ("ok" as const);
+          return { status, health };
+        })(),
+        (async () => {
+          const status = await getClientXeroStatus(client.id);
+          // Health only probes when connected (it doubles as the keep-alive
+          // for Xero's 60-day idle expiry).
+          const health =
+            currentFirm && status?.connected
+              ? await getXeroConnectionHealth(currentFirm.id, client.id)
+              : ("ok" as const);
+          return { status, health };
+        })(),
+      ]);
+      return {
+        qboStatus: qbo.status,
+        qboHealth: qbo.health,
+        xeroStatus: xero.status,
+        xeroHealth: xero.health,
+      };
+    })(),
+  ]);
+
+  const [relationships, allClients] = relationshipData;
+  const { engagements, signals } = engagementData;
+  const { clientPayments, paymentByEng } = moneyData;
+  const me = viewer;
   const clientNameById = new Map(
     allClients.map((c) => [c.id, c.display_name]),
   );
@@ -134,32 +425,14 @@ export default async function ClientDetailPage({
       })),
   };
 
-  // OVERVIEW + ENGAGEMENTS only. Nothing else on the page lists them.
-  const engagements =
-    tab === "overview" || tab === "engagements"
-      ? await listEngagements({ client_id: id })
-      : [];
   // Unified status for the pills below — same derivation every other surface
-  // reads, via the cached active-scope signal load.
-  const signals =
-    engagements.length > 0 ? await loadEngagementSignals("active") : [];
+  // reads, via the cached signal load (client-scoped, fetched above).
   const derivedStatusById = new Map(
     signals.map((s) => [
       s.engagement.id,
       deriveEngagementStatus(s.engagement.status, s.attention),
     ]),
   );
-  // Self-heal: re-check this client's still-"requested" payments against Stripe
-  // (webhook-independent) so Paid shows even if the webhook never delivered, then
-  // read the now-correct statuses for display. Bounded to one client's payments.
-  const firm = await getCurrentFirm();
-  // Team roster for the owner picker. Include deactivated members so a
-  // former owner's name still renders (with a "please reassign" nudge);
-  // only ACTIVE members are valid reassignment targets.
-  const [firmUsers, me] = await Promise.all([
-    listFirmUsers(),
-    getCurrentUser(),
-  ]);
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: firmUsers.filter((u) => !u.deactivated_at).length,
@@ -170,10 +443,6 @@ export default async function ClientDetailPage({
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
 
-  // Phase 3 slice 1: who works on this client. Descriptive only — nothing
-  // reads it for access control yet (see 1210_client_members.sql).
-  // ORGANIZERS ONLY — the one tab that lists them.
-  const castRows = tab === "organizers" ? await listClientMembers(id) : [];
   const nameOf = new Map(firmUsers.map((u) => [u.id, userDisplayLabel(u)]));
   const cast = castRows
     // A member whose user row is gone from the roster read has been removed
@@ -191,57 +460,113 @@ export default async function ClientDetailPage({
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
   const castIds = new Set(cast.map((m) => m.userId));
   const castCandidates = assignableMembers.filter((u) => !castIds.has(u.id));
-  // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ──────────────────────────────────
-  //
-  // This block used to run on every render of this route, which after the tabs
-  // landed meant every tab SWITCH paid for it — including the Stripe
-  // reconciliation below, a live call out to Stripe for each still-"requested"
-  // payment. That is the latency the founder hit clicking between tabs: the
-  // Organizers tab was waiting on Stripe to render a list of names.
-  const needsMoney = tab === "overview" || tab === "engagements";
-  const connectedAccountId = needsMoney
-    ? (firm?.stripe_connect_account_id ?? null)
-    : null;
-  if (connectedAccountId) {
-    const pending = await listFirmPaymentsWithNames({ clientId: id });
-    await Promise.all(
-      pending
-        .filter((p) => p.status === "requested")
-        .map((p) => reconcilePaymentRequest(p.id, connectedAccountId)),
-    );
-  }
-  // Payment status per engagement (for the chip) + this client's payment history
-  // (so the accountant can backtrack what was paid on which engagement).
-  const [paymentByEng, clientPayments] = needsMoney
-    ? await Promise.all([
-        getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
-        listFirmPaymentsWithNames({ clientId: id }),
-      ])
-    : [
-        // Typed off the real loader so the empty case can never drift from the
-        // populated one.
-        new Map() as Awaited<
-          ReturnType<typeof getLatestPaymentStatusByEngagementIds>
-        >,
-        [] as Awaited<ReturnType<typeof listFirmPaymentsWithNames>>,
-      ];
 
-  // The overview's "Recent files" card. Only fetched for the overview — every
-  // other tab would pay for a query it never renders, which is the point of
-  // putting the tab in the URL. Fails soft: the Files view is gated on its own
-  // migration, and a client profile must not 500 because that is unapplied.
-  const recentFiles =
-    tab === "overview"
-      ? await listDocuments({ clientId: id, sort: "date", page: 1 })
-          .then((page) => page.documents.slice(0, 5))
-          .catch(() => [])
-      : [];
+  // ── Organizers tab: everyone with access, WHY, and their live load ────────
+  //
+  // One row per person, merged from the three separate ways somebody ends up
+  // able to see this client — they own the firm, they're the client's assigned
+  // owner, or they were added to its team. Merged rather than listed three
+  // times, because the question is "who works on this", and a person who is two
+  // of those things is still one person.
+  //
+  // The live count reads the active worklist — React.cache'd per scope, so on
+  // any request that also drew the Engagements tab this is free, and on this
+  // tab it is one query rather than one per person.
+  const organizerRows = (() => {
+    if (!(teamEnabled && tab === "organizers")) return [];
+    const liveByUser = new Map<string, number>();
+    for (const r of selectForClient(organizerWorklist, id)) {
+      if (r.status === "complete" || r.status === "cancelled") continue;
+      if (!r.assigneeUserId) continue;
+      liveByUser.set(r.assigneeUserId, (liveByUser.get(r.assigneeUserId) ?? 0) + 1);
+    }
+    const ownerIds = new Set(firmOwners.map((o) => o.id));
+    const byId = new Map<
+      string,
+      {
+        userId: string;
+        name: string;
+        position: string | null;
+        isOwner: boolean;
+        isAssignee: boolean;
+        isMember: boolean;
+        liveCount: number;
+      }
+    >();
+    const put = (userId: string, name: string) => {
+      const existing = byId.get(userId);
+      if (existing) return existing;
+      const row = {
+        userId,
+        name,
+        position: null as string | null,
+        isOwner: ownerIds.has(userId),
+        isAssignee: client.assigned_user_id === userId,
+        isMember: false,
+        liveCount: liveByUser.get(userId) ?? 0,
+      };
+      byId.set(userId, row);
+      return row;
+    };
+    for (const o of firmOwners) put(o.id, o.name);
+    if (owner) put(owner.id, userDisplayLabel(owner));
+    for (const m of cast) {
+      const row = put(m.userId, m.name);
+      row.isMember = true;
+      // The role somebody was given ON THIS CLIENT ("Preparer", "Reviewer"),
+      // which is more specific than their firm-wide job title and is the thing
+      // this tab is actually about.
+      row.position = m.position ?? row.position;
+    }
+    // Most loaded first — the point of the column is spotting who is carrying
+    // this client. Ties fall back to name so the order is stable between loads.
+    return [...byId.values()].sort(
+      (a, b) => b.liveCount - a.liveCount || a.name.localeCompare(b.name),
+    );
+  })();
+  // ── The Engagements tab's rows ─────────────────────────────────────────────
+  //
+  // The SAME worklist every other engagement list in the app is built from,
+  // narrowed to this client. Not a second loader and not a second table: the
+  // founder's note on the first attempt was that the tab was the overview's
+  // little block moved across, and the fix for that is to render the real
+  // thing, not to grow the block.
+  //
+  // Two scopes at most: the active set (which Active / Ready / Completed all
+  // slice out of, and which the overview's signals load already warmed — it is
+  // React.cache'd per scope) plus, only when you are actually on it, the
+  // archived set. Selecting a filter never costs more than one extra query.
+  const engagementRows = selectView(
+    engView,
+    engView === "archived" ? archivedClientRows : activeClientRows,
+  );
+  // Counts for the filter links. Archived's is deliberately absent unless you
+  // are on it — printing a number we did not load would be a guess, and loading
+  // it to print would be a query on every other filter (see the component).
+  const engagementCounts: Partial<Record<ClientEngagementView, number>> =
+    onEngagementsTab
+      ? Object.fromEntries(
+          CLIENT_ENGAGEMENT_VIEWS.filter(
+            (v) => v !== "archived" || engView === "archived",
+          ).map((v) => [
+            v,
+            selectView(
+              v,
+              v === "archived" ? archivedClientRows : activeClientRows,
+            ).length,
+          ]),
+        )
+      : {};
+
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
   // The worklist column labels already exist in Dashboard and read identically
   // here — reusing them keeps one wording for "Assigned to" across the app.
   const tWl = await getTranslations("Dashboard");
+  const tStage = await getTranslations("Stage");
+  const tHome = await getTranslations("Home");
+  const tArchive = await getTranslations("Archive");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
@@ -251,12 +576,7 @@ export default async function ClientDetailPage({
   // callback result from ?qbo=. Connect/disconnect inside the card are owner-only.
   // BOOKKEEPING TAB ONLY. The health probe in particular is a live call out to
   // the ledger, so every tab switch used to wait on Intuit before painting.
-  const qboStatus =
-    tab === "bookkeeping" ? await getClientQuickbooksStatus(client.id) : null;
-  const qboHealth =
-    firm && qboStatus?.connected
-      ? await getQuickbooksConnectionHealth(firm.id, client.id)
-      : "ok";
+  const { qboStatus, qboHealth, xeroStatus, xeroHealth } = bookkeeping;
   const qboCallbackStatus =
     qboParam === "done" ||
     qboParam === "denied" ||
@@ -277,12 +597,6 @@ export default async function ClientDetailPage({
   // Per-client Xero status — the sibling of the QuickBooks block above. Health
   // only probes when connected (it doubles as the keep-alive for Xero's 60-day
   // idle expiry).
-  const xeroStatus =
-    tab === "bookkeeping" ? await getClientXeroStatus(client.id) : null;
-  const xeroHealth =
-    firm && xeroStatus?.connected
-      ? await getXeroConnectionHealth(firm.id, client.id)
-      : "ok";
   const xeroCallbackStatus =
     xeroParam === "done" ||
     xeroParam === "denied" ||
@@ -309,6 +623,10 @@ export default async function ClientDetailPage({
     callbackStatus: xeroCallbackStatus,
   };
   const isOwner = me?.role === "owner";
+  // Connecting this client's books is integrations.manage, NOT the rank. Every
+  // connect/disconnect route already checks exactly that capability, so a role
+  // granting it worked on the server while this screen still hid the buttons.
+  const canConnectBooks = can(me, "integrations.manage");
   // Phase 2: the first two capabilities that actually withhold something. Both
   // are carried by the member preset, so every existing staff member keeps
   // exactly what they have — these only bite once an owner makes someone a
@@ -343,31 +661,20 @@ export default async function ClientDetailPage({
         <div className="flex min-w-0 items-start gap-3">
           <AvatarInitials name={client.display_name} size={44} />
           <div className="min-w-0">
-          {/* The pen sits with the name because that IS what it edits. As a
-              labelled button on the right it read as a primary action of the
-              page, which it isn't — the page is for reading the client. */}
+          {/* The client's name IS the menu — the same NameMenu the firm page
+              uses, because the founder asked for "the exact same thing". It
+              replaces BOTH the pen that used to sit here and the "⋯" that used
+              to sit in the corner: two anonymous controls answering one
+              question, which is the shape the firm page just shed. */}
           <div className="flex items-center gap-1">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">
-              {client.display_name}
-            </h1>
-            {canManageClients && (
-              <ClientFormDialog
-                mode="edit"
-                locale={locale}
-                client={client}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t("edit_client")}
-                    className="size-8 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                }
-              />
-            )}
+            <ClientNameMenu
+              client={client}
+              locale={locale}
+              canManage={canManageClients}
+              showPrivacy={isOwner && teamEnabled}
+              isOwner={isOwner}
+              archiveFormId={CLIENT_ARCHIVE_FORM_ID}
+            />
           </div>
           <div className="flex items-center gap-2 mt-2 text-sm">
             <Badge variant="secondary">
@@ -406,73 +713,62 @@ export default async function ClientDetailPage({
           )}
           </div>
         </div>
-        {/* One control left in the corner. The Documents button went because
-            the Files tab below already goes to the same route, and archiving is
-            a once-a-year action that doesn't deserve permanent real estate.
-            The form lives outside the menu and is reached by id, because a
-            <form> cannot be a dropdown item and still submit cleanly. */}
-        <div className="flex items-center gap-2">
-          <form
-            id={CLIENT_ARCHIVE_FORM_ID}
-            action={client.archived_at ? restoreClientAction : archiveClientAction}
-            className="hidden"
-          >
-            <input type="hidden" name="id" value={client.id} />
-          </form>
-          <ClientActionsMenu
-            clientId={client.id}
-            isPrivate={client.is_private ?? false}
-            showPrivacy={isOwner && teamEnabled}
-            archive={{
-              formId: CLIENT_ARCHIVE_FORM_ID,
-              archived: client.archived_at != null,
-            }}
-          />
-        </div>
+        {/* The corner is now empty of controls — everything moved onto the
+            name. The archive form stays here and is reached BY ID from the
+            menu, because a <form> cannot be a dropdown item and still submit
+            cleanly. */}
+        <form
+          id={CLIENT_ARCHIVE_FORM_ID}
+          action={client.archived_at ? restoreClientAction : archiveClientAction}
+          className="hidden"
+        >
+          <input type="hidden" name="id" value={client.id} />
+        </form>
       </div>
 
       {/* The tab row, sitting on the card's bottom edge with the active tab
-          underlined — Canopy's exact treatment. TWO tabs, not their ten: these
-          are the only two places a client's own content actually lives in
-          Vylan, and a tab that opens an empty section is the bloat the founder
-          asked to leave out. They NAVIGATE (Documents is its own route) rather
-          than toggling a client-side panel, so a link still opens in a new tab
-          and the back button still works. */}
-      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {[
+          underlined — Canopy's exact treatment. Rendered by the SHARED
+          ProfileTabs: the teammate profile has the identical row, and two
+          copies of it is precisely the drift the repo's Cohesion rule names.
+          A tab that would open an empty section isn't offered at all (no
+          bookkeeping provider configured → no Bookkeeping tab). */}
+      <ProfileTabs
+        label={client.display_name}
+        items={[
           { key: "overview", href: clientTabHref(client.id, "overview"), label: t("tab_overview"), active: tab === "overview" },
           { key: "engagements", href: clientTabHref(client.id, "engagements"), label: t("engagements"), active: tab === "engagements" },
-          // "Team" rather than "Who works on it": on a client, the firm's own
-          // people ARE the team on that client, and the shorter noun is what
-          // Canopy's tab row is made of.
+          // "Organizers" rather than "Who works on it": the founder asked for
+          // the Canopy word, and "team" reads as the firm's own staff list,
+          // which is a different page.
           ...(teamEnabled
             ? [{ key: "team", href: clientTabHref(client.id, "organizers"), label: t("tab_organizers"), active: tab === "organizers" }]
             : []),
           ...(clientQuickbooks.configured || clientXero.configured
             ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
             : []),
-          // Files is a real route of its own, so this tab NAVIGATES rather than
-          // switching a panel — a link that still opens in a new tab.
-          { key: "documents", href: `/clients/${client.id}/archive`, label: t("tab_files"), active: false },
-        ].map((item) => (
-          <Link
-            key={item.key}
-            href={item.href}
-            aria-current={item.active ? "page" : undefined}
-            className={
-              item.active
-                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
-                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+          // Files is still a route of its own, so this tab NAVIGATES away.
+          // Files is a real tab now, not a link away: it hosts the same browser
+          // /files renders, locked to this client.
+          { key: "files", href: clientTabHref(client.id, "files"), label: t("tab_files"), active: tab === "files" },
+        ]}
+      />
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
-      {/* ── Left rail: reference, and who can see this ───────────────────
+      {/* Two columns on the OVERVIEW only. Every other tab is ONE full-width
+          column.
+          The rail used to be reserved on every tab, so opening Organizers gave
+          you a narrow card on the left and a dead gutter filling the other two
+          thirds of the screen — the exact "you just moved the little block"
+          shape the founder rejected, one level up. A tab whose content is a
+          table has no rail to put beside it. */}
+      <div
+        className={
+          tab === "overview"
+            ? "grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start"
+            : ""
+        }
+      >
+      {/* ── Left rail (overview only): reference ─────────────────────────
           It used to hold five panels including the two most action-heavy ones
           on the page (connect QuickBooks, set a portal PIN) under a comment
           claiming it was "reference, not action". That is what made the page
@@ -481,25 +777,8 @@ export default async function ClientDetailPage({
           two boxes of it stacked was arbitrary), and the action panels moved
           across to the work. Sticky, so a long engagements table no longer
           scrolls the rail away into whitespace. */}
-      <div className="space-y-4 lg:sticky lg:top-6">
-      {/* Who can see this client — the whole Team tab. It used to sit first in
-          the rail on every view; as its own tab it stops competing with the
-          work for the top of the page, and gets room to breathe when you do
-          want it. */}
-      {teamEnabled && tab === "organizers" && (
-        <Panel title={t("access_title")}>
-          <ClientAccess
-            clientId={id}
-            members={cast}
-            owners={firmOwners}
-            assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
-            candidates={castCandidates}
-            canEdit={canManageClients}
-          />
-        </Panel>
-      )}
-
       {tab === "overview" && (
+      <div className="space-y-4 lg:sticky lg:top-6">
       <Panel title={t("details_title")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
@@ -544,21 +823,19 @@ export default async function ClientDetailPage({
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
       </Panel>
-      )}
 
       {/* Relationships — the entity tree (spec §2). Between About and
           Bookkeeping, always rendered (the empty state keeps the feature
           discoverable). Renders its own Panel-identical section because the
-          [+], kebabs and View-all need client state. */}
-      {tab === "overview" && (
-        <RelationshipsCard
-          clientId={client.id}
-          clientType={client.type}
-          rows={relationshipRows}
-          candidates={pickerCandidates}
-          canManage={canManageClients && !client.archived_at}
-        />
-      )}
+          [+], kebabs and View-all need client state.
+          No tab check of its own: the whole rail is already overview-only. */}
+      <RelationshipsCard
+        clientId={client.id}
+        clientType={client.type}
+        rows={relationshipRows}
+        candidates={pickerCandidates}
+        canManage={canManageClients && !client.archived_at}
+      />
 
       {/* Portal access — the optional 6-digit code that gates this client's
           portal link. Off for everyone by default; the frictionless link stays
@@ -570,18 +847,214 @@ export default async function ClientDetailPage({
 
 
       </div>
+      )}
 
       {/* ── Main column: the work ────────────────────────────────────────── */}
       <div className="space-y-6">
+
+      {/* ── ORGANIZERS TAB: who works on this client ──────────────────────
+          Two panels, full width. "Who can see this" is the control (add
+          someone, give them a role); the table beside it is the ANSWER — every
+          person with access, why they have it, and how much of this client's
+          live work is actually on them. The tab used to be the access card
+          alone, floating in a rail with two thirds of the screen empty. */}
+      {teamEnabled && tab === "organizers" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+          <Panel title={t("access_title")}>
+            <ClientAccess
+              clientId={id}
+              members={cast}
+              owners={firmOwners}
+              assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
+              candidates={castCandidates}
+              canEdit={canManageClients}
+            />
+          </Panel>
+
+          <Panel title={t("organizers_workload_title")} flush>
+            {organizerRows.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                {t("organizers_workload_empty")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">{t("organizers_col_person")}</th>
+                      <th className="px-4 py-2 font-medium">{t("organizers_col_why")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{t("organizers_col_live")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {organizerRows.map((r) => (
+                      <tr
+                        key={r.userId}
+                        className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
+                      >
+                        <td className="px-4 py-3 align-middle">
+                          <Link
+                            href={`/settings/team/${r.userId}`}
+                            className="flex items-center gap-2.5 font-medium hover:underline"
+                          >
+                            <AvatarInitials name={r.name} size={26} />
+                            <span className="truncate">{r.name}</span>
+                          </Link>
+                          {r.position && (
+                            <span className="ml-[2.3rem] block text-xs text-muted-foreground">
+                              {r.position}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          {/* WHY they can see this client, not just that they
+                              can. An owner sees every client whether or not
+                              anyone added them, and a panel that doesn't say so
+                              is simply wrong about who is looking. */}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {r.isOwner && (
+                              <Badge variant="secondary" className="font-normal">
+                                {t("organizers_why_owner")}
+                              </Badge>
+                            )}
+                            {r.isAssignee && (
+                              <Badge variant="secondary" className="font-normal">
+                                {t("organizers_why_assignee")}
+                              </Badge>
+                            )}
+                            {r.isMember && (
+                              <Badge variant="outline" className="font-normal">
+                                {t("organizers_why_member")}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right align-middle tabular-nums">
+                          {r.liveCount > 0 ? (
+                            r.liveCount
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
       {/* Canopy's "Active Tasks (4)" panel: a titled box whose body is a real
           TABLE with column headers, not a bare list of links. The columns are
           the questions you actually ask of a client's work — where is it, what
           is it, who has it, when is it due — and the status reads as a coloured
           dot plus a word, which is Canopy's treatment and quieter than a row of
           filled pills. */}
-      {(tab === "overview" || tab === "engagements") && (
+      {/* ── FILES TAB: the firm's file browser, locked to this client ──────
+          Literally the component /files renders — path bar, folder rows, drag
+          to move, bulk bar, upload, sort, the lot — with `lockedClientId` set
+          so you start inside this client's folders and no link can wander out
+          to another client's.
+          Founder: "for the files it should be the full archive browser — like
+          you're just porting it to the client's page", and "get rid of file
+          archive; it exists purely within the files on a client's page". So
+          /clients/[id]/archive is now a redirect that lands here.
+          No Panel around it: the browser draws its own toolbar and path bar,
+          and a titled box around a file manager is a second frame. */}
+      {tab === "files" && (
+        <div className="space-y-4">
+          {/* The one thing the retired archive page had that the browser
+              doesn't: give me everything, as a zip. It handles its own empty
+              case, so it needs no file count to decide whether to render —
+              which is a whole archive load saved on every visit to this tab. */}
+          <div className="flex justify-end">
+            <ArchiveDownloadZipButton
+              endpoint={`/api/clients/${client.id}/archive`}
+              label={tArchive("download_everything")}
+              preparingLabel={tArchive("preparing")}
+              emptyLabel={tArchive("download_empty")}
+              failedLabel={tArchive("download_failed")}
+              tooLargeLabel={tArchive("download_too_large")}
+              variant="outline"
+            />
+          </div>
+          <BrowseTab
+            locale={locale}
+            sp={sp}
+            basePath={`/clients/${client.id}`}
+            // Rides on every link the browser writes, so a folder click stays
+            // on this tab instead of dropping back to the overview.
+            baseParams={{ tab: "files" }}
+            lockedClientId={client.id}
+          />
+        </div>
+      )}
+
+      {/* The ENGAGEMENTS TAB — the real list, not this preview. Same table the
+          /engagements section renders (progress, attention, presence, the row
+          menu), narrowed to this client, with the lifecycle filter and a search
+          box of its own. */}
+      {tab === "engagements" && (
+        <Panel
+          title={t("engagements")}
+          aside={
+            <FilterLinks
+              label={t("engagements")}
+              items={CLIENT_ENGAGEMENT_VIEWS.map((v) => ({
+                key: v,
+                href: clientEngagementViewHref(client.id, v),
+                label: tEng(viewLabelKey(v) as Parameters<typeof tEng>[0]),
+                active: v === engView,
+                count: engagementCounts[v],
+              }))}
+            />
+          }
+          action={
+            !client.archived_at ? (
+              <Link href={`/engagements/new?client=${client.id}`}>
+                <Button size="sm">
+                  <Plus className="size-4" />
+                  {tEng("new")}
+                </Button>
+              </Link>
+            ) : null
+          }
+          flush
+        >
+          <WorklistBrowser
+            rows={engagementRows}
+            locale={locale}
+            emptyText={tEng(`view_${engView}_empty`)}
+            emptySearchText={tWl("wl_empty_search")}
+            emptyStageText={tStage("empty_for_stage")}
+            canDelete={canManageClients}
+            teamEnabled={teamEnabled}
+            assignMembers={assignableMembers}
+            viewerId={me?.id ?? null}
+            firmId={firm?.id ?? null}
+          />
+        </Panel>
+      )}
+
+      {tab === "overview" && (
       <Panel
         title={`${t("engagements")} (${engagements.length})`}
+        aside={
+          // The overview is a SUMMARY, so it shows the five most recent and
+          // hands the rest to the tab. It used to print every engagement a
+          // client has ever had, which on a long-standing client pushed the
+          // rest of the overview off the screen.
+          engagements.length > OVERVIEW_ENGAGEMENT_PREVIEW ? (
+            <Link
+              href={clientTabHref(client.id, "engagements")}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {tHome("view_all")}
+            </Link>
+          ) : null
+        }
         action={
           !client.archived_at ? (
             <Link href={`/engagements/new?client=${client.id}`}>
@@ -616,7 +1089,7 @@ export default async function ClientDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {engagements.map((e) => {
+                {engagements.slice(0, OVERVIEW_ENGAGEMENT_PREVIEW).map((e) => {
                   const derived = derivedStatusById.get(e.id) ?? e.status;
                   const pay = paymentByEng.get(e.id);
                   const holder = firmUsers.find(
@@ -696,28 +1169,28 @@ export default async function ClientDetailPage({
         {tab === "bookkeeping" &&
           (clientQuickbooks.connected ||
           clientXero.connected ||
-          (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
+          (canConnectBooks && (clientQuickbooks.configured || clientXero.configured))) && (
           <Panel title={t("bk_section_title")}>
             {(clientQuickbooks.connected ||
-              (isOwner &&
+              (canConnectBooks &&
                 clientQuickbooks.configured &&
                 !clientXero.connected)) && (
                 <ClientQuickbooksCard
                   clientId={client.id}
                   clientName={client.display_name}
                   status={clientQuickbooks}
-                  isOwner={isOwner}
+                  canManage={canConnectBooks}
                 />
               )}
             {(clientXero.connected ||
-              (isOwner &&
+              (canConnectBooks &&
                 clientXero.configured &&
                 !clientQuickbooks.connected)) && (
                 <ClientXeroCard
                   clientId={client.id}
                   clientName={client.display_name}
                   status={clientXero}
-                  isOwner={isOwner}
+                  canManage={canConnectBooks}
                 />
               )}
           </Panel>
@@ -736,6 +1209,21 @@ export default async function ClientDetailPage({
           first, with a quiet "View all" to the full archive. The overview
           should answer "what has been coming in from this client lately"
           without making you leave it. */}
+      {/* What the firm knows about this client, in its own words, with a name
+          and a date on every line. Always rendered — an empty notes box is an
+          invitation, and a section that only appears once it has content is a
+          feature nobody discovers. */}
+      {tab === "overview" && (
+        <Panel title={t("notes_title")}>
+          <ClientNotes
+            clientId={client.id}
+            notes={clientNotes}
+            viewerId={me?.id ?? null}
+            locale={locale}
+          />
+        </Panel>
+      )}
+
       {tab === "overview" && recentFiles.length > 0 && (
         <Panel
           title={t("recent_files")}
@@ -789,29 +1277,6 @@ export default async function ClientDetailPage({
 // is its own bordered card with a header band, which is what makes a dense
 // profile scannable instead of a wall. `flush` drops the body padding for
 // panels whose content is a table that should meet the edges.
-function Panel({
-  title,
-  action,
-  flush = false,
-  children,
-}: {
-  title: string;
-  action?: React.ReactNode;
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
-        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-          {title}
-        </h2>
-        {action}
-      </div>
-      <div className={flush ? "" : "p-4"}>{children}</div>
-    </section>
-  );
-}
 
 function DetailRow({
   label,

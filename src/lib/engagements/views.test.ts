@@ -22,6 +22,7 @@ function row(
   return {
     title: `Engagement ${over.id}`,
     clientName: "Client",
+    clientId: "client-1",
     status: "in_progress",
     derivedStatus,
     dueDate: null,

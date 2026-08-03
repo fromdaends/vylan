@@ -26,8 +26,8 @@ import {
   computeEngagementWorkload,
   workloadForMember,
 } from "@/lib/team/workload";
-import { FirmRolesSection } from "@/components/settings/team/firm-roles-section";
-import { listFirmRoles, listRolesByUser } from "@/lib/db/firm-roles";
+import { listRolesByUser } from "@/lib/db/firm-roles";
+import { can } from "@/lib/auth/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -55,20 +55,23 @@ export default async function TeamPage({
 
   // Owners manage; staff only view. firm_invites + seat usage are owner-only
   // (RLS) — staff would just get empty results, so skip those fetches for them.
-  const canManage = user.role === "owner";
+  // team.manage, not the rank. The server side (actions/team.ts, the roles
+  // page, /api routes) already asks this question via can(); the screen asking a
+  // different one is how a granted role ends up hiding its own controls.
+  const canManage = can(user, "team.manage");
   // Only owners have a Firm tab (every block on it is owner-gated), so a staff
   // member arriving on ?tab=firm falls back to the roster rather than a blank
   // page. An unrecognised value falls back the same way.
   const view: "people" | "settings" =
     canManage && requestedTab === "settings" ? "settings" : "people";
-  const [members, invites, usage, firmRoles, rolesByUser] = await Promise.all([
+  const [members, invites, usage, rolesByUser] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
     canManage ? getFirmSeatUsage(firm.id) : Promise.resolve(null),
-    // Empty until 1260 is applied, which is exactly what a firm with no roles
-    // should see either way.
-    listFirmRoles(),
-    // Who wears what — feeds the head counts AND the badges on the roster.
+    // Who wears what — the badges on the roster. The roles THEMSELVES are no
+    // longer read here: they moved to their own page, and fetching them for a
+    // screen that no longer lists them is exactly the wasted await that made
+    // the client tabs slow.
     listRolesByUser(),
   ]);
   const t = await getTranslations("Team");
@@ -112,6 +115,7 @@ export default async function TeamPage({
       role: m.role,
       isSelf: m.id === user.id,
       avatarUrl: avatarById.get(m.id) ?? null,
+      isExternal: m.is_external === true,
     }))
     // Owner first, then the rest alphabetically.
     .sort((a, b) =>
@@ -250,21 +254,6 @@ export default async function TeamPage({
         pendingInvites={pendingInvites}
         locale={locale}
         unassignedWorkload={canManage ? workloadUnassigned : undefined}
-        rolesSection={
-          canManage ? (
-            <FirmRolesSection
-              roles={firmRoles.map((r) => ({
-                ...r,
-                // How many people wear it — the number that makes deleting one
-                // a decision rather than a guess.
-                count: [...rolesByUser.values()].filter((held) =>
-                  held.some((h) => h.id === r.id),
-                ).length,
-                capabilities: r.capabilities,
-              }))}
-            />
-          ) : null
-        }
         firmSettings={
           canManage ? (
             <TeamSettings

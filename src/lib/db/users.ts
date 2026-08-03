@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 
 export type AppUser = {
   id: string;
@@ -33,6 +34,15 @@ export type AppUser = {
   // getCurrentUser. Not a users column — it is assembled per request so that
   // capabilitiesFor() can read it straight off an AppUser.
   role_capabilities?: readonly string[] | null;
+  // OUTSIDE COLLABORATOR (migration 1300). A contractor scoped to the clients
+  // they are on: no firm roster, no 'listed' clients, no seat, and an EMPTY
+  // capability floor. Still role = "staff" — users.role keeps its two values
+  // forever, because RLS is written against them.
+  //
+  // Optional like the rest: undefined until 1300 is applied, and every reader
+  // treats undefined as false. The flag only ever NARROWS, so a missing column
+  // leaves everybody exactly as they were.
+  is_external?: boolean | null;
 };
 
 /** Active firm members only (not deactivated) — the valid targets for
@@ -46,14 +56,14 @@ export async function listActiveFirmUsers(): Promise<AppUser[]> {
 // without the wrapper the firm-row + auth-row queries fire twice on
 // every navigation.
 export const getCurrentUser = cache(async function _getCurrentUser(): Promise<AppUser | null> {
+  const authUser = await getAuthUser();
+  if (!authUser) return null;
   const supabase = await getServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
 
   const { data: row } = await supabase
     .from("users")
     .select("*")
-    .eq("id", data.user.id)
+    .eq("id", authUser.id)
     .maybeSingle();
   if (!row) return null;
 
@@ -64,7 +74,7 @@ export const getCurrentUser = cache(async function _getCurrentUser(): Promise<Ap
   // effort: a failure here just leaves the row at the old value until
   // the next request retries (login still works either way since auth
   // is the source of truth for sign-in).
-  const authEmail = data.user.email ?? null;
+  const authEmail = authUser.email ?? null;
   if (
     typeof authEmail === "string" &&
     authEmail.toLowerCase() !== ((row as AppUser).email ?? "").toLowerCase()
@@ -72,7 +82,7 @@ export const getCurrentUser = cache(async function _getCurrentUser(): Promise<Ap
     const { data: synced } = await supabase
       .from("users")
       .update({ email: authEmail })
-      .eq("id", data.user.id)
+      .eq("id", authUser.id)
       .select("*")
       .maybeSingle();
     if (synced) return synced as AppUser;
@@ -109,8 +119,16 @@ async function withRoleCapabilities(user: AppUser): Promise<AppUser> {
  * returns only same-firm rows without an explicit filter. Used to resolve
  * an engagement's `assigned_user_id` to a display name and to power the
  * "assigned to me" worklist filter.
+ *
+ * React.cache()'d: the (app) layout reads the roster on every page render
+ * (team-size check) and most pages read it again for name resolution —
+ * without the wrapper that is two identical full-roster queries per
+ * navigation. Safe to memoize per-request: every caller reads it before
+ * mutating the roster, never after.
  */
-export async function listFirmUsers(): Promise<AppUser[]> {
+export const listFirmUsers = cache(async function _listFirmUsers(): Promise<
+  AppUser[]
+> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("users")
@@ -118,7 +136,7 @@ export async function listFirmUsers(): Promise<AppUser[]> {
     .order("name", { ascending: true });
   if (error) throw error;
   return (data ?? []) as AppUser[];
-}
+});
 
 export type UserProfilePatch = {
   display_name?: string | null;
@@ -141,8 +159,8 @@ export async function updateUserProfile(
   patch: UserProfilePatch,
 ): Promise<AppUser | null> {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const authUser = await getAuthUser();
+  if (!authUser) return null;
 
   // Build a strictly-typed update object; ignore undefined keys so callers
   // can pass a partial patch.
@@ -161,7 +179,7 @@ export async function updateUserProfile(
   const { data: row, error } = await supabase
     .from("users")
     .update(update)
-    .eq("id", auth.user.id)
+    .eq("id", authUser.id)
     .select("*")
     .single();
   if (error) throw error;

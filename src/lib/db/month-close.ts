@@ -13,6 +13,7 @@
 // a client's expenses.
 
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth-user";
 import { isMissingSchema } from "@/lib/db/quickbooks";
 import { periodStart, type PeriodKey } from "@/lib/close/period";
 
@@ -78,13 +79,13 @@ export async function closeMonth(input: {
   note?: string | null;
 }): Promise<void> {
   const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+  const authUser = await getAuthUser();
   const { error } = await supabase.from("month_end_closes").upsert(
     {
       firm_id: input.firmId,
       client_id: input.clientId,
       period: periodStart(input.period),
-      closed_by: auth.user?.id ?? null,
+      closed_by: authUser?.id ?? null,
       note: input.note?.trim() || null,
     },
     { onConflict: "client_id,period" },
