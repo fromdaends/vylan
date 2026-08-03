@@ -4,7 +4,16 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { ArrowUpDown, FileType2, Info, Search, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpDown,
+  CalendarDays,
+  Check,
+  FileType2,
+  Info,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Tooltip,
@@ -13,12 +22,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/cn";
 import { BROWSE_CATEGORIES } from "@/lib/files/axes";
 
 // Search debounce. Long enough that typing a client name is one query rather
@@ -156,79 +170,209 @@ export function FilesToolbar({
       )}
 
       {scope === "documents" && (
-        <>
-          <Select
-            value={docType || "all"}
-            onValueChange={(v) => setParam("type", v === "all" ? null : v)}
-          >
-            <SelectTrigger size="sm" className="w-[13rem]" aria-label={t("filter_type")}>
-              <FileType2 className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue placeholder={t("filter_type")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filter_type_all")}</SelectItem>
-              {docTypes.map((d) => (
-                <SelectItem key={d.code} value={d.code}>
-                  {d.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={year || "all"}
-            onValueChange={(v) => setParam("year", v === "all" ? null : v)}
-          >
-            <SelectTrigger size="sm" className="w-[9rem]" aria-label={t("filter_year")}>
-              <SelectValue placeholder={t("filter_year")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filter_year_all")}</SelectItem>
-              {years.map((y) => (
-                <SelectItem key={y} value={String(y)}>
-                  {y}
-                </SelectItem>
-              ))}
-              {/* "unsorted" is a real, selectable bucket, not the absence of a
-                  filter — a firm needs to be able to go straight to the pile
-                  that still needs a year. */}
-              <SelectItem value="unsorted">{t("unsorted")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={status || "all"}
-            onValueChange={(v) => setParam("status", v === "all" ? null : v)}
-          >
-            <SelectTrigger size="sm" className="w-[11rem]" aria-label={t("filter_status")}>
-              <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue placeholder={t("filter_status")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("filter_status_all")}</SelectItem>
-              <SelectItem value="approved">{t("status_approved")}</SelectItem>
-              <SelectItem value="pending">{t("status_pending")}</SelectItem>
-              <SelectItem value="rejected">{t("status_rejected")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={sort || "date"}
-            onValueChange={(v) => setParam("sort", v === "date" ? null : v)}
-          >
-            <SelectTrigger size="sm" className="w-[11rem]" aria-label={t("sort_label")}>
-              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue placeholder={t("sort_label")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="date">{t("sort_date")}</SelectItem>
-              <SelectItem value="name">{t("sort_name")}</SelectItem>
-              <SelectItem value="size">{t("sort_size")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </>
+        <SortFilterMenu
+          sort={sort}
+          docType={docType}
+          status={status}
+          year={year}
+          years={years}
+          docTypes={docTypes}
+          setParam={setParam}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * ONE button — Sort. The founder's ruling, verbatim: "just move all of that
+ * into sort - SIMPLE. one button - sort." So the menu carries everything the
+ * list can be arranged by: "Sort by" and "Sort direction" inline (exactly
+ * Drive's menu), and the type / year / status filters as submenus of the
+ * same button. The toolbar is a search box and this.
+ *
+ * URL values keep their history: bare "name"/"size"/default-date mean what
+ * they always meant, and the other direction gets a suffixed value — so old
+ * links and the Home tab's "View all" keep working unchanged.
+ */
+function SortFilterMenu({
+  sort,
+  docType,
+  status,
+  year,
+  years,
+  docTypes,
+  setParam,
+}: {
+  sort: string;
+  docType: string;
+  status: string;
+  year: string;
+  years: number[];
+  docTypes: { code: string; label: string }[];
+  setParam: (key: string, value: string | null) => void;
+}) {
+  const t = useTranslations("Files");
+  const field = sort.startsWith("name")
+    ? "name"
+    : sort.startsWith("size")
+      ? "size"
+      : "date";
+  const ascending =
+    sort === "name" || sort === "date_asc" || sort === "size_asc";
+
+  function paramFor(nextField: string, nextAsc: boolean): string | null {
+    if (nextField === "name") return nextAsc ? "name" : "name_desc";
+    if (nextField === "size") return nextAsc ? "size_asc" : "size";
+    return nextAsc ? "date_asc" : null; // newest-first date is the default URL
+  }
+
+  // Switching FIELD keeps Drive's sensible per-field default direction
+  // (names A→Z, dates newest, sizes largest) instead of dragging the old
+  // direction along; switching DIRECTION keeps the field.
+  function defaultAscFor(nextField: string): boolean {
+    return nextField === "name";
+  }
+
+  const fields = [
+    { key: "name", label: t("sort_field_name") },
+    { key: "date", label: t("sort_field_date") },
+    { key: "size", label: t("sort_field_size") },
+  ];
+
+  // Applied FILTERS surface on the button as a count — with the dropdowns
+  // gone, an invisible active filter would read as "my files disappeared".
+  const activeFilters = [docType, year, status].filter(Boolean).length;
+
+  const check = (on: boolean) => (
+    <Check className={cn("size-4", on ? "opacity-100" : "opacity-0")} aria-hidden />
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5">
+          <ArrowUpDown className="size-3.5 text-muted-foreground" aria-hidden />
+          {t("sort_button")}
+          {activeFilters > 0 && (
+            <span className="rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground">
+              {activeFilters}
+            </span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">
+          {t("sort_by")}
+        </DropdownMenuLabel>
+        {fields.map((f) => (
+          <DropdownMenuItem
+            key={f.key}
+            className="gap-2"
+            onSelect={() => setParam("sort", paramFor(f.key, defaultAscFor(f.key)))}
+          >
+            {check(field === f.key)}
+            {f.label}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">
+          {t("sort_direction")}
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          className="gap-2"
+          onSelect={() => setParam("sort", paramFor(field, true))}
+        >
+          {check(ascending)}
+          {t("sort_az")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="gap-2"
+          onSelect={() => setParam("sort", paramFor(field, false))}
+        >
+          {check(!ascending)}
+          {t("sort_za")}
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="gap-2">
+            <FileType2 className="size-4 text-muted-foreground" aria-hidden />
+            {t("filter_type")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
+            <DropdownMenuItem className="gap-2" onSelect={() => setParam("type", null)}>
+              {check(!docType)}
+              {t("filter_type_all")}
+            </DropdownMenuItem>
+            {docTypes.map((d) => (
+              <DropdownMenuItem
+                key={d.code}
+                className="gap-2"
+                onSelect={() => setParam("type", d.code)}
+              >
+                {check(docType === d.code)}
+                {d.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="gap-2">
+            <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
+            {t("filter_year")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-80 w-44 overflow-y-auto">
+            <DropdownMenuItem className="gap-2" onSelect={() => setParam("year", null)}>
+              {check(!year)}
+              {t("filter_year_all")}
+            </DropdownMenuItem>
+            {years.map((y) => (
+              <DropdownMenuItem
+                key={y}
+                className="gap-2"
+                onSelect={() => setParam("year", String(y))}
+              >
+                {check(year === String(y))}
+                {y}
+              </DropdownMenuItem>
+            ))}
+            {/* "unsorted" is a real, selectable bucket, not the absence of a
+                filter — a firm needs to be able to go straight to the pile
+                that still needs a year. */}
+            <DropdownMenuItem
+              className="gap-2"
+              onSelect={() => setParam("year", "unsorted")}
+            >
+              {check(year === "unsorted")}
+              {t("unsorted")}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="gap-2">
+            <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
+            {t("filter_status")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-48">
+            <DropdownMenuItem className="gap-2" onSelect={() => setParam("status", null)}>
+              {check(!status)}
+              {t("filter_status_all")}
+            </DropdownMenuItem>
+            {(["approved", "pending", "rejected"] as const).map((s) => (
+              <DropdownMenuItem
+                key={s}
+                className="gap-2"
+                onSelect={() => setParam("status", s)}
+              >
+                {check(status === s)}
+                {t(`status_${s}`)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

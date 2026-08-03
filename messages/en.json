@@ -3914,6 +3914,15 @@
     "upload_pick": "Choose files",
     "upload_picked": "{count, plural, one {# file selected} other {# files selected}}",
     "upload_start": "Upload {count}",
-    "import_folder_button": "Import a folder"
+    "import_folder_button": "Import a folder",
+    "sort_button": "Sort",
+    "sort_by": "Sort by",
+    "sort_direction": "Sort direction",
+    "sort_az": "A to Z",
+    "sort_za": "Z to A",
+    "sort_field_name": "Name",
+    "sort_field_date": "Date modified",
+    "sort_field_size": "Size",
+    "action_open": "Open"
   }
 }

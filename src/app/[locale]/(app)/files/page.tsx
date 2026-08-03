@@ -10,12 +10,8 @@ import { FilesPagination } from "@/components/files/files-pagination";
 import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
-import { BulkBar } from "@/components/files/bulk-bar";
 import { NewMenu } from "@/components/files/new-menu";
-import {
-  FolderRowMenu,
-  NewFolderButton,
-} from "@/components/files/folder-actions";
+import { FolderRowMenu } from "@/components/files/folder-actions";
 import { HomeTab } from "@/components/files/home-tab";
 import { resolveFilesTab, type FilesTab } from "@/lib/files/tabs";
 import {
@@ -153,7 +149,13 @@ async function BrowseTab({
   const search = sp.q?.trim() ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
   const sort: DocumentSort =
-    sp.sort === "name" || sp.sort === "size" ? sp.sort : "date";
+    sp.sort === "name" ||
+    sp.sort === "size" ||
+    sp.sort === "name_desc" ||
+    sp.sort === "size_asc" ||
+    sp.sort === "date_asc"
+      ? sp.sort
+      : "date";
 
   // "unsorted" is a real folder, not the absence of a filter.
   const yearParam = sp.year?.trim();
@@ -372,11 +374,6 @@ async function BrowseTab({
               makes dragging usable: you cannot drop a file on a folder that
               is off screen. Inside a custom folder these are its sub-folders;
               anywhere else, the client's top-level folders. */}
-          {clientId && bulkFolders && (
-            <div className="flex justify-end">
-              <NewFolderButton clientId={clientId} parentId={folderId} />
-            </div>
-          )}
           <FileList
             folderEntries={
               clientId && bulkFolders
@@ -404,6 +401,7 @@ async function BrowseTab({
                       clientId,
                       folderId: f.id,
                     },
+                    manage: { clientId, folderId: f.id },
                   }))
                 : []
             }
@@ -433,8 +431,8 @@ async function BrowseTab({
             }}
             showClient={!clientId}
             buildHref={(p) => buildQuery({ page: p > 1 ? String(p) : null })}
+            barFolders={bulkFolders ?? undefined}
           />
-          <BulkBar locale={locale} folders={bulkFolders} />
         </FileSelectionProvider>
       ) : clientId ? (
         <FolderLevel
@@ -601,6 +599,7 @@ async function FolderLevel({
     hint: t("folder_item_count", { count: counts.get(f.id) ?? 0 }),
     dropTarget: { kind: "folder" as const, folderId: f.id },
     dragPayload: { kind: "folder" as const, clientId, folderId: f.id },
+    manage: { clientId, folderId: f.id },
     actions: (
       <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />
     ),
@@ -637,13 +636,11 @@ async function FolderLevel({
   }));
   void yearParam;
 
+  // The standalone "New folder" button is gone on purpose: "+ New" already
+  // carries it, and two buttons for one act read as clutter next to Drive.
+  void foldersAvailable;
   return (
     <div className="space-y-3">
-      {foldersAvailable && (
-        <div className="flex justify-end">
-          <NewFolderButton clientId={clientId} parentId={null} />
-        </div>
-      )}
       <FileBrowser
         entries={[...customEntries, ...yearEntries]}
         locale={locale}
@@ -661,6 +658,7 @@ async function FileList({
   showClient,
   buildHref,
   folderEntries = [],
+  barFolders,
 }: {
   locale: AppLocaleish;
   filters: Parameters<typeof listDocuments>[0];
@@ -669,6 +667,8 @@ async function FileList({
   /** Folder rows drawn ABOVE the documents, inside the SAME list — one
    * header, folders first, like a real directory listing. */
   folderEntries?: BrowserEntry[];
+  /** Passed through to the selection bar's "File into" control. */
+  barFolders?: { id: string; name: string }[];
 }) {
   const t = await getTranslations("Files");
   const result = await listDocuments(filters);
@@ -767,6 +767,7 @@ async function FileList({
         entries={[...folderEntries, ...entries]}
         locale={locale}
         emptyMessage={t("no_documents")}
+        barFolders={barFolders}
       />
       {/* "No results" under a list that plainly shows folders reads as the
           app contradicting itself — the count line only appears when there

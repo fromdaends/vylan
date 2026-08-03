@@ -3914,6 +3914,15 @@
     "upload_pick": "Choisir des fichiers",
     "upload_picked": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}",
     "upload_start": "Téléverser {count}",
-    "import_folder_button": "Importer un dossier"
+    "import_folder_button": "Importer un dossier",
+    "sort_button": "Trier",
+    "sort_by": "Trier par",
+    "sort_direction": "Ordre de tri",
+    "sort_az": "De A à Z",
+    "sort_za": "De Z à A",
+    "sort_field_name": "Nom",
+    "sort_field_date": "Date de modification",
+    "sort_field_size": "Taille",
+    "action_open": "Ouvrir"
   }
 }

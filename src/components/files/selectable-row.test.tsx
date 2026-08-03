@@ -42,7 +42,13 @@ function renderRows() {
     <FileSelectionProvider>
       <SelectionSize />
       <RowsSurface>
-        <SelectableRow kind="folder" rowKey="f1" href="/files?client=c1">
+        <SelectableRow
+          kind="folder"
+          rowKey="f1"
+          name="Folder One"
+          href="/files?client=c1"
+          manage={{ clientId: "c1", folderId: "f1" }}
+        >
           <div>Folder One</div>
         </SelectableRow>
         <SelectableRow
@@ -115,6 +121,25 @@ describe("SelectableRow", () => {
     expect(screen.getByTestId("size").textContent).toBe("1");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByTestId("size").textContent).toBe("0");
+  });
+
+  it("pops the action bar when a folder is selected — Open/Rename/Delete", () => {
+    renderRows();
+    // Nothing selected: no bar.
+    expect(screen.queryByText("action_open")).toBeNull();
+    fireEvent.click(screen.getByText("Folder One").parentElement!);
+    // Folder mode: the bar names the folder and offers its actions
+    // (the next-intl mock renders raw keys).
+    expect(screen.getByText("action_open")).toBeInTheDocument();
+    expect(screen.getByText("action_rename")).toBeInTheDocument();
+    expect(screen.getByText("action_delete")).toBeInTheDocument();
+  });
+
+  it("pops the bulk bar when a file is selected", () => {
+    renderRows();
+    fireEvent.click(screen.getByText(/File One/).parentElement!);
+    expect(screen.getByText("bulk_selected")).toBeInTheDocument();
+    expect(screen.getByText("action_download")).toBeInTheDocument();
   });
 
   it("selecting a folder clears file selection, and vice versa", () => {

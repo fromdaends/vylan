@@ -63,6 +63,9 @@ export type BrowserEntry =
        * are then simply not draggable.
        */
       dragPayload?: DragPayload | null;
+      /** Rename/delete identity for the selection bar — only for folders the
+       * firm made. Derived rows (clients, years, categories) have none. */
+      manage?: { clientId: string; folderId: string } | null;
     }
   | {
       kind: "file";
@@ -137,10 +140,14 @@ export async function FileBrowser({
   entries,
   locale,
   emptyMessage,
+  barFolders,
 }: {
   entries: BrowserEntry[];
   locale: AppLocale;
   emptyMessage: string;
+  /** The current client's custom folders, for the selection bar's
+   * "File into" control. */
+  barFolders?: { id: string; name: string }[];
 }) {
   const t = await getTranslations("Files");
 
@@ -157,8 +164,10 @@ export async function FileBrowser({
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
+      {/* The surface renders Drive's selection strip ABOVE the header the
+          moment anything — file or folder — is selected. */}
+      <RowsSurface locale={locale} folders={barFolders}>
       <BrowserHeader t={t} />
-      <RowsSurface>
       <ul className="divide-y divide-border/50">
         {entries.map((entry) => (
           <li key={`${entry.kind}-${entry.id}`}>
@@ -175,7 +184,13 @@ export async function FileBrowser({
                  changing nothing — they were already at the top level. */
               <MaybeDropTarget drop={entry.dropTarget} label={entry.name}>
               <DraggableFolder moves={entry.dragPayload ?? null} name={entry.name}>
-              <SelectableRow kind="folder" rowKey={entry.id} href={entry.href}>
+              <SelectableRow
+                kind="folder"
+                rowKey={entry.id}
+                name={entry.name}
+                href={entry.href}
+                manage={entry.manage}
+              >
               <div className={cn(ROW_CLASS, "gap-0 p-0")}>
               <div className={cn(ROW_CLASS, "min-w-0 flex-1")}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -321,8 +336,11 @@ export async function FileBrowser({
 // py-3 + the size-5 icons below = ~52px rows, Drive's list density. The
 // founder's review of the old rows: too small — "should feel like a file
 // manager, not a data grid".
+// The group-data override drops the gray hover wash while the row is
+// SELECTED: gray at 50% over the hard selection blue muddied it into exactly
+// the "too dark" look the founder rejected. (SelectableRow is the `group`.)
 const ROW_CLASS =
-  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 group-data-[selected]:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 // Each metadata column earns its place only once the row is wide enough to
 // still show a NAME afterwards.

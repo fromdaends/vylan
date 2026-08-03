@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   useTransition,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -19,7 +20,13 @@ import {
   bulkDeleteDocumentsAction,
   restoreDocumentAction,
 } from "@/app/actions/documents";
-import { parseSelectionKey, selectionKey, useFileSelection } from "./file-selection";
+import {
+  parseSelectionKey,
+  selectionKey,
+  useFileSelection,
+  type SelectedFolder,
+} from "./file-selection";
+import { BulkBar } from "./bulk-bar";
 
 // DRIVE'S SELECTION MODEL (Files v2 §7) — the founder's exact words: "when
 // you click on one, it turns blue. You have to double click to open it."
@@ -28,31 +35,45 @@ import { parseSelectionKey, selectionKey, useFileSelection } from "./file-select
 // click was a full server navigation — click around a folder and the app
 // feels slow because each click IS a page load. Now a single click only
 // flips local selection state (instant, zero network), and navigation costs
-// are paid exactly once, on an intentional double-click.
+// are paid exactly once, on an intentional double-click. Folder targets are
+// prefetched the moment the pointer touches a row, so that double-click
+// lands on a route that is already in the client cache.
 //
-//   single click   select (blue) — files feed the bulk action bar
+//   single click   select (hard Drive blue) — the action bar pops up on top
 //   double click   open: folders navigate, files open their preview
 //   Esc / empty    clear the selection
 //   Delete         soft-delete the selected FILES, with an Undo toast
 //
 // Folders are single-select and the Delete key never touches them — a
-// keyboard slip must not be able to unfile a folder's contents.
+// keyboard slip must not be able to unfile a folder's contents. Selecting a
+// folder still pops the bar (Open, and Rename/Delete for folders the firm
+// made), because "nothing pops up when you click on a folder" reads as
+// broken next to the file behaviour.
 
 type RowsContext = {
-  selectedFolder: string | null;
-  setSelectedFolder: (key: string | null) => void;
+  selectedFolder: SelectedFolder | null;
+  setSelectedFolder: (sel: SelectedFolder | null) => void;
 };
 
 const Ctx = createContext<RowsContext | null>(null);
 
 /** The client surface around the row list: folder selection, Esc / Delete
- * keys, and click-on-empty-space to clear. Rendered by the server-side
- * FileBrowser around its <ul>. */
-export function RowsSurface({ children }: { children: ReactNode }) {
+ * keys, click-on-empty-space to clear, and the Drive-style action bar that
+ * pops up over the list whenever anything is selected. */
+export function RowsSurface({
+  locale = "en",
+  folders,
+  children,
+}: {
+  locale?: "en" | "fr";
+  /** The current client's custom folders, for the bar's "File into". */
+  folders?: { id: string; name: string }[];
+  children: ReactNode;
+}) {
   const t = useTranslations("Files");
   const router = useRouter();
   const selection = useFileSelection();
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
   const [, startTransition] = useTransition();
 
   const clearAll = useCallback(() => {
@@ -107,6 +128,12 @@ export function RowsSurface({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{ selectedFolder, setSelectedFolder }}>
+      <BulkBar
+        locale={locale}
+        folders={folders}
+        folderSelection={selectedFolder}
+        onClearFolder={() => setSelectedFolder(null)}
+      />
       <div
         onClick={(e) => {
           // A click that lands on the surface itself (not on a row) clears —
@@ -123,31 +150,38 @@ export function RowsSurface({ children }: { children: ReactNode }) {
 export function SelectableRow({
   kind,
   rowKey,
+  name,
   href,
   previewUrl,
   source,
   id,
+  manage,
   children,
 }: {
   kind: "folder" | "file";
   /** Unique within the list (folder id or source|id). */
   rowKey: string;
+  /** Display name — the action bar says what is selected. */
+  name?: string;
   /** Folder navigation target — used on DOUBLE click. */
   href?: string;
   /** File preview target — opened in a new tab on double click. */
   previewUrl?: string;
   source?: string;
   id?: string;
+  /** Rename/delete identity, only for folders the firm made. */
+  manage?: { clientId: string; folderId: string } | null;
   children: ReactNode;
 }) {
   const rows = useContext(Ctx);
   const selection = useFileSelection();
   const router = useRouter();
+  const prefetched = useRef(false);
 
   const fileKey = source && id ? selectionKey(source, id) : null;
   const isSelected =
     kind === "folder"
-      ? rows?.selectedFolder === rowKey
+      ? rows?.selectedFolder?.key === rowKey
       : !!fileKey && !!selection?.selected.has(fileKey);
 
   function open() {
@@ -158,13 +192,21 @@ export function SelectableRow({
     }
   }
 
+  function selectFolder(on: boolean) {
+    rows?.setSelectedFolder(
+      on && href
+        ? { key: rowKey, name: name ?? "", href, manage: manage ?? null }
+        : null,
+    );
+  }
+
   function onClick(e: ReactMouseEvent) {
     // Row controls (menus, checkboxes, the From link) own their clicks.
     const el = e.target as HTMLElement;
     if (el.closest("button, a, input, [role=menuitem], [role=checkbox]")) return;
     e.stopPropagation();
     if (kind === "folder") {
-      rows?.setSelectedFolder(isSelected ? null : rowKey);
+      selectFolder(!isSelected);
       selection?.clear();
     } else if (fileKey && selection) {
       // Plain click behaves like Drive: selects THIS row (add with the
@@ -198,7 +240,7 @@ export function SelectableRow({
     } else if (e.key === " ") {
       e.preventDefault();
       if (kind === "folder") {
-        rows?.setSelectedFolder(isSelected ? null : rowKey);
+        selectFolder(!isSelected);
       } else if (fileKey && selection) {
         selection.toggle(fileKey);
       }
@@ -210,13 +252,24 @@ export function SelectableRow({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
+      onPointerEnter={() => {
+        // Warm the route on first touch so the double-click that follows
+        // navigates from the client cache instead of a cold server roundtrip
+        // — the visible part of "there's a ton of latency".
+        if (kind === "folder" && href && !prefetched.current) {
+          prefetched.current = true;
+          router.prefetch(href);
+        }
+      }}
       tabIndex={0}
       role="button"
       className={cn(
-        "cursor-default select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        // Drive's blue. The row's own hover (a translucent gray) paints over
-        // it, which reads as "selected, hovered" — close enough to Drive.
-        isSelected && "bg-accent/15",
+        // "group" lets the row divs inside drop their gray hover wash while
+        // selected (see ROW_CLASS) — gray over the blue muddied it.
+        "group cursor-default select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        // Drive's bright, HARD blue — an opaque token, not a translucent
+        // accent wash ("it is too dark" was the review of the wash).
+        isSelected && "bg-(--selection)",
       )}
       data-selected={isSelected || undefined}
     >
