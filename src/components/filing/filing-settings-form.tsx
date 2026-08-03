@@ -155,7 +155,14 @@ export function FilingSettingsForm({
   }
 
   return (
-    <div className="space-y-6">
+    // TWO COLUMNS: the controls on the left, the LIVE PREVIEW pinned on the
+    // right. The preview is the thing you are actually editing against — every
+    // keystroke in the templates rewrites the path it shows — so it has to stay
+    // on screen while you type. Stacked underneath (the old layout) it scrolled
+    // out of view exactly when it was being used. Collapses to one column below
+    // `lg`, where a 400px rail would leave the inputs unusably narrow.
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="space-y-6 rounded-xl border border-border/70 bg-card p-5.5">
       {!available && (
         <p className="rounded-lg border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-sm text-foreground/80">
           {t("unavailable_body")}
@@ -239,53 +246,6 @@ export function FilingSettingsForm({
         )}
       </div>
 
-      {/* Live preview */}
-      <div className="rounded-xl border border-border/60 bg-secondary/30 p-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("preview_label")}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            {sampleIsReal ? t("preview_real_doc") : t("preview_sample_doc")}
-          </p>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-1 gap-y-1.5 text-sm">
-          {preview.segments.map((segment, i) => (
-            <span key={i} className="flex items-center gap-1">
-              {i > 0 && (
-                <ChevronRight
-                  className="size-3.5 text-muted-foreground/60"
-                  aria-hidden
-                />
-              )}
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-1 ring-1 ring-inset ring-border/60">
-                <Folder className="size-3.5 text-icon-amber" aria-hidden />
-                <span className="font-medium">{segment}</span>
-              </span>
-            </span>
-          ))}
-          <ChevronRight
-            className="size-3.5 text-muted-foreground/60"
-            aria-hidden
-          />
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-1 ring-1 ring-inset ring-border/60">
-            <FileText className="size-3.5 text-icon-blue" aria-hidden />
-            <span className="font-medium">{preview.fileName}</span>
-          </span>
-        </div>
-
-        {/* What happens when the year can't be read — showing the fallback is
-            what prevents the support ticket. */}
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {t("preview_yearless", {
-            path: [...yearlessPreview.segments, yearlessPreview.fileName].join(
-              " / ",
-            ),
-          })}
-        </p>
-      </div>
-
       {/* Language + auto-file + save */}
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -351,6 +311,54 @@ export function FilingSettingsForm({
         ) : (
           <p className="text-xs text-muted-foreground">{t("owner_only_note")}</p>
         )}
+      </div>
+      </div>
+
+      {/* Live preview */}
+      <div className="sticky top-6 rounded-xl border border-border/70 bg-secondary/45 px-5 py-4.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("preview_label")}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {sampleIsReal ? t("preview_real_doc") : t("preview_sample_doc")}
+          </p>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-1 gap-y-1.5 text-sm">
+          {preview.segments.map((segment, i) => (
+            <span key={i} className="flex items-center gap-1">
+              {i > 0 && (
+                <ChevronRight
+                  className="size-3.5 text-muted-foreground/60"
+                  aria-hidden
+                />
+              )}
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-1 ring-1 ring-inset ring-border/60">
+                <Folder className="size-3.5 text-icon-amber" aria-hidden />
+                <span className="font-medium">{segment}</span>
+              </span>
+            </span>
+          ))}
+          <ChevronRight
+            className="size-3.5 text-muted-foreground/60"
+            aria-hidden
+          />
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-1 ring-1 ring-inset ring-border/60">
+            <FileText className="size-3.5 text-icon-blue" aria-hidden />
+            <span className="font-medium">{preview.fileName}</span>
+          </span>
+        </div>
+
+        {/* What happens when the year can't be read — showing the fallback is
+            what prevents the support ticket. */}
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          {t("preview_yearless", {
+            path: [...yearlessPreview.segments, yearlessPreview.fileName].join(
+              " / ",
+            ),
+          })}
+        </p>
       </div>
     </div>
   );

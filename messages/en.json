@@ -4172,6 +4172,21 @@
     "sort_field_name": "Name",
     "sort_field_date": "Date modified",
     "sort_field_size": "Size",
-    "action_open": "Open"
+    "action_open": "Open",
+    "search_all_placeholder": "Search files and clients…",
+    "organize_ready": "{count, plural, one {# suggestion} other {# suggestions}} ready — file them in one review",
+    "home_upload_drop": "Drop files here",
+    "home_upload_or": "or",
+    "home_upload_browse": "browse your computer",
+    "home_upload_hint": "They will be filed to the right client automatically.",
+    "home_cloud_title": "Cloud filing",
+    "home_cloud_body": "Approved documents file themselves into your firm’s {provider}.",
+    "home_cloud_body_off": "Connect a storage provider and approved documents will file themselves.",
+    "home_cloud_open": "Open folder",
+    "home_cloud_settings": "Filing settings",
+    "home_cloud_connect": "Connect storage",
+    "status_connected": "Connected",
+    "empty_search_title": "Nothing matches “{query}”",
+    "empty_search_hint": "Try a different name, or clear the search."
   }
 }

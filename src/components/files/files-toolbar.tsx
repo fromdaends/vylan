@@ -55,6 +55,7 @@ export function FilesToolbar({
   // searches documents. Two search boxes would have been worse — this is one
   // box that says what it does.
   scope,
+  hideSearch = false,
 }: {
   search: string;
   sort: string;
@@ -64,6 +65,10 @@ export function FilesToolbar({
   years: number[];
   docTypes: { code: string; label: string }[];
   scope: "folders" | "documents";
+  // Set when the HOST page's header owns the search box (that is /files, whose
+  // header search covers all three tabs). The toolbar then contributes only
+  // its Sort menu — two inputs writing the same ?q= would fight each other.
+  hideSearch?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -115,6 +120,7 @@ export function FilesToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
+      {!hideSearch && (
       <div className="relative">
         <Search
           className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -145,12 +151,13 @@ export function FilesToolbar({
           </span>
         )}
       </div>
+      )}
       {/* What the search can and cannot see. Content search only covers
           documents the AI has read (new portal uploads — capture is
           forward-only by the founder's ruling), and without saying so the
           honest gap reads as "search is broken" the first time a word inside
           an old file comes up empty. */}
-      {scope === "documents" && (
+      {!hideSearch && scope === "documents" && (
         <TooltipProvider delayDuration={150}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -251,7 +258,11 @@ function SortFilterMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-[34px] gap-[7px] rounded-lg px-3 text-[13px] font-medium"
+        >
           <ArrowUpDown className="size-3.5 text-muted-foreground" aria-hidden />
           {t("sort_button")}
           {activeFilters > 0 && (

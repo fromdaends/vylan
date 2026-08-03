@@ -146,6 +146,29 @@ export async function listClients(filters: ClientFilters = {}): Promise<
   );
 }
 
+/**
+ * Every client the firm can see, as {id, name} — the list behind the "+ New"
+ * menu's import/upload pickers.
+ *
+ * Deliberately NOT the folder list the Files RPC returns: that only includes
+ * clients who already have documents, and importing history is exactly how a
+ * client with none gets their first. Shared by the Files page header and the
+ * embedded browser so the two can never drift to different client sets.
+ */
+export async function listClientOptions(): Promise<
+  { id: string; name: string }[]
+> {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase
+    .from("clients")
+    .select("id, display_name")
+    .order("display_name", { ascending: true })
+    .limit(1000);
+  return ((data ?? []) as Array<{ id: string; display_name: string }>).map(
+    (c) => ({ id: c.id, name: c.display_name }),
+  );
+}
+
 export async function getClient(id: string): Promise<Client | null> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase

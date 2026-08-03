@@ -16,17 +16,24 @@ function intlLocale(locale: AppLocale): string {
 export function formatDate(
   input: string | Date | null | undefined,
   locale: AppLocale,
-  style: "short" | "medium" | "long" = "medium",
+  // "compact" drops the year — "Jul 28" / "28 juil." — for the narrow date
+  // columns in list rows, where a full "2026-07-28" either wraps or pushes the
+  // file name out of the row. Use it only where the year is obvious from
+  // context (a recency-ordered list); anywhere a date stands alone, it needs
+  // its year.
+  style: "compact" | "short" | "medium" | "long" = "medium",
 ): string {
   if (input == null) return "—";
   const d = typeof input === "string" ? parseDateInput(input) : input;
   if (!d || Number.isNaN(d.getTime())) return "—";
   const opts: Intl.DateTimeFormatOptions =
-    style === "short"
-      ? { year: "numeric", month: "2-digit", day: "2-digit" }
-      : style === "long"
-        ? { year: "numeric", month: "long", day: "numeric", weekday: "long" }
-        : { year: "numeric", month: "long", day: "numeric" };
+    style === "compact"
+      ? { month: "short", day: "numeric" }
+      : style === "short"
+        ? { year: "numeric", month: "2-digit", day: "2-digit" }
+        : style === "long"
+          ? { year: "numeric", month: "long", day: "numeric", weekday: "long" }
+          : { year: "numeric", month: "long", day: "numeric" };
   return new Intl.DateTimeFormat(intlLocale(locale), opts).format(d);
 }
 

@@ -4172,6 +4172,21 @@
     "sort_field_name": "Nom",
     "sort_field_date": "Date de modification",
     "sort_field_size": "Taille",
-    "action_open": "Ouvrir"
+    "action_open": "Ouvrir",
+    "search_all_placeholder": "Rechercher fichiers et clients…",
+    "organize_ready": "{count, plural, one {# suggestion prête} other {# suggestions prêtes}} — classez-les en une seule révision",
+    "home_upload_drop": "Déposez vos fichiers ici",
+    "home_upload_or": "ou",
+    "home_upload_browse": "parcourez votre ordinateur",
+    "home_upload_hint": "Ils seront classés au bon client automatiquement.",
+    "home_cloud_title": "Classement infonuagique",
+    "home_cloud_body": "Les documents approuvés se classent d’eux-mêmes dans le {provider} de votre cabinet.",
+    "home_cloud_body_off": "Connectez un espace de stockage et les documents approuvés se classeront d’eux-mêmes.",
+    "home_cloud_open": "Ouvrir le dossier",
+    "home_cloud_settings": "Paramètres de classement",
+    "home_cloud_connect": "Connecter un espace",
+    "status_connected": "Connecté",
+    "empty_search_title": "Rien ne correspond à « {query} »",
+    "empty_search_hint": "Essayez un autre nom, ou effacez la recherche."
   }
 }

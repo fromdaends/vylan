@@ -1,42 +1,41 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import {
-  Activity,
   ArrowRight,
-  Bot,
-  CalendarDays,
-  Cloud,
-  FileText,
-  Files,
+  Folder,
   Sparkles,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { formatDate, type AppLocale } from "@/lib/format";
+import { StatusCapsule } from "@/components/ui/status-capsule";
+import { computeInitials } from "@/components/ui/avatar-initials";
+import { formatDate, formatRelative, type AppLocale } from "@/lib/format";
 import { DOC_TYPE_LABELS } from "@/lib/doc-types";
-import {
-  countDocumentsSince,
-  countPendingAnalysis,
-  listDocuments,
-  type BrowseDocument,
-} from "@/lib/db/documents";
+import { listDocuments, type BrowseDocument } from "@/lib/db/documents";
 import { listActivityForFirm, type FirmActivityEntry } from "@/lib/db/activity";
 import { openSuggestionCounts } from "@/lib/files/organize";
 import { ScanNowButton } from "@/components/files/organize-review";
+import { UploadDropzone } from "@/components/files/upload-dropzone";
+import { ProviderLogo } from "@/components/filing/provider-logos";
 import { getFirmStorageConnection } from "@/lib/db/filing";
+import { listClientOptions } from "@/lib/db/clients";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isAuditAction } from "@/components/settings/audit-actions";
 
-// FILES HOME — the landing dashboard for the firm's documents.
+// FILES HOME — the landing view for the firm's documents.
 //
-// Four sections, per the v2 spec, and nothing else: recent files, team
-// activity, AI Organize (arrives with the Organize scanner — nothing renders
-// until it exists, an empty promise card would be worse than absence), and an
-// at-a-glance stat row.
+// A MAIN COLUMN and a SIDE RAIL, not a stack of full-width boxes: the things
+// you read (what arrived, what the AI wants to file) get the width, and the
+// things you act on or glance at (drop files, where filing goes, who did what)
+// sit beside them. On a narrow window the rail wraps underneath, which is why
+// this is flex-wrap and not a two-column grid.
 //
-// The whole tab is FIVE flat queries, run in parallel: one page of documents
-// (whose exact count doubles as the "total documents" stat), one activity
-// read, one storage-connection read, and two head-counts that never fetch
-// rows. No N+1, nothing proportional to firm size.
+// There is deliberately NO stats bar. Four counters — total documents, this
+// month, pending, storage — is a dashboard about documents rather than a way
+// into them, and none of the four is a number anyone acts on. Removing it also
+// removed two head-count queries from every load of this page.
+//
+// FOUR flat queries, run in parallel: one page of documents, one activity
+// read, one storage-connection read, one suggestion count (plus the client
+// list the dropzone needs). No N+1, nothing proportional to firm size.
 
 /** The audit-log actions that count as "file activity" for the Home feed. */
 const FILE_ACTIVITY_ACTIONS = [
@@ -58,19 +57,13 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
   const t = await getTranslations("Files");
   const tAudit = await getTranslations("Audit");
 
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-
-  const [docsPage, activity, storage, monthCount, pendingCount, organize] =
-    await Promise.all([
-      listDocuments({ sort: "date", page: 1 }),
-      listActivityForFirm({ actions: FILE_ACTIVITY_ACTIONS, limit: 15 }),
-      getFirmStorageConnection(),
-      countDocumentsSince(monthStart.toISOString()),
-      countPendingAnalysis(),
-      openSuggestionCounts(),
-    ]);
+  const [docsPage, activity, storage, organize, clients] = await Promise.all([
+    listDocuments({ sort: "date", page: 1 }),
+    listActivityForFirm({ actions: FILE_ACTIVITY_ACTIONS, limit: 15 }),
+    getFirmStorageConnection(),
+    openSuggestionCounts(),
+    listClientOptions(),
+  ]);
 
   const recent = docsPage.documents.slice(0, 10);
 
@@ -90,40 +83,58 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
   }
 
   return (
-    <div className="space-y-6">
-      <AtAGlance
-        t={t}
-        total={docsPage.total}
-        month={monthCount}
-        pending={pendingCount}
-        storage={storage}
-      />
-      {organize.available && <OrganizeCard t={t} total={organize.total} />}
-      <RecentFiles t={t} locale={locale} recent={recent} clientNames={clientNames} />
-      <TeamActivity t={t} tAudit={tAudit} locale={locale} entries={activity} />
+    <div className="flex flex-wrap items-start gap-5">
+      {/* MAIN COLUMN. flex-999 makes it take essentially all the spare width
+          while still being allowed to wrap; 560px is the basis below which the
+          rail drops underneath rather than squeezing the file names. */}
+      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5">
+        {organize.available && <OrganizeBar t={t} total={organize.total} />}
+        <RecentFiles
+          t={t}
+          locale={locale}
+          recent={recent}
+          clientNames={clientNames}
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
+        <UploadDropzone clients={clients} />
+        <CloudFiling t={t} storage={storage} />
+        <TeamActivity
+          t={t}
+          tAudit={tAudit}
+          locale={locale}
+          entries={activity}
+        />
+      </div>
     </div>
   );
 }
 
 type T = Awaited<ReturnType<typeof getTranslations<"Files">>>;
+type TAudit = Awaited<ReturnType<typeof getTranslations<"Audit">>>;
+
+/** One card. The kit's rule: one card per subject, hairline rows inside it,
+ * whitespace between subjects — never a box inside a box. */
+const CARD = "rounded-xl border border-border/70 bg-card";
 
 // ── AI Organize ─────────────────────────────────────────────────────────────
-// The card only appears once the Organize schema exists (available), and it
-// is honest both ways: a count with a Review button when files need
-// attention, a quiet all-clear when they don't. The scanner can be run on
-// demand from here; the nightly run keeps it fresh otherwise.
+// A single bar rather than a card: it is a prompt to act, and it should read as
+// one line of the page rather than a section competing with the file list. It
+// only appears once the Organize schema exists — an empty promise card would be
+// worse than its absence.
 
-function OrganizeCard({ t, total }: { t: T; total: number }) {
+function OrganizeBar({ t, total }: { t: T; total: number }) {
   return (
-    <section className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <Sparkles className="size-5 shrink-0 text-accent" aria-hidden />
+    <section className={`${CARD} flex items-center justify-between gap-4 px-5 py-3.5`}>
+      <div className="flex min-w-0 items-center gap-3.5">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-accent-subtle text-accent">
+          <Sparkles className="size-5" aria-hidden />
+        </span>
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">{t("organize_title")}</h2>
-          <p className="truncate text-xs text-muted-foreground">
-            {total > 0
-              ? t("organize_card_count", { count: total })
-              : t("organize_all_clear")}
+          <h2 className="text-sm font-semibold">{t("organize_title")}</h2>
+          <p className="truncate text-[13px] text-muted-foreground">
+            {total > 0 ? t("organize_ready", { count: total }) : t("organize_all_clear")}
           </p>
         </div>
       </div>
@@ -132,89 +143,15 @@ function OrganizeCard({ t, total }: { t: T; total: number }) {
         {total > 0 && (
           <Link
             href="/files/organize"
-            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex h-[34px] items-center rounded-lg border border-border bg-card px-3.5 text-[13.5px] font-medium transition-colors hover:border-accent hover:text-accent"
           >
-            {t("organize_review")}
+            {t("organize_review")} {total}
           </Link>
         )}
       </div>
     </section>
   );
 }
-type TAudit = Awaited<ReturnType<typeof getTranslations<"Audit">>>;
-
-// ── At a glance ─────────────────────────────────────────────────────────────
-
-function AtAGlance({
-  t,
-  total,
-  month,
-  pending,
-  storage,
-}: {
-  t: T;
-  total: number;
-  month: number;
-  pending: number;
-  storage: Awaited<ReturnType<typeof getFirmStorageConnection>>;
-}) {
-  const storageValue =
-    storage == null || storage.status === "disconnected"
-      ? t("home_glance_storage_off")
-      : storage.status === "error"
-        ? t("home_glance_storage_error")
-        : t("home_glance_storage_on", { provider: PROVIDER_LABELS[storage.provider] ?? storage.provider });
-
-  const stats: { icon: React.ReactNode; label: string; value: string }[] = [
-    {
-      icon: <Files className="size-4" aria-hidden />,
-      label: t("home_glance_total"),
-      value: String(total),
-    },
-    {
-      icon: <CalendarDays className="size-4" aria-hidden />,
-      label: t("home_glance_month"),
-      value: String(month),
-    },
-    {
-      icon: <Cloud className="size-4" aria-hidden />,
-      label: t("home_glance_storage"),
-      value: storageValue,
-    },
-    {
-      icon: <Bot className="size-4" aria-hidden />,
-      label: t("home_glance_pending"),
-      value: String(pending),
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {stats.map((s) => (
-        <div
-          key={s.label}
-          className="rounded-lg border border-border/70 bg-card px-4 py-3"
-        >
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {s.icon}
-            {s.label}
-          </div>
-          <p className="mt-1 truncate text-xl font-semibold tracking-tight">
-            {s.value}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const PROVIDER_LABELS: Record<string, string> = {
-  google_drive: "Google Drive",
-  dropbox: "Dropbox",
-  microsoft: "OneDrive",
-  onedrive: "OneDrive",
-  smartvault: "SmartVault",
-};
 
 // ── Recent files ────────────────────────────────────────────────────────────
 
@@ -247,46 +184,149 @@ function RecentFiles({
         : t("home_source_portal");
 
   return (
-    <section className="rounded-lg border border-border/70 bg-card">
-      <SectionHeader
-        icon={<FileText className="size-4" aria-hidden />}
-        title={t("home_recent_title")}
-        link={{ href: "/files?sort=date", label: t("home_view_all") }}
-      />
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex h-13 items-center justify-between px-5">
+        <h2 className="text-[14.5px] font-semibold">{t("home_recent_title")}</h2>
+        <Link
+          href="/files?tab=browse&sort=date"
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+        >
+          {t("home_view_all")}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+      </div>
       {recent.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+        <p className="border-t border-border/50 px-5 py-10 text-center text-sm text-muted-foreground">
           {t("home_recent_empty")}
         </p>
       ) : (
-        <ul className="divide-y divide-border/50">
+        <ul>
           {recent.map((d) => (
             <li key={`${d.source}-${d.id}`}>
               <Link
                 href={docHref(d)}
-                className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className="flex items-center gap-3 border-t border-border/50 px-5 py-[11px] transition-colors hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
+                <DocIcon />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{d.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {clientNames.get(d.clientId) ?? "—"}
+                  <span className="block truncate text-[12.5px] text-muted-foreground">
+                    {clientNames.get(d.clientId) ?? "—"} · {sourceLabel(d)}
                   </span>
                 </span>
-                {d.docType && (
-                  <Badge variant="outline" className="hidden shrink-0 sm:inline-flex">
-                    {DOC_TYPE_LABELS[d.docType][locale].split(" — ")[0]}
-                  </Badge>
+                {/* Color marks the EXCEPTION: only a document still waiting on
+                    a human gets a capsule. Approved is the resting state and
+                    says nothing. */}
+                {d.reviewStatus === "pending" && (
+                  <StatusCapsule tone="warning" className="hidden sm:inline-flex">
+                    {t("status_pending")}
+                  </StatusCapsule>
                 )}
-                <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground sm:block">
-                  {sourceLabel(d)}
+                {/* Doc type as PLAIN TEXT, not a badge — every row has one, so
+                    a badge on each is decoration that makes the one real
+                    status capsule above impossible to spot. */}
+                <span className="hidden min-w-0 flex-[0_1_180px] truncate text-[12.5px] text-muted-foreground lg:block">
+                  {d.docType ? DOC_TYPE_LABELS[d.docType][locale].split(" — ")[0] : ""}
                 </span>
-                <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
-                  {formatDate(d.createdAt, locale, "short")}
+                <span className="w-13 shrink-0 text-right text-[12.5px] text-muted-foreground">
+                  {formatDate(d.createdAt, locale, "compact")}
                 </span>
               </Link>
             </li>
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** The file glyph on a recent row. Thin stroke on purpose — at 20px a 2px
+ * stroke reads as a filled block and fights the file name beside it. */
+function DocIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0 text-muted-foreground"
+      aria-hidden
+    >
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </svg>
+  );
+}
+
+// ── Cloud filing ────────────────────────────────────────────────────────────
+// Where approved documents end up. On the rail rather than in the main column
+// because it is a status you check, not a list you read — and it is the one
+// place on Home that links into Filing settings.
+
+const PROVIDER_LABELS: Record<string, string> = {
+  google_drive: "Google Drive",
+  dropbox: "Dropbox",
+  microsoft: "OneDrive",
+  onedrive: "OneDrive",
+  smartvault: "SmartVault",
+};
+
+function CloudFiling({
+  t,
+  storage,
+}: {
+  t: T;
+  storage: Awaited<ReturnType<typeof getFirmStorageConnection>>;
+}) {
+  const connected = storage != null && storage.status === "active";
+  const providerLabel = storage
+    ? (PROVIDER_LABELS[storage.provider] ?? storage.provider)
+    : null;
+
+  return (
+    <section className={`${CARD} px-5 py-4.5`}>
+      <div className="flex items-center gap-2.5">
+        {storage ? (
+          <ProviderLogo provider={storage.provider} className="size-5.5 shrink-0" />
+        ) : (
+          <Folder className="size-5.5 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+        <h2 className="flex-1 text-sm font-semibold">{t("home_cloud_title")}</h2>
+        {storage && (
+          <StatusCapsule tone={connected ? "success" : "destructive"}>
+            {connected ? t("status_connected") : t("home_glance_storage_error")}
+          </StatusCapsule>
+        )}
+      </div>
+
+      <p className="mt-2.5 text-[13px] leading-[1.55] text-muted-foreground">
+        {providerLabel
+          ? t("home_cloud_body", { provider: providerLabel })
+          : t("home_cloud_body_off")}
+      </p>
+
+      {storage && (
+        <p className="mt-3 flex items-center gap-2 text-[13px]">
+          <Folder className="size-3.75 shrink-0 text-icon-amber" aria-hidden />
+          <span className="truncate">
+            {providerLabel}
+            {storage.rootLabel ? ` › ${storage.rootLabel}` : ""}
+          </span>
+        </p>
+      )}
+
+      <div className="mt-3.5 flex items-center gap-4">
+        <Link
+          href="/files?tab=settings"
+          className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+        >
+          {storage ? t("home_cloud_settings") : t("home_cloud_connect")} →
+        </Link>
+      </div>
     </section>
   );
 }
@@ -305,19 +345,23 @@ function TeamActivity({
   entries: FirmActivityEntry[];
 }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-card">
-      <SectionHeader
-        icon={<Activity className="size-4" aria-hidden />}
-        title={t("home_activity_title")}
-        link={{ href: "/settings/audit", label: t("home_activity_audit") }}
-      />
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex h-12 items-center justify-between px-4.5">
+        <h2 className="text-sm font-semibold">{t("home_activity_title")}</h2>
+        <Link
+          href="/settings/audit"
+          className="text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
+        >
+          {t("home_activity_audit")} →
+        </Link>
+      </div>
       {entries.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+        <p className="px-4.5 pb-8 text-center text-sm text-muted-foreground">
           {t("home_activity_empty")}
         </p>
       ) : (
-        <ul className="divide-y divide-border/50">
-          {entries.map((e) => {
+        <ul className="pb-2">
+          {entries.slice(0, 8).map((e) => {
             // Registered actions render their localized label; anything else
             // falls back to the raw code rather than crashing the page — the
             // audit view applies the same rule.
@@ -326,13 +370,18 @@ function TeamActivity({
               : e.action;
             const count =
               typeof e.metadata?.count === "number" ? e.metadata.count : null;
+            const who = e.actor_name ?? t("home_activity_system");
             return (
-              <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+              <li key={e.id} className="flex items-start gap-2.5 px-4.5 py-2">
+                <span
+                  className="mt-px inline-flex size-6.5 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[10.5px] font-semibold text-accent"
+                  aria-hidden
+                >
+                  {computeInitials(who)}
+                </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">
-                    <span className="font-medium">
-                      {e.actor_name ?? t("home_activity_system")}
-                    </span>{" "}
+                  <span className="block text-[13px] leading-[1.45]">
+                    <span className="font-semibold">{who}</span>{" "}
                     <span className="text-muted-foreground">
                       {actionLabel}
                       {count != null && count > 1 ? ` (${count})` : ""}
@@ -344,8 +393,8 @@ function TeamActivity({
                     </span>
                   )}
                 </span>
-                <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
-                  {formatDate(e.created_at, locale, "short")}
+                <span className="mt-0.5 shrink-0 text-[11.5px] text-muted-foreground">
+                  {formatRelative(e.created_at, locale)}
                 </span>
               </li>
             );
@@ -353,31 +402,5 @@ function TeamActivity({
         </ul>
       )}
     </section>
-  );
-}
-
-function SectionHeader({
-  icon,
-  title,
-  link,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  link: { href: string; label: string };
-}) {
-  return (
-    <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5">
-      <h2 className="flex items-center gap-2 text-sm font-medium">
-        {icon}
-        {title}
-      </h2>
-      <Link
-        href={link.href}
-        className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
-      >
-        {link.label}
-        <ArrowRight className="size-3" aria-hidden />
-      </Link>
-    </div>
   );
 }
