@@ -16,11 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ClientTeamEditor,
+  type TeamRow,
+} from "@/components/clients/client-team-editor";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -73,9 +71,13 @@ export function ClientFormDialog({
   const [province, setProvince] = useState(client?.province ?? "none");
   const [timezone, setTimezone] = useState(client?.timezone ?? "none");
   // Who else works on this, chosen at creation. You are always on it — the
-  // server adds the creator regardless — so this picker is only ever about
-  // OTHER people, which is why it does not list you.
-  const [teamIds, setTeamIds] = useState<string[]>([]);
+  // server adds the creator regardless — so this only ever covers OTHER people,
+  // which is why the picker does not list you.
+  //
+  // Draft rows: nothing is saved until the form is submitted, because there is
+  // no client to attach anybody to yet. Same editor the client page uses, in
+  // its draft mode.
+  const [team, setTeam] = useState<TeamRow[]>([]);
   const router = useRouter();
   const action = mode === "create" ? createClientAction : updateClientAction;
   const [state, formAction, pending] = useActionState<
@@ -314,40 +316,50 @@ export function ClientFormDialog({
             />
           </div>
           <div className="space-y-1.5">
-            {/* Who else can see this client. Create-time only, and optional:
-                at this point you often do not know yet, and the client page's
-                own panel is where it is really managed. It writes the same
-                client_members rows that panel reads, so the two can never
-                disagree. Hidden in a solo firm. */}
+            {/* Who else can see this client. Create-time only, hidden in a
+                solo firm, and the SAME editor as the client page's panel — so
+                positions can be set here too and the two surfaces cannot drift
+                into different shapes. It writes the same client_members rows
+                that panel reads. */}
             {mode === "create" && teammates.length > 0 && (
               <div className="space-y-1.5">
                 <Label>{t("create_team_label")}</Label>
-                <input type="hidden" name="member_ids" value={teamIds.join(",")} />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" className="w-full justify-start font-normal">
-                      {teamIds.length === 0
-                        ? t("create_team_just_you")
-                        : t("create_team_count", { count: teamIds.length + 1 })}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-64">
-                    {teammates.map((m) => (
-                      <DropdownMenuCheckboxItem
-                        key={m.id}
-                        checked={teamIds.includes(m.id)}
-                        onCheckedChange={(on) =>
-                          setTeamIds((prev) =>
-                            on ? [...prev, m.id] : prev.filter((x) => x !== m.id),
-                          )
-                        }
-                        onSelect={(e) => e.preventDefault()}
-                      >
-                        {m.name}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <input
+                  type="hidden"
+                  name="members"
+                  value={JSON.stringify(
+                    team.map((m) => ({ userId: m.userId, position: m.position })),
+                  )}
+                />
+                <div className="rounded-lg border border-border/60 p-3">
+                  <ClientTeamEditor
+                    rows={team}
+                    candidates={teammates.filter(
+                      (m) => !team.some((r) => r.userId === m.id),
+                    )}
+                    canEdit
+                    emptyLabel={t("create_team_just_you")}
+                    mode="draft"
+                    onAdd={(userId) => {
+                      const person = teammates.find((m) => m.id === userId);
+                      if (!person) return;
+                      setTeam((prev) => [
+                        ...prev,
+                        { userId, name: person.name, position: null },
+                      ]);
+                    }}
+                    onRemove={(userId) =>
+                      setTeam((prev) => prev.filter((r) => r.userId !== userId))
+                    }
+                    onPosition={(userId, position) =>
+                      setTeam((prev) =>
+                        prev.map((r) =>
+                          r.userId === userId ? { ...r, position } : r,
+                        ),
+                      )
+                    }
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {t("create_team_hint")}
                 </p>
