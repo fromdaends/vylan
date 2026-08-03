@@ -223,9 +223,18 @@ is visibly missing; a log that looks complete and isn't is worse, and for an
 accounting product holding client tax documents it's the kind of thing that
 matters if anyone ever asks who accessed a file.
 
+**Checked the obvious objection — "maybe those are different kinds of file with
+their own logs."** They aren't. The logging function's own source map
+([documents.ts:42](src/app/actions/documents.ts:42)) explicitly covers three
+sources: `checklist` → `uploaded_files`, `final` → `final_documents`, and
+`imported` → `imported_documents`. Those are precisely the files the engagement
+checklist and the finals list download. The logging was *built* to cover them.
+It is simply never called from those screens.
+
 **This is the cohesion problem in its most expensive form:** download was built
 six times, the audit call was added to the copy someone happened to be working
-in, and the other five were never revisited.
+in, and the other five were never revisited. The plumbing already accepts them,
+which is also why the fix is small.
 
 **Fix size:** small, and it should probably jump the queue. Move the logging
 into the API routes rather than the components, so it fires regardless of which
