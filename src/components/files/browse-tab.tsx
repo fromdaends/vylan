@@ -32,6 +32,7 @@ import {
   type ReviewStatus,
 } from "@/lib/db/documents";
 import { listClientOptions } from "@/lib/db/clients";
+import type { StatusTone } from "@/components/ui/status-capsule";
 import { splitSnippet } from "@/lib/files/search-snippet";
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
@@ -438,14 +439,18 @@ export async function BrowseTab({
         />
       )}
 
-      {/* The way into the recycle bin. Quiet and at the bottom, like every file
-          manager's Trash — findable, never in the way. Also a drop target:
+      {/* Footer: what you are looking at on the left, the way into the recycle
+          bin on the right. Quiet and at the bottom, like every file manager's
+          Trash — findable, never in the way. The bin is also a drop target:
           dragging files onto it soft-deletes them, with an Undo toast. */}
-      <div className="pt-2">
+      {/* The count itself is NOT repeated here — FilesPagination already
+          renders "N results" directly under the list, and two counts on one
+          screen invites them to disagree. */}
+      <div className="flex items-center justify-end gap-4 pt-1">
         <TrashDropTarget>
           <Link
             href="/files?deleted=1"
-            className="inline-flex items-center gap-1.5 px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
           >
             <Trash2 className="size-3.5" aria-hidden />
             {t("bin_title")}
@@ -720,8 +725,8 @@ async function FileList({
       ...(searchQ
         ? [
             contentOnlyKeys.has(`${doc.source}|${doc.id}`)
-              ? { label: t("match_content"), tone: "outline" as const }
-              : { label: t("match_name"), tone: "outline" as const },
+              ? { label: t("match_content"), tone: "accent" as const }
+              : { label: t("match_name"), tone: "accent" as const },
           ]
         : []),
     ],
@@ -804,17 +809,17 @@ function fileBadges(
   doc: BrowseDocument,
   t: T,
   clientName: string | null | undefined,
-): { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[] {
-  const badges: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[] =
+): { label: string; tone: StatusTone }[] {
+  const badges: { label: string; tone: StatusTone }[] =
     [];
   // In firm-wide results the row has to say WHOSE file this is; inside a folder
   // that would be the same value on every row and is left off.
-  if (clientName) badges.push({ label: clientName, tone: "secondary" });
+  if (clientName) badges.push({ label: clientName, tone: "muted" });
   // The one badge every surface shows for a hidden-from-client file.
   if (doc.visibility === "firm") {
-    badges.push({ label: t("badge_firm_only"), tone: "secondary" });
+    badges.push({ label: t("badge_firm_only"), tone: "muted" });
   }
-  if (doc.isDuplicate) badges.push({ label: t("badge_duplicate"), tone: "outline" });
+  if (doc.isDuplicate) badges.push({ label: t("badge_duplicate"), tone: "muted" });
   // Only the EXCEPTIONS get a badge. Approved is the resting state of a filed
   // document — badging it would put a coloured pill on almost every row and the
   // rows that actually need attention would stop standing out.
@@ -822,7 +827,7 @@ function fileBadges(
     badges.push({ label: t("status_rejected"), tone: "destructive" });
   }
   if (doc.reviewStatus === "pending") {
-    badges.push({ label: t("status_pending"), tone: "outline" });
+    badges.push({ label: t("status_pending"), tone: "warning" });
   }
   return badges;
 }

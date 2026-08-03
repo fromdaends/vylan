@@ -4186,7 +4186,6 @@
     "home_cloud_settings": "Filing settings",
     "home_cloud_connect": "Connect storage",
     "status_connected": "Connected",
-    "results_count": "{count, plural, one {# result} other {# results}}",
     "empty_search_title": "Nothing matches “{query}”",
     "empty_search_hint": "Try a different name, or clear the search."
   }

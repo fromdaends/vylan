@@ -229,7 +229,7 @@ function RecentFiles({
                   {d.docType ? DOC_TYPE_LABELS[d.docType][locale].split(" — ")[0] : ""}
                 </span>
                 <span className="w-13 shrink-0 text-right text-[12.5px] text-muted-foreground">
-                  {formatDate(d.createdAt, locale, "short")}
+                  {formatDate(d.createdAt, locale, "compact")}
                 </span>
               </Link>
             </li>

@@ -4186,7 +4186,6 @@
     "home_cloud_settings": "Paramètres de classement",
     "home_cloud_connect": "Connecter un espace",
     "status_connected": "Connecté",
-    "results_count": "{count, plural, one {# résultat} other {# résultats}}",
     "empty_search_title": "Rien ne correspond à « {query} »",
     "empty_search_hint": "Essayez un autre nom, ou effacez la recherche."
   }
