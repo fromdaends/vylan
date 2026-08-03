@@ -80,7 +80,7 @@ export type InvoiceListResult = {
   rows: InvoiceListRow[];
   page: number;
   hasNext: boolean;
-  // True when migration 1260 hasn't reached this database: the list still
+  // True when migration 1270 hasn't reached this database: the list still
   // renders from the legacy columns, and the UI says so rather than showing
   // every invoice as fully outstanding.
   migrationPending: boolean;
@@ -90,7 +90,7 @@ const LEGACY_COLS =
   "id, client_id, engagement_id, amount_cents, currency, status, created_at, " +
   "invoice_number, invoice_kind, issue_date, due_date, tax_total_cents, " +
   "paid_at, paid_provider";
-const WITH_1260_COLS = `${LEGACY_COLS}, amount_paid_cents, auto_chase, chase_count, last_chased_at`;
+const WITH_1270_COLS = `${LEGACY_COLS}, amount_paid_cents, auto_chase, chase_count, last_chased_at`;
 
 function isMissingColumn(err: { code?: string } | null): boolean {
   return err?.code === "PGRST204" || err?.code === "42703";
@@ -193,12 +193,12 @@ export async function listFirmInvoices(
   };
 
   let migrationPending = false;
-  let { data, error } = await run(WITH_1260_COLS);
+  let { data, error } = await run(WITH_1270_COLS);
   if (error && isMissingColumn(error)) {
     migrationPending = true;
     ({ data, error } = await run(LEGACY_COLS));
     // The status filters that reference amount_paid_cents cannot run at all
-    // pre-1260. Falling back to the plain unpaid set is the honest answer: on
+    // pre-1270. Falling back to the plain unpaid set is the honest answer: on
     // such a database no invoice is partly paid, because none can be.
     if (error && isMissingColumn(error)) {
       ({ data, error } = await sb
@@ -327,7 +327,7 @@ async function decorate(
       paymentMethod:
         state.status === "paid"
           ? // The ledger's method when it has one; otherwise the rail on the
-            // invoice, which is all a pre-1260 paid row can tell us.
+            // invoice, which is all a pre-1270 paid row can tell us.
             (methodByInvoice.get(r.id as string) ??
             (r.paid_provider as PaymentMethod | null) ??
             null)

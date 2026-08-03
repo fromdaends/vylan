@@ -9,7 +9,7 @@
 //
 // THE CADENCE: one reminder when the bill comes due, then every N days while it
 // is still owed, up to a maximum. Defaults 7 days and 4 reminders, per firm and
-// bounded in the database (migration 1260) as well as the UI.
+// bounded in the database (migration 1270) as well as the UI.
 //
 // THE WORKER RE-VALIDATES EVERYTHING. Queued jobs are never cancelled on
 // payment — they fire and find the invoice settled, and stop. That is

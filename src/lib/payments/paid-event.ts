@@ -79,7 +79,7 @@ export async function recordInvoicePaid(
     ).catch(() => {});
   }
 
-  // Mirror the rail's payment into the ledger (migration 1260) so the invoice's
+  // Mirror the rail's payment into the ledger (migration 1270) so the invoice's
   // payment history is ONE list whatever collected the money, and "collected
   // this month" can be summed from a single place going forward.
   //

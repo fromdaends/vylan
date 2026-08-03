@@ -33,7 +33,7 @@
 -- the last one went. There is no second scheduler and no new cron.
 --
 -- Migration number: written as 1240 off a highest-of-1230, then renumbered to
--- 1260 when a merge from main brought in BOTH 1240 and 1250 from two other
+-- 1270 when a merge from main brought in BOTH 1240 and 1250 from two other
 -- sessions. The duplicate check in CLAUDE.md caught it (`ls supabase/migrations
 -- | sed 's/_.*//' | sort | uniq -d` printed 1240), which is exactly the failure
 -- that once put eight pairs of files on the same version and broke the Supabase
@@ -105,7 +105,7 @@ alter table payment_requests
   add column if not exists amount_paid_cents bigint not null default 0;
 
 comment on column payment_requests.amount_paid_cents is
-  'Sum of invoice_payments for this invoice, maintained by trigger. ZERO ON PRE-1260 PAID ROWS — outstanding is 0 when status = paid, regardless of this column.';
+  'Sum of invoice_payments for this invoice, maintained by trigger. ZERO ON PRE-1270 PAID ROWS — outstanding is 0 when status = paid, regardless of this column.';
 
 -- The ledger's single reflection. Recomputed as a full re-sum rather than an
 -- increment: an increment is only correct if every event is seen exactly once,
