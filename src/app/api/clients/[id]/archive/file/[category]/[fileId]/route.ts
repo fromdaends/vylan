@@ -11,6 +11,10 @@ import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl } from "@/lib/storage";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
 import { resolveArchiveFile } from "@/lib/archive/download";
+import {
+  countsAsDownload,
+  recordDocumentDownload,
+} from "@/lib/files/download-audit";
 import type { ArchiveCategoryKey } from "@/lib/db/client-archive";
 
 export const runtime = "nodejs";
@@ -87,6 +91,24 @@ export async function GET(
   if (len) headers.set("Content-Length", len);
   const contentRange = upstream.headers.get("content-range");
   if (contentRange) headers.set("Content-Range", contentRange);
+
+  // Audited here, past the firm+client authorization above, on exactly the same
+  // terms as /api/files/[id] — an archived tax slip leaving the building is the
+  // same event as a checklist one leaving it.
+  if (countsAsDownload({ wantsDownload, range })) {
+    recordDocumentDownload({
+      firmId: firm.id,
+      engagementId: resolved.engagementId,
+      clientId,
+      // The archive's three categories, not the Files sources: 'signed' has no
+      // equivalent there, and calling it 'final' would misreport what left.
+      source: category,
+      documentId: fileId,
+      fileName: resolved.filename,
+      route: "archive",
+      actorId: auth.user.id,
+    });
+  }
 
   return new Response(upstream.body, {
     status: upstream.status === 206 ? 206 : 200,

@@ -2,7 +2,6 @@
 
 import { useTranslations } from "next-intl";
 import { FileText, Download, FileCheck2, Lock } from "lucide-react";
-import { logPortalActivity } from "@/lib/portal/activity-log";
 
 // The client-facing "Your completed documents" card: the finished work the
 // accountant has returned. Each file downloads through the gated
@@ -91,16 +90,12 @@ export function PortalFinalDocuments({
                 )}
               </div>
             </div>
+            {/* No onClick beacon: the download route records this itself now.
+                A beacon only ever covered the clicks that went through this
+                exact link — never a copied URL or "Save link as" — and firing
+                one here as well would log the download twice. */}
             <a
               href={`/api/portal/deliverables/${d.id}?token=${enc}&download=1`}
-              // Log the download for the accountant's activity feed. keepalive
-              // in the logger lets the beacon survive this navigation.
-              onClick={() =>
-                logPortalActivity(token, "client_downloaded_deliverable", {
-                  name: d.display_name || d.original_filename,
-                  ref: d.id,
-                })
-              }
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Download className="size-3.5" aria-hidden />
