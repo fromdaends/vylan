@@ -74,14 +74,27 @@ beforeEach(() => {
 });
 
 describe("SelectableRow", () => {
-  it("selects a folder on single click and deselects on the second", () => {
+  it("selects a folder on single click and STAYS selected on a re-click", () => {
     renderRows();
     const row = screen.getByText("Folder One").parentElement!;
     fireEvent.click(row);
     expect(row).toHaveAttribute("data-selected");
     expect(push).not.toHaveBeenCalled();
+    // Drive never deselects on a re-click — the founder's exact report was
+    // "when you click it a second time it shouldn't close". Esc clears.
     fireEvent.click(row);
+    expect(row).toHaveAttribute("data-selected");
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(row).not.toHaveAttribute("data-selected");
+  });
+
+  it("keeps a file selected on a plain re-click too", () => {
+    renderRows();
+    const row = screen.getByText(/File One/).parentElement!;
+    fireEvent.click(row);
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("data-selected");
+    expect(screen.getByTestId("size").textContent).toBe("1");
   });
 
   it("opens a folder on double click, not single", () => {

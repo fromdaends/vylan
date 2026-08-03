@@ -205,17 +205,18 @@ export function SelectableRow({
     const el = e.target as HTMLElement;
     if (el.closest("button, a, input, [role=menuitem], [role=checkbox]")) return;
     e.stopPropagation();
+    // Clicking a row SELECTS it — including a row that is already selected.
+    // Drive never deselects on a re-click (founder: "when you click it a
+    // second time it shouldn't close"); getting OUT of a selection is what
+    // the bar's X, Esc, another row, or empty space are for. Ctrl/Cmd-click
+    // stays a true toggle — that is the explicit add/remove gesture.
     if (kind === "folder") {
-      selectFolder(!isSelected);
+      selectFolder(true);
       selection?.clear();
     } else if (fileKey && selection) {
-      // Plain click behaves like Drive: selects THIS row (add with the
-      // checkbox or Ctrl/Cmd-click for more).
       if (e.ctrlKey || e.metaKey) {
         selection.toggle(fileKey);
-      } else if (selection.selected.has(fileKey) && selection.selected.size === 1) {
-        selection.clear();
-      } else {
+      } else if (!(selection.selected.has(fileKey) && selection.selected.size === 1)) {
         selection.clear();
         selection.toggle(fileKey);
       }
