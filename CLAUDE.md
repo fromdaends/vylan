@@ -169,8 +169,12 @@ is your job, not theirs.
    "Change how settings look" must be one edit that ripples, not one edit per
    settings page.
 
-Precedent: PR #1149 collapsed two team editors into one used in both places it
-is needed. That is the shape of the fix, every time.
+Precedent: `src/components/clients/client-team-editor.tsx` is the reference
+implementation — ONE component, a `mode` prop for the two places it is used,
+identical markup in both, and a comment saying why. Copy its shape.
+
+`docs/cohesion-audit.md` lists the places that have NOT been consolidated yet,
+with verified file paths. Check it before assuming a concept has one home.
 
 ### What "the same concept" means
 

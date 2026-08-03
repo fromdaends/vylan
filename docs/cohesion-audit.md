@@ -446,3 +446,314 @@ firm-facing portal settings screen; `src/components/portal/**` is the
 client-facing portal itself. Noting it so nobody re-searches for it.
 
 ---
+
+## Finding 13 — every amount in the app is formatted as Canadian dollars
+
+**Severity: high, and it's a correctness bug with a visible symptom.**
+
+[format.ts:49](src/lib/format.ts:49) — `formatCurrency` — hardcodes
+`currency: "CAD"` with no way to override it. Most of the app correctly imports
+this one helper, which means most of the app renders every amount with a
+Canadian dollar symbol regardless of the actual currency.
+
+This matters because at least one connected Xero organisation banks in **USD**.
+
+Downstream code already knows the helper is wrong and has invented four
+different, mutually inconsistent workarounds. The worst is visible to users —
+[post-draft-controls.tsx:497](src/components/quickbooks/post-draft-controls.tsx:497)
+calls `formatCurrency` and then appends the currency code unconditionally.
+Rendered:
+
+| Locale | What a USD transaction shows |
+|---|---|
+| English | `$1,234.56 USD` |
+| French | `1 234,56 $ USD` |
+
+A Canadian-styled dollar sign sitting directly beside a label that contradicts
+it. The other three workarounds each disagree: one shows the raw number with no
+symbol at all, one labels only the section header and leaves every line CAD, and
+one branches on "is this foreign" in a way that still falls through to CAD when
+the books' home currency *is* USD.
+
+There are also two byte-identical `money()` helpers in
+[xero/post-transaction.ts:467](src/lib/xero/post-transaction.ts:467) and
+[quickbooks/post-transaction.ts:104](src/lib/quickbooks/post-transaction.ts:104),
+and two identical `formatAmount` functions in `receipt-gap.ts` and
+`uncategorized.ts`.
+
+**Fix size:** medium. Add a `currency` parameter to `formatCurrency` (defaulting
+to CAD so nothing breaks), then collapse the four workarounds onto it. Do the
+parameter first — same shape as Finding 10, where the shared thing has to become
+capable before anything can adopt it.
+
+---
+
+## Finding 14 — a comment predicted this exact duplication, and it happened anyway
+
+**Severity: low on its own. High as evidence.**
+
+[avatar-initials.tsx:75](src/components/ui/avatar-initials.tsx:75) exports
+`computeInitials`, with this comment directly above it:
+
+> "Exported so surfaces that need the initials WITHOUT this component's chrome
+> (the portal's near-black message header renders its own translucent disc) use
+> the same derivation rather than a second, drifting copy."
+
+The portal then wrote two copies of it —
+[r/[token]/page.tsx:87](src/app/r/[token]/page.tsx:87) and
+[portal-shell.tsx:218](src/components/portal/portal-shell.tsx:218). Neither file
+imports `computeInitials` (verified: zero occurrences in both). And they drift:
+
+| Firm name | Shared version | Portal copies |
+|---|---|---|
+| Smith Jones Bookkeeping | `SB` | `SJ` |
+| Gagnon Tremblay Associés CPA | `GC` | `GT` |
+
+The shared version takes first-and-last word; the copies take the first two. So
+a three-word firm gets different initials in the portal than in the app. The
+copies also lose the email handling and the empty-name guard.
+
+**This is the third time in this audit** that a previous session anticipated a
+duplication in a comment and the duplication happened regardless — the others
+being `normalize.ts` (Finding 1) and `Panel` (Finding 10). All three comments
+were accurate, well-written, and completely ineffective.
+
+That is the argument for the rule in `CLAUDE.md`. A note explaining the risk sits
+in a file that only gets read by someone already editing it — which is precisely
+the person who doesn't need the warning. A rule read at the start of every
+session reaches the person who does.
+
+**Fix size:** tiny. Two imports.
+
+---
+
+## Finding 15 — the long tail
+
+Verified, lower priority, listed so they aren't re-discovered:
+
+- **Empty states:** ~13 hand-rolled "nothing here" panels, no shared component.
+  Padding, corner radius, border opacity and icon treatment all differ. Nothing
+  is *wrong*, it's just visibly inconsistent.
+- **Engagement status colour:** the shared `engagementStatusVariant` is
+  duplicated locally in two files
+  ([engagements/[id]/page.tsx:1863](src/app/[locale]/(app)/engagements/[id]/page.tsx:1863),
+  [clients-table.tsx:382](src/components/clients/clients-table.tsx:382)), both of
+  which already import a *different* function from that same shared module.
+  Outputs agree today. Both copies type the status as a plain string, so
+  TypeScript won't flag a missed case when a status is added.
+- **Client filter dropdown:** four independent implementations; three offer an
+  "all clients" option and one doesn't.
+- **Reassign dropdown:** four implementations. Two share a byte-identical button
+  style — and one's own docblock says it "mirrors" the other.
+- **Date formatting:** two places bypass the shared `formatDate` and lose
+  Canadian date conventions — [team-manager.tsx:803](src/components/settings/team/team-manager.tsx:803)
+  passes a bare `"fr"` instead of `"fr-CA"`, and
+  [file-to-storage-dialog.tsx:183](src/components/filing/file-to-storage-dialog.tsx:183)
+  passes no locale at all. The scan flagged that it inferred the visible effect
+  from documented behaviour rather than seeing it rendered — worth a look before
+  treating the symptom as confirmed, though the code is unambiguously passing a
+  different locale than everywhere else.
+
+### Things that are done right, for calibration
+
+Worth recording so this doesn't read as "everything is broken":
+
+- `formatBytes`, `docTypeLabel`, `PaymentBadge`, `StageChip`, `AvatarInitials`,
+  `ClientCombobox` and `PaymentsList` are all properly single-sourced and reused.
+- The engagements table is *deliberately* shared between the main list and the
+  client page, with a comment explaining it was kept unified on purpose:
+  "DELIBERATELY NOT A FORK… Copying it would have produced a second table that
+  drifts."
+- The client row has exactly one implementation.
+- The dashboard's "needs attention" row is a separate implementation from the
+  main engagement row — but that one is a justified split (different shape for a
+  different job) and it already shares the underlying logic. Not a finding.
+
+The codebase clearly knows how to do this. The gap is that doing it is currently
+a matter of individual judgement rather than a rule.
+
+---
+
+## Finding 16 — saving the firm name silently switches off auto-reject
+
+**Severity: highest tier. Confirmed by executing the real code, not by reading
+it.**
+
+Turning on "Auto-reject unusable documents" (Settings → Documents) and later
+editing the firm's name (Settings → Account) **silently switches auto-reject back
+off.** No warning, no error, nothing in the interface either before or after.
+
+The chain, each link verified:
+
+1. The firm-details form sends exactly three fields — name, brand colour,
+   default language. It has no auto-reject control
+   ([firm-settings-sections.tsx](src/components/settings/firm-settings-sections.tsx)).
+2. Its validator declares `auto_reject_unusable_docs` with `.default(false)`
+   ([settings.schema.ts:25](src/app/actions/settings.schema.ts:25)). A default
+   *materialises* the key even when the form never sent it. I ran the real
+   schema against the exact three fields the form sends, and the output was:
+
+   ```
+   in:  { name, brand_color, locale_default }
+   out: { name, brand_color, locale_default, auto_reject_unusable_docs: false }
+   ```
+
+3. The action passes that whole object through —
+   `updateCurrentFirm(parsed.data)` ([settings.ts:39](src/app/actions/settings.ts:39)).
+4. `updateCurrentFirm` writes whatever patch it's handed, and
+   `auto_reject_unusable_docs` is in its permitted column list
+   ([firms.ts:152](src/lib/db/firms.ts:152)).
+
+Meanwhile the real toggle writes a narrow, correct patch
+([auto-reject/route.ts:35](src/app/api/firm/auto-reject/route.ts:35)) — so two
+independent writers touch one column and the wrong one wins whenever you edit
+your firm name.
+
+**And there is a passing test that certifies it.**
+[settings.test.ts:12](src/app/actions/settings.test.ts:12) asserts *"defaults to
+false when the field is absent from the form"* — which is exactly the behaviour
+that erases the setting. This is the second time in this audit that tests lock in
+the defect instead of catching it (Finding 1 was the first).
+
+**Fix size:** one word. Change `.default(false)` to `.optional()`, or drop the
+field from that schema entirely since the dedicated route owns it. Then fix the
+test to assert the key is *absent*.
+
+---
+
+## Finding 17 — English-speaking clients see no instructions on most checklist items
+
+**Severity: high. Invisible from your side of the product.**
+
+Checklist items store two description columns — `description` (English) and
+`description_fr`. There are two separate places an item gets created, and they
+fill those columns differently:
+
+| Created how | English column | French column |
+|---|---|---|
+| As part of a new engagement | **always empty** | filled |
+| Later, via "+ Add item" | filled | filled |
+
+The builder seeds `description_en: null`
+([engagement-builder.tsx:330](src/components/engagements/engagement-builder.tsx:330))
+and its only description box writes solely to the French column (line 1326);
+nothing ever assigns the English one. The creation insert then stores
+`description: item.description_en ?? null`
+([engagements.ts:462](src/lib/db/engagements.ts:462)) — always null. The
+"+ Add item" route, by contrast, mirrors one box into both columns
+([items/route.ts:72](src/app/api/engagements/[id]/items/route.ts:72)).
+
+The client portal reads
+`locale === "fr" && item.description_fr ? item.description_fr : item.description`
+([item-card.tsx:300](src/components/portal/item-card.tsx:300)).
+
+So an English-speaking client sees **no instructions at all** on every item that
+was part of the original checklist, and does see them on items added afterwards.
+You would never notice from inside the app, because the firm-side editor always
+shows the French text either way.
+
+**Fix size:** small. Mirror the description into both columns at creation, the
+way the add-item route already does — or better, give both paths one shared
+"build an item row" function so they can't diverge again.
+
+---
+
+## Finding 18 — things you can set once and never change
+
+Not duplication, but found on the way and worth knowing. These have a creation
+path and no edit path at all:
+
+- **Engagement title** — no rename exists anywhere. A typo is permanent unless
+  you delete and rebuild the engagement, losing its uploaded files and history.
+- **Tax year** — same.
+- **AI analysis on/off** — set at creation; the header shows a permanent "AI off"
+  badge with nothing to click.
+- **A checklist item's description** — settable at creation and at add-time,
+  then never editable by anything.
+
+And two capabilities that exist but have no button — the only way to reach them
+is to type into the AI assistant chat:
+
+- **Changing an engagement's due date** (`updateEngagementDueDate` — its sole
+  caller is the chat tool).
+- **Editing an existing checklist item's label, type, or required flag**.
+
+**Fix size:** small-to-medium each. The server-side functions for the last two
+already exist and just need a control wired to them.
+
+---
+
+## Finding 19 — your own example turned out to be the thing that's already fixed
+
+**This is the good news, and it's worth ending on.**
+
+Organizers — the feature you named — is **not** duplicated. It is the single
+best-built example of the pattern in the whole codebase.
+
+[client-team-editor.tsx](src/components/clients/client-team-editor.tsx) is one
+component with two modes: `live` on the client page (every change saves
+immediately) and `draft` in the create-client dialog (choices held until you
+submit). Both render identical markup. Both funnel into the same
+`addClientMemberAction`. Verified: exactly two call sites, one component, one
+server action, one table.
+
+Its header comment says why, and it quotes you:
+
+> "Written twice, the two would drift: the create form would quietly lack
+> positions, or gain a confirm the panel does not have, and the founder's rule
+> that 'everything correlates' would break at exactly the seam nobody looks at."
+
+So your instinct wasn't wrong — it was *right enough that someone already acted
+on it for that feature*. You were describing a real thing you'd experienced. It
+had simply already been fixed in the one place you happened to name.
+
+That makes `ClientTeamEditor` the reference implementation. When consolidating
+anything else in this document, copy its shape: one component, a mode prop for
+where it's used, identical markup in both, and a comment saying why.
+
+---
+
+## Recommended order
+
+Reasoning, not a mandate — the founder decides.
+
+**Fix now (real defects, all small):**
+
+1. Finding 16 — firm name wipes auto-reject. One word, plus its test.
+2. Finding 17 — English clients see no instructions. Small.
+3. Finding 6 — the download audit log. Small, and it's a trust issue.
+4. Finding 1 — the four search normalizers. Small.
+
+**Then the enablers (each unblocks other cleanups):**
+
+5. Finding 10 — let `Panel` accept `className`/`id`. Nothing else can adopt it
+   until this lands.
+6. Finding 13 — give `formatCurrency` a currency parameter. Same shape: the
+   shared thing has to become capable before the four workarounds can collapse.
+
+**Then the sweep (needs the founder's eye):**
+
+7. Findings 2, 11, 12 — implement the design tokens, extract `<SettingsSection>`
+   and `<SettingRow>`, unify the two firm-settings shells.
+8. Finding 7 — the document status pills, once you've picked the canonical set
+   of status words.
+
+**Leave alone for now:** Findings 3, 5, 15 — real but low-value, best folded in
+opportunistically when touching those files anyway.
+
+## The through-line
+
+Three separate times, a previous session saw a duplication risk and wrote an
+accurate, well-argued comment about it — in `normalize.ts`, in `Panel`, and above
+`computeInitials`. All three comments were correct. All three were ignored,
+because a comment is only read by someone already inside that file, which is
+precisely the person who doesn't need the warning.
+
+Twice, a passing test certified the defect rather than catching it — the
+normalizers, and the firm-settings default.
+
+That is the whole case for putting this in `CLAUDE.md` instead of in the code:
+the rule has to reach the person *before* they start editing, and it has to be
+about searching for the other copies, because neither comments nor tests can do
+that job.
+
