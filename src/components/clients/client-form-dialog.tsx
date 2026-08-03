@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -46,9 +52,18 @@ type Props = {
   locale: "fr" | "en";
   client?: Client;
   trigger?: React.ReactNode;
+  /** Active teammates, for the create-time team picker. Empty in a solo firm,
+   *  which hides the control entirely. */
+  teammates?: { id: string; name: string }[];
 };
 
-export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
+export function ClientFormDialog({
+  mode,
+  locale,
+  client,
+  trigger,
+  teammates = [],
+}: Props) {
   const t = useTranslations("Clients");
   const tc = useTranslations("Common");
   const tAuth = useTranslations("Auth");
@@ -57,6 +72,10 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
   // timezone (timezone stays editable for the rare multi-zone override).
   const [province, setProvince] = useState(client?.province ?? "none");
   const [timezone, setTimezone] = useState(client?.timezone ?? "none");
+  // Who else works on this, chosen at creation. You are always on it — the
+  // server adds the creator regardless — so this picker is only ever about
+  // OTHER people, which is why it does not list you.
+  const [teamIds, setTeamIds] = useState<string[]>([]);
   const router = useRouter();
   const action = mode === "create" ? createClientAction : updateClientAction;
   const [state, formAction, pending] = useActionState<
@@ -295,6 +314,46 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
             />
           </div>
           <div className="space-y-1.5">
+            {/* Who else can see this client. Create-time only, and optional:
+                at this point you often do not know yet, and the client page's
+                own panel is where it is really managed. It writes the same
+                client_members rows that panel reads, so the two can never
+                disagree. Hidden in a solo firm. */}
+            {mode === "create" && teammates.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>{t("create_team_label")}</Label>
+                <input type="hidden" name="member_ids" value={teamIds.join(",")} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-start font-normal">
+                      {teamIds.length === 0
+                        ? t("create_team_just_you")
+                        : t("create_team_count", { count: teamIds.length + 1 })}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    {teammates.map((m) => (
+                      <DropdownMenuCheckboxItem
+                        key={m.id}
+                        checked={teamIds.includes(m.id)}
+                        onCheckedChange={(on) =>
+                          setTeamIds((prev) =>
+                            on ? [...prev, m.id] : prev.filter((x) => x !== m.id),
+                          )
+                        }
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        {m.name}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <p className="text-xs text-muted-foreground">
+                  {t("create_team_hint")}
+                </p>
+              </div>
+            )}
+
             <Label htmlFor="notes">{t("field_notes")}</Label>
             <Textarea
               id="notes"

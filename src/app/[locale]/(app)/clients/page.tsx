@@ -284,7 +284,19 @@ export default async function ClientsPage({
                   {t("import_csv")}
                 </Button>
               </Link>
-              <ClientFormDialog mode="create" locale={locale} />
+              <ClientFormDialog
+                mode="create"
+                locale={locale}
+                teammates={
+                  teamEnabled
+                    ? members
+                        .filter(
+                          (m) => !m.deactivated_at && m.id !== currentUser?.id,
+                        )
+                        .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))
+                    : []
+                }
+              />
             </>
           )}
         </div>
