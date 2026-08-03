@@ -29,6 +29,10 @@ export type AppUser = {
   // full time.
   job_title?: string | null;
   weekly_hours?: number | null;
+  // Everything this person's firm roles grant (1260), unioned and attached by
+  // getCurrentUser. Not a users column — it is assembled per request so that
+  // capabilitiesFor() can read it straight off an AppUser.
+  role_capabilities?: readonly string[] | null;
 };
 
 /** Active firm members only (not deactivated) — the valid targets for
@@ -74,8 +78,30 @@ export const getCurrentUser = cache(async function _getCurrentUser(): Promise<Ap
     if (synced) return synced as AppUser;
   }
 
-  return row as AppUser;
+  return withRoleCapabilities(row as AppUser);
 });
+
+// Attach what this person's firm roles grant (1260).
+//
+// Done HERE rather than at each call site so every existing can() keeps working
+// untouched: capabilitiesFor() reads role_capabilities off the subject, and the
+// subject is almost always this object. Adding it anywhere else would have
+// meant auditing ~100 call sites for the ones that forgot.
+//
+// One extra query per request, not per call — getCurrentUser is React.cache'd.
+// A failure returns the user WITHOUT role grants rather than throwing: losing a
+// granted capability degrades to the preset, which is the safe direction; a
+// throw would take down every page that asks who you are.
+async function withRoleCapabilities(user: AppUser): Promise<AppUser> {
+  try {
+    const { roleCapabilitiesForUser } = await import("@/lib/db/firm-roles");
+    const caps = await roleCapabilitiesForUser(user.id);
+    return caps.length > 0 ? { ...user, role_capabilities: caps } : user;
+  } catch (err) {
+    console.error("[users] could not read role grants:", err);
+    return user;
+  }
+}
 
 /**
  * All members of the caller's firm. RLS policy `users_select` (migration

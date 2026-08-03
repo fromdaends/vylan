@@ -46,6 +46,7 @@ import {
   leaveTeam,
 } from "@/app/actions/team";
 import { BookCallButton } from "@/components/booking/book-call-button";
+import { RoleBadges } from "./role-badge";
 
 type Seat = { used: number; cap: number | null; atCap: boolean };
 type ActiveMember = {
@@ -65,6 +66,8 @@ type ActiveMember = {
   // Live (not ended) recurring schedules assigned to them (0940). Not shown in
   // the roster row — it exists so removal can hand the schedules over too.
   schedules?: number;
+  // Firm role badges (1260). Shown beside the name on the roster.
+  roles?: { id: string; name: string; color: string }[];
 };
 type DeactivatedMember = {
   id: string;
@@ -132,6 +135,7 @@ export function TeamManager({
   locale,
   unassignedWorkload,
   firmSettings,
+  rolesSection,
   tabs,
   view = "people",
 }: {
@@ -158,6 +162,8 @@ export function TeamManager({
   // Firm-wide settings. Rendered INLINE on the Firm tab (and still available
   // from the ⋯ dialog, so the old muscle memory keeps working).
   firmSettings?: ReactNode;
+  // The firm's roles list, shown inline on the Settings tab (owners only).
+  rolesSection?: ReactNode;
   // Which tab is showing. "people" = the roster, invitations and former members.
   // "firm" = the firm itself: seats, its settings, ownership, leaving.
   // Defaults to "people" so any caller that does not pass it behaves as before.
@@ -466,6 +472,11 @@ export function TeamManager({
         />
       )}
 
+      {/* Roles — made here, handed out on a person's own page. Rendered inline
+          rather than in the firm-settings dialog: a dialog is for a handful of
+          switches, and this is a list you add to over time. */}
+      {view === "settings" && canManage && rolesSection}
+
       {view === "settings" && canManage && <LeaveTeamSection />}
 
       {canManage && (
@@ -685,6 +696,11 @@ function MemberRow({
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {t("role_staff")}
                 </span>
+              )}
+              {/* Firm role badges. After the rank, because the rank is what you
+                  are in the product and these are what you are in the firm. */}
+              {member.roles && member.roles.length > 0 && (
+                <RoleBadges roles={member.roles} />
               )}
               {member.isSelf && (
                 <span className="text-xs text-muted-foreground">{t("you")}</span>

@@ -168,6 +168,16 @@ export type CapabilitySubject = {
   permission_preset?: string | null;
   // users.extra_capabilities — per-person grants on top of the preset.
   extra_capabilities?: readonly string[] | null;
+  // Everything this person's FIRM ROLES grant (1260), already unioned by
+  // getCurrentUser. Not a users column — hence the different naming shape from
+  // the two above, which deliberately mirror theirs.
+  //
+  // ROLES ONLY EVER ADD. There is no way to express "this role takes X away",
+  // and that is a decision rather than an omission: two systems that can both
+  // grant and revoke gives a firm two answers to "why can she do that", which
+  // is the exact mess the one-place-decides work escaped. The preset is the
+  // floor, roles stack on top.
+  role_capabilities?: readonly string[] | null;
 };
 
 // Which preset applies to this person.
@@ -207,9 +217,14 @@ export function capabilitiesFor(
   const preset = resolvePreset(subject);
   const base = PRESET_SETS[preset];
   const grants = subject.extra_capabilities;
-  if (!grants || grants.length === 0) return base;
+  const fromRoles = subject.role_capabilities;
+  const hasGrants = grants && grants.length > 0;
+  const hasRoles = fromRoles && fromRoles.length > 0;
+  if (!hasGrants && !hasRoles) return base;
   const merged = new Set(base);
-  for (const g of grants) {
+  // Per-person grants, then role grants. Union, never subtraction — see the
+  // note on role_capabilities above.
+  for (const g of [...(grants ?? []), ...(fromRoles ?? [])]) {
     // Unknown grant strings are ignored, not thrown on. A grant that stops
     // existing (renamed capability, rolled-back feature) must not break every
     // page the person opens — it just stops granting anything.
