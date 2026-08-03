@@ -91,3 +91,13 @@ export function capabilityRows(
     return { capability, allowed, source, roleNames };
   });
 }
+
+// The i18n key for a capability's plain-English label.
+//
+// next-intl splits a key on "." to walk nested namespaces, so a key literally
+// named `cap_team.manage` resolves as Team → cap_team → manage, misses, and
+// renders the raw key on screen (which is exactly what shipped and had to be
+// fixed). The capability ID keeps its dot; only the KEY flattens it.
+export function capabilityLabelKey(capability: Capability): string {
+  return `cap_${capability.replace(/\./g, "_")}`;
+}

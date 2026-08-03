@@ -45,7 +45,10 @@ import { formatDate } from "@/lib/format";
 import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
 import { MemberRoles } from "@/components/settings/team/member-roles";
 import { RoleBadges } from "@/components/settings/team/role-badge";
-import { capabilityRows } from "@/lib/team/capability-sources";
+import {
+  capabilityRows,
+  capabilityLabelKey,
+} from "@/lib/team/capability-sources";
 import { Check, Minus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -508,7 +511,7 @@ export default async function TeamMemberProfilePage({
                             : "px-4 py-2.5 align-middle text-muted-foreground"
                         }
                       >
-                        {t(`cap_${r.capability}` as Parameters<typeof t>[0])}
+                        {t(capabilityLabelKey(r.capability) as Parameters<typeof t>[0])}
                       </td>
                       <td className="px-4 py-2.5 align-middle text-muted-foreground">
                         {/* Naming the ROLE matters: "a role gives her this" is

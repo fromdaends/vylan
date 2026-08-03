@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { capabilityRows } from "./capability-sources";
+import { capabilityRows, capabilityLabelKey } from "./capability-sources";
+import en from "@/../messages/en.json";
+import fr from "@/../messages/fr.json";
 import { CAPABILITIES, STAFF_CAPABILITIES } from "@/lib/auth/capabilities";
 
 const row = (rows: ReturnType<typeof capabilityRows>, cap: string) =>
@@ -101,6 +103,26 @@ describe("capabilityRows", () => {
         expect(r.allowed).toBe(false);
         expect(r.source).toBe("none");
       }
+    }
+  });
+});
+
+describe("capabilityLabelKey", () => {
+  it("flattens the dot, because next-intl treats it as a namespace separator", () => {
+    // `cap_team.manage` resolves as Team → cap_team → manage, misses, and
+    // renders the raw key on screen. That exact bug shipped once.
+    expect(capabilityLabelKey("team.manage")).toBe("cap_team_manage");
+    expect(capabilityLabelKey("clients.private")).toBe("cap_clients_private");
+  });
+
+  it("has a real translation for EVERY capability, in both locales", () => {
+    // The guard that would have caught the shipped bug before the founder saw
+    // it: a missing or dotted key fails here instead of rendering as text.
+    for (const cap of CAPABILITIES) {
+      const key = capabilityLabelKey(cap);
+      expect(key).not.toContain(".");
+      expect(en.Team, `en is missing ${key}`).toHaveProperty(key);
+      expect(fr.Team, `fr is missing ${key}`).toHaveProperty(key);
     }
   });
 });
