@@ -32,8 +32,46 @@ export type RoleActionResult = {
   ok: boolean;
   /** Set when database update 1260 has not been applied yet. */
   needsMigration?: boolean;
-  error?: "no_session" | "not_allowed" | "bad_name" | "duplicate" | "not_found" | "failed";
+  error?:
+    | "no_session"
+    | "not_allowed"
+    | "bad_name"
+    | "duplicate"
+    | "not_found"
+    | "owner_role"
+    | "failed";
 };
+
+/**
+ * Is this the automatic Owner role (1290)?
+ *
+ * Three writes must refuse it, and each for its own reason rather than a
+ * blanket "it is special":
+ *
+ *   delete           — every firm has exactly one, maintained by trigger, and
+ *                      the trigger would simply put it back
+ *   set capabilities — an owner gets everything from users.role, so a switch
+ *                      here is a control that changes nothing
+ *   set membership   — the trigger owns it; a hand edit would be reverted the
+ *                      next time anybody's rank was touched
+ *
+ * Renaming it and recolouring it are ALLOWED. Those are cosmetic and a firm
+ * that would rather call it "Partner" should be able to.
+ *
+ * Reads the flag through the service-role client so an unapplied 1290 (no
+ * column) answers false and everything behaves exactly as it did before.
+ */
+async function isOwnerRole(roleId: string, firmId: string): Promise<boolean> {
+  const admin = getServiceRoleSupabase();
+  const { data, error } = await admin
+    .from("firm_roles")
+    .select("is_owner_role")
+    .eq("id", roleId)
+    .eq("firm_id", firmId)
+    .maybeSingle();
+  if (error) return false;
+  return (data as { is_owner_role?: boolean } | null)?.is_owner_role === true;
+}
 
 async function guard() {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
@@ -119,6 +157,9 @@ export async function deleteRoleAction(input: {
 }): Promise<RoleActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
+  if (await isOwnerRole(input.roleId, g.firm.id)) {
+    return { ok: false, error: "owner_role" };
+  }
 
   try {
     // Assignments go with it (on delete cascade), so nobody is left wearing a
@@ -149,6 +190,9 @@ export async function setRoleCapabilitiesAction(input: {
 }): Promise<RoleActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
+  if (await isOwnerRole(input.roleId, g.firm.id)) {
+    return { ok: false, error: "owner_role" };
+  }
 
   // Narrowed to the VETTED list, not merely to "is a capability". The browser
   // sends this, and the difference matters: team.manage is a real capability
@@ -190,6 +234,9 @@ export async function setUserRoleAction(input: {
 }): Promise<RoleActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
+  if (await isOwnerRole(input.roleId, g.firm.id)) {
+    return { ok: false, error: "owner_role" };
+  }
 
   // The target must be in the caller's own firm. The service-role write below
   // does not enforce that, which is exactly why it is checked here.

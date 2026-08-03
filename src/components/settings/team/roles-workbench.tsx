@@ -30,7 +30,7 @@ import {
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, UserPlus, X } from "lucide-react";
+import { Plus, Search, ShieldCheck, Trash2, UserPlus, X } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,16 @@ type Role = {
   color: string;
   capabilities: string[];
   memberIds: string[];
+  /**
+   * The automatic Owner role (1290). Every firm has exactly one, every owner
+   * wears it, and a trigger — not this screen — keeps that true.
+   *
+   * The editor therefore drops three things for it: the delete button, the
+   * permission switches, and the add/remove controls on Members. Not disabled
+   * versions of them — GONE. A greyed switch invites you to wonder why you
+   * cannot flip it; absent, with one line saying what decides it, does not.
+   */
+  isOwnerRole?: boolean;
 };
 type Person = { id: string; name: string; email: string };
 type Tab = "display" | "permissions" | "members";
@@ -112,7 +122,9 @@ export function RolesWorkbench({
           ? t("roles_duplicate")
           : res.error === "bad_name"
             ? t("roles_bad_name")
-            : t("roles_failed"),
+            : res.error === "owner_role"
+              ? t("roles_owner_locked")
+              : t("roles_failed"),
     );
     return false;
   }
@@ -227,6 +239,9 @@ export function RolesWorkbench({
                 <RoleBadge name={selected.name} color={selected.color} />
               </h2>
             </div>
+            {/* No delete for the automatic Owner role: every firm has exactly
+                one, and the trigger would put it straight back. */}
+            {!selected.isOwnerRole && (
             <button
               type="button"
               onClick={() =>
@@ -240,6 +255,7 @@ export function RolesWorkbench({
             >
               <Trash2 className="size-4" aria-hidden />
             </button>
+            )}
             <nav
               className="-mb-px flex w-full gap-1"
               aria-label={t("roles_title")}
@@ -286,15 +302,26 @@ export function RolesWorkbench({
                 onSaved={() => startTransition(() => router.refresh())}
               />
             )}
-            {tab === "permissions" && (
+            {tab === "permissions" &&
+              (selected.isOwnerRole ? (
+                <OwnerRoleNote text={t("roles_owner_permissions")} />
+              ) : (
               <PermissionsTab
                 key={selected.id}
                 role={selected}
                 report={report}
                 onSaved={() => startTransition(() => router.refresh())}
               />
-            )}
-            {tab === "members" && (
+              ))}
+            {tab === "members" &&
+              (selected.isOwnerRole ? (
+                <OwnerRoleMembers
+                  people={people.filter((p) =>
+                    selected.memberIds.includes(p.id),
+                  )}
+                  note={t("roles_owner_members")}
+                />
+              ) : (
               <MembersTab
                 key={selected.id}
                 role={selected}
@@ -302,7 +329,7 @@ export function RolesWorkbench({
                 report={report}
                 onSaved={() => startTransition(() => router.refresh())}
               />
-            )}
+              ))}
           </div>
         </section>
       ) : (
@@ -765,6 +792,48 @@ function MembersTab({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ── The automatic Owner role ────────────────────────────────────────────────
+//
+// Two read-only panels rather than disabled versions of the editors. A greyed
+// switch invites you to wonder why you cannot flip it; a sentence saying what
+// decides this does not.
+
+function OwnerRoleNote({ text }: { text: string }) {
+  return (
+    <div className="flex max-w-2xl items-start gap-3 rounded-lg border border-border/60 p-4">
+      <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <p className="text-sm leading-relaxed text-muted-foreground">{text}</p>
+    </div>
+  );
+}
+
+function OwnerRoleMembers({
+  people,
+  note,
+}: {
+  people: { id: string; name: string; email: string }[];
+  note: string;
+}) {
+  return (
+    <div className="max-w-2xl space-y-4">
+      <p className="text-xs leading-relaxed text-muted-foreground">{note}</p>
+      <ul className="divide-y divide-border/60">
+        {people.map((p) => (
+          <li key={p.id} className="flex items-center gap-3 py-2.5">
+            <AvatarInitials name={p.name} size={30} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{p.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {p.email}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

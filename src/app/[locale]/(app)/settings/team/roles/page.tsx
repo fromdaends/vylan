@@ -90,6 +90,7 @@ export default async function FirmRolesPage({
           name: r.name,
           color: r.color,
           capabilities: r.capabilities,
+          isOwnerRole: r.isOwnerRole,
           memberIds: memberIdsByRole.get(r.id) ?? [],
         }))}
         people={members
