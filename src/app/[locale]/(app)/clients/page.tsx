@@ -62,9 +62,16 @@ export default async function ClientsPage({
     : "recent";
   const activeOnly = sp.active === "1";
 
-  const [clientsRaw, engagements, firm, currentUser, members, signals] =
+  // ONE clients query for the whole page: the relationships name map below
+  // needs every client (archived included), and the table's type/archived view
+  // is a pure subset of that — so fetch the superset once and filter in
+  // memory, instead of the two overlapping table scans this page used to run.
+  // listEngagements() here and the one inside loadEngagementSignals("active")
+  // are the identical query — the request-level cache in lib/db/engagements
+  // collapses them to one.
+  const [allClients, engagements, firm, currentUser, members, signals] =
     await Promise.all([
-      listClients({ type, includeArchived }),
+      listClients({ includeArchived: true }),
       listEngagements(),
       getCurrentFirm(),
       getCurrentUser(),
@@ -73,6 +80,10 @@ export default async function ClientsPage({
       // Overview uses, so a "Ready to review" engagement reads ready here too.
       loadEngagementSignals("active"),
     ]);
+  const clientsRaw = allClients.filter(
+    (c) =>
+      (includeArchived || !c.archived_at) && (type === "all" || c.type === type),
+  );
   const derivedStatusById = new Map(
     signals.map((s) => [
       s.engagement.id,
@@ -150,16 +161,14 @@ export default async function ClientsPage({
 
   const t = await getTranslations("Clients");
 
-  // Relationships indicator (spec §3): one query for the firm's live links,
-  // one for names (archived included so a link to an archived client still
-  // reads as a name, and unaffected by this page's type filter). Turned into
-  // a per-client {count, one-line summary} map for the row badge + tooltip.
-  const [firmRelationships, allClientsForNames] = await Promise.all([
-    listLiveRelationshipsForFirm(),
-    listClients({ includeArchived: true }),
-  ]);
+  // Relationships indicator (spec §3): one query for the firm's live links;
+  // the name map reuses the superset fetched above (archived included so a
+  // link to an archived client still reads as a name, and unaffected by this
+  // page's type filter). Turned into a per-client {count, one-line summary}
+  // map for the row badge + tooltip.
+  const firmRelationships = await listLiveRelationshipsForFirm();
   const relNameById = new Map(
-    allClientsForNames.map((c) => [c.id, c.display_name]),
+    allClients.map((c) => [c.id, c.display_name]),
   );
   const relScopeSummary = (scopes: readonly string[] | null) =>
     (scopes ?? []).map((s) => t(`rel_scope_${s}`)).join(", ");
