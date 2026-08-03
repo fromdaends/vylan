@@ -43,6 +43,7 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { Plus, FileText, Lock } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -772,29 +773,6 @@ export default async function ClientDetailPage({
 // is its own bordered card with a header band, which is what makes a dense
 // profile scannable instead of a wall. `flush` drops the body padding for
 // panels whose content is a table that should meet the edges.
-function Panel({
-  title,
-  action,
-  flush = false,
-  children,
-}: {
-  title: string;
-  action?: React.ReactNode;
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
-        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-          {title}
-        </h2>
-        {action}
-      </div>
-      <div className={flush ? "" : "p-4"}>{children}</div>
-    </section>
-  );
-}
 
 function DetailRow({
   label,

@@ -151,6 +151,7 @@ export const loadEngagementWorklist = cache(
         id: e.id,
         title: e.title,
         clientName: clientsById.get(e.client_id)?.display_name ?? "—",
+        clientId: e.client_id,
         status: e.status,
         derivedStatus: deriveEngagementStatus(e.status, a),
         flaggedFilesCount: action.flaggedFiles,
