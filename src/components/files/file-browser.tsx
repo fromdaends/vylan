@@ -163,9 +163,11 @@ export async function FileBrowser({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
-      {/* The surface renders Drive's selection strip ABOVE the header the
-          moment anything — file or folder — is selected. */}
+    /* `relative` because the selection strip OVERLAYS the column header
+       (absolute, same height) instead of inserting above it. Inserting
+       pushed every row down by the bar's height on the first click — which
+       moved the row out from under the second click of a double-click. */
+    <div className="relative overflow-hidden rounded-lg border border-border/70 bg-card">
       <RowsSurface locale={locale} folders={barFolders}>
       <BrowserHeader t={t} />
       <ul className="divide-y divide-border/50">
@@ -389,7 +391,9 @@ function Cell({
 
 function BrowserHeader({ t }: { t: (key: string) => string }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    // Fixed h-11 — the selection strip overlays this row at the same height,
+    // so the two must match exactly or rows shift when the strip appears.
+    <div className="flex h-11 items-center gap-3 border-b border-border/60 bg-muted/30 px-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
       <span className="min-w-0 flex-1">{t("col_name")}</span>
       <span className="hidden w-36 shrink-0 lg:block">{t("col_type")}</span>
       <span className="hidden w-40 shrink-0 xl:block">{t("col_source")}</span>

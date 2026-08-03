@@ -232,9 +232,12 @@ export function BulkBar({
 
   return (
     <>
-      {/* Full-width, on top of the list, X on the left — Drive's strip. The
-          quick slide-in matches the menus' new open animation. */}
-      <div className="flex min-h-11 flex-wrap items-center gap-1 border-b border-border/60 bg-card px-2 py-1 duration-150 animate-in fade-in-0 slide-in-from-top-1">
+      {/* Full-width, X on the left — Drive's strip. It OVERLAYS the column
+          header (absolute, same h-11) rather than inserting above it: adding
+          height pushed the rows down mid-double-click, so the second click
+          landed on the wrong row. Opaque bg-card so the header underneath
+          never shows through; overflow-x keeps one row on narrow screens. */}
+      <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center gap-1 overflow-x-auto border-b border-border/60 bg-card px-2 duration-150 animate-in fade-in-0 slide-in-from-top-1">
         <Button
           variant="ghost"
           size="icon-sm"
