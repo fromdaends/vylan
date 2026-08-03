@@ -223,6 +223,74 @@ export default async function ClientDetailPage({
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
   const castIds = new Set(cast.map((m) => m.userId));
   const castCandidates = assignableMembers.filter((u) => !castIds.has(u.id));
+
+  // ── Organizers tab: everyone with access, WHY, and their live load ────────
+  //
+  // One row per person, merged from the three separate ways somebody ends up
+  // able to see this client — they own the firm, they're the client's assigned
+  // owner, or they were added to its team. Merged rather than listed three
+  // times, because the question is "who works on this", and a person who is two
+  // of those things is still one person.
+  //
+  // The live count reads the active worklist — React.cache'd per scope, so on
+  // any request that also drew the Engagements tab this is free, and on this
+  // tab it is one query rather than one per person.
+  const organizerWorklist =
+    teamEnabled && tab === "organizers"
+      ? await loadEngagementWorklist("active")
+      : [];
+  const organizerRows = (() => {
+    if (!(teamEnabled && tab === "organizers")) return [];
+    const liveByUser = new Map<string, number>();
+    for (const r of selectForClient(organizerWorklist, id)) {
+      if (r.status === "complete" || r.status === "cancelled") continue;
+      if (!r.assigneeUserId) continue;
+      liveByUser.set(r.assigneeUserId, (liveByUser.get(r.assigneeUserId) ?? 0) + 1);
+    }
+    const ownerIds = new Set(firmOwners.map((o) => o.id));
+    const byId = new Map<
+      string,
+      {
+        userId: string;
+        name: string;
+        position: string | null;
+        isOwner: boolean;
+        isAssignee: boolean;
+        isMember: boolean;
+        liveCount: number;
+      }
+    >();
+    const put = (userId: string, name: string) => {
+      const existing = byId.get(userId);
+      if (existing) return existing;
+      const row = {
+        userId,
+        name,
+        position: null as string | null,
+        isOwner: ownerIds.has(userId),
+        isAssignee: client.assigned_user_id === userId,
+        isMember: false,
+        liveCount: liveByUser.get(userId) ?? 0,
+      };
+      byId.set(userId, row);
+      return row;
+    };
+    for (const o of firmOwners) put(o.id, o.name);
+    if (owner) put(owner.id, userDisplayLabel(owner));
+    for (const m of cast) {
+      const row = put(m.userId, m.name);
+      row.isMember = true;
+      // The role somebody was given ON THIS CLIENT ("Preparer", "Reviewer"),
+      // which is more specific than their firm-wide job title and is the thing
+      // this tab is actually about.
+      row.position = m.position ?? row.position;
+    }
+    // Most loaded first — the point of the column is spotting who is carrying
+    // this client. Ties fall back to name so the order is stable between loads.
+    return [...byId.values()].sort(
+      (a, b) => b.liveCount - a.liveCount || a.name.localeCompare(b.name),
+    );
+  })();
   // ── Money. OVERVIEW AND ENGAGEMENTS ONLY. ──────────────────────────────────
   //
   // This block used to run on every render of this route, which after the tabs
@@ -542,8 +610,21 @@ export default async function ClientDetailPage({
       />
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
-      {/* ── Left rail: reference, and who can see this ───────────────────
+      {/* Two columns on the OVERVIEW only. Every other tab is ONE full-width
+          column.
+          The rail used to be reserved on every tab, so opening Organizers gave
+          you a narrow card on the left and a dead gutter filling the other two
+          thirds of the screen — the exact "you just moved the little block"
+          shape the founder rejected, one level up. A tab whose content is a
+          table has no rail to put beside it. */}
+      <div
+        className={
+          tab === "overview"
+            ? "grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start"
+            : ""
+        }
+      >
+      {/* ── Left rail (overview only): reference ─────────────────────────
           It used to hold five panels including the two most action-heavy ones
           on the page (connect QuickBooks, set a portal PIN) under a comment
           claiming it was "reference, not action". That is what made the page
@@ -552,25 +633,8 @@ export default async function ClientDetailPage({
           two boxes of it stacked was arbitrary), and the action panels moved
           across to the work. Sticky, so a long engagements table no longer
           scrolls the rail away into whitespace. */}
-      <div className="space-y-4 lg:sticky lg:top-6">
-      {/* Who can see this client — the whole Team tab. It used to sit first in
-          the rail on every view; as its own tab it stops competing with the
-          work for the top of the page, and gets room to breathe when you do
-          want it. */}
-      {teamEnabled && tab === "organizers" && (
-        <Panel title={t("access_title")}>
-          <ClientAccess
-            clientId={id}
-            members={cast}
-            owners={firmOwners}
-            assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
-            candidates={castCandidates}
-            canEdit={canManageClients}
-          />
-        </Panel>
-      )}
-
       {tab === "overview" && (
+      <div className="space-y-4 lg:sticky lg:top-6">
       <Panel title={t("details_title")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
@@ -615,21 +679,19 @@ export default async function ClientDetailPage({
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
       </Panel>
-      )}
 
       {/* Relationships — the entity tree (spec §2). Between About and
           Bookkeeping, always rendered (the empty state keeps the feature
           discoverable). Renders its own Panel-identical section because the
-          [+], kebabs and View-all need client state. */}
-      {tab === "overview" && (
-        <RelationshipsCard
-          clientId={client.id}
-          clientType={client.type}
-          rows={relationshipRows}
-          candidates={pickerCandidates}
-          canManage={canManageClients && !client.archived_at}
-        />
-      )}
+          [+], kebabs and View-all need client state.
+          No tab check of its own: the whole rail is already overview-only. */}
+      <RelationshipsCard
+        clientId={client.id}
+        clientType={client.type}
+        rows={relationshipRows}
+        candidates={pickerCandidates}
+        canManage={canManageClients && !client.archived_at}
+      />
 
       {/* Portal access — the optional 6-digit code that gates this client's
           portal link. Off for everyone by default; the frictionless link stays
@@ -641,9 +703,105 @@ export default async function ClientDetailPage({
 
 
       </div>
+      )}
 
       {/* ── Main column: the work ────────────────────────────────────────── */}
       <div className="space-y-6">
+
+      {/* ── ORGANIZERS TAB: who works on this client ──────────────────────
+          Two panels, full width. "Who can see this" is the control (add
+          someone, give them a role); the table beside it is the ANSWER — every
+          person with access, why they have it, and how much of this client's
+          live work is actually on them. The tab used to be the access card
+          alone, floating in a rail with two thirds of the screen empty. */}
+      {teamEnabled && tab === "organizers" && (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+          <Panel title={t("access_title")}>
+            <ClientAccess
+              clientId={id}
+              members={cast}
+              owners={firmOwners}
+              assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
+              candidates={castCandidates}
+              canEdit={canManageClients}
+            />
+          </Panel>
+
+          <Panel title={t("organizers_workload_title")} flush>
+            {organizerRows.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                {t("organizers_workload_empty")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">{t("organizers_col_person")}</th>
+                      <th className="px-4 py-2 font-medium">{t("organizers_col_why")}</th>
+                      <th className="px-4 py-2 text-right font-medium">{t("organizers_col_live")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {organizerRows.map((r) => (
+                      <tr
+                        key={r.userId}
+                        className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
+                      >
+                        <td className="px-4 py-3 align-middle">
+                          <Link
+                            href={`/settings/team/${r.userId}`}
+                            className="flex items-center gap-2.5 font-medium hover:underline"
+                          >
+                            <AvatarInitials name={r.name} size={26} />
+                            <span className="truncate">{r.name}</span>
+                          </Link>
+                          {r.position && (
+                            <span className="ml-[2.3rem] block text-xs text-muted-foreground">
+                              {r.position}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          {/* WHY they can see this client, not just that they
+                              can. An owner sees every client whether or not
+                              anyone added them, and a panel that doesn't say so
+                              is simply wrong about who is looking. */}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {r.isOwner && (
+                              <Badge variant="secondary" className="font-normal">
+                                {t("organizers_why_owner")}
+                              </Badge>
+                            )}
+                            {r.isAssignee && (
+                              <Badge variant="secondary" className="font-normal">
+                                {t("organizers_why_assignee")}
+                              </Badge>
+                            )}
+                            {r.isMember && (
+                              <Badge variant="outline" className="font-normal">
+                                {t("organizers_why_member")}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right align-middle tabular-nums">
+                          {r.liveCount > 0 ? (
+                            r.liveCount
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
       {/* Canopy's "Active Tasks (4)" panel: a titled box whose body is a real
           TABLE with column headers, not a bare list of links. The columns are
           the questions you actually ask of a client's work — where is it, what

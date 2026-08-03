@@ -1887,7 +1887,15 @@
     "note_error_not_ready": "Notes will be available in a moment.",
     "note_error_forbidden": "You can only delete your own notes.",
     "note_error_no_session": "Your session expired. Refresh the page and try again.",
-    "note_error_failed": "That didn't save. Try again."
+    "note_error_failed": "That didn't save. Try again.",
+    "organizers_workload_title": "Who works on this client",
+    "organizers_workload_empty": "Nobody has been added to this client yet.",
+    "organizers_col_person": "Person",
+    "organizers_col_why": "Access",
+    "organizers_col_live": "Live work",
+    "organizers_why_owner": "Firm owner",
+    "organizers_why_assignee": "Client owner",
+    "organizers_why_member": "On the team"
   },
   "Engagements": {
     "add_comment": "Add a comment",
