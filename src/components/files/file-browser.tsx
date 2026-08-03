@@ -187,7 +187,7 @@ export async function FileBrowser({
                   <Folder
                     // Filled, in the brand blue: the single strongest signal
                     // that a row is a container rather than a document.
-                    className="size-[18px] shrink-0 fill-accent/25 text-accent"
+                    className="size-5 shrink-0 fill-accent/25 text-accent"
                     aria-hidden
                   />
                   <span className="truncate text-sm">{entry.name}</span>
@@ -235,7 +235,7 @@ export async function FileBrowser({
                     const Icon = iconForMime(entry.mimeType);
                     return (
                       <Icon
-                        className="size-[18px] shrink-0 text-muted-foreground"
+                        className="size-5 shrink-0 text-muted-foreground"
                         aria-hidden
                       />
                     );
@@ -309,8 +309,11 @@ export async function FileBrowser({
 
 // Shared row geometry, so the header and every row line up exactly. Drifting
 // these apart is the classic way a hand-built table starts looking broken.
+// py-3 + the size-5 icons below = ~52px rows, Drive's list density. The
+// founder's review of the old rows: too small — "should feel like a file
+// manager, not a data grid".
 const ROW_CLASS =
-  "flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 // Each metadata column earns its place only once the row is wide enough to
 // still show a NAME afterwards.

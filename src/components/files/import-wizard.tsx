@@ -53,8 +53,14 @@ type Mapping = Record<string, string>; // folder -> clientId | "skip"
 
 export function ImportWizard({
   clients,
+  externalOpen,
+  onExternalOpenChange,
 }: {
   clients: { id: string; name: string }[];
+  /** Drive-style "+ New" menu drives the wizard from outside; when these are
+   * provided the wizard renders NO button of its own. */
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
@@ -210,8 +216,17 @@ export function ImportWizard({
     router.refresh();
   }
 
+  const controlled = externalOpen !== undefined;
+  const isOpen = controlled ? externalOpen : open;
+  const setOpenBoth = (o: boolean) => {
+    if (controlled) onExternalOpenChange?.(o);
+    else setOpen(o);
+    if (o) reset();
+  };
+
   return (
     <>
+      {!controlled && (
       <Button
         variant="outline"
         size="sm"
@@ -224,14 +239,16 @@ export function ImportWizard({
         <FolderUp className="size-4" aria-hidden />
         {t("import_button")}
       </Button>
+      )}
 
       <Dialog
-        open={open}
+        open={isOpen}
         onOpenChange={(o) => {
           // Never let a click-away abandon an import mid-flight: the files live
           // in this tab, so closing really does stop it.
           if (!o && busy) return;
-          setOpen(o);
+          if (controlled) onExternalOpenChange?.(o);
+          else setOpen(o);
           if (!o) reset();
         }}
       >

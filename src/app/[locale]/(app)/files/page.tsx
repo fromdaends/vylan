@@ -11,7 +11,7 @@ import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
 import { BulkBar } from "@/components/files/bulk-bar";
-import { ImportWizard } from "@/components/files/import-wizard";
+import { NewMenu } from "@/components/files/new-menu";
 import {
   FolderRowMenu,
   NewFolderButton,
@@ -341,7 +341,14 @@ async function BrowseTab({
         docTypes={docTypeOptions}
           scope={clientId || showFiles ? "documents" : "folders"}
         />
-        <ImportWizard clients={importClients} />
+        {/* Drive's one entry point for putting things in (§7): Import, and
+            New folder when inside a client. Replaces the standalone Import
+            button. */}
+        <NewMenu
+          clients={importClients}
+          clientId={clientId}
+          folderParentId={folderId}
+        />
       </div>
 
       {/* Selection only wraps the FILE list. Folder rows are navigation, and a

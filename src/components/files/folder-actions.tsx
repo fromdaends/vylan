@@ -41,9 +41,15 @@ function errorMessage(
 export function NewFolderButton({
   clientId,
   parentId,
+  externalOpen,
+  onExternalOpenChange,
 }: {
   clientId: string;
   parentId: string | null;
+  /** The "+ New" menu drives this dialog from outside; when provided, the
+   * component renders no button of its own. */
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
@@ -67,6 +73,7 @@ export function NewFolderButton({
 
   return (
     <>
+      {externalOpen === undefined && (
       <Button
         variant="outline"
         size="sm"
@@ -79,7 +86,15 @@ export function NewFolderButton({
         <FolderPlus className="size-4" aria-hidden />
         {t("folder_new")}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      )}
+      <Dialog
+        open={externalOpen ?? open}
+        onOpenChange={(o) => {
+          if (externalOpen === undefined) setOpen(o);
+          else onExternalOpenChange?.(o);
+          if (o) setName("");
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t("folder_new_title")}</DialogTitle>
