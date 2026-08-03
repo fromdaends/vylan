@@ -401,11 +401,9 @@ export default async function ClientDetailPage({
         <Panel title={t("access_title")}>
           <ClientAccess
             clientId={id}
-            isPrivate={client.is_private ?? false}
             members={cast}
             owners={firmOwners}
             assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
-            firmSize={assignableMembers.length}
             candidates={castCandidates}
             canEdit={canManageClients}
           />

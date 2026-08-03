@@ -1749,7 +1749,7 @@
     "access_reason_owner": "propriétaire",
     "access_reason_assigned": "assigné",
     "access_reason_member": "dans l'équipe",
-    "access_everyone": "Tout le monde dans votre cabinet ({count} personnes), car ce client n'est pas privé. Rendez-le privé pour le limiter aux personnes ci-dessus.",
+    "access_everyone": "Personne d'autre dans votre cabinet ne peut voir ce client. Ajoutez quelqu'un ci-dessus pour lui donner accès.",
     "access_only_you": "Vous seul pouvez voir ce client. Ajoutez quelqu'un ci-dessus pour qu'il puisse y travailler.",
     "team_position": "Ce qu'il fait sur ce client",
     "team_position_add": "Ajouter un rôle",
