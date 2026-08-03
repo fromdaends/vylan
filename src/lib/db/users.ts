@@ -33,6 +33,15 @@ export type AppUser = {
   // getCurrentUser. Not a users column — it is assembled per request so that
   // capabilitiesFor() can read it straight off an AppUser.
   role_capabilities?: readonly string[] | null;
+  // OUTSIDE COLLABORATOR (migration 1300). A contractor scoped to the clients
+  // they are on: no firm roster, no 'listed' clients, no seat, and an EMPTY
+  // capability floor. Still role = "staff" — users.role keeps its two values
+  // forever, because RLS is written against them.
+  //
+  // Optional like the rest: undefined until 1300 is applied, and every reader
+  // treats undefined as false. The flag only ever NARROWS, so a missing column
+  // leaves everybody exactly as they were.
+  is_external?: boolean | null;
 };
 
 /** Active firm members only (not deactivated) — the valid targets for

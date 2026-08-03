@@ -15,6 +15,7 @@ import {
   Lock,
   Users,
   LogOut,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -67,6 +68,9 @@ type ActiveMember = {
   schedules?: number;
   // Firm role badges (1260). Shown beside the name on the roster.
   roles?: { id: string; name: string; color: string }[];
+  // OUTSIDE COLLABORATOR (1300) — scoped to the clients they are on, and not
+  // counted against the firm's seats.
+  isExternal?: boolean;
 };
 type DeactivatedMember = {
   id: string;
@@ -443,6 +447,7 @@ export function TeamManager({
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           defaultLocale={locale}
+          canInviteExternal={canManage}
         />
       )}
     </section>
@@ -650,6 +655,14 @@ function MemberRow({
                     className="size-1.5 shrink-0 rounded-full bg-accent"
                   />
                   {t("role_owner")}
+                </span>
+              ) : member.isExternal ? (
+                // Named rather than left as an ordinary member: an outsider
+                // sees a different firm from everyone else on this list, and
+                // a roster that does not say so is a roster that misleads.
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <ExternalLink className="size-3" aria-hidden />
+                  {t("role_external")}
                 </span>
               ) : (
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -934,10 +947,13 @@ function InviteModal({
   open,
   onOpenChange,
   defaultLocale,
+  canInviteExternal = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultLocale: "fr" | "en";
+  /** Owner-only (1300): an outsider is a privacy and a billing decision. */
+  canInviteExternal?: boolean;
 }) {
   const t = useTranslations("Team");
   const errorMessage = useErrorMessage();
@@ -945,17 +961,20 @@ function InviteModal({
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [inviteLocale, setInviteLocale] = useState<"fr" | "en">(defaultLocale);
+  const [external, setExternal] = useState(false);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const fd = new FormData();
     fd.set("email", email);
     fd.set("locale", inviteLocale);
+    if (external) fd.set("external", "on");
     startTransition(async () => {
       const res = await createInvite(fd);
       if (res.ok) {
         toast.success(res.emailSent ? t("invite_sent") : t("invite_sent_no_email"));
         setEmail("");
+        setExternal(false);
         onOpenChange(false);
         router.refresh();
       } else {
@@ -1008,6 +1027,27 @@ function InviteModal({
               ))}
             </div>
           </div>
+          {/* Colleague or outsider, decided HERE rather than flipped after the
+              fact — somebody who is briefly a full member is somebody who
+              briefly saw the whole roster. */}
+          {canInviteExternal && (
+            <label className="flex items-start gap-3 rounded-lg border border-border/60 p-3">
+              <input
+                type="checkbox"
+                checked={external}
+                onChange={(e) => setExternal(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">
+                  {t("invite_external_label")}
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                  {t("invite_external_hint")}
+                </span>
+              </span>
+            </label>
+          )}
           <DialogFooter>
             <Button
               type="button"

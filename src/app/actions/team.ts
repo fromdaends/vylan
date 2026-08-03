@@ -149,18 +149,42 @@ export async function createInvite(
     firm.locale_default ?? user.locale,
   );
 
-  const { data: inserted, error: insertErr } = await admin
+  // Invited AS an outsider or as a colleague, decided here rather than flipped
+  // afterwards — a contractor who is briefly a full member is a contractor who
+  // briefly saw the whole roster. Owner-only: an outsider is a privacy and a
+  // billing decision, and members who may invite (1200) may only invite peers.
+  const asExternal = user.role === "owner" && formData.get("external") === "on";
+
+  const insertRow: Record<string, unknown> = {
+    firm_id: firm.id,
+    email,
+    role: "staff",
+    token_hash: hashInviteToken(rawToken),
+    expires_at: inviteExpiryISO(),
+    invited_by_user_id: user.id,
+  };
+  if (asExternal) insertRow.is_external = true;
+
+  let { data: inserted, error: insertErr } = await admin
     .from("firm_invites")
-    .insert({
-      firm_id: firm.id,
-      email,
-      role: "staff",
-      token_hash: hashInviteToken(rawToken),
-      expires_at: inviteExpiryISO(),
-      invited_by_user_id: user.id,
-    })
+    .insert(insertRow)
     .select("id")
     .single();
+  // 1300 not applied yet: firm_invites has no is_external column. Send the
+  // invite anyway rather than refusing it — they arrive as an ordinary member,
+  // which is recoverable, where a failed invite is just a dead end.
+  if (
+    insertErr &&
+    asExternal &&
+    (insertErr.code === "42703" || insertErr.code === "PGRST204")
+  ) {
+    delete insertRow.is_external;
+    ({ data: inserted, error: insertErr } = await admin
+      .from("firm_invites")
+      .insert(insertRow)
+      .select("id")
+      .single());
+  }
   if (insertErr || !inserted) {
     console.error("[team] createInvite insert failed:", insertErr?.message);
     return { ok: false, error: "insert_failed" };
@@ -369,7 +393,7 @@ export async function acceptInvite(
   // Look up by token hash; re-run the same access decision the page used.
   const { data: invite } = await admin
     .from("firm_invites")
-    .select("id, firm_id, email, accepted_at, revoked_at, expires_at")
+    .select("*")
     .eq("token_hash", hashInviteToken(token))
     .maybeSingle();
   const usage = invite ? await getFirmSeatUsage(invite.firm_id) : null;
@@ -410,15 +434,29 @@ export async function acceptInvite(
   }
   const newUserId = created.user.id;
 
-  // Insert the public.users profile (staff, in the invite's firm).
-  const { error: profileErr } = await admin.from("users").insert({
+  // Insert the public.users profile (staff, in the invite's firm). An invite
+  // marked external (1300) creates an OUTSIDE COLLABORATOR — set at creation,
+  // so there is no moment where they are a full member.
+  const profileRow: Record<string, unknown> = {
     id: newUserId,
     firm_id: invite.firm_id,
     email: invite.email,
     name,
     role: "staff",
     locale,
-  });
+  };
+  if (invite.is_external === true) profileRow.is_external = true;
+  let { error: profileErr } = await admin.from("users").insert(profileRow);
+  // 1300 not applied: create the account anyway. Being let in as an ordinary
+  // member is fixable in one click; being unable to accept an invite at all is
+  // the person sitting outside the door.
+  if (
+    profileErr &&
+    (profileErr.code === "42703" || profileErr.code === "PGRST204")
+  ) {
+    delete profileRow.is_external;
+    ({ error: profileErr } = await admin.from("users").insert(profileRow));
+  }
   if (profileErr) {
     // Orphan recovery: roll the auth user back so a retry can succeed.
     console.error(
@@ -519,7 +557,7 @@ export async function switchFirmViaInvite(
   // Look up by token hash; re-run the same access decision the page used.
   const { data: invite } = await admin
     .from("firm_invites")
-    .select("id, firm_id, email, accepted_at, revoked_at, expires_at")
+    .select("*")
     .eq("token_hash", hashInviteToken(token))
     .maybeSingle();
   const usage = invite ? await getFirmSeatUsage(invite.firm_id) : null;
@@ -577,11 +615,23 @@ export async function switchFirmViaInvite(
   if (!guard.ok) return { error: guard.reason };
 
   const oldFirmId = existing.firm_id;
-  // Move the account into the invite's firm as staff.
-  const { error: moveErr } = await admin
+  // Move the account into the invite's firm as staff. is_external is written
+  // EITHER WAY, never left alone: an account that was an outsider at its last
+  // firm must not stay one here, and vice versa.
+  let { error: moveErr } = await admin
     .from("users")
-    .update({ firm_id: invite.firm_id, role: "staff" })
+    .update({
+      firm_id: invite.firm_id,
+      role: "staff",
+      is_external: invite.is_external === true,
+    })
     .eq("id", existing.id);
+  if (moveErr && (moveErr.code === "42703" || moveErr.code === "PGRST204")) {
+    ({ error: moveErr } = await admin
+      .from("users")
+      .update({ firm_id: invite.firm_id, role: "staff" })
+      .eq("id", existing.id));
+  }
   if (moveErr) {
     console.error("[team] switchFirmViaInvite move failed:", moveErr.message);
     return { error: "switch_failed" };
