@@ -44,13 +44,18 @@ export function NewMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" className="gap-1.5">
-            <Plus className="size-4" aria-hidden />
+          {/* Drive-sized: the one button that puts things INTO the system is
+              the biggest control on the screen, not another toolbar chip. */}
+          <Button className="h-11 gap-2 rounded-xl px-5 text-[15px] shadow-md">
+            <Plus className="size-5" aria-hidden />
             {t("new_button")}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
+          // origin-top-left makes the open animation GROW out of the button's
+          // corner, the way Drive's New menu does, instead of fading in place.
+          className="min-w-56 origin-top-left p-1.5 shadow-xl duration-150"
           onCloseAutoFocus={(e) => {
             if (pendingDialog.current) {
               e.preventDefault();
@@ -60,22 +65,22 @@ export function NewMenu({
           }}
         >
           <DropdownMenuItem
-            className="gap-2"
+            className="gap-3 rounded-lg px-3 py-2.5 text-[15px]"
             onSelect={() => {
               pendingDialog.current = "import";
             }}
           >
-            <FolderUp className="size-4" aria-hidden />
+            <FolderUp className="size-5 text-muted-foreground" aria-hidden />
             {t("import_button")}
           </DropdownMenuItem>
           {clientId && (
             <DropdownMenuItem
-              className="gap-2"
+              className="gap-3 rounded-lg px-3 py-2.5 text-[15px]"
               onSelect={() => {
                 pendingDialog.current = "folder";
               }}
             >
-              <FolderPlus className="size-4" aria-hidden />
+              <FolderPlus className="size-5 text-muted-foreground" aria-hidden />
               {t("folder_new")}
             </DropdownMenuItem>
           )}
