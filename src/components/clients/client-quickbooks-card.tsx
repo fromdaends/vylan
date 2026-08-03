@@ -14,7 +14,7 @@ import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 //   - Connected: green "Connected to {company}" + owner disconnect.
 //   - Needs reconnect: amber, owner can reconnect (re-auth this client) or disconnect.
 //   - Not connected + non-owner: nothing (the page hides the section for staff).
-// The page gates the whole section on `connected || (isOwner && configured)`, so
+// The page gates the whole section on `connected || (canManage && configured)`, so
 // this component is only mounted when there's something to show.
 export type ClientQuickbooksStatus = {
   configured: boolean;
@@ -36,12 +36,12 @@ export function ClientQuickbooksCard({
   clientId,
   clientName,
   status,
-  isOwner,
+  canManage,
 }: {
   clientId: string;
   clientName: string;
   status: ClientQuickbooksStatus;
-  isOwner: boolean;
+  canManage: boolean;
 }) {
   const t = useTranslations("Clients");
   const [loading, setLoading] = useState(false);
@@ -117,7 +117,7 @@ export function ClientQuickbooksCard({
     setDisconnecting(false);
   }
 
-  const disconnectControl = isOwner ? (
+  const disconnectControl = canManage ? (
     <div className="pt-1">
       {confirmingDisconnect ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -174,7 +174,7 @@ export function ClientQuickbooksCard({
                 ? t("qbo_reconnect_hint_company", { company: status.companyName })
                 : t("qbo_reconnect_hint", { client: clientName })}
             </p>
-            {isOwner ? (
+            {canManage ? (
               <>
                 <div className="pt-1">
                   <Button
@@ -243,7 +243,7 @@ export function ClientQuickbooksCard({
   // Not connected + owner: a small invitation to connect THIS client's QuickBooks.
   // (The page only renders this section for owners when not connected, so staff
   // never see it — but guard anyway.)
-  if (isOwner) {
+  if (canManage) {
     return (
       <div className="rounded-lg border border-border/50 p-4">
         <div className="flex items-start gap-3">

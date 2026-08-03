@@ -9,6 +9,7 @@ import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
+import { can } from "@/lib/auth/capabilities";
 
 export default async function NewEngagementPage({
   params,
@@ -87,7 +88,7 @@ export default async function NewEngagementPage({
         invoiceDefaultMode={firm?.default_invoice_auto_mode ?? "off"}
         invoiceDefaultDelayDays={firm?.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}
-        canManageReminderDefaults={user?.role === "owner"}
+        canManageReminderDefaults={can(user, "firm.settings")}
         authorizedContacts={authorizedContacts}
       />
     </div>
