@@ -4,6 +4,7 @@ import type { SetAssessment } from "@/lib/ai/set-assessment";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 import { matchDocument } from "@/lib/ai/matching";
+import { normalizeText } from "@/lib/text/normalize";
 
 // The at-a-glance states a document can show in the Preview grid:
 //   * approved — the accountant accepted it, OR the AI read it as usable AND
@@ -72,16 +73,6 @@ export type PreviewDoc = {
   isDuplicate: boolean;
   duplicateOfFileId: string | null;
 };
-
-// Strip accents + lower-case so "Rémunération" matches "remuneration" and
-// "EMPLOI" matches "emploi" — the same accent/case-insensitive approach used by
-// the app-wide command search.
-export function normalizeText(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
 
 // Resolve the single status a document card shows. Order matters:
 //   1. A rejection — the accountant's (sent this file back) or the system's

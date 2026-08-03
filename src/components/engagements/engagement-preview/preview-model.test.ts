@@ -15,11 +15,11 @@ import {
   previewCardTitle,
   applyOverrides,
   searchDocs,
-  normalizeText,
   hasPageOrder,
   sortDocsByPageOrder,
   type PreviewDoc,
 } from "./preview-model";
+import { normalizeText } from "@/lib/text/normalize";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
@@ -566,6 +566,29 @@ describe("searchDocs", () => {
   it("matches issuer + is accent-insensitive on the taxpayer name", () => {
     expect(ids("acme")).toEqual(["a"]);
     expect(ids("genevieve")).toEqual(["a"]);
+  });
+  it("is LIGATURE-insensitive too", () => {
+    // THE REGRESSION. This surface had its own normalizeText using NFD with no
+    // oe/ae mapping, so a client named Sœur was unfindable by typing "soeur" —
+    // while the very same query worked in the client archive, which used the
+    // shared folding. Accents worked in both, which is why it went unnoticed.
+    // The fi ligature matters here specifically because this searches text the
+    // AI extracted from PDFs, and PDF extraction emits it.
+    const ligatureDocs = buildPreviewDocs(
+      [
+        file({
+          id: "c",
+          request_item_id: "i1",
+          original_filename: "ﬁnance.pdf",
+          ai_classification: "t4",
+          ai_extracted_fields: { party_name: "Sœur Marie" },
+        }),
+      ],
+      items,
+    );
+    const found = (q: string) => searchDocs(ligatureDocs, q).map((d) => d.fileId);
+    expect(found("soeur")).toEqual(["c"]);
+    expect(found("finance")).toEqual(["c"]);
   });
   it("matches by filename", () => {
     expect(ids("rbc")).toEqual(["b"]);
