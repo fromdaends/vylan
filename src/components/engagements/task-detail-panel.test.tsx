@@ -112,12 +112,26 @@ describe("TaskDetailPanel", () => {
       (screen.getByLabelText(en.Engagements.add_task_name as string) as HTMLInputElement)
         .value,
     ).toBe("2025 T2 supporting documents");
-    expect(screen.getByDisplayValue("Waiting on the bank statements.")).toBeTruthy();
     expect(screen.getByDisplayValue("2026-04-30")).toBeTruthy();
     // The kind is a TAG, beside the name — never the name itself.
     expect(
       screen.getByText(en.Engagements.kind_document_collection as string),
     ).toBeTruthy();
+  });
+
+  // NOTES AND COMMENTS MUST NOT CO-EXIST (1540). The founder, looking at this
+  // exact panel with a Notes box above a Comments thread: "its one or the other.
+  // get rid of notes." The fixture below still HAS notes — the row shape comes
+  // from the table and the column was deliberately not dropped — so this asserts
+  // the panel ignores it rather than merely that the fixture is empty. Without
+  // that distinction the test would pass again the moment someone re-added the
+  // box with a different default.
+  it("does not render a Notes field, even when the task has note text", () => {
+    renderPanel();
+    expect(screen.queryByDisplayValue("Waiting on the bank statements.")).toBeNull();
+    expect(screen.queryByLabelText(en.Engagements.task_notes as string)).toBeNull();
+    // The thread that replaced it is there.
+    expect(screen.getByText(en.Engagements.task_comments as string)).toBeTruthy();
   });
 
   // The list owns the write. The panel never calls a server action itself, so
