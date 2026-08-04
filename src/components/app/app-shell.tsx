@@ -18,8 +18,10 @@ import {
   FileText,
   CircleCheckBig,
   FolderOpen,
+  FolderPlus,
   Gauge,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Receipt,
   Settings,
@@ -197,25 +199,29 @@ export function AppShell({
       // lists and neither is the obvious default, so it asks which — landing
       // somebody on Tasks when they wanted Engagements is a click and a page
       // load to undo.
-      // Each row is a blue label with the chevron inline and one line under it
-      // saying what is inside. The rows USED to carry an icon block as well —
-      // that was the fix for "the text ui looks bad", and it is deliberately
-      // gone now: the founder sent Canopy's own Create panel as the reference
-      // and it has no icons. Do not put them back without asking.
+      // Work's two destinations are the BUTTON STRIP, not rows.
+      //
+      // They were rows until the founder saw the Create panel and asked for
+      // "the same with the two blue icons". They are not ALSO rows: Work holds
+      // exactly these two places, so a row list underneath would be the same
+      // two links printed twice.
+      //
+      // The one-line hints are the cost of the change (a round button carries a
+      // short label and nothing else) and it is an acceptable one here — unlike
+      // the Create panel, where every row makes a DIFFERENT kind of thing and
+      // the line under it is what tells them apart, these two are named plainly
+      // enough to stand alone.
       panel: {
         title: labels.work,
-        items: [
-          {
-            href: "/work",
-            label: labels.workTasks,
-            description: labels.workTasksHint,
-          },
+        actions: [
+          { href: "/work", label: labels.workTasks, icon: ListTodo },
           {
             href: "/engagements",
             label: labels.workEngagements,
-            description: labels.workEngagementsHint,
+            icon: FileText,
           },
         ],
+        items: [],
       },
     },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
@@ -265,13 +271,16 @@ export function AppShell({
           actions: [
             { href: "/work?new=1", label: tHome("create_task"), icon: CircleCheckBig },
             { href: "/clients?new=1", label: tHome("create_client"), icon: UserPlus },
-          ],
-          items: [
+            // Promoted out of the list below at the founder's request. It is
+            // NOT also a row: the same link twice in one short panel reads as a
+            // mistake, and this is the version they asked to see.
             {
               href: "/engagements/new",
               label: tHome("create_engagement"),
-              description: tHome("create_engagement_hint"),
+              icon: FolderPlus,
             },
+          ],
+          items: [
             {
               // Plain /billing, NOT ?new=1: the invoice picker renders nothing
               // at all for a firm with no payment rails connected, so an

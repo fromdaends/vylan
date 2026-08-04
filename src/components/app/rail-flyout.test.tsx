@@ -260,3 +260,47 @@ describe("RailFlyout — the action strip", () => {
     expect(queryByRole("link", { name: "Add client" })).toBeNull();
   });
 });
+
+describe("RailFlyout — a panel that is nothing but buttons", () => {
+  // Work's shape after the founder asked for "the same with the two blue
+  // icons": its two destinations ARE the strip, so there are no rows at all.
+  it("draws no rule under the strip when there are no rows", () => {
+    const { container } = renderPanel({ actions: ACTIONS, items: [] });
+    // A panel ending on a rule with empty space under it reads as a list that
+    // failed to load.
+    expect(container.querySelectorAll(".h-px")).toHaveLength(0);
+  });
+
+  it("keeps the rule when rows follow the strip", () => {
+    const { container } = renderPanel({ actions: ACTIONS });
+    expect(container.querySelectorAll(".h-px")).toHaveLength(1);
+  });
+
+  it("marks the button you are already standing on", () => {
+    // The panel's whole job is saying which room you are in. Moving Work's
+    // destinations from rows to buttons must not lose that.
+    const { getByRole } = renderPanel({
+      actions: [
+        { href: "/work", label: "Tasks", icon: CircleCheckBig },
+        { href: "/engagements", label: "Engagements", icon: UserPlus },
+      ],
+      items: [],
+      activeHref: "/work",
+    });
+    expect(getByRole("link", { name: "Tasks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(getByRole("link", { name: "Engagements" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("marks nothing when the buttons are create-links rather than places", () => {
+    // The Create panel's buttons are ?new=1 links. Nobody is ever "on" one.
+    const { getByRole } = renderPanel({ actions: ACTIONS, activeHref: null });
+    expect(getByRole("link", { name: "Create task" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+});

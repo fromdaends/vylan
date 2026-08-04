@@ -177,25 +177,51 @@ export function RailFlyout({
         // left-packed row leaves a hole on the right that reads as a missing
         // fourth button.
         <div className="flex items-start justify-around gap-2 px-3 pb-4 pt-3">
-          {actions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              onClick={() => onClose()}
-              className="group flex w-[84px] flex-col items-center gap-2 rounded-lg py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors group-hover:bg-accent-hover">
-                <action.icon className="size-[21px]" aria-hidden />
-              </span>
-              <span className="text-[11.5px] font-medium leading-tight text-foreground">
-                {action.label}
-              </span>
-            </Link>
-          ))}
+          {actions.map((action) => {
+            // Only ever true for a panel whose buttons are DESTINATIONS (Work).
+            // The Create panel's are ?new=1 links, which nobody is ever "on".
+            const current = activeHref === action.href;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                onClick={() => onClose()}
+                aria-current={current ? "page" : undefined}
+                className="group flex w-[84px] flex-col items-center gap-2 rounded-lg py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span
+                  className={cn(
+                    "flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-[background-color,box-shadow] group-hover:bg-accent-hover",
+                    // A ring rather than a different fill: the buttons are the
+                    // panel's brand moment and recolouring one would break the
+                    // row. Said twice — a ring for people who can see it, and
+                    // aria-current above for people who cannot.
+                    current &&
+                      "ring-2 ring-accent ring-offset-2 ring-offset-card",
+                  )}
+                >
+                  <action.icon className="size-[21px]" aria-hidden />
+                </span>
+                <span
+                  className={cn(
+                    "text-[11.5px] leading-tight text-foreground",
+                    current ? "font-semibold" : "font-medium",
+                  )}
+                >
+                  {action.label}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
 
-      <div aria-hidden className="mx-4 h-px bg-border" />
+      {/* Only when there is something on BOTH sides of it. A panel that is
+          nothing but its button strip (Work) would otherwise end on a rule with
+          empty space under it, which reads as a list that failed to load. */}
+      {items.length > 0 && (
+        <div aria-hidden className="mx-4 h-px bg-border" />
+      )}
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {items.map((item, i) => {
