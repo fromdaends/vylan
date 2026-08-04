@@ -694,6 +694,7 @@ export function EngagementBuilder({
       <EngagementModalShell
         title={t("new_title")}
         closeHref="/engagements"
+        compact
         labels={{
           close: tc("cancel"),
           save: t("wizard_save"),
@@ -702,8 +703,6 @@ export function EngagementBuilder({
           saveAsTemplate: t("save_as_template"),
           saving: tc("saving"),
         }}
-        onSaveDraft={() => {}}
-        onSaveAndSend={() => {}}
       >
         <EngagementStartChooser
           templates={engagementTemplates.map((x) => ({
