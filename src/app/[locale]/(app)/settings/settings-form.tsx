@@ -66,6 +66,7 @@ type SectionId =
   | "team"
   | "payments"
   | "automation"
+  | "statuses"
   | "integrations"
   | "documents";
 type Translate = (k: string, values?: Record<string, string | number>) => string;
@@ -98,9 +99,18 @@ const SECTION_IDS: SectionId[] = [
   "team",
   "payments",
   "automation",
+  "statuses",
   "integrations",
   "documents",
 ];
+
+/**
+ * Settings that live at their own URL rather than as a panel in this shell.
+ * Anything listed here renders as a link in the sub-nav instead of a tab.
+ */
+const SECTION_ROUTES: Partial<Record<SectionId, string>> = {
+  statuses: "/settings/statuses",
+};
 
 export function SettingsShell({
   currentLocale,
@@ -225,7 +235,8 @@ export function SettingsShell({
   const allGroups: { label: string; ids: SectionId[] }[] = [
     { label: t("nav_group_you"), ids: ["account", "security", "notifications"] },
     { label: t("nav_group_firm"), ids: ["general", "team", "payments"] },
-    { label: t("nav_group_product"), ids: ["automation", "integrations", "documents"] },
+    { label: t("nav_group_workflow"), ids: ["automation", "statuses"] },
+    { label: t("nav_group_product"), ids: ["integrations", "documents"] },
   ];
   const sectionLabel: Record<SectionId, string> = {
     account: t("nav_account"),
@@ -235,6 +246,7 @@ export function SettingsShell({
     team: t("nav_team"),
     payments: t("nav_payments"),
     automation: t("nav_automation"),
+    statuses: t("nav_statuses"),
     integrations: t("nav_integrations"),
     documents: t("nav_documents"),
   };
@@ -267,18 +279,33 @@ export function SettingsShell({
             </p>
             {g.ids.map((id) => {
               const active = section === id;
+              const cls = cn(
+                "whitespace-nowrap rounded-lg px-3 py-[7px] text-left text-sm transition-colors duration-150 ease-out",
+                active
+                  ? "bg-accent-subtle font-medium text-accent"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              );
+              // ⚠️ SOME SETTINGS ARE THEIR OWN ROUTE, and one of them had NO
+              // ENTRY POINT AT ALL. /settings/statuses has existed since 1420 —
+              // the whole firm-defined status editor — and the founder could
+              // not find it: "THERES NO WHERE IN SETTINGS TO VIEW STATUSES???"
+              // They were right. It was built, shipped, and never linked, which
+              // makes it exactly as useful as not existing.
+              const href = SECTION_ROUTES[id];
+              if (href) {
+                return (
+                  <Link key={id} href={href} className={cls}>
+                    {sectionLabel[id]}
+                  </Link>
+                );
+              }
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setSection(id)}
                   aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "whitespace-nowrap rounded-lg px-3 py-[7px] text-left text-sm transition-colors duration-150 ease-out",
-                    active
-                      ? "bg-accent-subtle font-medium text-accent"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                  )}
+                  className={cls}
                 >
                   {sectionLabel[id]}
                 </button>
