@@ -59,6 +59,15 @@ import {
   type CatalogueService,
 } from "@/components/engagements/engagement-items-editor";
 import type { EngagementItemDraft } from "@/lib/engagements/items";
+import {
+  emptyTask,
+  meaningfulTasks,
+  availableKinds,
+  documentCollectionIndex,
+  type TaskDraft,
+} from "@/lib/engagements/task-drafts";
+import { taskKindLabelKey } from "@/lib/tasks/kinds";
+import type { TaskKind } from "@/lib/db/engagement-tasks";
 import { EngagementModalShell } from "@/components/engagements/engagement-modal-shell";
 import { EngagementStartChooser } from "@/components/engagements/engagement-start-chooser";
 import { SaveAsTemplateDialog } from "@/components/engagements/save-as-template-dialog";
@@ -130,13 +139,19 @@ export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
 // asking them for, what it costs, how hard you chase.
 // Services sits SECOND, right after who it is for. It is the scope — what you
 // are doing and for how much — and everything after it depends on it: the
-// invoice is built from these lines, and tasks will hang off them. Documents
-// follows, because what you need FROM the client is decided once you know what
-// you are doing for them.
+// invoice is built from these lines, and tasks hang off them. TASKS follows,
+// because what the work actually consists of — including what you need FROM the
+// client — is decided once you know what you are doing for them.
+//
+// There is no Documents step any more. Collecting documents is ONE KIND OF
+// TASK (1370's `document_collection`), so the checklist and its template picker
+// live inside that task's row rather than occupying a fifth of the wizard.
+// The founder: "the templates for document collection exist purely for that
+// task... it's not a whole section. It exists within that task."
 const WIZARD_STEPS = [
   "details",
   "services",
-  "documents",
+  "tasks",
   "billing",
   "reminders",
 ] as const;
@@ -154,7 +169,7 @@ type PlaceholderKey =
 type WizardStepKey =
   | "wizard_step_details"
   | "wizard_step_services"
-  | "wizard_step_documents"
+  | "wizard_step_tasks"
   | "wizard_step_billing"
   | "wizard_step_reminders";
 
@@ -331,6 +346,41 @@ export function EngagementBuilder({
   // The priced scope (migration 1450). Starts empty — an engagement without one
   // is still perfectly valid, and is what every engagement was until now.
   const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>([]);
+
+  // What the work CONSISTS OF (1370's engagement_tasks).
+  //
+  // Seeded with a document-collection row rather than an empty list, because
+  // that is what every engagement in Vylan did before this step existed: it
+  // always had a checklist. Starting empty would have silently removed the
+  // client-facing half of engagement creation for anyone who didn't discover
+  // that they now had to add a row for it. It is an ordinary row — retitle it,
+  // change its kind, or delete it.
+  const [tasks, setTasks] = useState<TaskDraft[]>([
+    { ...emptyTask("document_collection"), title: t("task_seed_documents") },
+  ]);
+  const docTaskIndex = documentCollectionIndex(tasks);
+
+  function updateTask(idx: number, patch: Partial<TaskDraft>) {
+    setTasks((prev) =>
+      prev.map((task, i) => (i === idx ? { ...task, ...patch } : task)),
+    );
+  }
+  function addTask() {
+    setTasks((prev) => [...prev, emptyTask()]);
+  }
+  function removeTask(idx: number) {
+    setTasks((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function moveTask(idx: number, delta: number) {
+    setTasks((prev) => {
+      const to = idx + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[to]] = [next[to], next[idx]];
+      return next;
+    });
+  }
+
   const [step, setStep] = useState<WizardStep>("details");
   const [savingTemplate, setSavingTemplate] = useState(false);
 
@@ -390,7 +440,11 @@ export function EngagementBuilder({
     // every engagement in Vylan was until now, and refusing to send one would
     // break the existing flow for a field nobody has filled in yet.
     services: true,
-    documents: items.length > 0,
+    // Titled work, or a checklist with something in it. Either alone is a real
+    // answer: "meet the client, then file" needs no documents, and a plain
+    // document request needs no other task.
+    tasks:
+      meaningfulTasks(tasks).length > 0 || items.length > 0,
     // Money and chasing are genuinely optional — a draft with neither is a
     // valid engagement — so they are complete by definition. They still get a
     // tick rather than nothing, because an empty circle beside a step you were
@@ -661,6 +715,14 @@ export function EngagementBuilder({
                 billing_frequency: i.billingFrequency,
                 tax_pct: i.taxPct,
               })),
+            // What the work consists of. Titled rows only — an untitled row
+            // left over from a stray "+ Add task" click must not land on the
+            // engagement as a nameless entry.
+            tasks: meaningfulTasks(tasks).map((task) => ({
+              title: task.title,
+              kind: task.kind,
+              assignee_ids: task.assigneeIds,
+            })),
             reminder_settings: reminderSettings,
             repeat_frequency: repeatFrequency,
             // Custom schedule only; null keeps a fixed-frequency series
@@ -805,7 +867,7 @@ export function EngagementBuilder({
             label: t(`wizard_step_${k}` as WizardStepKey),
             complete: stepComplete[k],
             // Only the two that actually stop you sending are marked required.
-            required: k === "details" || k === "documents",
+            required: k === "details" || k === "tasks",
           }))}
         />
       </div>
@@ -1091,7 +1153,137 @@ export function EngagementBuilder({
           whole thing, so it belonged at the front. Now that Documents is its
           own step, a picker for document requests belongs in it, and step 1 is
           what Canopy's is: who it is for and what it is called. */}
-      {step === "documents" && (
+      {step === "tasks" && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              {t("section_tasks")}{" "}
+              <span className="font-normal text-muted-foreground">
+                ({tasks.length})
+              </span>
+            </CardTitle>
+            <Button type="button" variant="outline" size="sm" onClick={addTask}>
+              <Plus className="size-4" />
+              {t("add_task")}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {tasks.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                {t("tasks_empty")}
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {tasks.map((task, idx) => (
+                  <li
+                    key={idx}
+                    className="rounded-lg border border-border bg-card p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex flex-col items-center pt-1 text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => moveTask(idx, -1)}
+                          disabled={idx === 0}
+                          className="hover:text-foreground disabled:opacity-30"
+                          aria-label={t("move_up")}
+                        >
+                          ↑
+                        </button>
+                        <GripVertical className="size-3" aria-hidden />
+                        <button
+                          type="button"
+                          onClick={() => moveTask(idx, 1)}
+                          disabled={idx === tasks.length - 1}
+                          className="hover:text-foreground disabled:opacity-30"
+                          aria-label={t("move_down")}
+                        >
+                          ↓
+                        </button>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Input
+                          value={task.title}
+                          onChange={(e) =>
+                            updateTask(idx, { title: e.target.value })
+                          }
+                          placeholder={t("task_title_placeholder")}
+                          aria-label={t("task_title_placeholder")}
+                        />
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                          {/* Only kinds this engagement can still take: the
+                              three screen-backed ones are one-per-job (1370's
+                              partial unique index), and offering a second would
+                              offer a row the insert will refuse. */}
+                          <select
+                            value={task.kind}
+                            onChange={(e) =>
+                              updateTask(idx, {
+                                kind: e.target.value as TaskKind,
+                              })
+                            }
+                            aria-label={t("task_kind_label")}
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          >
+                            {availableKinds(tasks, idx).map((kind) => (
+                              <option key={kind} value={kind}>
+                                {t(taskKindLabelKey(kind) as "kind_task")}
+                              </option>
+                            ))}
+                          </select>
+                          {/* Hidden in a solo firm — there is nobody else to
+                              hand it to, so the control would be a dead end. */}
+                          {members.length > 0 && (
+                            <select
+                              value={task.assigneeIds[0] ?? ""}
+                              onChange={(e) =>
+                                updateTask(idx, {
+                                  assigneeIds: e.target.value
+                                    ? [e.target.value]
+                                    : [],
+                                })
+                              }
+                              aria-label={t("task_assignee_label")}
+                              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            >
+                              <option value="">{t("task_assignee_none")}</option>
+                              {members.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {task.kind === "document_collection" && (
+                            <span className="text-muted-foreground">
+                              {t("task_documents_count")}: {items.length}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeTask(idx)}
+                            className="ml-auto inline-flex items-center gap-1 text-destructive hover:underline"
+                          >
+                            <Trash2 className="size-3" />
+                            {tc("delete")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── BELONGS TO THE DOCUMENT-COLLECTION TASK ABOVE ──────────────────
+          Present only because that task is, and gone the moment it is deleted.
+          This is the founder's correction in structural form: a document
+          request template is not a section of engagement creation, it is how
+          you fill in ONE task. */}
+      {step === "tasks" && docTaskIndex !== -1 && (
         <>
             <Card>
               <CardHeader>
@@ -1129,8 +1321,8 @@ export function EngagementBuilder({
         </>
       )}
 
-      {/* STEP 3 — what you are asking the client for. This card used to be LAST on the page, below invoicing and reminders, which buried the one part of an engagement the client actually sees. */}
-      {step === "documents" && (
+      {/* The checklist itself — also the document task's, on the same terms. */}
+      {step === "tasks" && docTaskIndex !== -1 && (
         <>
           <Card
             className={
