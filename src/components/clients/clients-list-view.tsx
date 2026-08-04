@@ -28,6 +28,7 @@ export function ClientsListView({
   owners,
   currentUserId,
   ownerFilter,
+  ownerDefault,
   locale,
   type,
   includeArchived,
@@ -46,6 +47,7 @@ export function ClientsListView({
   currentUserId: string;
   // "all" | "mine" | a specific member id.
   ownerFilter: string;
+  ownerDefault: string;
   locale: AppLocale;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
@@ -108,6 +110,7 @@ export function ClientsListView({
         sort={sort}
         activeOnly={activeOnly}
         ownerFilter={ownerFilter}
+        ownerDefault={ownerDefault}
         teamEnabled={teamEnabled}
       />
       {filtered.length === 0 && clients.length > 0 ? (
