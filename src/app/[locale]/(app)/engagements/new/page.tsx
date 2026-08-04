@@ -29,14 +29,12 @@ import { listEngagementTemplates } from "@/lib/db/engagement-templates";
  * drift CLAUDE.md's cohesion rule exists to prevent, and this one loads seven
  * things and threads a dozen props.
  */
-export async function NewEngagementScreen({
+export default async function NewEngagementPage({
   params,
   searchParams,
-  overlay = false,
 }: {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ client?: string; template?: string }>;
-  overlay?: boolean;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -102,7 +100,6 @@ export async function NewEngagementScreen({
     // with the actions in it, the way Canopy's modal does. A page heading above
     // a modal-looking card would name the same thing twice.
     <EngagementBuilder
-        overlay={overlay}
         clients={clients.map((c) => ({
           id: c.id,
           display_name: c.display_name,
@@ -141,12 +138,3 @@ export async function NewEngagementScreen({
   );
 }
 
-// Direct load, refresh, or a shared link: there is no page behind to overlay,
-// so this renders full-screen. The @modal intercepting route handles every
-// in-app navigation and renders the SAME screen as an overlay.
-export default async function NewEngagementPage(props: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<{ client?: string; template?: string }>;
-}) {
-  return <NewEngagementScreen {...props} />;
-}
