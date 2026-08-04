@@ -17,6 +17,19 @@ vi.mock("@/app/actions/engagement-tasks", () => ({
   deleteTaskAction: vi.fn(async () => ({ ok: true })),
   setTaskAssigneeAction: vi.fn(async () => ({ ok: true })),
 }));
+// The panel now carries a comment thread that fetches its own rows on mount.
+// Unmocked, it reaches getServerSupabase → cookies() and rejects outside a
+// request scope — the tests still passed, but on a floor of unhandled errors.
+vi.mock("@/app/actions/comments", () => ({
+  loadCommentThreadAction: vi.fn(async () => ({
+    comments: [],
+    members: [],
+    currentUserId: "u-me",
+    legacy: false,
+  })),
+  addCommentAction: vi.fn(async () => ({ ok: false, error: "failed" })),
+  deleteCommentAction: vi.fn(async () => ({ ok: true })),
+}));
 
 import {
   TaskDetailPanel,

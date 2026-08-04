@@ -240,6 +240,7 @@
     "comment_post": "Publier",
     "comment_delete": "Supprimer le commentaire",
     "comment_not_activated": "Les commentaires ne sont pas encore activés.",
+    "comment_empty": "Aucun commentaire pour l'instant.",
     "comment_post_failed": "Échec de la publication du commentaire. Réessayez.",
     "comment_delete_failed": "Échec de la suppression du commentaire. Réessayez.",
     "member_deactivated": "Membre désactivé.",
@@ -2090,6 +2091,7 @@
     "task_assignees": "Assigné à",
     "task_due": "Échéance",
     "task_notes": "Notes",
+    "task_comments": "Commentaires",
     "task_notes_placeholder": "Ce que la prochaine personne doit savoir.",
     "col_status": "Statut",
     "col_task": "Nom de la tâche",
@@ -2782,7 +2784,14 @@
     "agr_accepted": "Accepté",
     "agr_active": "En cours",
     "agr_complete": "Terminé",
-    "agr_cancelled": "Annulé"
+    "agr_cancelled": "Annulé",
+    "field_start_date": "Date de début",
+    "start_date_hint": "Quand le travail commence. Laissez vide s’il commence maintenant.",
+    "field_intro_message": "Message au client",
+    "intro_message_placeholder": "Une courte note affichée en haut de ce que votre client voit.",
+    "intro_message_hint": "Optionnel. Le client le lit en premier.",
+    "field_assignee": "Assigné à",
+    "assignee_me": "Moi"
   },
   "Attention": {
     "metric_active": "Actifs",

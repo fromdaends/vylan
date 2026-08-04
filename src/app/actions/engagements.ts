@@ -203,6 +203,10 @@ const CreateSchema = z
     // assigned_user_id has no firm-scoped FK, so a well-formed id from
     // another firm would otherwise be accepted.
     assigned_user_id: z.string().uuid().nullable().optional(),
+    // Canopy's step 1 (migration 1510). Both optional so an older client bundle
+    // mid-deploy still creates engagements exactly as before.
+    start_date: z.string().date().nullable().optional(),
+    intro_message: z.string().trim().max(4000).nullable().optional(),
     items: z.array(ItemSchema).min(0),
   })
   // Any invoice (created now OR automated) needs an amount to bill.
@@ -272,6 +276,8 @@ export async function createEngagementAction(
     repeat_due_offset_days?: number | null;
     repeat_invoice_recreate?: boolean;
     assigned_user_id?: string | null;
+    start_date?: string | null;
+    intro_message?: string | null;
     items: TemplateItem[];
     send: boolean;
     locale: "fr" | "en";
@@ -291,6 +297,8 @@ export async function createEngagementAction(
     invoice_create_now: payload.invoice_create_now,
     invoice_locks_deliverables: payload.invoice_locks_deliverables,
     invoice_description: payload.invoice_description,
+    start_date: payload.start_date,
+    intro_message: payload.intro_message,
     service_items: payload.service_items,
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,
@@ -376,6 +384,8 @@ export async function createEngagementAction(
       // invoice; a "create now" invoice gets them directly below.
       invoice_locks_deliverables: parsed.data.invoice_locks_deliverables,
       invoice_description: parsed.data.invoice_description ?? null,
+      start_date: parsed.data.start_date,
+      intro_message: parsed.data.intro_message,
       service_items: parsed.data.service_items,
       reminder_settings: parsed.data.reminder_settings,
       assigned_user_id: assignedUserId,

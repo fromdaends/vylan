@@ -149,6 +149,7 @@ export function EngagementBuilder({
   servicePrices = {},
   services = [],
   engagementTemplates = [],
+  members = [],
   overlay = false,
   connectReady = false,
   invoiceDefaultMode = "off",
@@ -181,6 +182,9 @@ export function EngagementBuilder({
   services?: CatalogueService[];
   /** Render as an overlay over the page behind, rather than as a full page. */
   overlay?: boolean;
+  /** Active firm members, for the assignee picker. Empty in a solo firm, which
+   *  hides the control entirely — there is nobody else to hand it to. */
+  members?: { id: string; name: string }[];
   /** Saved whole-engagement templates (migration 1500). */
   engagementTemplates?: {
     id: string;
@@ -229,6 +233,13 @@ export function EngagementBuilder({
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  // Canopy's step 1 (migration 1510).
+  const [startDate, setStartDate] = useState("");
+  const [introMessage, setIntroMessage] = useState("");
+  // Empty string = "me", which is what the server already does when no assignee
+  // is sent. Naming that explicitly in the picker is clearer than an
+  // unlabelled blank option.
+  const [assigneeId, setAssigneeId] = useState("");
   // Optional structured tax year ("" = none). Options: next year down to 6
   // back — covers late prior-year filings without a free-text field.
   const [taxYear, setTaxYear] = useState("");
@@ -594,6 +605,9 @@ export function EngagementBuilder({
             title: effectiveTitle.trim(),
             type: selectedTemplate.type,
             due_date: dueDate || null,
+            start_date: startDate || null,
+            assigned_user_id: assigneeId || null,
+            intro_message: introMessage.trim() || null,
             tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
@@ -887,6 +901,23 @@ export function EngagementBuilder({
                   required
                 />
               </div>
+              {/* START date — Canopy's step 1 has both, and they answer
+                  different questions: when the work BEGINS versus when it is
+                  OWED. Conflating them is why an engagement created in advance
+                  for next season had no honest way to say it had not started. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="start_date">{t("field_start_date")}</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-fit"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("start_date_hint")}
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="due_date">{t("field_due_date_optional")}</Label>
                 <Input
@@ -921,6 +952,50 @@ export function EngagementBuilder({
                   {t("builder_tax_year_hint")}
                 </p>
               </div>
+              {/* WHO the work belongs to, from the moment it exists. The save
+                  path has accepted this since 0001; the form never offered it,
+                  so handing work to somebody else was always TWO steps —
+                  create it, then reassign. Hidden in a solo firm: a picker with
+                  one option is a question with one answer. */}
+              {members.length > 1 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="assignee">{t("field_assignee")}</Label>
+                  <select
+                    id="assignee"
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className="h-9 w-fit min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">{t("assignee_me")}</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* The covering note at the top of the client's proposal.
+                  PLAIN TEXT for now: nothing in this repo has a rich-text
+                  editor, and adding one is its own decision that also affects
+                  the item descriptions and the terms. Storing text now and
+                  upgrading the EDITOR later is safe; storing HTML from an
+                  editor that does not exist is not. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="intro_message">{t("field_intro_message")}</Label>
+                <Textarea
+                  id="intro_message"
+                  value={introMessage}
+                  onChange={(e) => setIntroMessage(e.target.value)}
+                  rows={3}
+                  placeholder={t("intro_message_placeholder")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("intro_message_hint")}
+                </p>
+              </div>
+
               {/* "AI Analyze" toggle. On by default; turning it off means no
                   document uploaded to this engagement is ever sent to the AI —
                   helps the firm control AI usage on engagements that don't need it. */}

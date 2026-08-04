@@ -22,6 +22,18 @@ vi.mock("@/app/actions/engagement-tasks", () => ({
   deleteTaskAction: vi.fn(async () => ({ ok: true })),
   setTaskAssigneeAction: vi.fn(async () => ({ ok: true })),
 }));
+// The detail panel this table opens now carries a comment thread that fetches
+// its own rows on mount; unmocked it reaches cookies() outside a request scope.
+vi.mock("@/app/actions/comments", () => ({
+  loadCommentThreadAction: vi.fn(async () => ({
+    comments: [],
+    members: [],
+    currentUserId: "u-me",
+    legacy: false,
+  })),
+  addCommentAction: vi.fn(async () => ({ ok: false, error: "failed" })),
+  deleteCommentAction: vi.fn(async () => ({ ok: true })),
+}));
 
 import { TasksTable, type TaskRow } from "./tasks-table";
 

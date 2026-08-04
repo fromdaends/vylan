@@ -6,6 +6,8 @@ function c(over: Partial<FileComment>): FileComment {
     id: "c0",
     uploadedFileId: null,
     requestItemId: null,
+    engagementTaskId: null,
+    clientId: null,
     authorUserId: "u1",
     authorName: "Tyler",
     body: "note",
@@ -54,6 +56,42 @@ describe("groupEngagementComments", () => {
       c({ id: "cx", uploadedFileId: "f1", requestItemId: "i1" }),
     ]);
     expect(grouped.byFile.get("f1")?.length).toBe(1);
+    expect(grouped.byItem.size).toBe(0);
+  });
+});
+
+// The 1510 targets. The important one is the LAST test: before task comments
+// had their own bucket, "no file and no item" meant "on the engagement", and a
+// task comment carries the engagement_id (so mention links resolve) — so it
+// arrived in the same query and silently joined the engagement's own thread.
+describe("groupEngagementComments — tasks (1510)", () => {
+  it("buckets a task comment by its task", () => {
+    const grouped = groupEngagementComments([
+      c({ id: "t1", engagementTaskId: "task-a" }),
+      c({ id: "t2", engagementTaskId: "task-a" }),
+      c({ id: "t3", engagementTaskId: "task-b" }),
+    ]);
+    expect(grouped.byTask.get("task-a")?.map((x) => x.id)).toEqual(["t1", "t2"]);
+    expect(grouped.byTask.get("task-b")?.map((x) => x.id)).toEqual(["t3"]);
+  });
+
+  it("keeps a task comment OUT of the engagement thread", () => {
+    const grouped = groupEngagementComments([
+      c({ id: "eng", }),
+      c({ id: "onTask", engagementTaskId: "task-a" }),
+    ]);
+    // Only the genuinely engagement-level one is in the engagement thread.
+    expect(grouped.engagement.map((x) => x.id)).toEqual(["eng"]);
+    expect(grouped.byTask.get("task-a")?.map((x) => x.id)).toEqual(["onTask"]);
+  });
+
+  it("keeps a client comment out of every engagement bucket", () => {
+    const grouped = groupEngagementComments([
+      c({ id: "onClient", clientId: "cl-1" }),
+    ]);
+    expect(grouped.engagement).toEqual([]);
+    expect(grouped.byTask.size).toBe(0);
+    expect(grouped.byFile.size).toBe(0);
     expect(grouped.byItem.size).toBe(0);
   });
 });

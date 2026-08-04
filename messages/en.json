@@ -240,6 +240,7 @@
     "comment_post": "Post",
     "comment_delete": "Delete comment",
     "comment_not_activated": "Comments aren't turned on yet.",
+    "comment_empty": "No comments yet.",
     "comment_post_failed": "Couldn't post the comment. Try again.",
     "comment_delete_failed": "Couldn't delete the comment. Try again.",
     "member_deactivated": "Teammate deactivated.",
@@ -2091,6 +2092,7 @@
     "task_due": "Due",
     "task_notes": "Notes",
     "task_notes_placeholder": "Anything the next person needs to know.",
+    "task_comments": "Comments",
     "col_status": "Status",
     "col_task": "Task name",
     "col_client": "Client",
@@ -2782,7 +2784,14 @@
     "agr_accepted": "Accepted",
     "agr_active": "Active",
     "agr_complete": "Complete",
-    "agr_cancelled": "Cancelled"
+    "agr_cancelled": "Cancelled",
+    "field_start_date": "Start date",
+    "start_date_hint": "When the work begins. Leave blank if it starts now.",
+    "field_intro_message": "Message to the client",
+    "intro_message_placeholder": "A short note that appears at the top of what your client sees.",
+    "intro_message_hint": "Optional. The client reads this first.",
+    "field_assignee": "Assigned to",
+    "assignee_me": "Me"
   },
   "Attention": {
     "metric_active": "Active",

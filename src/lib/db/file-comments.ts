@@ -1,11 +1,15 @@
-// Team Wave 3 — comments + @mentions (migration 0800, targets widened by
-// 0930). Firm-internal comments on an uploaded FILE, a CHECKLIST ITEM
-// (request_item_id), or the ENGAGEMENT itself (both targets null) — one table
-// so RLS, mentions and author plumbing stay shared. Authenticated (RLS
-// firm-scoped) reads + writes; the client never touches this. Everything
-// degrades gracefully (isMissingFileCommentsSchema) before the SQL is applied
-// (dev uses remote Supabase). Author name is denormalized at write time so the
-// thread survives a teammate's removal.
+// Team Wave 3 — comments + @mentions (migration 0800, targets widened by 0930
+// and again by 1510). Firm-internal comments on an uploaded FILE, a CHECKLIST
+// ITEM (request_item_id), a TASK (engagement_task_id), a CLIENT (client_id), or
+// the ENGAGEMENT itself (every target column null) — ONE table so RLS, mentions
+// and author plumbing stay shared. Authenticated (RLS firm-scoped) reads +
+// writes; the client never touches this. Everything degrades gracefully
+// (isMissingFileCommentsSchema) before the SQL is applied (dev uses remote
+// Supabase). Author name is denormalized at write time so the thread survives a
+// teammate's removal.
+//
+// engagement_id is NULLABLE since 1510: a task can exist without an engagement
+// (1350) and a client comment never has one. Callers must not assume it is set.
 
 import { getServerSupabase } from "@/lib/supabase/server";
 import { userDisplayLabel } from "@/lib/db/users";
@@ -13,9 +17,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FileComment = {
   id: string;
-  // At most one of these is set; both null = a comment on the engagement.
+  // At most ONE of these four is set; all null = a comment on the engagement.
   uploadedFileId: string | null;
   requestItemId: string | null;
+  engagementTaskId: string | null;
+  clientId: string | null;
   authorUserId: string | null;
   authorName: string;
   body: string;
@@ -23,9 +29,10 @@ export type FileComment = {
   createdAt: string;
 };
 
-// Every read/write returns the same row shape (0930 adds request_item_id).
+// Every read/write returns the same row shape (0930 adds request_item_id; 1510
+// adds engagement_task_id + client_id).
 const COMMENT_SELECT =
-  "id, uploaded_file_id, request_item_id, author_user_id, author_name, body, mentions, created_at";
+  "id, uploaded_file_id, request_item_id, engagement_task_id, client_id, author_user_id, author_name, body, mentions, created_at";
 
 // Missing TABLE (PGRST205 / 42P01) or COLUMN (PGRST204 / 42703) — degrade to
 // "not activated yet" until 0800 lands. Match on codes ONLY (repo rule).
@@ -45,6 +52,8 @@ function toComment(row: Record<string, unknown>): FileComment {
     id: String(row.id),
     uploadedFileId: (row.uploaded_file_id as string | null) ?? null,
     requestItemId: (row.request_item_id as string | null) ?? null,
+    engagementTaskId: (row.engagement_task_id as string | null) ?? null,
+    clientId: (row.client_id as string | null) ?? null,
     authorUserId: (row.author_user_id as string | null) ?? null,
     authorName: (row.author_name as string | null) ?? "",
     body: (row.body as string | null) ?? "",
@@ -118,17 +127,26 @@ export async function listFileComments(
 export type EngagementComments = {
   byFile: Map<string, FileComment[]>;
   byItem: Map<string, FileComment[]>;
+  byTask: Map<string, FileComment[]>;
   engagement: FileComment[];
 };
 
 // PURE: split a flat, already-sorted comment list by target. Exported for
 // unit tests.
+//
+// THE `else` ARM IS THE DANGEROUS ONE. "No file and no item" used to mean "on
+// the engagement", and 1510 made that false — a comment on a TASK also carries
+// the engagement_id (so mention links and revalidation resolve), so it arrives
+// in this same query and would land in the engagement's own thread. Task
+// comments therefore get their own bucket ABOVE the fallback, and the fallback
+// keeps its original meaning: nothing else claimed it, so it is the engagement.
 export function groupEngagementComments(
   flat: FileComment[],
 ): EngagementComments {
   const out: EngagementComments = {
     byFile: new Map(),
     byItem: new Map(),
+    byTask: new Map(),
     engagement: [],
   };
   for (const c of flat) {
@@ -140,6 +158,15 @@ export function groupEngagementComments(
       const arr = out.byItem.get(c.requestItemId) ?? [];
       arr.push(c);
       out.byItem.set(c.requestItemId, arr);
+    } else if (c.engagementTaskId) {
+      const arr = out.byTask.get(c.engagementTaskId) ?? [];
+      arr.push(c);
+      out.byTask.set(c.engagementTaskId, arr);
+    } else if (c.clientId) {
+      // A client comment has no engagement_id at all, so it cannot reach this
+      // query — but bucketing it explicitly keeps the fallback honest if a
+      // future caller ever hands this function a mixed list.
+      continue;
     } else {
       out.engagement.push(c);
     }
@@ -169,19 +196,89 @@ export async function listCommentsForEngagement(
   return groupEngagementComments(flat);
 }
 
+// One TASK's comments, oldest first (1510). [] before the SQL lands.
+export async function listCommentsForTask(
+  taskId: string,
+): Promise<FileComment[]> {
+  return listByTarget("engagement_task_id", taskId, "listCommentsForTask");
+}
+
+// One CLIENT's comments, oldest first (1510) — the successor to client_notes.
+// [] before the SQL lands, which is what lets the caller fall back to the old
+// table instead of showing an empty box where notes used to be.
+export async function listCommentsForClient(
+  clientId: string,
+): Promise<FileComment[]> {
+  return listByTarget("client_id", clientId, "listCommentsForClient");
+}
+
+// Shared body of the single-target reads. `schemaMissing` is reported back
+// through a sentinel rather than swallowed, because the client-notes caller has
+// to tell "no comments" apart from "1510 has not been applied" — the first
+// renders an empty thread, the second must fall back to client_notes.
+export const COMMENTS_SCHEMA_MISSING = Symbol("comments_schema_missing");
+
+async function listByTarget(
+  column: "engagement_task_id" | "client_id",
+  id: string,
+  label: string,
+): Promise<FileComment[]> {
+  const res = await listByTargetOrMissing(column, id, label);
+  return res === COMMENTS_SCHEMA_MISSING ? [] : res;
+}
+
+export async function listByTargetOrMissing(
+  column: "engagement_task_id" | "client_id",
+  id: string,
+  label: string,
+): Promise<FileComment[] | typeof COMMENTS_SCHEMA_MISSING> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("file_comments")
+    .select(COMMENT_SELECT)
+    .eq(column, id)
+    .order("created_at", { ascending: true });
+  if (error) {
+    if (isMissingFileCommentsSchema(error)) return COMMENTS_SCHEMA_MISSING;
+    console.error(`[file-comments] ${label} failed:`, error);
+    return [];
+  }
+  const comments = ((data as Array<Record<string, unknown>> | null) ?? []).map(
+    toComment,
+  );
+  return applyLiveAuthorNames(sb, comments);
+}
+
+// Client comments, or the sentinel when 1510 is still unapplied.
+export async function listCommentsForClientOrMissing(
+  clientId: string,
+): Promise<FileComment[] | typeof COMMENTS_SCHEMA_MISSING> {
+  return listByTargetOrMissing(
+    "client_id",
+    clientId,
+    "listCommentsForClientOrMissing",
+  );
+}
+
 export type InsertFileCommentResult =
   | { ok: true; comment: FileComment }
   | { ok: false; error: "schema" | "failed" };
 
 // Insert a comment as the current user (RLS enforces firm + self-authorship +
-// engagement containment). Target: a file, a checklist item, or (neither) the
-// engagement itself — the DB CHECK rejects both at once. `mentions` should
-// already be sanitized to real firm member ids by the caller.
+// containment on every anchor that is set). Target: a file, a checklist item, a
+// task, a client, or (none of them) the engagement itself — the DB CHECK rejects
+// more than one at once. `mentions` should already be sanitized to real firm
+// member ids by the caller.
+//
+// engagementId is optional since 1510: a standalone task and a client comment
+// both legitimately have none.
 export async function insertFileComment(input: {
   firmId: string;
-  engagementId: string;
+  engagementId?: string | null;
   uploadedFileId?: string | null;
   requestItemId?: string | null;
+  engagementTaskId?: string | null;
+  clientId?: string | null;
   authorUserId: string;
   authorName: string;
   body: string;
@@ -192,9 +289,11 @@ export async function insertFileComment(input: {
     .from("file_comments")
     .insert({
       firm_id: input.firmId,
-      engagement_id: input.engagementId,
+      engagement_id: input.engagementId ?? null,
       uploaded_file_id: input.uploadedFileId ?? null,
       request_item_id: input.requestItemId ?? null,
+      engagement_task_id: input.engagementTaskId ?? null,
+      client_id: input.clientId ?? null,
       author_user_id: input.authorUserId,
       author_name: input.authorName,
       body: input.body,

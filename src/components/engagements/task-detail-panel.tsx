@@ -54,6 +54,7 @@ import {
 } from "@/components/engagements/detail-panel-bits";
 import { TaskProgressRing } from "@/components/engagements/task-progress-ring";
 import { SubtaskList } from "@/components/engagements/subtask-list";
+import { InlineCommentThread } from "@/components/engagements/inline-comment-thread";
 
 type TaskStatus = "todo" | "doing" | "done";
 type TaskPriority = "none" | "low" | "medium" | "high";
@@ -375,6 +376,28 @@ function DetailBody({
                     }
                   }}
                   placeholder={t("task_notes_placeholder")}
+                />
+              </Field>
+
+              {/* Comments on THIS task — the same thread as a checklist item,
+                  a file and an engagement, because the founder asked for one
+                  system rather than five that resemble each other.
+
+                  It loads its own rows, which is what lets it appear here at
+                  all: this panel is opened from BOTH the engagement page and
+                  the /work list, and neither of those Server Components could
+                  be edited to thread comments down without touching files owned
+                  by other live sessions. One request when a task is opened.
+
+                  NOT the same thing as the Notes box above it. Notes is ONE
+                  editable description of the task; this is an attributed,
+                  append-only conversation with @mentions. They are the two
+                  halves the founder is consolidating — see the summary: merging
+                  them is a data decision, not a layout one. */}
+              <Field label={t("task_comments")}>
+                <InlineCommentThread
+                  target={{ kind: "task", taskId: task.id }}
+                  quotedText={task.title}
                 />
               </Field>
             </div>
