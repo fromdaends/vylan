@@ -1419,6 +1419,15 @@ export default async function EngagementDetailPage({
           />
         }
         checklistCount={collectionItems.length}
+        // Approved, not merely uploaded: "8 of 12" has to mean eight are DONE,
+        // or the row overstates progress on every engagement in the firm.
+        checklistDone={
+          collectionItems.filter((i) => i.status === "approved").length
+        }
+        signaturesDone={
+          signatureItems.filter((i) => i.status === "approved").length
+        }
+        workDone={internalTasks.filter((x) => x.status === "done").length}
         signaturesCount={signatureItems.length}
         showSignatures={isLive || signatureItems.length > 0}
         checklistControls={
