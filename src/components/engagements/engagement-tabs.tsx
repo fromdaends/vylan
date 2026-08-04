@@ -3,7 +3,11 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronLeft } from "lucide-react";
-import { TasksTable, type TaskRow } from "@/components/engagements/tasks-table";
+import {
+  TasksTable,
+  type TaskRow,
+  type FirmStatus,
+} from "@/components/engagements/tasks-table";
 
 // An engagement's TASKS, as one list.
 //
@@ -49,6 +53,7 @@ export function EngagementTabs({
   tasks,
   members,
   canEdit,
+  statuses,
   currentUserId,
   checklistControls,
   signaturesControls,
@@ -64,6 +69,8 @@ export function EngagementTabs({
   tasks: TaskRow[];
   members: { id: string; name: string }[];
   canEdit: boolean;
+  /** The firm's own task statuses (1420). */
+  statuses: FirmStatus[];
   /** Drives the table's "Mine" view. */
   currentUserId: string;
   checklistControls: ReactNode;
@@ -125,6 +132,7 @@ export function EngagementTabs({
         tasks={tasks}
         members={members}
         canEdit={canEdit}
+        statuses={statuses}
         currentUserId={currentUserId}
         variant="job"
         addTask={addTask}

@@ -18,6 +18,12 @@ vi.mock("@/app/actions/engagement-tasks", () => ({
 
 import { TasksTable, type TaskRow } from "./tasks-table";
 
+const STATUSES = [
+  { id: "s-todo", name: "To do", color: "#64748b", bucket: "todo" as const },
+  { id: "s-review", name: "Needs review", color: "#2563eb", bucket: "doing" as const },
+  { id: "s-done", name: "Done", color: "#16a34a", bucket: "done" as const },
+];
+
 const MEMBERS = [
   { id: "u-tyler", name: "Tyler Jette" },
   { id: "u-zach", name: "Zachary Thresh" },
@@ -34,6 +40,7 @@ const TASKS: TaskRow[] = [
     title: "Zulu overdue thing",
     kind: "task",
     status: "todo",
+    statusId: "s-todo",
     priority: "high",
     assigneeIds: ["u-tyler"],
     clientId: "c-aber",
@@ -46,6 +53,7 @@ const TASKS: TaskRow[] = [
     title: "Alpha no date",
     kind: "document_collection",
     status: "doing",
+    statusId: "s-review",
     priority: "none",
     assigneeIds: [],
     clientId: "c-zen",
@@ -58,6 +66,7 @@ const TASKS: TaskRow[] = [
     title: "Mike soon",
     kind: "signatures",
     status: "todo",
+    statusId: "s-todo",
     priority: "low",
     assigneeIds: ["u-zach"],
     clientId: "c-mat",
@@ -70,6 +79,7 @@ const TASKS: TaskRow[] = [
     title: "Delta finished",
     kind: "task",
     status: "done",
+    statusId: "s-done",
     priority: "medium",
     assigneeIds: ["u-tyler"],
     clientId: "c-beta",
@@ -139,6 +149,10 @@ function renderTable(props: Partial<React.ComponentProps<typeof TasksTable>> = {
         tasks={TASKS}
         members={MEMBERS}
         canEdit
+        // The firm's own statuses, named and coloured (1420). The table reads
+        // the BUCKET for every rule and the label only for display, which is
+        // exactly what these fixtures let the tests prove.
+        statuses={STATUSES}
         currentUserId="u-tyler"
         {...props}
       />
@@ -183,7 +197,7 @@ describe("TasksTable — the saved views", () => {
   it("still answers 'what is done', from the Status column", async () => {
     renderTable();
     fireEvent.click(within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }));
-    await pickValue(C.col_status as string, en.Clients.task_status_done as string);
+    await pickValue(C.col_status as string, "Done");
     expect(names()).toEqual(["Delta finished"]);
   });
 });

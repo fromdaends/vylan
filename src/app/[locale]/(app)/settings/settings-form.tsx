@@ -10,6 +10,7 @@ import {
   Monitor,
   Check,
   ShieldCheck,
+  CircleDot,
   Download,
   Trash2,
   ChevronRight,
@@ -1155,6 +1156,27 @@ function DataPrivacySection({
         {t("section_data_hint")}
       </p>
       <div className="mt-4 max-w-xl space-y-3">
+        {/* Statuses live beside the audit log rather than on the firm page:
+            both are things the OWNER sets that everybody else then reads. */}
+        <Link
+          href="/settings/statuses"
+          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+        >
+          <span className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+              <CircleDot className="h-4 w-4" />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">
+                {t("statuses_title")}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t("statuses_link_hint")}
+              </span>
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </Link>
         <Link
           href="/settings/audit"
           className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"

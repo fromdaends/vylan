@@ -171,6 +171,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
+import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { listEngagementTasks } from "@/lib/db/engagement-tasks";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
@@ -529,7 +530,13 @@ export default async function EngagementDetailPage({
   // The FIRM's own steps (1340). Read for everybody who can open the page —
   // unlike the access control above, this is the work itself, not a permission
   // screen. Empty until the migration lands, which reads as "nothing planned".
-  const internalTasks = await listEngagementTasks(id);
+  // Both reads together: the job's tasks, and the firm's statuses that give
+  // them their labels and colours. listTaskStatuses is request-cached, so this
+  // costs nothing on a page that already asked for them.
+  const [internalTasks, taskStatuses] = await Promise.all([
+    listEngagementTasks(id),
+    listTaskStatuses(),
+  ]);
   const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
   // Anyone who can ALREADY see this through the client is not a candidate:
   // adding them would grant nothing, and removing them later would take
@@ -1406,6 +1413,7 @@ export default async function EngagementDetailPage({
           title: x.title,
           kind: x.kind,
           status: x.status,
+          statusId: x.statusId,
           priority: x.priority,
           assigneeIds: x.assigneeIds,
           clientId: x.clientId,
@@ -1436,6 +1444,7 @@ export default async function EngagementDetailPage({
         }))}
         members={activeMembers}
         canEdit={isLive}
+        statuses={taskStatuses}
         currentUserId={user?.id ?? ""}
         // Arriving from the Tasks table's type link. Validated against the
         // job's OWN tasks rather than trusted: a stale or hand-typed id would

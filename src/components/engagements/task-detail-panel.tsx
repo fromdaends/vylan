@@ -55,11 +55,20 @@ type TaskStatus = "todo" | "doing" | "done";
 type TaskPriority = "none" | "low" | "medium" | "high";
 type Person = { id: string; name: string };
 
+export type DetailStatus = {
+  id: string;
+  name: string;
+  color: string;
+  bucket: TaskStatus;
+};
+
 export type DetailTask = {
   id: string;
   title: string;
   kind: string;
+  /** The bucket. Every rule reads this; the label is the firm's. */
   status: TaskStatus;
+  statusId?: string | null;
   priority: TaskPriority;
   assigneeIds: string[];
   clientId: string;
@@ -71,7 +80,6 @@ export type DetailTask = {
   meta?: string;
 };
 
-const STATUSES: TaskStatus[] = ["todo", "doing", "done"];
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export type TaskDetailPanelPatch = (
@@ -79,6 +87,7 @@ export type TaskDetailPanelPatch = (
     title?: string;
     notes?: string | null;
     status?: TaskStatus;
+    statusId?: string | null;
     dueDate?: string | null;
     priority?: TaskPriority;
     assigneeIds?: string[];
@@ -92,6 +101,7 @@ export function TaskDetailPanel({
   task,
   members,
   canEdit,
+  statuses,
   kindLabel,
   onClose,
   onOpenScreen,
@@ -99,6 +109,8 @@ export function TaskDetailPanel({
 }: {
   /** Null when nothing is open. The sheet stays mounted either way. */
   task: DetailTask | null;
+  /** The firm's own statuses (1420), in board order. */
+  statuses: DetailStatus[];
   members: Person[];
   canEdit: boolean;
   /** The kind's display name, or null for a plain task. */
@@ -122,6 +134,7 @@ export function TaskDetailPanel({
             task={task}
             members={members}
             canEdit={canEdit}
+            statuses={statuses}
             kindLabel={kindLabel}
             onClose={onClose}
             onOpenScreen={onOpenScreen}
@@ -137,6 +150,7 @@ function DetailBody({
   task,
   members,
   canEdit,
+  statuses,
   kindLabel,
   onClose,
   onOpenScreen,
@@ -145,6 +159,7 @@ function DetailBody({
   task: DetailTask;
   members: Person[];
   canEdit: boolean;
+  statuses: DetailStatus[];
   kindLabel: (kind: string) => string | null;
   onClose: () => void;
   onOpenScreen?: (taskId: string) => void;
@@ -225,26 +240,39 @@ function DetailBody({
               )}
 
               <Field label={t("task_status")}>
-                <div className="flex gap-1">
-                  {STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={!canEdit}
-                      onClick={() => onPatch({ status: s }, {})}
-                      aria-pressed={task.status === s}
-                      className={cn(
-                        "flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors disabled:opacity-50",
-                        task.status === s
-                          ? "border-foreground/30 bg-secondary font-medium text-foreground"
-                          : "border-border text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      {s === "done" && <Check className="size-3" aria-hidden />}
-                      {s === "doing" && <Minus className="size-3" aria-hidden />}
-                      {tStatus(`task_status_${s}` as "task_status_todo")}
-                    </button>
-                  ))}
+                {/* The firm's own statuses, wrapping — three fitted in a row,
+                    nine do not, and a firm that names nine is the entire point
+                    of 1420. */}
+                <div className="flex flex-wrap gap-1">
+                  {statuses.map((s) => {
+                    const on = task.statusId
+                      ? s.id === task.statusId
+                      : s.bucket === task.status;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={!canEdit}
+                        onClick={() =>
+                          onPatch({ status: s.bucket, statusId: s.id }, {})
+                        }
+                        aria-pressed={on}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors disabled:opacity-50",
+                          on
+                            ? "border-foreground/30 bg-secondary font-medium text-foreground"
+                            : "border-border text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: s.color }}
+                          aria-hidden
+                        />
+                        {s.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </Field>
 
