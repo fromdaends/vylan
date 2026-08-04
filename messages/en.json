@@ -2168,6 +2168,7 @@
     "new_title": "Create engagement",
     "new_subtitle": "Set the scope and price, choose what you need from the client, and how they're billed.",
     "back": "Back",
+    "back_to_list": "Back to {list}",
     "section_client": "Client",
     "no_clients_title": "No clients yet",
     "no_clients_body": "Add a client first, then come back here to start their engagement.",
