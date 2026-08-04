@@ -151,6 +151,29 @@ const CreateSchema = z
     // (migration 0610).
     invoice_locks_deliverables: z.boolean().optional().default(false),
     invoice_description: z.string().trim().max(500).nullable().optional(),
+    // The priced scope (migration 1450). Optional, so an older client bundle
+    // that does not send it still creates engagements exactly as before — the
+    // deploy-skew lesson from #0 applies to every server action in this repo.
+    service_items: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(200),
+          description: z.string().trim().max(2000).nullable().default(null),
+          // Cents. Nullable = "not fixed yet", never 0.
+          rate_cents: z.number().int().min(0).max(1_000_000_00).nullable(),
+          rate_type: z.enum(["item", "hour"]),
+          billing_frequency: z.enum([
+            "once",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "yearly",
+          ]),
+          tax_pct: z.number().min(0).max(100).nullable(),
+        }),
+      )
+      .max(50)
+      .optional(),
     reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
       normalizeReminderSettings(value),
     ),
@@ -231,6 +254,14 @@ export async function createEngagementAction(
     invoice_create_now?: boolean;
     invoice_locks_deliverables?: boolean;
     invoice_description?: string | null;
+    service_items?: {
+      name: string;
+      description: string | null;
+      rate_cents: number | null;
+      rate_type: "item" | "hour";
+      billing_frequency: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
+      tax_pct: number | null;
+    }[];
     reminder_settings?: ReminderSettings;
     repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly" | "custom";
     repeat_interval_months?: number | null;
@@ -257,6 +288,7 @@ export async function createEngagementAction(
     invoice_create_now: payload.invoice_create_now,
     invoice_locks_deliverables: payload.invoice_locks_deliverables,
     invoice_description: payload.invoice_description,
+    service_items: payload.service_items,
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,
     repeat_interval_months: payload.repeat_interval_months,
@@ -341,6 +373,7 @@ export async function createEngagementAction(
       // invoice; a "create now" invoice gets them directly below.
       invoice_locks_deliverables: parsed.data.invoice_locks_deliverables,
       invoice_description: parsed.data.invoice_description ?? null,
+      service_items: parsed.data.service_items,
       reminder_settings: parsed.data.reminder_settings,
       assigned_user_id: assignedUserId,
       items,

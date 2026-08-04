@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { isMissingSchema } from "@/lib/db/quickbooks";
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -275,6 +276,17 @@ export type CreateEngagementInput = {
   // invoice created LATER by the automation (on_completion / delayed).
   invoice_locks_deliverables?: boolean;
   invoice_description?: string | null;
+  // Priced service lines — the scope (migration 1450). Optional so every
+  // existing caller is unaffected; absent means "no priced scope", which is
+  // every engagement created before this shipped.
+  service_items?: {
+    name: string;
+    description: string | null;
+    rate_cents: number | null;
+    rate_type: "item" | "hour";
+    billing_frequency: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
+    tax_pct: number | null;
+  }[];
   reminder_settings: ReminderSettings;
   // Who the work belongs to from the moment it exists. Absent (or null) keeps
   // the old behaviour of assigning the creator. Before this, creating work for
@@ -490,6 +502,36 @@ export async function createEngagementWithItems(
       .insert(rows);
     if (itemsErr) throw itemsErr;
   }
+
+  // The priced scope (migration 1450). Written AFTER the engagement and its
+  // checklist, and deliberately FAIL-SOFT: a missing table means 1450 is not
+  // applied yet, and an engagement created without its scope is still a valid,
+  // usable engagement — exactly how it behaved before this shipped. Losing the
+  // whole engagement because a new table is not there yet would be far worse
+  // than losing the prices, which the accountant can re-enter on its page.
+  const scope = input.service_items ?? [];
+  if (scope.length > 0) {
+    const { error: scopeErr } = await supabase.from("engagement_items").insert(
+      scope.map((it, idx) => ({
+        engagement_id: (engagement as Engagement).id,
+        firm_id: u.firm_id,
+        name: it.name,
+        description: it.description,
+        rate_cents: it.rate_cents,
+        rate_type: it.rate_type,
+        billing_frequency: it.billing_frequency,
+        tax_pct: it.tax_pct,
+        order_index: idx,
+      })),
+    );
+    if (scopeErr && !isMissingSchema(scopeErr)) throw scopeErr;
+    if (scopeErr) {
+      console.warn(
+        "[engagements] priced scope not saved — migration 1450 unapplied",
+      );
+    }
+  }
+
   return engagement as Engagement;
 }
 
