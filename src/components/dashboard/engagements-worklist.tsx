@@ -144,6 +144,12 @@ export type WorklistRow = {
    * engagement's TYPE is the service, and its TASKS are the items — so neither
    * column needs new storage, only a name.
    */
+  /**
+   * The engagement's priced service lines, in proposal order — Canopy's
+   * "Service items" and the real answer to "what are we doing for them".
+   * Empty on anything created before #1274, which falls back to `type`.
+   */
+  serviceNames?: string[];
   type?: EngagementType;
   /** When it went to the client; falls back to creation for a draft. */
   startedAt?: string | null;
@@ -517,7 +523,13 @@ export function WorklistTable({
     const stages = new Set<string>();
     for (const r of rows) {
       if (r.clientName) clients.set(r.clientName, r.clientName);
-      if (r.type) services.add(r.type);
+      // Offer what the column actually SHOWS: the priced line names when the
+      // engagement has them, its type only as the fallback. Offering the type
+      // on a row that displays "Monthly bookkeeping" would let you filter by a
+      // label that appears nowhere on screen.
+      const named = (r.serviceNames ?? []).filter((n) => n.trim() !== "");
+      if (named.length > 0) for (const n of named) services.add(n);
+      else if (r.type) services.add(r.type);
       // Unassigned is a real answer to "whose is this", and the one people
       // filter for most — it gets a row of its own rather than being absent.
       assignees.set(r.assigneeName ?? "", r.assigneeName ?? "");
@@ -537,7 +549,12 @@ export function WorklistTable({
       out = out.filter((r) => clientFilter.includes(r.clientName));
     }
     if (serviceFilter.length) {
-      out = out.filter((r) => r.type && serviceFilter.includes(r.type));
+      out = out.filter((r) => {
+        const named = (r.serviceNames ?? []).filter((n) => n.trim() !== "");
+        return named.length > 0
+          ? named.some((n) => serviceFilter.includes(n))
+          : Boolean(r.type && serviceFilter.includes(r.type));
+      });
     }
     if (assigneeFilter.length) {
       out = out.filter((r) => assigneeFilter.includes(r.assigneeName ?? ""));
@@ -742,7 +759,11 @@ export function WorklistTable({
               onChange={setServiceFilter}
               options={distinct.services.map((v) => ({
                 value: v,
-                label: serviceLabelFor(v),
+                // A type key needs translating ("t1" → "Personal tax (T1)"); a
+                // service line is already the words the accountant typed.
+                label: SERVICE_LABEL_KEY[v as EngagementType]
+                  ? serviceLabelFor(v)
+                  : v,
               }))}
             />
             {/* TASKS — and it is called that because that is what it counts.
@@ -967,6 +988,11 @@ function WorklistRowView({
   // One shared map (lib/engagements/services.ts) so a second surface showing
   // the service cannot invent its own wording for the same four things.
   const serviceLabel = (type: EngagementType) => tEng(SERVICE_LABEL_KEY[type]);
+  // Named lines only; an unnamed one is a draft the accountant has not filled
+  // in, and a blank in a list of services is worse than one fewer.
+  const services = (row.serviceNames ?? []).filter((n) => n.trim() !== "");
+  const moreServicesText = (count: number) =>
+    tEng("wl_service_more", { count: String(count) });
   const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
@@ -1150,8 +1176,36 @@ function WorklistRowView({
 
             {/* SERVICE ITEMS — what was sold. Quiet by design: it repeats down
                 the column, so it must not compete with the engagement's name. */}
+            {/* SERVICE ITEMS — the engagement's priced lines, which is what
+                Canopy shows here ("Bookkeeping Monthly", "Tax Prep, Payroll").
+
+                Two shown, then "+N more" exactly as Canopy does: the column has
+                to stay one line tall or a row with five services makes every
+                other row on screen taller for nothing. The full list is on the
+                engagement itself.
+
+                An engagement with no priced lines falls back to its TYPE, which
+                is every engagement made before #1274. That fallback is why the
+                column reads "Custom" on most existing rows — four fixed values
+                cannot describe a real firm's services, which is the whole
+                reason the priced lines exist. */}
             <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
-              {row.type ? serviceLabel(row.type) : "—"}
+              {services.length > 0 ? (
+                <div className="flex flex-wrap items-baseline gap-x-1.5">
+                  <span className="text-foreground">
+                    {services.slice(0, 2).join(", ")}
+                  </span>
+                  {services.length > 2 && (
+                    <span className="text-xs text-muted-foreground">
+                      {moreServicesText(services.length - 2)}
+                    </span>
+                  )}
+                </div>
+              ) : row.type ? (
+                serviceLabel(row.type)
+              ) : (
+                "—"
+              )}
             </TableCell>
 
             <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top md:table-cell">

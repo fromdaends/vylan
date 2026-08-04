@@ -1,6 +1,7 @@
 import { cache } from "react";
 import {
   listEngagements,
+  listItemNamesByEngagement,
   type Engagement,
   type EngagementScope,
 } from "@/lib/db/engagements";
@@ -159,7 +160,8 @@ export const loadEngagementWorklist = cache(
     // in ONE query alongside clients + users (no N+1). loadEngagementSignals is
     // React.cache'd, so this is usually free on repeat.
     const signals = await loadEngagementSignals(scope);
-    const [clients, firmUsers, paymentByEng, tasksByEng] = await Promise.all([
+    const [clients, firmUsers, paymentByEng, tasksByEng, itemNamesByEng] =
+      await Promise.all([
       listClients({ includeArchived: false }),
       listFirmUsers(),
       getLatestPaymentStatusByEngagementIds(signals.map((s) => s.engagement.id)),
@@ -174,6 +176,7 @@ export const loadEngagementWorklist = cache(
       // paperwork was in — with the return not yet prepared, reviewed, signed
       // or delivered.
       countTasksByEngagement(),
+      listItemNamesByEngagement(),
     ]);
 
     const clientsById = new Map(clients.map((c) => [c.id, c]));
@@ -217,9 +220,16 @@ export const loadEngagementWorklist = cache(
         awaitingPct: doingPct,
         tasksDone: taskCounts?.done ?? 0,
         tasksTotal: taskCounts?.total ?? 0,
-        // The service (its type) and when it started. sent_at is the honest
-        // start — a draft has not begun — with created_at as the fallback so
-        // the column is never empty on a row that plainly exists.
+        // WHAT WE ARE DOING FOR THEM, and when it started.
+        //
+        // serviceNames are the engagement's priced lines (#1274) — Canopy's
+        // "Service items", and the real answer. `type` stays as the FALLBACK
+        // for every engagement created before those existed: one of four fixed
+        // values, which reads "Custom" on most real work.
+        //
+        // sent_at is the honest start — a draft has not begun — with created_at
+        // behind it so the column is never empty on a row that plainly exists.
+        serviceNames: itemNamesByEng.get(e.id) ?? [],
         type: e.type,
         startedAt: e.sent_at ?? e.created_at ?? null,
         itemsDone: a.itemsDone,
