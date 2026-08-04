@@ -434,7 +434,18 @@ export function useEngagementRowMenu(args: {
           (everything was filed — purged, no question asked) or becomes the
           unfiled-documents warning — this delete has no undo. */}
       <Dialog open={forever != null} onOpenChange={(o) => !o && setForever(null)}>
-        <DialogContent>
+        <DialogContent
+          // The dialog opens from a menu item, and the menu's close beat —
+          // focus returning to the trigger, the dismissable-layer teardown —
+          // lands OUTSIDE the just-mounted dialog and silently dismisses it
+          // (observed live: mounted, gone 250ms later). The repo has hit this
+          // Radix race before (see document-actions-menu). Refusing
+          // outside-dismissal both dodges the race and is right for a
+          // destructive confirm: it closes on Cancel, Escape, or a decision —
+          // not on a stray click.
+          onInteractOutside={(e) => e.preventDefault()}
+          onFocusOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{t("forever_title")}</DialogTitle>
             <DialogDescription>
