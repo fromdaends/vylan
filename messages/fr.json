@@ -2348,7 +2348,7 @@
     "toast_undo": "Annuler",
     "forever_title": "Supprimer définitivement ?",
     "forever_checking": "Vérification des fichiers de cet engagement…",
-    "forever_desc": "{count, plural, one {Le # fichier de cet engagement sera conservé — il sera déplacé dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.} other {Les # fichiers de cet engagement seront conservés — ils seront déplacés dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.}}",
+    "forever_desc": "{count, plural, one {# fichier de cet engagement sera conservé — il sera déplacé dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.} other {# fichiers de cet engagement seront conservés — ils seront déplacés dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.}}",
     "forever_confirm": "Supprimer définitivement",
     "forever_failed": "Une erreur est survenue — rien n’a été supprimé. Réessayez.",
     "views_label": "Vues des engagements",
