@@ -1,9 +1,13 @@
-// Client messaging, portal side (Phase 2): the thread refresh, POST {token}.
+// Client messaging, portal side: the thread refresh, POST {token}.
 //
 // Trust model (same as every portal route): the client's browser never
 // touches the database. The magic token resolves to exactly ONE engagement
-// (or the request is refused), and the read runs on the service role scoped
-// by that engagement id — the client cannot name an engagement themselves.
+// (or the request is refused), and that engagement resolves to exactly ONE
+// client — the read runs on the service role scoped by that client id. The
+// client cannot name a client or an engagement themselves.
+//
+// Since 1440 this returns the client's WHOLE conversation with the firm, not
+// just the part that happened under the engagement whose link they opened.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { findEngagementForToken } from "@/lib/db/portal";
@@ -11,7 +15,7 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   CLIENT_MESSAGING_SCHEMA_MISSING,
   countUnreadForClient,
-  getThreadForEngagement,
+  getThreadForClient,
   listClientMessages,
   toPortalMessage,
 } from "@/lib/db/client-messages";
@@ -42,8 +46,8 @@ export async function POST(request: NextRequest) {
 
   const sb = getServiceRoleSupabase();
   const [messages, thread] = await Promise.all([
-    listClientMessages(sb, engagement.id),
-    getThreadForEngagement(sb, engagement.id),
+    listClientMessages(sb, engagement.client_id),
+    getThreadForClient(sb, engagement.client_id),
   ]);
   if (
     messages === CLIENT_MESSAGING_SCHEMA_MISSING ||

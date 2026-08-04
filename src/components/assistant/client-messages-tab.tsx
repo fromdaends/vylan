@@ -1,13 +1,16 @@
 "use client";
 
-// The panel's "Client messages" tab (founder redesign): a social-style,
-// cross-client INBOX — every client conversation in one list with unread
-// dots, no engagement picker to fumble with. Tap a row to open that thread.
+// The panel's "Client messages" tab: a social-style, cross-client INBOX —
+// every client conversation in one list with unread dots. Tap a row to open
+// that thread.
 //
-// Conversations are per-engagement (the thread model) but shown client-first:
-// the client's name leads, the engagement is the subtitle. Opening a row hosts
-// the existing EngagementMessages thread (which fetches + stamps the firm read
-// pointer on visibility), so this component only owns the list ⇆ thread nav.
+// ONE ROW PER CLIENT, and one forever conversation behind it (migration 1440).
+// The list is every ACTIVE client, not just the ones already talked to, so
+// starting a chat with somebody is finding their name rather than picking an
+// engagement first. Clients with real messages sort to the top by recency; the
+// rest sit below alphabetically. Opening a row hosts the ClientThread (which
+// fetches + stamps the firm read pointer on visibility), so this component
+// only owns the list ⇆ thread nav.
 //
 // When the firm has a team, the firm's internal team chat is PINNED at the top
 // of the inbox as its own conversation — the firm's name + logo lead the row
@@ -19,17 +22,17 @@ import { ChevronLeft, Loader2, MessagesSquare, Pin } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
-import { EngagementMessages } from "@/components/engagements/engagement-messages";
+import { ClientThread } from "@/components/messages/client-thread";
 import { TeamThread } from "@/components/assistant/team-thread";
 import type { FirmConversation } from "@/lib/db/client-messages";
 import type { TeamConversation } from "@/lib/db/team-messages";
 
 // Inbox refresh while the panel is open. A touch slower than an open thread —
 // this is a heavier list query and runs on every panel-open, whereas the open
-// conversation (EngagementMessages) polls every few seconds for the live feel.
+// conversation (ClientThread) polls every few seconds for the live feel.
 const POLL_MS = 10_000;
 
-// The pinned team conversation's slot in `openId`. Engagement ids are UUIDs,
+// The pinned team conversation's slot in `openId`. Client ids are UUIDs,
 // so this sentinel can never collide with a real conversation.
 export const TEAM_CONVERSATION_ID = "__team__";
 
@@ -155,9 +158,7 @@ export function ClientMessagesTab({
     }
     setConversations((prev) =>
       prev
-        ? prev.map((c) =>
-            c.engagementId === id ? { ...c, unreadCount: 0 } : c,
-          )
+        ? prev.map((c) => (c.clientId === id ? { ...c, unreadCount: 0 } : c))
         : prev,
     );
   }, []);
@@ -208,9 +209,7 @@ export function ClientMessagesTab({
 
   // --- Thread view --------------------------------------------------------
   if (openId) {
-    const conv = conversations?.find((c) => c.engagementId === openId) ?? null;
-    const status = conv?.status ?? "in_progress";
-    const isLive = status === "sent" || status === "in_progress";
+    const conv = conversations?.find((c) => c.clientId === openId) ?? null;
     return (
       <div className="flex h-full min-h-0 flex-col">
         {/* One slim row IS the thread header: a bare back arrow plus the
@@ -227,28 +226,18 @@ export function ClientMessagesTab({
             <ChevronLeft className="size-4" aria-hidden />
           </button>
           <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
-            {conv?.clientName ?? conv?.engagementTitle ?? ""}
+            {conv?.clientName ?? ""}
           </p>
         </div>
         <div className="min-h-0 flex-1">
-          <EngagementMessages
+          <ClientThread
             key={openId}
-            engagementId={openId}
+            clientId={openId}
             clientName={conv?.clientName ?? null}
             initialMessages={[]}
             deferInitialLoad
             hideHeader
             notActivated={false}
-            readOnly={!isLive}
-            readOnlyReason={
-              status === "cancelled"
-                ? "cancelled"
-                : status === "complete"
-                  ? "complete"
-                  : status === "draft"
-                    ? "draft"
-                    : null
-            }
             locale={locale}
           />
         </div>
@@ -304,20 +293,20 @@ export function ClientMessagesTab({
                   aria-hidden
                 />
                 <p className="text-sm font-medium text-foreground">
-                  {t("messages_inbox_empty")}
+                  {t("messages_inbox_no_clients")}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {t("messages_inbox_empty_hint")}
+                  {t("messages_inbox_no_clients_hint")}
                 </p>
               </div>
             ) : (
               <ul className="divide-y divide-border/60">
                 {(conversations ?? []).map((c) => (
-                  <li key={c.engagementId}>
+                  <li key={c.clientId}>
                     <ConversationRow
                       conversation={c}
                       locale={locale}
-                      onOpen={() => openConversation(c.engagementId)}
+                      onOpen={() => openConversation(c.clientId)}
                       youPrefix={t("messages_preview_you")}
                       noMessages={t("messages_no_messages_yet")}
                       unreadLabel={(n) =>
@@ -351,7 +340,7 @@ export function ConversationRow({
   unreadLabel: (n: number) => string;
 }) {
   const unread = c.unreadCount > 0;
-  const title = c.clientName ?? c.engagementTitle;
+  const title = c.clientName;
   const preview = c.lastMessage
     ? (c.lastMessage.sender === "firm" ? youPrefix : "") +
       c.lastMessage.body.replace(/\s+/g, " ").trim()
@@ -366,7 +355,7 @@ export function ConversationRow({
       <AvatarInitials
         name={title}
         size={46}
-        color={avatarColor(c.clientName ?? c.engagementId)}
+        color={avatarColor(c.clientName || c.clientId)}
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
@@ -380,9 +369,14 @@ export function ConversationRow({
           >
             {title}
           </span>
-          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
-            {formatRelative(c.lastActivityAt, locale)}
-          </span>
+          {/* No timestamp on a client you've never messaged — there is no
+              activity to date, and showing when the record was created reads
+              like a conversation that isn't there. */}
+          {c.lastActivityAt && (
+            <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+              {formatRelative(c.lastActivityAt, locale)}
+            </span>
+          )}
         </span>
         <span
           className={cn(
@@ -392,11 +386,6 @@ export function ConversationRow({
         >
           {preview}
         </span>
-        {c.clientName && (
-          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/70">
-            {c.engagementTitle}
-          </span>
-        )}
       </span>
       {unread && (
         <span

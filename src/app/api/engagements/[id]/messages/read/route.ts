@@ -1,8 +1,9 @@
-// Client messaging (Phase 1): stamp "the firm has read this engagement's
-// thread as of now". Called when the accountant opens the Messages tab.
-// No-op when the thread doesn't exist yet (nothing was ever sent). RLS
-// scopes the update to the caller's own firm, and the 0650 column grant
-// whitelists firm_last_read_at only.
+// Client messaging read-stamp — COMPATIBILITY SHIM. The real route is
+// /api/clients/[id]/messages/read; this one exists so a browser still running
+// the pre-1440 bundle keeps clearing its unread badge mid-deploy. It resolves
+// the engagement to its client and stamps that client's thread. RLS scopes the
+// update to the caller's own firm, and the 0650 column grant whitelists
+// firm_last_read_at only.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -24,7 +25,19 @@ export async function POST(
     return NextResponse.json({ error: "unauth" }, { status: 401 });
   }
 
-  const res = await markThreadReadByFirm(supabase, id);
+  // RLS-scoped, so a foreign engagement id resolves to nothing.
+  const { data: engagement, error } = await supabase
+    .from("engagements")
+    .select("client_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  const clientId = (engagement as { client_id: string } | null)?.client_id;
+  if (!clientId) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  const res = await markThreadReadByFirm(supabase, clientId);
   if (res === CLIENT_MESSAGING_SCHEMA_MISSING) {
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
   }
