@@ -2785,7 +2785,9 @@
     "start_date_hint": "When the work begins. Leave blank if it starts now.",
     "field_intro_message": "Message to the client",
     "intro_message_placeholder": "A short note that appears at the top of what your client sees.",
-    "intro_message_hint": "Optional. The client reads this first."
+    "intro_message_hint": "Optional. The client reads this first.",
+    "field_assignee": "Assigned to",
+    "assignee_me": "Me"
   },
   "Attention": {
     "metric_active": "Active",
