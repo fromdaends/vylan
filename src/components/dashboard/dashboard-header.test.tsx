@@ -24,7 +24,7 @@ function renderHeader(props: { firstName: string | null; subtitle: string }) {
 }
 
 describe("DashboardHeader", () => {
-  it("greets the user by first name, shows the firm name WITHOUT a date, and links to Import clients", () => {
+  it("greets the user by first name and shows the firm name WITHOUT a date or action buttons", () => {
     renderHeader({ firstName: "Zach", subtitle: "Acme Co" });
 
     // The greeting is time-aware (the exact word depends on the clock), so we
@@ -49,13 +49,12 @@ describe("DashboardHeader", () => {
         .some((a) => a.getAttribute("href") === "/engagements/new"),
     ).toBe(false);
 
-    // Import clients → the CSV import flow.
-    const importClients = screen.getByRole("link", {
-      name: en.Clients.import_title,
-    });
-    expect(importClients.getAttribute("href") ?? "").toContain(
-      "/clients/import",
-    );
+    // "Import clients" left too (founder's call, 2026-08-03): importing is a
+    // clients-section job, not a standing button on the Overview. Only the
+    // bell (passed in via the `bell` slot) shares the header now.
+    expect(
+      screen.queryByRole("link", { name: en.Clients.import_title }),
+    ).not.toBeInTheDocument();
   });
 
   it("still renders a greeting + the firm name when the user has no name", () => {
