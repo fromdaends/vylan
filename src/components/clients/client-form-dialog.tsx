@@ -31,6 +31,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   createClientAction,
   updateClientAction,
+  updateClientAvatarAction,
+  removeClientAvatarAction,
   type ClientFormState,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
@@ -44,11 +46,17 @@ import { SearchableSelect } from "./searchable-select";
 import { emailChangeNeedsConfirm } from "./email-change";
 import { Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { AvatarPicker } from "@/components/ui/avatar-picker";
 
 type Props = {
   mode: "create" | "edit";
   locale: "fr" | "en";
   client?: Client;
+  /** A SIGNED URL for the client's existing picture, minted by the server that
+   *  renders this (clients.avatar_path stores a path, and only the server can
+   *  sign it). Omitted simply means the picker starts on initials — which is
+   *  also the correct state for a client who has no picture. */
+  avatarUrl?: string | null;
   trigger?: React.ReactNode;
   /** Active teammates, for the create-time team picker. Empty in a solo firm,
    *  which hides the control entirely. */
@@ -68,6 +76,7 @@ export function ClientFormDialog({
   mode,
   locale,
   client,
+  avatarUrl,
   trigger,
   teammates = [],
   defaultOpen = false,
@@ -200,6 +209,50 @@ export function ClientFormDialog({
               <AlertDescription>{t("save_error")}</AlertDescription>
             </Alert>
           )}
+
+          {/* The client's picture — the founder: "theres no way for a client to
+              upload a pfp or even the accountant. Its a redudant circle. Add the
+              ability for a accountant to do it for now in the profile section of
+              the client when they edit them."
+
+              EDIT ONLY, and that is a real constraint rather than an oversight.
+              The storage path is keyed on the client's id
+              (firms/{firm}/clients/{client}/avatar-…), so there is nowhere to
+              put a file for a client that does not exist yet. Offering the
+              control while creating would mean either inventing an id before the
+              save or holding the bytes in memory across a form submit — both
+              worse than picking the picture a moment later.
+
+              It writes IMMEDIATELY, not on Save, because it is not a form field:
+              it uploads through its own action the instant you choose a file.
+              That is why it sits visually apart from the fields below it. */}
+          {client && (
+            <div className="pb-1">
+              <AvatarPicker
+                currentUrl={avatarUrl}
+                name={client.display_name}
+                size={56}
+                onUpload={async (fd) => {
+                  const res = await updateClientAvatarAction(client.id, fd);
+                  return {
+                    ok: res.ok,
+                    signedUrl: res.ok ? res.signedUrl : null,
+                  };
+                }}
+                onRemove={async () => {
+                  const res = await removeClientAvatarAction(client.id);
+                  return { ok: res.ok };
+                }}
+                labels={{
+                  change: t("picture_change"),
+                  uploading: t("picture_uploading"),
+                  remove: t("picture_remove"),
+                  error: () => t("picture_error"),
+                }}
+              />
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="display_name">{t("field_name")}</Label>
             <Input

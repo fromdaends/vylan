@@ -1,6 +1,6 @@
 "use server";
 
-// ONE door for commenting, on all five targets (1510).
+// ONE door for commenting, on all five targets (1520).
 //
 // WHY THIS EXISTS ALONGSIDE actions/file-comments.ts. That file is the original
 // engagement-page path: the page is a Server Component, it loads every comment
@@ -50,7 +50,7 @@ export type CommentTargetInput =
   | { kind: "task"; taskId: string }
   | { kind: "client"; clientId: string };
 
-// A note that still lives in client_notes (1270) because 1510 has not been
+// A note that still lives in client_notes (1270) because 1520 has not been
 // applied yet carries this prefix on its id, so a later delete knows which
 // table to go to. Without it, deleting a pre-migration note would silently miss.
 const LEGACY_NOTE_PREFIX = "note:";
@@ -59,7 +59,7 @@ export type CommentThreadData = {
   comments: FileComment[];
   members: { id: string; name: string }[];
   currentUserId: string | null;
-  // True when the rows came from client_notes because 1510 is unapplied. The UI
+  // True when the rows came from client_notes because 1520 is unapplied. The UI
   // uses it for one thing only: hiding the @ button, since a legacy note has
   // nowhere to store mentions and offering the control would silently drop them.
   legacy: boolean;
@@ -91,7 +91,7 @@ export async function loadCommentThreadAction(
     );
     return {
       // A task thread has no older home to fall back to — nothing could write
-      // one before 1510 — so an unapplied migration is simply an empty thread.
+      // one before 1520 — so an unapplied migration is simply an empty thread.
       comments: res === COMMENTS_SCHEMA_MISSING ? [] : res,
       members: mentionable,
       currentUserId: user.id,
@@ -113,7 +113,7 @@ export async function loadCommentThreadAction(
     };
   }
 
-  // 1510 is not applied. Read the OLD table so the founder's existing notes stay
+  // 1520 is not applied. Read the OLD table so the founder's existing notes stay
   // on screen — an empty box where notes used to be is the worst possible way to
   // ship this, and it is exactly what a bare `return []` would have done.
   const notes = await listClientNotes(target.clientId);
@@ -167,7 +167,7 @@ export async function addCommentAction(input: {
     // Resolve the task's own engagement + client. engagement_id is DENORMALIZED
     // onto the comment so mention links and revalidation resolve to a page —
     // and it is legitimately null for a standalone task (1350), which is why
-    // 1510 had to drop the NOT NULL. Reading it back also proves the task is
+    // 1520 had to drop the NOT NULL. Reading it back also proves the task is
     // ours before we write: RLS would refuse anyway, but a clean "failed" beats
     // a policy violation in the log.
     const sb = await getServerSupabase();
@@ -224,7 +224,7 @@ export async function addCommentAction(input: {
 
   if (!res.ok) {
     if (res.error === "schema") {
-      // 1510 unapplied — write the OLD table so a note is never lost just
+      // 1520 unapplied — write the OLD table so a note is never lost just
       // because the database is behind the deployment.
       const legacy = await createClientNote({
         firmId: firm.id,
@@ -275,7 +275,7 @@ export async function deleteCommentAction(input: {
   const user = await getCurrentUser();
   if (!user) return { ok: false };
 
-  // A pre-1510 note lives in the other table; its id says so.
+  // A pre-1520 note lives in the other table; its id says so.
   if (input.id.startsWith(LEGACY_NOTE_PREFIX)) {
     const ok = await deleteClientNote(input.id.slice(LEGACY_NOTE_PREFIX.length));
     if (ok && input.target.kind === "client") {

@@ -113,7 +113,7 @@ describe("InlineCommentThread — self-loading", () => {
   });
 });
 
-// A client's notes still live in client_notes until 1510 is applied. They must
+// A client's notes still live in client_notes until 1520 is applied. They must
 // still READ and WRITE in that state — an empty box where a firm's notes used to
 // be is the worst possible way to ship this — but a legacy note has nowhere to
 // store a mention, so the @ control is hidden rather than silently dropping it.

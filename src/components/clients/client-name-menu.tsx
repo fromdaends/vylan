@@ -33,6 +33,7 @@ import type { Client } from "@/lib/db/clients";
 
 export function ClientNameMenu({
   client,
+  avatarUrl,
   locale,
   canManage,
   isOwner,
@@ -41,6 +42,10 @@ export function ClientNameMenu({
   archiveFormId,
 }: {
   client: Client;
+  /** Signed URL for the client's picture (1530), minted by the page. Passed
+   *  through to the edit dialog so its picker opens showing the CURRENT
+   *  picture rather than initials. */
+  avatarUrl?: string | null;
   locale: "fr" | "en";
   canManage: boolean;
   isOwner: boolean;
@@ -125,6 +130,7 @@ export function ClientNameMenu({
         mode="edit"
         locale={locale}
         client={client}
+        avatarUrl={avatarUrl}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

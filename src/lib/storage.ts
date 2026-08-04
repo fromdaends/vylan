@@ -210,20 +210,33 @@ export function invoiceAttachmentPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/invoices/${parts.uuid}-${safeName}`;
 }
 
-export type BrandingKind = "firm_logo" | "user_avatar";
+export type BrandingKind = "firm_logo" | "user_avatar" | "client_avatar";
 
-// Storage paths for branding images. Both sit under the firm prefix so the
-// existing `firms/{firm_id}/...` RLS on the bucket continues to apply.
+// Storage paths for branding images. All THREE sit under the firm prefix so the
+// existing `firms/{firm_id}/...` RLS on the bucket continues to apply — which is
+// the whole reason a client's picture reuses this pipeline rather than getting
+// its own: the bucket scoping, the sharp re-encode, the size ceiling and the
+// signed-URL TTL are already right here, and a second upload path would have to
+// re-earn all four.
 export function brandingStoragePath(parts: {
   firmId: string;
   kind: BrandingKind;
   userId?: string;
+  clientId?: string;
   uuid: string;
   ext: string;
 }): string {
   const safeExt = parts.ext.replace(/[^a-z0-9]/gi, "").slice(0, 5) || "jpg";
   if (parts.kind === "firm_logo") {
     return `firms/${parts.firmId}/branding/logo-${parts.uuid}.${safeExt}`;
+  }
+  if (parts.kind === "client_avatar") {
+    if (!parts.clientId) {
+      throw new Error(
+        "brandingStoragePath: clientId required for client_avatar",
+      );
+    }
+    return `firms/${parts.firmId}/clients/${parts.clientId}/avatar-${parts.uuid}.${safeExt}`;
   }
   // user_avatar requires userId
   if (!parts.userId) {

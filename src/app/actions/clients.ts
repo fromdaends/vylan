@@ -13,7 +13,10 @@ import {
   setClientPrivacy,
   setClientVisibility,
   canReceiveClientAssignment,
+  getClient,
+  type ClientInput,
 } from "@/lib/db/clients";
+import { uploadBrandingImage } from "@/app/actions/branding";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { can } from "@/lib/auth/capabilities";
@@ -171,6 +174,71 @@ export async function updateClientAction(
   }
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+export type ClientAvatarResult =
+  | { ok: true; signedUrl: string | null }
+  | { ok: false; error: string };
+
+// Give a client a picture. The accountant does this on the client's own edit
+// form — the founder's framing was "for now", and the portal deliberately has no
+// write path to it (see 1530).
+//
+// Reuses uploadBrandingImage, the SAME pipeline behind a user's avatar and the
+// firm logo, so the mime allow-list, the byte ceiling, the sharp re-encode and
+// the firm-prefixed storage path all apply unchanged. Building a second uploader
+// would have meant re-earning every one of those.
+export async function updateClientAvatarAction(
+  clientId: string,
+  formData: FormData,
+): Promise<ClientAvatarResult> {
+  // Same gate as renaming a client: a Junior does the WORK on a client but does
+  // not change what the client IS. A picture is identity, not work.
+  if (!can(await getCurrentUser(), "clients.manage")) {
+    return { ok: false, error: "forbidden" };
+  }
+  // Prove the client is OURS before the id reaches a storage path. RLS would
+  // refuse the write anyway, but a rejected upload that already wrote an object
+  // leaves a stray file in the bucket.
+  const client = await getClient(clientId);
+  if (!client) return { ok: false, error: "not_found" };
+
+  const upload = await uploadBrandingImage(formData, "client_avatar", {
+    clientId,
+  });
+  if (!upload.ok) return { ok: false, error: upload.error };
+
+  try {
+    await updateClient(clientId, {
+      avatar_path: upload.path,
+    } as Partial<ClientInput>);
+  } catch {
+    return { ok: false, error: "save_failed" };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, signedUrl: upload.signedUrl };
+}
+
+export async function removeClientAvatarAction(
+  clientId: string,
+): Promise<ClientAvatarResult> {
+  if (!can(await getCurrentUser(), "clients.manage")) {
+    return { ok: false, error: "forbidden" };
+  }
+  const client = await getClient(clientId);
+  if (!client) return { ok: false, error: "not_found" };
+  try {
+    // Clear the column, keep the storage object — the same call the user-avatar
+    // path makes, and for the same reason: a stored object is cheap, and a
+    // delete that races a page still rendering its signed URL is not.
+    await updateClient(clientId, {
+      avatar_path: null,
+    } as Partial<ClientInput>);
+  } catch {
+    return { ok: false, error: "save_failed" };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, signedUrl: null };
 }
 
 // Reassign a client's owner to another ACTIVE firm member. Any firm member may

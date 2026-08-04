@@ -60,11 +60,11 @@ describe("groupEngagementComments", () => {
   });
 });
 
-// The 1510 targets. The important one is the LAST test: before task comments
+// The 1520 targets. The important one is the LAST test: before task comments
 // had their own bucket, "no file and no item" meant "on the engagement", and a
 // task comment carries the engagement_id (so mention links resolve) — so it
 // arrived in the same query and silently joined the engagement's own thread.
-describe("groupEngagementComments — tasks (1510)", () => {
+describe("groupEngagementComments — tasks (1520)", () => {
   it("buckets a task comment by its task", () => {
     const grouped = groupEngagementComments([
       c({ id: "t1", engagementTaskId: "task-a" }),
