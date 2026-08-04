@@ -71,19 +71,26 @@ const FINISH_TOTAL_MS = 320;
 /** Nothing may leave the bar running longer than this. */
 const MAX_MS = 20000;
 /**
- * The floor. Once the bar is up it stays up this long, even if the page has
- * already arrived.
- *
- * ⚠️ THIS IS THE WHOLE DIFFERENCE between a reassuring bar and one nobody ever
- * sees. Next prefetches every <Link> in view, so most navigations in this app
- * land in under 50ms — the bar would mount and unmount inside three frames and
- * read as nothing happening at all, which is precisely the complaint it was
- * built to answer.
- *
- * 400ms is long enough to register as a deliberate sweep and short enough that
- * it never feels like it is holding the page back.
+ * How long one crossing takes. MUST match the duration in the animate- class
+ * below — a test asserts it, because the two drifting apart is exactly the bug
+ * the founder caught.
  */
-const MIN_VISIBLE_MS = 400;
+const SWEEP_MS = 800;
+
+/**
+ * The floor: once the bar is up it stays up for one WHOLE crossing, even if the
+ * page arrived in three frames.
+ *
+ * ⚠️ THE BUG THIS FIXES. It used to be 400ms against a 1600ms sweep, so on a
+ * fast page the segment got a quarter of the way across and vanished. The
+ * founder: "it only crosses, like, the first quarter of the top of the screen."
+ * That is 400/1600 exactly — it was not stopping deliberately, it was being cut
+ * off mid-journey, which reads as the load having failed.
+ *
+ * Tying the floor TO the sweep is what makes that unrepresentable: the segment
+ * always completes at least one full pass, left edge to right edge.
+ */
+const MIN_VISIBLE_MS = SWEEP_MS;
 
 export function RouteProgress() {
   const pathname = usePathname();
@@ -205,7 +212,7 @@ export function RouteProgress() {
               "opacity-0 transition-opacity duration-300"
             : // Loops for as long as the wait lasts. ease-in-out so it arrives
               // and leaves softly instead of tearing across at a constant clip.
-              "opacity-70 animate-[route-progress_1.6s_cubic-bezier(0.4,0,0.2,1)_infinite] " +
+              "opacity-70 animate-[route-progress_800ms_cubic-bezier(0.4,0,0.2,1)_infinite] " +
               // Reduced motion: no travel. A still, very faint full-width line
               // that says something is happening without moving.
               "motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-40",

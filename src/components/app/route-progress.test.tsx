@@ -111,7 +111,7 @@ describe("RouteProgress", () => {
     // The floor: a prefetched page arrives in a few frames, and the bar must
     // still be sweeping when it does.
     expect(inner()?.className).toContain("infinite");
-    act(() => void vi.advanceTimersByTime(400));
+    act(() => void vi.advanceTimersByTime(800));
     rerender(<RouteProgress />);
     // NOW it goes — a fade, not a snap to full. There is nothing to fill.
     expect(inner()?.className).toContain("opacity-0");
@@ -129,7 +129,7 @@ describe("RouteProgress", () => {
     clickLink("/dashboard?due=overdue");
     expect(bar()).not.toBeNull();
     arriveAt("/dashboard?due=overdue", rerender);
-    act(() => void vi.advanceTimersByTime(400));
+    act(() => void vi.advanceTimersByTime(800));
     rerender(<RouteProgress />);
     expect(inner()?.className).toContain("opacity-0");
   });
@@ -177,7 +177,7 @@ describe("RouteProgress", () => {
     expect(inner()?.className).toContain("infinite");
     expect(inner()?.className).not.toContain("opacity-0");
 
-    act(() => void vi.advanceTimersByTime(400));
+    act(() => void vi.advanceTimersByTime(800));
     rerender(<RouteProgress />);
     expect(inner()?.className).toContain("opacity-0");
   });
@@ -189,6 +189,32 @@ describe("RouteProgress", () => {
     clickLink("/clients");
     act(() => void vi.advanceTimersByTime(1500));
     arriveAt("/clients", rerender);
+    expect(inner()?.className).toContain("opacity-0");
+  });
+});
+
+// ⚠️ THE BUG THE FOUNDER CAUGHT, made unrepresentable. The floor was 400ms
+// against a 1600ms sweep, so on a fast page the segment got a quarter of the
+// way across and vanished — which reads as the load having failed rather than
+// finished. The two numbers live in different languages (a JS constant and a
+// Tailwind class string), so nothing but a test keeps them honest.
+describe("the sweep completes at least one full crossing", () => {
+  it("shows the bar for exactly as long as one pass takes", () => {
+    const { rerender } = render(<RouteProgress />);
+    clickLink("/clients");
+    const cls = inner()?.className ?? "";
+
+    const duration = cls.match(/route-progress_(\d+)ms_/)?.[1];
+    expect(duration, "the animate- class must state its duration in ms").toBeDefined();
+
+    // One frame short of a full pass: still sweeping.
+    act(() => void vi.advanceTimersByTime(Number(duration) - 20));
+    arriveAt("/clients", rerender);
+    expect(inner()?.className).toContain("infinite");
+
+    // A full pass done: now it may go.
+    act(() => void vi.advanceTimersByTime(20));
+    rerender(<RouteProgress />);
     expect(inner()?.className).toContain("opacity-0");
   });
 });
