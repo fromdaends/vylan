@@ -60,12 +60,8 @@ import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
-  ArrowDown,
-  ArrowUp,
   Check,
   ChevronRight,
-  ChevronsUpDown,
-  Plus,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -73,11 +69,8 @@ import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -166,16 +159,6 @@ export type TaskView = "active" | "mine" | "unassigned" | "done" | "all";
 // FILTERS — Unassigned is a value in the assignee menu and Completed is one in
 // the status menu — so nothing became unreachable, it stopped being a tab.
 const VIEWS: TaskView[] = ["active", "mine", "all"];
-
-type SortKey =
-  | "created"
-  | "status"
-  | "title"
-  | "client"
-  | "kind"
-  | "assignee"
-  | "priority"
-  | "due";
 
 export function TasksTable({
   tasks,
@@ -533,7 +516,10 @@ export function TasksTable({
                 {/* Nothing to narrow a free-text name by, and A→Z on it answers
                     no question anybody brings here. The founder said so
                     outright, and they are right. */}
-                <th className="px-2 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {/* Matches ColumnMenu's type exactly, minus the menu — the
+                    two sitting side by side in different cases was the tell
+                    that one of them had been left behind. */}
+                <th className="px-2 py-2.5 text-sm font-medium text-foreground/80">
                   {t("col_task")}
                 </th>
                 {firmWide && (
@@ -544,7 +530,7 @@ export function TasksTable({
                     // founder asked for the same: it separates "what is this
                     // task" from "whose is it", which is the actual seam in
                     // the row.
-                    className="w-[190px] border-l border-border"
+                    className="w-[190px] border-l border-border/60"
                     sortKey="client"
                     sort={sort}
                     setSort={setSort}
@@ -557,7 +543,7 @@ export function TasksTable({
                 <ColumnMenu
                   label={t("col_kind")}
                   t={t}
-                  className={cn("w-[170px]", !firmWide && "border-l border-border")}
+                  className={cn("w-[170px] border-l border-border/60")}
                   sortKey="kind"
                   sort={sort}
                   setSort={setSort}
@@ -569,7 +555,7 @@ export function TasksTable({
                 <ColumnMenu
                   label={t("col_assignee")}
                   t={t}
-                  className="w-[150px]"
+                  className="w-[150px] border-l border-border/60"
                   sortKey="assignee"
                   sort={sort}
                   setSort={setSort}
@@ -584,7 +570,7 @@ export function TasksTable({
                 <ColumnMenu
                   label={t("col_priority")}
                   t={t}
-                  className="w-[120px]"
+                  className="w-[120px] border-l border-border/60"
                   sortKey="priority"
                   sort={sort}
                   setSort={setSort}
@@ -598,7 +584,7 @@ export function TasksTable({
                 <ColumnMenu
                   label={t("col_due")}
                   t={t}
-                  className="w-[120px]"
+                  className="w-[120px] border-l border-border/60"
                   sortKey="due"
                   sort={sort}
                   setSort={setSort}
@@ -902,7 +888,7 @@ function Row({
       </td>
 
       {firmWide && (
-        <td className="border-l border-border px-2 py-2">
+        <td className="border-l border-border/60 px-2 py-2">
           <Link
             href={`/clients/${task.clientId}`}
             onClick={(e) => e.stopPropagation()}
@@ -923,15 +909,7 @@ function Row({
           rather than on the job's task list with one more click to go. A plain
           task has no screen, so it stays plain text — a link to nowhere is
           worse than no link. */}
-      <td
-        className={cn(
-          "px-2 py-2 text-muted-foreground",
-          // ONE divider, and it sits where the row changes subject. On the
-          // firm table that seam is before Client; on a job there is no Client
-          // column, so it moves here.
-          !firmWide && "border-l border-border",
-        )}
-      >
+      <td className="border-l border-border/60 px-2 py-2 text-muted-foreground">
         {taskKindHasScreen(task.kind) && task.engagementId ? (
           <Link
             href={`/engagements/${task.engagementId}?task=${task.id}`}
@@ -949,7 +927,7 @@ function Row({
         )}
       </td>
 
-      <td className="px-2 py-2">
+      <td className="border-l border-border/60 px-2 py-2">
         {canEdit ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1029,13 +1007,13 @@ function Row({
         )}
       </td>
 
-      <td className="px-2 py-2">
+      <td className="border-l border-border/60 px-2 py-2">
         <PriorityCell task={task} canEdit={canEdit} run={run} t={t} />
       </td>
 
       <td
         className={cn(
-          "px-2 py-2 tabular-nums",
+          "border-l border-border/60 px-2 py-2 tabular-nums",
           overdue ? "font-medium text-destructive" : "text-muted-foreground",
         )}
       >
