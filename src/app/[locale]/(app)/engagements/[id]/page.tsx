@@ -115,6 +115,7 @@ import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementAccess } from "@/components/engagements/engagement-access";
 import { InternalWork } from "@/components/engagements/internal-work";
+import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
 import { EngagementPresence } from "@/components/engagements/engagement-presence";
 import { getLatestHandoffNote } from "@/lib/db/activity";
 import {
@@ -1398,24 +1399,46 @@ export default async function EngagementDetailPage({
           tab keeps its own controls. The Activity feed lives in the Assistant
           panel's Activity tab, opened from the header. */}
       <EngagementTabs
-        // Shown once the engagement is real. A draft has no work to plan yet,
-        // and a fourth tab on an empty draft is furniture.
-        showWork={!isDraft}
-        workCount={internalTasks.length}
+        // Every task on this job, in order. The three built-in kinds are REAL
+        // rows now (1370), so an engagement nobody has planned shows nothing —
+        // which is the whole point of the change.
+        tasks={internalTasks.map((x) => ({
+          id: x.id,
+          title: x.title,
+          kind: x.kind,
+        }))}
+        addTask={
+          isLive ? (
+            <AddTaskDialog
+              clientId={engagement.client_id}
+              engagementId={engagement.id}
+              existingKinds={internalTasks.map((x) => x.kind)}
+            />
+          ) : null
+        }
         work={
           <InternalWork
             engagementId={engagement.id}
-            tasks={internalTasks.map((x) => ({
-              id: x.id,
-              title: x.title,
-              status: x.status,
-              assigneeIds: x.assigneeIds,
-              clientId: x.clientId,
-              engagementId: x.engagementId,
-            }))}
+            // PLAIN tasks only. The other kinds render as rows above with
+            // their own screens; showing them here too would put every task
+            // on the page twice.
+            tasks={internalTasks
+              .filter((x) => x.kind === "task")
+              .map((x) => ({
+                id: x.id,
+                title: x.title,
+                status: x.status,
+                assigneeIds: x.assigneeIds,
+                clientId: x.clientId,
+                engagementId: x.engagementId,
+              }))}
             members={activeMembers}
             canEdit={isLive}
             clientId={engagement.client_id}
+            // The WALL stays on these. The rows above are client-facing work —
+            // documents, signatures, deliverables — and these are not, so the
+            // dashed panel and the line saying so are still doing a job.
+            variant="job"
           />
         }
         checklistCount={collectionItems.length}
@@ -1427,9 +1450,7 @@ export default async function EngagementDetailPage({
         signaturesDone={
           signatureItems.filter((i) => i.status === "approved").length
         }
-        workDone={internalTasks.filter((x) => x.status === "done").length}
         signaturesCount={signatureItems.length}
-        showSignatures={isLive || signatureItems.length > 0}
         checklistControls={
           <>
             {/* Always-available visual review of every uploaded document. */}
@@ -1523,7 +1544,6 @@ export default async function EngagementDetailPage({
           )
         }
         finalCount={finalDocs.length}
-        showFinal={isLive || isComplete || finalDocs.length > 0}
         finalControls={
           engagement.status !== "cancelled" ? (
             <AddFinalDocumentDialog engagementId={engagement.id} />

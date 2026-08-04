@@ -23,6 +23,7 @@ import {
   setTaskAssignee,
   EngagementTasksUnsupportedError,
   type TaskStatus,
+  type TaskKind,
 } from "@/lib/db/engagement-tasks";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
@@ -75,6 +76,10 @@ export async function addTaskAction(input: {
   /** Omit for work that belongs to the client and no job. */
   engagementId?: string | null;
   title: string;
+  /** Defaults to a plain task. The built-in kinds are limited to one per job
+   *  by the database (1370), so a duplicate comes back as "failed" rather than
+   *  silently making a second row that shows the same documents. */
+  kind?: TaskKind;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -94,6 +99,7 @@ export async function addTaskAction(input: {
       engagementId: input.engagementId ?? null,
       firmId: g.firm.id,
       title,
+      kind: input.kind ?? "task",
       createdBy: g.user.id,
       orderIndex: existing.length,
     });
