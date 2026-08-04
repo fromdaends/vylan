@@ -32,8 +32,6 @@ import { PaymentBadge } from "@/components/payments/payment-badge";
 import type { EngagementType } from "@/lib/db/templates";
 import { SERVICE_LABEL_KEY } from "@/lib/engagements/services";
 import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
-import { sortRowsByStage } from "@/lib/engagements/stage-filter";
-import { ENGAGEMENT_STAGES, stageLabelKey } from "@/lib/engagements/stage";
 
 /**
  * What the headers show before anything has been sorted.
@@ -91,7 +89,12 @@ import {
 } from "@/lib/engagements/status-pill";
 import type { EngagementStage } from "@/lib/engagements/stage";
 import { AgreementChip } from "@/components/engagements/agreement-chip";
-import { agreementStatusForRow } from "@/lib/engagements/agreement";
+import {
+  AGREEMENT_STATUSES,
+  agreementLabelKey,
+  agreementStatusForRow,
+  type AgreementStatus,
+} from "@/lib/engagements/agreement";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 
 export type EngagementStatus =
@@ -454,7 +457,6 @@ export function WorklistTable({
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
-  const tStage = useTranslations("Stage");
 
   // Ticked rows. A Set because the only operations are has/add/delete, and the
   // bar needs the count more than the order.
@@ -593,15 +595,19 @@ export function WorklistTable({
   const serviceLabelFor = (type: string) =>
     tEng(SERVICE_LABEL_KEY[type as EngagementType] ?? "wl_service_custom");
   /**
-   * The Status column mixes two vocabularies, because the rows do: a live
-   * engagement shows its workflow STAGE, and everything else (draft,
-   * complete, cancelled) shows its status. The menu has to name both or it
-   * would silently offer no way to filter for drafts.
+   * ⚠️ THE MENU NAMES WHAT THE COLUMN SHOWS — the AGREEMENT status.
+   *
+   * Founder: "the new statuses dont exist within the filter sorting on the
+   * engagements page." Correct, and it was a real incoherence: #1307 moved the
+   * Status COLUMN onto the agreement words (Draft / Sent / Active / Complete)
+   * and left this menu offering workflow STAGES (Collecting documents,
+   * Awaiting payment). You could tick "Awaiting payment" and get back rows
+   * whose Status cell read "Active" — a filter for a value that appears
+   * nowhere on screen.
+   *
+   * Same resolver, same label builder, same order as the chip in the cell.
    */
-  const stageLabel = (v: string) =>
-    (ENGAGEMENT_STAGES as readonly string[]).includes(v)
-      ? tStage(stageLabelKey(v as EngagementStage))
-      : tStatus(v);
+  const stageLabel = (v: string) => tEng(agreementLabelKey(v as AgreementStatus));
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [serviceFilter, setServiceFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
@@ -625,7 +631,7 @@ export function WorklistTable({
       // Unassigned is a real answer to "whose is this", and the one people
       // filter for most — it gets a row of its own rather than being absent.
       assignees.set(r.assigneeName ?? "", r.assigneeName ?? "");
-      stages.add(r.stage ?? r.derivedStatus);
+      stages.add(agreementStatusForRow(r));
     }
     return {
       clients: [...clients.keys()].sort((a, b) => a.localeCompare(b)),
@@ -652,7 +658,7 @@ export function WorklistTable({
       out = out.filter((r) => assigneeFilter.includes(r.assigneeName ?? ""));
     }
     if (stageFilter.length) {
-      out = out.filter((r) => stageFilter.includes(r.stage ?? r.derivedStatus));
+      out = out.filter((r) => stageFilter.includes(agreementStatusForRow(r)));
     }
     if (!sort) return out;
 
@@ -714,7 +720,15 @@ export function WorklistTable({
   const sortedRows = useMemo(
     () =>
       sort?.key === "status"
-        ? sortRowsByStage(filteredRows, sort.desc ? "desc" : "asc")
+        ? // By AGREEMENT position (draft → sent → accepted → active →
+          // complete), not the alphabet and no longer by workflow stage: what
+          // you want from a status sort is "what is nearly finished".
+          [...filteredRows].sort((a, b) => {
+            const d =
+              AGREEMENT_STATUSES.indexOf(agreementStatusForRow(a)) -
+              AGREEMENT_STATUSES.indexOf(agreementStatusForRow(b));
+            return sort.desc ? -d : d;
+          })
         : filteredRows,
     [filteredRows, sort],
   );
@@ -915,9 +929,7 @@ export function WorklistTable({
               sortKey="status"
               sort={sort ?? UNSORTED}
               setSort={setSort}
-              // By workflow POSITION, not the alphabet — the first thing you
-              // want from a status sort is "what is nearly finished".
-              sortLabels={[tStage("sort_earliest"), tStage("sort_latest")]}
+              sortLabels={[tEng("sort_agr_earliest"), tEng("sort_agr_latest")]}
               selected={stageFilter}
               onChange={setStageFilter}
               options={distinct.stages.map((v) => ({

@@ -2115,6 +2115,8 @@
     "sort_asc": "Sort A → Z",
     "sort_desc": "Sort Z → A",
     "sort_earliest": "Earliest first",
+    "sort_agr_earliest": "Least far along first",
+    "sort_agr_latest": "Furthest along first",
     "sort_latest": "Latest first",
     "sort_lowest": "Lowest first",
     "sort_highest": "Highest first",

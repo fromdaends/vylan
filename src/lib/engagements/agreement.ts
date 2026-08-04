@@ -141,3 +141,17 @@ export function agreementStatusForRow(row: {
     clientHasEngaged: row.daysSinceClientActivity != null,
   });
 }
+
+/**
+ * The i18n key (Engagements namespace) naming an agreement status.
+ *
+ * ⚠️ SHARED ON PURPOSE. It used to be private to AgreementChip, and the
+ * engagements list's Status FILTER went on offering workflow stages
+ * ("Awaiting payment", "Collecting documents") months after the COLUMN had
+ * stopped showing them — so you could tick a value that appeared nowhere on
+ * screen and get rows reading "Active". A column and its own menu must draw
+ * their words from one place, or they drift the moment either is touched.
+ */
+export function agreementLabelKey(status: AgreementStatus): string {
+  return `agr_${status}`;
+}
