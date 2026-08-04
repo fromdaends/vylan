@@ -9,6 +9,18 @@ vi.mock("@/i18n/navigation", () => ({
   ),
   useRouter: () => ({ refresh: vi.fn() }),
 }));
+// The panel now carries the engagement's comment thread, which fetches its own
+// rows on mount; unmocked it reaches cookies() outside a request scope.
+vi.mock("@/app/actions/comments", () => ({
+  loadCommentThreadAction: vi.fn(async () => ({
+    comments: [],
+    members: [],
+    currentUserId: "u-me",
+    legacy: false,
+  })),
+  addCommentAction: vi.fn(async () => ({ ok: false, error: "failed" })),
+  deleteCommentAction: vi.fn(async () => ({ ok: true })),
+}));
 
 import { EngagementDetailPanel } from "./engagement-detail-panel";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";

@@ -18,10 +18,22 @@
 -- from the old shape made createSignedUrl reject and take the whole page down.
 -- Storing the path and minting the URL on read is the shape that survived.
 --
--- NO RLS CHANGES. clients already carries firm-scoped RLS plus the private-client
--- cascade, and a column added to that table inherits both. The storage object
--- lives under firms/{firm_id}/clients/{client_id}/ so the bucket's existing
--- firm-prefix policy covers the file itself.
+-- NO RLS CHANGES ON THE TABLE. clients already carries firm-scoped RLS plus the
+-- private-client cascade, and a column added to that table inherits both.
+--
+-- THE STORAGE OBJECT IS A DIFFERENT STORY, and the earlier draft of this comment
+-- got it wrong: it claimed "the bucket's existing firm-prefix policy covers the
+-- file itself". It does not. storage.ts uploadObject() and signedUrl() both go
+-- through getServiceRoleSupabase(), which BYPASSES RLS entirely, and 0003_storage
+-- defines only a SELECT policy for `authenticated` — there is no INSERT policy at
+-- all. Firm scoping on the write path is enforced by APPLICATION CODE: the `kind`
+-- and the clientId reach brandingStoragePath from the trusted call site rather
+-- than the form, and updateClientAvatarAction checks can(user,'clients.manage')
+-- and re-reads the client through RLS before the id is ever used in a path.
+--
+-- That is a real property, just not the one first written down, and the
+-- difference matters: anyone adding a fourth branding `kind` must know the
+-- database will not catch a mistake here.
 --
 -- THE CLIENT CANNOT SET THIS, by design and by the founder's own wording ("for
 -- now"). The portal has no write path to this column, so the only way a picture
