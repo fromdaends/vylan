@@ -20,9 +20,23 @@ import {
 // `kind` is a loose string rather than the enum, matching the create-engagement
 // action: a kind from a newer bundle must not fail the whole save.
 // readTaskTemplatePayload downgrades anything unrecognised to a plain task.
+// The client request a task carries — Canopy's "Add client request" inside a
+// task template. Bounded, but deliberately loose about content: the reader
+// normalises it, and this schema exists to stop an unbounded blob rather than
+// to be a second definition of the shape.
+const ChecklistSchema = z.object({
+  label_en: z.string().trim().max(300).optional(),
+  label_fr: z.string().trim().max(300).optional(),
+  description_en: z.string().trim().max(2000).nullable().optional(),
+  description_fr: z.string().trim().max(2000).nullable().optional(),
+  doc_type: z.string().trim().max(100).nullable().optional(),
+  required: z.boolean().optional(),
+});
+
 const TaskSchema = z.object({
   title: z.string().trim().min(1).max(200),
   kind: z.string().max(60).optional(),
+  checklist: z.array(ChecklistSchema).max(200).optional(),
 });
 
 const SaveSchema = z.object({

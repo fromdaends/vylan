@@ -17,18 +17,37 @@ import { Input } from "@/components/ui/input";
 import { TASK_KIND_META, taskKindLabelKey } from "@/lib/tasks/kinds";
 import type { TaskKind } from "@/lib/db/engagement-tasks";
 import type { TaskTemplate } from "@/lib/db/task-templates";
+import type { TemplateChecklistItem } from "@/lib/engagements/template-payload";
 import {
   saveTaskTemplateAction,
   archiveTaskTemplateAction,
 } from "@/app/actions/task-templates";
 
-type DraftRow = { title: string; kind: TaskKind };
+type DraftRow = {
+  title: string;
+  kind: TaskKind;
+  /** The client request this task carries, copied from a request template. */
+  checklist: TemplateChecklistItem[];
+};
 
 export function TaskTemplateCatalogue({
   templates,
+  requestTemplates = [],
+  locale,
   openOnMount = false,
 }: {
   templates: TaskTemplate[];
+  /**
+   * The firm's document-request templates — Canopy's "Client request
+   * templates". Offered inside a document-collection row so a task template can
+   * carry what the client is asked to send.
+   */
+  requestTemplates?: {
+    id: string;
+    name: string;
+    items: TemplateChecklistItem[];
+  }[];
+  locale: "en" | "fr";
   /** The + Create panel links straight here with the form already open. */
   openOnMount?: boolean;
 }) {
@@ -40,7 +59,7 @@ export function TaskTemplateCatalogue({
   const [open, setOpen] = useState(openOnMount);
   const [name, setName] = useState("");
   const [access, setAccess] = useState<"team" | "private">("team");
-  const [rows, setRows] = useState<DraftRow[]>([{ title: "", kind: "task" }]);
+  const [rows, setRows] = useState<DraftRow[]>([{ title: "", kind: "task", checklist: [] }]);
   const [error, setError] = useState<string | null>(null);
 
   const usableRows = rows.filter((r) => r.title.trim().length > 0);
@@ -49,7 +68,7 @@ export function TaskTemplateCatalogue({
   function reset() {
     setName("");
     setAccess("team");
-    setRows([{ title: "", kind: "task" }]);
+    setRows([{ title: "", kind: "task", checklist: [] }]);
     setError(null);
   }
 
@@ -60,7 +79,16 @@ export function TaskTemplateCatalogue({
       const res = await saveTaskTemplateAction({
         name: name.trim(),
         access,
-        tasks: usableRows.map((r) => ({ title: r.title.trim(), kind: r.kind })),
+        tasks: usableRows.map((r) => ({
+          title: r.title.trim(),
+          kind: r.kind,
+          // Only where it means something. A client request on a "meeting"
+          // row is ignored by the reader anyway, but sending it would put
+          // noise in the stored payload.
+          ...(r.kind === "document_collection" && r.checklist.length > 0
+            ? { checklist: r.checklist }
+            : {}),
+        })),
       });
       if (!res.ok) {
         // needsMigration is its own message: "it didn't work" is unhelpful when
@@ -189,7 +217,8 @@ export function TaskTemplateCatalogue({
 
           <ul className="space-y-2">
             {rows.map((row, idx) => (
-              <li key={idx} className="flex items-center gap-2">
+              <li key={idx} className="space-y-2">
+                <div className="flex items-center gap-2">
                 <Input
                   value={row.title}
                   onChange={(e) =>
@@ -242,6 +271,90 @@ export function TaskTemplateCatalogue({
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
+                </div>
+
+                {/* ── THE CLIENT REQUEST THIS TASK CARRIES ─────────────────
+                    Canopy's "Add client request", which lives INSIDE the task
+                    template rather than beside it: their article has you edit
+                    the task template and, at the bottom, Add → Add client
+                    request, then Apply template to fill it in.
+
+                    Applying COPIES the lines rather than storing a reference.
+                    Canopy's own wording is that the fields "will be populated
+                    according to the selected template", and this repo's rule is
+                    copy-on-use — otherwise a firm tidying up its document
+                    requests would silently change what every saved task
+                    template asks for. */}
+                {row.kind === "document_collection" &&
+                  requestTemplates.length > 0 && (
+                    <div className="ml-1 flex flex-wrap items-center gap-2 border-l-2 border-border pl-3 text-xs">
+                      <span className="text-muted-foreground">
+                        {t("task_template_client_request")}
+                      </span>
+                      <select
+                        // Resets after each apply so the same request template
+                        // can be applied twice; a select already holding the
+                        // value fires no change event.
+                        value=""
+                        onChange={(e) => {
+                          const picked = requestTemplates.find(
+                            (x) => x.id === e.target.value,
+                          );
+                          if (!picked) return;
+                          setRows((prev) =>
+                            prev.map((r, i) =>
+                              i === idx
+                                ? { ...r, checklist: [...picked.items] }
+                                : r,
+                            ),
+                          );
+                        }}
+                        aria-label={t("task_template_apply_request")}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        <option value="">
+                          {t("task_template_apply_request")}
+                        </option>
+                        {requestTemplates.map((rt) => (
+                          <option key={rt.id} value={rt.id}>
+                            {rt.name}
+                          </option>
+                        ))}
+                      </select>
+                      {row.checklist.length > 0 && (
+                        <>
+                          <span className="text-muted-foreground">
+                            {/* The lines themselves, not a count — a template
+                                you are building should show what it will ask
+                                for. */}
+                            {row.checklist
+                              .slice(0, 4)
+                              .map((c) =>
+                                locale === "fr"
+                                  ? c.label_fr || c.label_en
+                                  : c.label_en || c.label_fr,
+                              )
+                              .join(" · ")}
+                            {row.checklist.length > 4 &&
+                              ` +${row.checklist.length - 4}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRows((prev) =>
+                                prev.map((r, i) =>
+                                  i === idx ? { ...r, checklist: [] } : r,
+                                ),
+                              )
+                            }
+                            className="text-muted-foreground underline transition-colors hover:text-destructive"
+                          >
+                            {t("remove")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
               </li>
             ))}
           </ul>
@@ -251,7 +364,7 @@ export function TaskTemplateCatalogue({
             size="sm"
             variant="ghost"
             onClick={() =>
-              setRows((prev) => [...prev, { title: "", kind: "task" }])
+              setRows((prev) => [...prev, { title: "", kind: "task", checklist: [] }])
             }
           >
             <Plus className="h-3.5 w-3.5" />

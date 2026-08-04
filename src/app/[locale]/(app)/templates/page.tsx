@@ -218,6 +218,22 @@ export default async function TemplatesPage({
         </p>
         <TaskTemplateCatalogue
           templates={taskTemplates}
+          locale={locale}
+          // Canopy's "Client request templates" — the same `templates` list the
+          // Document requests section below renders. A task template can carry
+          // one, copied in at edit time.
+          requestTemplates={templates.map((tmpl) => ({
+            id: tmpl.id,
+            name: localizedTemplateName(tmpl, locale),
+            items: tmpl.items.map((it) => ({
+              label_en: it.label_en,
+              label_fr: it.label_fr,
+              description_en: it.description_en ?? null,
+              description_fr: it.description_fr ?? null,
+              doc_type: it.doc_type ?? null,
+              required: it.required,
+            })),
+          }))}
           openOnMount={sp.new === "task"}
         />
       </Section>
