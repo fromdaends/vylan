@@ -198,6 +198,52 @@ describe("TasksTable — the saved views", () => {
     expect(all).toHaveAttribute("aria-selected", "true");
   });
 
+  // ⚠️ FOUND BY EYE ON THE DEPLOYED PAGE, not by a test. On one engagement this
+  // strip sat 90px under the page's OWN tab row (Manage tasks / Services /
+  // Client view) — two tab rows stacked, which reads as a rendering mistake.
+  // Canopy's engagement page has no such strip either.
+  //
+  // It was also wrong, not just noisy: "Active work" hid a job whose two tasks
+  // were both finished, printing "Nothing planned on your side yet" underneath
+  // a count of two.
+  it("has no saved-view strip on a single job, and shows all its tasks", () => {
+    renderTable({
+      variant: "job",
+      tasks: [
+        {
+          ...base,
+          id: "t1",
+          title: "Done thing",
+          kind: "task" as const,
+          status: "done" as const,
+          statusId: "s-done",
+          priority: "none" as const,
+          assigneeIds: [],
+          clientId: "c-aber",
+          clientName: "Abercrombie",
+          dueDate: null,
+        },
+        {
+          ...base,
+          id: "t2",
+          title: "Live thing",
+          kind: "task" as const,
+          status: "doing" as const,
+          statusId: "s-doing",
+          priority: "none" as const,
+          assigneeIds: [],
+          clientId: "c-aber",
+          clientName: "Abercrombie",
+          dueDate: null,
+        },
+      ],
+    });
+    expect(screen.queryByRole("tablist")).toBeNull();
+    // The finished one is still listed — that is the half "Active work" hid.
+    expect(screen.getByText("Done thing")).toBeInTheDocument();
+    expect(screen.getByText("Live thing")).toBeInTheDocument();
+  });
+
   it("keeps only three tabs: Active, Mine, All", () => {
     renderTable();
     const tabs = within(screen.getByRole("tablist"))

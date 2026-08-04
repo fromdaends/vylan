@@ -220,7 +220,11 @@ export function TasksTable({
 
   // "active" everywhere the table is the page. The engagements list's panel
   // passes "all", because you get there by clicking a total.
-  const [view, setView] = useState<TaskView>(initialView);
+  const [view, setView] = useState<TaskView>(
+    // On a job there is no strip to change this with, so it must be the view
+    // that shows the job's whole task list.
+    variant === "job" ? "all" : initialView,
+  );
   // NEWEST FIRST until you say otherwise. Founder: "tasks should auto sort for
   // newest to appear ontop always unless changed by filters and stuff." A task
   // you just made must be the one you can see — landing it in the middle of a
@@ -463,15 +467,26 @@ export function TasksTable({
           engagements page needed the same row. It looked identical to this the
           day it was written and had drifted into a strip of pills by the time
           the founder saw the two side by side — so now there is one of it. */}
-      <ViewTabs
-        activeKey={view}
-        onSelect={(key) => setView(key as TaskView)}
-        tabs={VIEWS.map((v) => ({
-          key: v,
-          label: t(`view_${v}` as "view_active"),
-          count: counts[v],
-        }))}
-      />
+      {/* ⚠️ NOT ON A SINGLE JOB. Saved views answer "which of my hundred
+          tasks now?" — a question one engagement does not raise, and Canopy's
+          engagement page has no such strip either.
+
+          It was also actively wrong there. The panel sits under its OWN tab row
+          (Manage tasks / Services / Client view), so a second strip 90px below
+          the first read as a rendering mistake — and "Active work" hid a job
+          whose two tasks were both finished, printing "Nothing planned on your
+          side yet" underneath a count of two. */}
+      {variant === "firm" && (
+        <ViewTabs
+          activeKey={view}
+          onSelect={(key) => setView(key as TaskView)}
+          tabs={VIEWS.map((v) => ({
+            key: v,
+            label: t(`view_${v}` as "view_active"),
+            count: counts[v],
+          }))}
+        />
+      )}
 
       {filtersOn && (
         <div className="flex items-center gap-2">

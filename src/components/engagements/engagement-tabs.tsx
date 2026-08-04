@@ -105,7 +105,11 @@ export function EngagementTabs({
   // Client state, like the task selection below it: everything all three
   // panels render is already loaded, so a URL round trip per click would buy a
   // linkable tab at the cost of the latency the founder complained about.
-  const [panel, setPanel] = useState<Panel>("tasks");
+  // Named `tab`, not `panel`: the open-task branch below declares its OWN
+  // `const panel`, and two different things called panel in one component is
+  // how somebody edits the wrong one. tsc is happy with the shadow, which is
+  // exactly why it needed catching by eye.
+  const [tab, setTab] = useState<Panel>("tasks");
 
   const openTask = tasks.find((x) => x.id === open) ?? null;
 
@@ -146,18 +150,25 @@ export function EngagementTabs({
           Same ViewTabs strip the Tasks and Engagements lists use, so a tab row
           looks like a tab row everywhere in the product. */}
       <ViewTabs
-        activeKey={panel}
-        onSelect={(key) => setPanel(key as Panel)}
+        activeKey={tab}
+        onSelect={(key) => setTab(key as Panel)}
         ariaLabel={t("engagement_panels_label")}
         tabs={[
           { key: "tasks", label: t("panel_tasks") },
-          { key: "services", label: t("panel_services"), count: itemCount },
+                    {
+            key: "services",
+            label: t("panel_services"),
+            // Only when there ARE some. "Services 0" on every engagement made
+            // before priced lines existed is a zero shouting about a feature
+            // rather than a count worth reading.
+            count: itemCount > 0 ? itemCount : undefined,
+          },
           { key: "client", label: t("panel_client_view") },
         ]}
       />
 
-      {panel !== "tasks" ? (
-        panel === "services" ? (
+      {tab !== "tasks" ? (
+        tab === "services" ? (
           servicesPanel
         ) : (
           clientViewPanel
