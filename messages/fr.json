@@ -2096,6 +2096,8 @@
     "task_due": "Échéance",
     "task_notes": "Notes",
     "task_comments": "Commentaires",
+    "task_change_status": "Changer le statut",
+    "task_delete": "Supprimer",
     "task_notes_placeholder": "Ce que la prochaine personne doit savoir.",
     "col_status": "Statut",
     "col_task": "Nom de la tâche",

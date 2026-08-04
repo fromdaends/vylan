@@ -2097,6 +2097,8 @@
     "task_notes": "Notes",
     "task_notes_placeholder": "Anything the next person needs to know.",
     "task_comments": "Comments",
+    "task_change_status": "Change status",
+    "task_delete": "Delete",
     "col_status": "Status",
     "col_task": "Task name",
     "col_client": "Client",

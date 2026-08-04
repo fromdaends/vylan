@@ -62,8 +62,12 @@ import { toast } from "sonner";
 import {
   Check,
   ChevronRight,
+  ExternalLink,
+  MessageSquare,
+  Milestone,
   Trash2,
   UserPlus,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
@@ -87,10 +91,14 @@ import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { RowCommentBubble } from "@/components/engagements/row-comment-bubble";
+import {
+  RowMenuItems,
+  CONTEXT_MENU_PARTS,
+} from "@/components/engagements/row-menu-items";
+import type { RowMenuItem } from "@/components/engagements/engagement-row-menu";
 import { commentKeyForTask } from "@/components/engagements/comment-keys";
 import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 import { loadCommentCountsAction } from "@/app/actions/comments";
@@ -447,10 +455,11 @@ export function TasksTable({
   const visibleIdsKey = visible.map((x) => x.id).join(",");
   useEffect(() => {
     const ids = visibleIdsKey ? visibleIdsKey.split(",") : [];
-    if (ids.length === 0) {
-      setCommentCounts({});
-      return;
-    }
+    // No synchronous setState here: an empty list has no rows to draw, and
+    // clearing state in an effect body triggers a cascading render (the
+    // react-hooks/set-state-in-effect rule). Counts are looked up BY ID, so a
+    // stale entry for a row that is no longer visible is never read.
+    if (ids.length === 0) return;
     let alive = true;
     void loadCommentCountsAction({ kind: "task", ids }).then((counts) => {
       if (alive) setCommentCounts(counts);
@@ -790,6 +799,125 @@ function Row({
   // Only a kind with a real screen is clickable through.
   const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
   const isDone = status.bucket === "done";
+
+  // THE SAME MENU AN ENGAGEMENT ROW HAS. Founder: "you should have the same
+  // options you have when right clicking a task that you have for an
+  // engagement." Same RowMenuItem shape, same renderer, so the two menus cannot
+  // look different — Open / Add a comment / Assign to… / Change status /
+  // Delete, mapped onto what a task actually has.
+  //
+  // "Change status" stands where an engagement's "Change stage" does: it is the
+  // same question (where is this in its life) answered with the FIRM's own
+  // statuses (1420) rather than the engagement pipeline. Archive has no task
+  // equivalent and is deliberately absent — an item that does nothing is worse
+  // than a shorter menu.
+  const menuItems: RowMenuItem[] = [
+    {
+      key: "open",
+      // The SAME string the engagement menu uses. task_open is "Open {title}"
+      // — an aria-label for the row button, which in a menu would read "Open
+      // 2025 T2 supporting documents" beside an engagement's plain "Open".
+      label: t("menu_open"),
+      icon: ExternalLink,
+      onSelect: () => (openable ? onOpenScreen?.(task.id) : onOpenDetail()),
+    },
+    {
+      key: "comment",
+      label: t("add_comment"),
+      icon: MessageSquare,
+      onSelect: () => comment.request(commentKeyForTask(task.id)),
+    },
+    ...(canEdit && members.length > 0
+      ? [
+          {
+            key: "assign",
+            label: t("assign_to"),
+            icon: UserRound,
+            submenu: members.map((m) => {
+              const on = task.assigneeIds.includes(m.id);
+              return {
+                key: m.id,
+                label: m.name,
+                checked: on,
+                onSelect: () =>
+                  run(
+                    {
+                      id: task.id,
+                      assigneeIds: on
+                        ? task.assigneeIds.filter((x) => x !== m.id)
+                        : [...task.assigneeIds, m.id],
+                    },
+                    () =>
+                      setTaskAssigneeAction({
+                        taskId: task.id,
+                        userId: m.id,
+                        on: !on,
+                        engagementId: task.engagementId,
+                      }),
+                  ),
+              };
+            }),
+          } satisfies RowMenuItem,
+        ]
+      : []),
+    ...(canEdit
+      ? [
+          {
+            key: "status",
+            label: t("task_change_status"),
+            icon: Milestone,
+            submenu: statusOptions.map((option) => ({
+              key: option.id,
+              label: option.name,
+              checked: option.id === status.id,
+              // The colour dot is an inline hex from the firm's own palette, so
+              // it rides dotColor rather than dotClass (which carries Tailwind
+              // classes for the fixed stage hues).
+              dotColor: option.color,
+              onSelect: () =>
+                run(
+                  {
+                    id: task.id,
+                    statusId: option.id.startsWith("bucket:") ? null : option.id,
+                    status: option.bucket,
+                  },
+                  () =>
+                    updateTaskAction({
+                      taskId: task.id,
+                      engagementId: task.engagementId,
+                      // The BUCKET is written by a database trigger from the
+                      // status, so sending it too would be a second writer for
+                      // one fact. Only the choice goes over the wire.
+                      statusId: option.id.startsWith("bucket:")
+                        ? null
+                        : option.id,
+                      status: option.id.startsWith("bucket:")
+                        ? option.bucket
+                        : undefined,
+                    }),
+                ),
+            })),
+          } satisfies RowMenuItem,
+        ]
+      : []),
+    ...(canEdit
+      ? [
+          {
+            key: "delete",
+            label: t("task_delete"),
+            icon: Trash2,
+            variant: "destructive" as const,
+            onSelect: () =>
+              run({ id: task.id, remove: true }, () =>
+                deleteTaskAction({
+                  taskId: task.id,
+                  engagementId: task.engagementId,
+                }),
+              ),
+          } satisfies RowMenuItem,
+        ]
+      : []),
+  ];
   const overdue =
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
@@ -1123,12 +1251,11 @@ function Row({
       </td>
     </tr>
       </ContextMenuTrigger>
-      <ContextMenuContent onCloseAutoFocus={comment.onCloseAutoFocus}>
-        <ContextMenuItem
-          onSelect={() => comment.request(commentKeyForTask(task.id))}
-        >
-          {t("add_comment")}
-        </ContextMenuItem>
+      <ContextMenuContent
+        className="w-44"
+        onCloseAutoFocus={comment.onCloseAutoFocus}
+      >
+        <RowMenuItems items={menuItems} parts={CONTEXT_MENU_PARTS} />
       </ContextMenuContent>
     </ContextMenu>
   );
