@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { useTranslations } from "next-intl";
 import { ChevronLeft } from "lucide-react";
 import {
@@ -49,7 +50,12 @@ import {
 // at the cost of the exact latency the founder complained about on the client
 // page's tabs.
 
+type Panel = "tasks" | "services" | "client";
+
 export function EngagementTabs({
+  servicesPanel,
+  clientViewPanel,
+  itemCount,
   tasks,
   members,
   canEdit,
@@ -64,6 +70,12 @@ export function EngagementTabs({
   addTask,
   initialTaskId = null,
 }: {
+  /** Canopy's Services tab — rendered by the page, which owns the data. */
+  servicesPanel: ReactNode;
+  /** Canopy's Client View tab. */
+  clientViewPanel: ReactNode;
+  /** Shown on the Services tab, so its emptiness is visible before clicking. */
+  itemCount: number;
   /** Every task on this job, in order. Empty is the ordinary state of a new
    *  job and renders as such. */
   tasks: TaskRow[];
@@ -90,6 +102,10 @@ export function EngagementTabs({
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState<string | null>(initialTaskId);
+  // Client state, like the task selection below it: everything all three
+  // panels render is already loaded, so a URL round trip per click would buy a
+  // linkable tab at the cost of the latency the founder complained about.
+  const [panel, setPanel] = useState<Panel>("tasks");
 
   const openTask = tasks.find((x) => x.id === open) ?? null;
 
@@ -119,7 +135,35 @@ export function EngagementTabs({
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
+      {/* ── CANOPY'S THREE TABS ─────────────────────────────────────────────
+          Manage Tasks · Services · Client View, from the founder's
+          screenshots. They are three ANSWERS to three different questions —
+          what are we doing, what did they agree to pay, and what do they see —
+          which is why they are tabs rather than three stacked sections: only
+          one of them is ever the reason you opened the page.
+
+          Same ViewTabs strip the Tasks and Engagements lists use, so a tab row
+          looks like a tab row everywhere in the product. */}
+      <ViewTabs
+        activeKey={panel}
+        onSelect={(key) => setPanel(key as Panel)}
+        ariaLabel={t("engagement_panels_label")}
+        tabs={[
+          { key: "tasks", label: t("panel_tasks") },
+          { key: "services", label: t("panel_services"), count: itemCount },
+          { key: "client", label: t("panel_client_view") },
+        ]}
+      />
+
+      {panel !== "tasks" ? (
+        panel === "services" ? (
+          servicesPanel
+        ) : (
+          clientViewPanel
+        )
+      ) : (
+      <>
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold tracking-tight text-foreground">
           {t("engagement_work")}
@@ -140,6 +184,8 @@ export function EngagementTabs({
         variant="job"
         onOpen={setOpen}
       />
+      </>
+      )}
     </section>
   );
 }

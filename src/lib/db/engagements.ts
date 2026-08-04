@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { isMissingSchema } from "@/lib/db/quickbooks";
+import type { EngagementItemDraft } from "@/lib/engagements/items";
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -116,13 +117,15 @@ export type Engagement = {
  * The single-row twin of listItemNamesByEngagement, for the engagement's own
  * page — which needs one job's lines, not every job's.
  */
-export async function listEngagementItems(engagementId: string): Promise<
-  { id: string; name: string; rateCents: number | null }[]
-> {
+export async function listEngagementItems(
+  engagementId: string,
+): Promise<EngagementItemDraft[]> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("engagement_items")
-    .select("id, name, rate_cents, order_index")
+    .select(
+      "id, name, description, service_id, rate_cents, rate_type, billing_frequency, tax_pct, order_index",
+    )
     .eq("engagement_id", engagementId)
     .order("order_index", { ascending: true });
   if (error) {
@@ -132,11 +135,21 @@ export async function listEngagementItems(engagementId: string): Promise<
     throw error;
   }
   return (data ?? []).map((r) => {
-    const row = r as { id: string; name: string | null; rate_cents: number | null };
+    const row = r as Record<string, unknown>;
     return {
-      id: row.id,
-      name: (row.name ?? "").trim(),
-      rateCents: row.rate_cents ?? null,
+      id: String(row.id),
+      name: String(row.name ?? "").trim(),
+      description: (row.description as string | null) ?? null,
+      // Provenance only — never read through to the catalogue for a price. A
+      // line's numbers are what the client agreed to, and editing the service
+      // afterwards must not rewrite an agreement.
+      serviceId: (row.service_id as string | null) ?? null,
+      rateCents: (row.rate_cents as number | null) ?? null,
+      rateType: (row.rate_type as EngagementItemDraft["rateType"]) ?? "item",
+      billingFrequency:
+        (row.billing_frequency as EngagementItemDraft["billingFrequency"]) ??
+        "once",
+      taxPct: (row.tax_pct as number | null) ?? null,
     };
   });
 }
