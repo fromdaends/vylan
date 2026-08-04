@@ -56,6 +56,7 @@ export function RailFlyout({
   items,
   activeHref,
   closeLabel,
+  autoFocus,
   onClose,
 }: {
   open: boolean;
@@ -64,14 +65,32 @@ export function RailFlyout({
   /** Which room you are already standing in, so the panel says so. */
   activeHref: string | null;
   closeLabel: string;
-  onClose: () => void;
+  /**
+   * Whether to move focus into the panel on open. TRUE only when it was opened
+   * from the keyboard.
+   *
+   * Founder, on seeing a blue ring sitting on the first row after a mouse
+   * click: "get rid of the blue ring". It was not decoration and not a bug in
+   * the ring — it was this panel grabbing focus on open, which is correct for
+   * somebody who arrived by keyboard and pure noise for somebody who arrived by
+   * mouse. So focus now follows the MODALITY rather than the event: the ring
+   * appears exactly for the people it is a wayfinding aid for.
+   */
+  autoFocus: boolean;
+  /**
+   * `restoreFocus` asks the rail to put focus back on the button that opened
+   * this. Same rule: only on a keyboard close, or the rail item is left wearing
+   * a ring after an ordinary click.
+   */
+  onClose: (opts?: { restoreFocus?: boolean }) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // Escape is keyboard by definition, so focus always goes home from here.
+      if (e.key === "Escape") onClose({ restoreFocus: true });
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target;
@@ -83,15 +102,20 @@ export function RailFlyout({
       onClose();
     };
     // Focus lands inside on open — a panel you can open with the keyboard and
-    // not leave with it is a trap. (The rail hands focus back on close.)
-    panelRef.current?.querySelector<HTMLAnchorElement>("a[href]")?.focus();
+    // not leave with it is a trap. (The rail hands focus back on close.) For a
+    // mouse user it is skipped entirely: their pointer is already where they
+    // want it, and moving focus only paints a ring on a row they did not ask
+    // about.
+    if (autoFocus) {
+      panelRef.current?.querySelector<HTMLAnchorElement>("a[href]")?.focus();
+    }
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, onClose]);
+  }, [open, autoFocus, onClose]);
 
   return (
     <div
@@ -126,7 +150,11 @@ export function RailFlyout({
         </h2>
         <button
           type="button"
-          onClick={onClose}
+          // detail === 0 means the click came from Enter or Space rather than a
+          // pointer — the standard way to tell an activated button from a
+          // clicked one, and the difference between handing focus back and
+          // leaving a ring behind.
+          onClick={(e) => onClose({ restoreFocus: e.detail === 0 })}
           aria-label={closeLabel}
           className="-mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
@@ -144,7 +172,7 @@ export function RailFlyout({
             <Link
               key={item.href}
               href={item.href}
-              onClick={onClose}
+              onClick={() => onClose()}
               aria-current={active ? "page" : undefined}
               // The stagger. A CSS ANIMATION rather than a delayed transition,
               // because a transition-delay on the row would also delay its hover

@@ -113,6 +113,10 @@ export function IconRail({
   // keyboard user who presses Escape and lands nowhere has to tab in from the
   // top of the document to carry on.
   const panelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // Whether the open came from the keyboard. Focus — and therefore the ring —
+  // follows this rather than the click, so a mouse user never picks up a
+  // highlight on a row they only walked past.
+  const [openedViaKeyboard, setOpenedViaKeyboard] = useState(false);
 
   // Narrowed once here so the render below can read item.panel without a
   // non-null assertion on every line.
@@ -220,8 +224,9 @@ export function IconRail({
             panelOpen={panel?.href === item.href}
             onOpenPanel={
               item.panel
-                ? (el) => {
+                ? (el, viaKeyboard) => {
                     panelTriggerRef.current = el;
+                    setOpenedViaKeyboard(viaKeyboard);
                     // Clicking the section you are already inside CLOSES it.
                     // Without this the only way out is the X, and a control
                     // that opens but never closes reads as broken.
@@ -258,9 +263,12 @@ export function IconRail({
               ?.href ?? null
           }
           closeLabel={labels.closePanel}
-          onClose={() => {
+          autoFocus={openedViaKeyboard}
+          onClose={(opts) => {
             setPanel(null);
-            panelTriggerRef.current?.focus();
+            // Only on a keyboard close. Refocusing after a click is what put a
+            // ring around the Work item and left it sitting there.
+            if (opts?.restoreFocus) panelTriggerRef.current?.focus();
           }}
         />
       ))}
@@ -377,10 +385,11 @@ function RailLink({
   panelOpen?: boolean;
   /**
    * Set for a section that opens a second sidebar rather than navigating. It is
-   * handed the button element so the rail can put focus back on it when the
-   * panel closes.
+   * handed the button element (so the rail can put focus back on it) and
+   * whether the activation came from the keyboard (so the panel knows whether
+   * to take focus at all).
    */
-  onOpenPanel?: (el: HTMLButtonElement) => void;
+  onOpenPanel?: (el: HTMLButtonElement, viaKeyboard: boolean) => void;
 }) {
   const Icon = item.icon;
   // Same classes either way — a button that looked unlike its neighbours would
@@ -422,7 +431,10 @@ function RailLink({
     return (
       <button
         type="button"
-        onClick={(e) => onOpenPanel(e.currentTarget)}
+        // detail === 0 means Enter or Space rather than a pointer. It is the
+        // standard signal for "activated" versus "clicked", and here it decides
+        // whether focus moves into the panel.
+        onClick={(e) => onOpenPanel(e.currentTarget, e.detail === 0)}
         aria-haspopup="dialog"
         aria-expanded={panelOpen}
         aria-current={active ? "page" : undefined}

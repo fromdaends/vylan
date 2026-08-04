@@ -57,6 +57,7 @@ function renderPanel(overrides: Partial<Parameters<typeof RailFlyout>[0]> = {}) 
         items={ITEMS}
         activeHref={null}
         closeLabel="Close"
+        autoFocus={false}
         onClose={onClose}
         {...overrides}
       />
@@ -132,6 +133,46 @@ describe("RailFlyout", () => {
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 
+  // The founder, on a blue ring left sitting on the first row after an ordinary
+  // click: "get rid of the blue ring". The ring is correct — it is how a
+  // keyboard user knows where they are. What was wrong is that it appeared for
+  // people who had not used the keyboard, so focus follows the MODALITY now.
+  it("takes focus on open only when it was opened from the keyboard", () => {
+    const byMouse = renderPanel({ autoFocus: false });
+    expect(byMouse.getByRole("dialog").contains(document.activeElement)).toBe(
+      false,
+    );
+    cleanup();
+
+    const byKeyboard = renderPanel({ autoFocus: true });
+    expect(
+      within(byKeyboard.getByRole("dialog")).getByRole("link", { name: /Tasks/ }),
+    ).toBe(document.activeElement);
+  });
+
+  it("asks for focus back only when the close was a keyboard one", () => {
+    const { getByLabelText, getByText, onClose } = renderPanel();
+
+    // Escape is keyboard by definition.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenLastCalledWith({ restoreFocus: true });
+
+    // detail: 0 is how the DOM reports Enter/Space on a button; a real pointer
+    // click carries detail >= 1. Getting this backwards is what left a ring
+    // around the rail item after every ordinary click.
+    fireEvent.click(getByLabelText("Close"), { detail: 0 });
+    expect(onClose).toHaveBeenLastCalledWith({ restoreFocus: true });
+
+    fireEvent.click(getByLabelText("Close"), { detail: 1 });
+    expect(onClose).toHaveBeenLastCalledWith({ restoreFocus: false });
+
+    // Clicking out on the page never asks for focus back — there is nothing
+    // keyboard about it.
+    onClose.mockClear();
+    fireEvent.pointerDown(getByText("Something on the page"));
+    expect(onClose).toHaveBeenLastCalledWith();
+  });
+
   it("closes on a click out on the page, but NOT on a click on the rail", () => {
     const { getByText, onClose } = renderPanel();
 
@@ -152,8 +193,8 @@ describe("RailFlyout", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("puts focus inside on open so the keyboard can carry on", () => {
-    const { getByRole } = renderPanel();
+  it("puts focus inside on a keyboard open so the keyboard can carry on", () => {
+    const { getByRole } = renderPanel({ autoFocus: true });
     const first = within(getByRole("dialog")).getByRole("link", { name: /Tasks/ });
     expect(document.activeElement).toBe(first);
   });
