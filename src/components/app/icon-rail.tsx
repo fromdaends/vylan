@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import {
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { openCommandPalette } from "@/components/app/sidebar-search";
 import { logoutAction } from "@/app/actions/auth";
-import { isNavItemActive } from "@/lib/navigation/active-nav";
+import { isNavItemActive, isPanelItemActive } from "@/lib/navigation/active-nav";
 import { RailFlyout, type FlyoutItem } from "@/components/app/rail-flyout";
 
 // The primary desktop navigation: a FIXED 76px icon rail (Canopy-style), from
@@ -109,6 +109,42 @@ export function IconRail({
   const pathname = usePathname();
   // Which section's second sidebar is open, if any. Null is the ordinary case.
   const [panel, setPanel] = useState<RailItem | null>(null);
+  // The button that opened the panel, so closing hands focus back to it. A
+  // keyboard user who presses Escape and lands nowhere has to tab in from the
+  // top of the document to carry on.
+  const panelTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Narrowed once here so the render below can read item.panel without a
+  // non-null assertion on every line.
+  const panelItems = items.filter(
+    (i): i is RailItem & { panel: NonNullable<RailItem["panel"]> } =>
+      i.panel != null,
+  );
+
+  // How far the page moves over, written in ONE place. The flyout could set
+  // this itself, but with more than one panel section the closing panel's
+  // cleanup and the opening panel's effect would race to write the same
+  // variable, and whichever landed second would win. The rail knows which
+  // panel is open; nothing else has to agree with it.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!panel?.panel) {
+      root.style.removeProperty("--rail-flyout-offset");
+      return;
+    }
+    // Pointed at the width rather than a copy of it, so the panel's width and
+    // the distance the page moves can never disagree — they are the same
+    // declaration read twice.
+    //
+    // If you ever come here to check this with getComputedStyle: the content
+    // column TRANSITIONS its margin, so a computed read taken in the same tick
+    // as the change returns a value part-way through the animation, not the
+    // target. It reads like the push is broken when it is only in progress.
+    root.style.setProperty("--rail-flyout-offset", "var(--rail-flyout-width)");
+    return () => {
+      root.style.removeProperty("--rail-flyout-offset");
+    };
+  }, [panel]);
   // Logout submits through this ref: a submit button nested in a Radix
   // DropdownMenuItem has its click swallowed by the menu's selection handling,
   // so requestSubmit() from onSelect is what actually posts (carried over from
@@ -118,6 +154,9 @@ export function IconRail({
   return (
     <aside
       aria-label={navLabel}
+      // Marks the rail for the flyout's click-outside check, which lets a click
+      // on a DIFFERENT section switch panels instead of merely dismissing.
+      data-rail
       style={{ background: RAIL_BG }}
       className="hidden sm:flex sm:fixed sm:inset-y-0 sm:left-0 sm:z-30 sm:w-[var(--rail-width)] sm:flex-col sm:items-center sm:px-2.5 sm:pb-4 sm:pt-4"
     >
@@ -178,7 +217,20 @@ export function IconRail({
             key={item.href}
             item={item}
             active={isNavItemActive(pathname, item.href)}
-            onOpenPanel={item.panel ? () => setPanel(item) : undefined}
+            panelOpen={panel?.href === item.href}
+            onOpenPanel={
+              item.panel
+                ? (el) => {
+                    panelTriggerRef.current = el;
+                    // Clicking the section you are already inside CLOSES it.
+                    // Without this the only way out is the X, and a control
+                    // that opens but never closes reads as broken.
+                    setPanel((current) =>
+                      current?.href === item.href ? null : item,
+                    );
+                  }
+                : undefined
+            }
           />
         ))}
       </nav>
@@ -186,19 +238,32 @@ export function IconRail({
       {/* The second sidebar, when a section has one. Rendered here rather than
           at the page level so it sits against the rail it belongs to and does
           not have to know what page is behind it. */}
-      {panel?.panel && (
+      {/* One per panel-bearing section, all of them mounted. Rendering only the
+          OPEN one would mean its first appearance has no previous frame to
+          transition from, so the very first open of a session would still snap
+          into place — the bug this is fixing, surviving in the one case nobody
+          would think to re-test. */}
+      {panelItems.map((item) => (
         <RailFlyout
-          open
-          title={panel.panel.title}
-          items={panel.panel.items}
+          key={item.href}
+          open={panel?.href === item.href}
+          title={item.panel.title}
+          items={item.panel.items}
+          // isPanelItemActive, NOT isNavItemActive. The rail's rule deliberately
+          // treats /engagements as part of /work so the section stays lit across
+          // both — correct one level up, wrong here, where it would match Tasks
+          // first and highlight the wrong row on the engagements page.
           activeHref={
-            panel.panel.items.find((i) => isNavItemActive(pathname, i.href))
+            item.panel.items.find((i) => isPanelItemActive(pathname, i.href))
               ?.href ?? null
           }
           closeLabel={labels.closePanel}
-          onClose={() => setPanel(null)}
+          onClose={() => {
+            setPanel(null);
+            panelTriggerRef.current?.focus();
+          }}
         />
-      )}
+      ))}
 
       {/* Firm sits here rather than in the list above: it is a firm-level
           destination — the same spot the old sidebar kept its quiet firm button
@@ -303,12 +368,19 @@ export function IconRail({
 function RailLink({
   item,
   active,
+  panelOpen = false,
   onOpenPanel,
 }: {
   item: RailItem;
   active: boolean;
-  /** Set for a section that opens a second sidebar rather than navigating. */
-  onOpenPanel?: () => void;
+  /** Whether THIS item's second sidebar is the one currently open. */
+  panelOpen?: boolean;
+  /**
+   * Set for a section that opens a second sidebar rather than navigating. It is
+   * handed the button element so the rail can put focus back on it when the
+   * panel closes.
+   */
+  onOpenPanel?: (el: HTMLButtonElement) => void;
 }) {
   const Icon = item.icon;
   // Same classes either way — a button that looked unlike its neighbours would
@@ -319,9 +391,12 @@ function RailLink({
     "relative flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
     // The selected item is marked by the underline bar below, never by a
     // filled pill — hover keeps its wash so the rail still feels clickable.
-    active
+    // An OPEN panel lights its own item too, even on a page from a different
+    // section — otherwise the panel appears to belong to nothing.
+    active || panelOpen
       ? "text-white"
       : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
+    panelOpen && "bg-white/[0.10]",
   );
   const inner = (
     <>
@@ -347,8 +422,9 @@ function RailLink({
     return (
       <button
         type="button"
-        onClick={onOpenPanel}
+        onClick={(e) => onOpenPanel(e.currentTarget)}
         aria-haspopup="dialog"
+        aria-expanded={panelOpen}
         aria-current={active ? "page" : undefined}
         className={className}
       >

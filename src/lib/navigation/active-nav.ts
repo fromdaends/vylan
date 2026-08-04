@@ -26,6 +26,18 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+// The same question asked one level down: which ROW of a rail section's second
+// sidebar are you standing on? Deliberately WITHOUT the /work ↔ /engagements
+// aliasing above.
+//
+// That alias is right for the rail — Work must stay lit across both its URL
+// trees — and wrong here, where the two are separate rooms you choose between.
+// With it, /work matches the engagements page as well, so the panel would find
+// Tasks first and put the highlight on the row you are NOT on.
+export function isPanelItemActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 // Routes that live under /integrations in the URL but are their OWN top-level
 // sidebar tab, so the Integrations section must stay unlit there (otherwise two
 // rows light at once). Document filing is a Vylan-native feature promoted out of

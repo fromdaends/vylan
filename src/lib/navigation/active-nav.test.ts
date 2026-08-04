@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isNavItemActive,
+  isPanelItemActive,
   isIntegrationsSectionActive,
   isIntegrationSubItemVisible,
   engagementToView,
@@ -177,5 +178,37 @@ describe("isEngagementViewActive", () => {
     expect(isEngagementViewActive("/engagements/abc", "active", "drafts")).toBe(
       false,
     );
+  });
+});
+
+describe("isPanelItemActive", () => {
+  // The whole reason this exists separately from isNavItemActive. The rail's
+  // rule treats /engagements as part of /work so the SECTION stays lit across
+  // both; inside the section's own panel that alias puts the highlight on the
+  // wrong row, because Tasks is listed first and would match every engagements
+  // page too.
+  it("does NOT treat /engagements as /work", () => {
+    expect(isPanelItemActive("/engagements", "/work")).toBe(false);
+    expect(isNavItemActive("/engagements", "/work")).toBe(true);
+  });
+
+  it("picks exactly one row per path, for both rows of the Work panel", () => {
+    const rows = ["/work", "/engagements"];
+    const matched = (pathname: string) =>
+      rows.filter((href) => isPanelItemActive(pathname, href));
+
+    expect(matched("/work")).toEqual(["/work"]);
+    expect(matched("/engagements")).toEqual(["/engagements"]);
+    expect(matched("/engagements/abc")).toEqual(["/engagements"]);
+  });
+
+  it("matches nested routes but not a route that merely shares the prefix", () => {
+    expect(isPanelItemActive("/work/123", "/work")).toBe(true);
+    expect(isPanelItemActive("/workflows", "/work")).toBe(false);
+  });
+
+  it("leaves the panel unhighlighted on a page from another section", () => {
+    const rows = ["/work", "/engagements"];
+    expect(rows.some((href) => isPanelItemActive("/clients", href))).toBe(false);
   });
 });
