@@ -25,7 +25,10 @@ import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users"
 import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
 import { ClientNotes } from "@/components/clients/client-notes";
+import { StatusCapsule } from "@/components/ui/status-capsule";
 import { listClientNotes } from "@/lib/db/client-notes";
+import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import { fieldLabel, INDUSTRIES, PROVINCES } from "@/lib/clients/fields";
 // PLAIN module, not a "use client" one: this Server Component CALLS these, and
 // a client-module export would be a client reference that throws (#959).
 import {
@@ -66,7 +69,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus, Lock, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Lock, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -216,6 +219,7 @@ export default async function ClientDetailPage({
     activeClientRows,
     archivedClientRows,
     clientNotes,
+    clientTasks,
     recentFiles,
     bookkeeping,
   ] = await Promise.all([
@@ -349,6 +353,17 @@ export default async function ClientDetailPage({
     tab === "overview"
       ? listClientNotes(id)
       : Promise.resolve([] as Awaited<ReturnType<typeof listClientNotes>>),
+    // THIS CLIENT'S TASKS. Read through the shared task list rather than a
+    // client-specific query, per the Tasks rule in CLAUDE.md: a task created on
+    // an engagement and a task created straight on the client are one list, and
+    // this card is a VIEW of it. Filtered here rather than in the reader so
+    // this page adds nothing to the tasks module while it is being built.
+    // Fails soft — the tasks migrations may not be applied yet.
+    tab === "overview"
+      ? listFirmTasks()
+          .then((rows) => rows.filter((r) => r.clientId === id))
+          .catch(() => [] as Awaited<ReturnType<typeof listFirmTasks>>)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listFirmTasks>>),
     // The overview's "Recent files" card. Fails soft: the Files view is gated
     // on its own migration, and a client profile must not 500 because that is
     // unapplied.
@@ -703,22 +718,25 @@ export default async function ClientDetailPage({
     // Deliberately not copied from the reference: its ten-tab row, and its
     // Spouse / Dependents / Linked contacts / Tags cards. Vylan has no data
     // behind any of those, and an empty card is worse than no card.
-    <div className="space-y-6 max-w-6xl">
-      <Breadcrumb
-        label={tCommon("breadcrumb")}
-        items={[
-          { label: tApp("nav_clients"), href: "/clients" },
-          { label: client.display_name },
-        ]}
-      />
+    <div className="w-full space-y-6 px-6 pt-7 pb-18 lg:px-11">
+      {/* One way back, stated plainly. A two-crumb breadcrumb ("Clients /
+          Zachary Thresh") spends a line telling you the name you can already
+          read at 26px directly underneath it. */}
+      <Link
+        href="/clients"
+        className="-ml-2 inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        <ArrowLeft className="size-3.5" aria-hidden />
+        {t("back_all_clients")}
+      </Link>
 
       {/* Canopy puts the identity AND the section tabs in one bordered card at
           the top, so "who am I looking at" and "which part of them" are one
           object. Vylan had a bare header floating above loose sections. */}
-      <header className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="flex flex-wrap items-start justify-between gap-4 p-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <AvatarInitials name={client.display_name} size={44} />
+      <header>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <AvatarInitials name={client.display_name} size={52} />
           <div className="min-w-0">
           {/* The client's name IS the menu — the same NameMenu the firm page
               uses, because the founder asked for "the exact same thing". It
@@ -734,28 +752,25 @@ export default async function ClientDetailPage({
               archiveFormId={CLIENT_ARCHIVE_FORM_ID}
             />
           </div>
-          <div className="flex items-center gap-2 mt-2 text-sm">
-            <Badge variant="secondary">
+          {/* Just what they ARE. The old row said "Individual · Active · EN"
+              on every client on every visit — three chips that are the same for
+              almost everyone, which is the noise the kit's "colour marks the
+              exception" rule exists to remove. Archived and Private still
+              show, because those genuinely are exceptions. */}
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-[13.5px] text-muted-foreground">
               {client.type === "individual"
                 ? t("type_individual")
                 : t("type_business")}
-            </Badge>
-            {client.archived_at ? (
-              <Badge variant="outline">{t("archived")}</Badge>
-            ) : (
-              <Badge>{t("active")}</Badge>
+            </p>
+            {client.archived_at && (
+              <StatusCapsule tone="muted">{t("archived")}</StatusCapsule>
             )}
-            <span className="text-muted-foreground font-mono text-xs">
-              {client.locale.toUpperCase()}
-            </span>
             {isOwner && client.is_private && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
-              >
+              <StatusCapsule tone="warning">
                 <Lock className="size-3" aria-hidden="true" />
                 {t("private_badge")}
-              </Badge>
+              </StatusCapsule>
             )}
           </div>
           {teamEnabled && (
@@ -819,10 +834,18 @@ export default async function ClientDetailPage({
           thirds of the screen — the exact "you just moved the little block"
           shape the founder rejected, one level up. A tab whose content is a
           table has no rail to put beside it. */}
+      {/* THREE COLUMNS on Overview — Canopy's shape: reference on the left,
+          the work in the middle, money and documents on the right.
+          `items-stretch` (the grid default) is deliberate: cards fill their row
+          so the column bottoms line up instead of ending in a ragged edge.
+          Collapses to two columns under ~1180px and one under ~880px, which is
+          what the arbitrary breakpoints below encode — the reference prototype
+          used a JS resize listener only because inline styles cannot carry
+          media queries. */}
       <div
         className={
           tab === "overview"
-            ? "grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start"
+            ? "grid gap-5 min-[880px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] min-[1180px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(260px,340px)]"
             : ""
         }
       >
@@ -851,6 +874,7 @@ export default async function ClientDetailPage({
           <DetailRow
             label={t("field_external_ref")}
             value={client.external_ref}
+            placeholder={t("field_none_yet")}
             mono
           />
           <li className="!mt-4 border-t border-border/60" aria-hidden />
@@ -864,11 +888,13 @@ export default async function ClientDetailPage({
           />
           <DetailRow
             label={t("field_industry")}
-            value={client.industry ?? null}
+            value={fieldLabel(INDUSTRIES, client.industry, locale)}
+            placeholder={t("field_none_yet")}
           />
           <DetailRow
             label={t("field_province")}
-            value={client.province ?? null}
+            value={fieldLabel(PROVINCES, client.province, locale)}
+            placeholder={t("field_none_yet")}
           />
           <DetailRow
             label={t("field_locale")}
@@ -897,6 +923,18 @@ export default async function ClientDetailPage({
         candidates={pickerCandidates}
         canManage={canManageClients && !client.archived_at}
       />
+
+      {/* Portal access — the optional code that gates this client's portal
+          link. Left column with the other reference cards, and compact: it is
+          one switch and a link, not a section. The code itself is deliberately
+          NOT passed in — the card fetches it through an audit-logged action, so
+          it never sits in this page's HTML. */}
+      <Panel title={t("portal_access_title")}>
+        <ClientPortalPinCard
+          clientId={client.id}
+          initialEnabled={client.portal_pin_enabled === true}
+        />
+      </Panel>
 
       {/* Portal access — the optional 6-digit code that gates this client's
           portal link. Off for everyone by default; the frictionless link stays
@@ -1330,15 +1368,6 @@ export default async function ClientDetailPage({
           </Panel>
         )}
 
-        {tab === "overview" && (
-        <Panel title={t("portal_access_title")}>
-          <ClientPortalPinCard
-            clientId={client.id}
-            initialEnabled={client.portal_pin_enabled === true}
-          />
-        </Panel>
-        )}
-
       {/* Recent files — Canopy's overview card: the last handful, newest
           first, with a quiet "View all" to the full archive. The overview
           should answer "what has been coming in from this client lately"
@@ -1347,6 +1376,62 @@ export default async function ClientDetailPage({
           and a date on every line. Always rendered — an empty notes box is an
           invitation, and a section that only appears once it has content is a
           feature nobody discovers. */}
+      {/* TASKS — a VIEW of the one task list (see the Tasks rule in
+          CLAUDE.md), not a second store. Whatever is created on an engagement
+          for this client, or straight on the client, shows up here the moment
+          it exists; this page owns none of it.
+
+          Status sits in a FIXED left column so the titles line up down the
+          card — Canopy's treatment, and the reason a mixed-status list stays
+          scannable instead of zig-zagging. */}
+      {tab === "overview" && (
+        <Panel
+          title={t("tasks_title")}
+          action={
+            <Link
+              href="/work"
+              className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+            >
+              {t("tasks_view_all")}
+            </Link>
+          }
+        >
+          {clientTasks.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("tasks_empty")}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/45">
+              {clientTasks.slice(0, 6).map((task) => (
+                <li key={task.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-[138px] shrink-0">
+                    <StatusCapsule
+                      tone={
+                        task.status === "done"
+                          ? "success"
+                          : task.status === "doing"
+                            ? "accent"
+                            : "muted"
+                      }
+                    >
+                      {t(`task_status_${task.status}`)}
+                    </StatusCapsule>
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {task.title}
+                  </span>
+                  <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                    {task.dueDate
+                      ? formatDate(task.dueDate, locale, "compact")
+                      : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
+
       {tab === "overview" && (
         <Panel title={t("notes_title")}>
           <ClientNotes
@@ -1357,6 +1442,11 @@ export default async function ClientDetailPage({
           />
         </Panel>
       )}
+
+      </div>
+
+      {/* ── Right column: what came in, and what was billed ──────────────── */}
+      <div className="space-y-5">
 
       {tab === "overview" && recentFiles.length > 0 && (
         <Panel
@@ -1417,11 +1507,15 @@ function DetailRow({
   value,
   mono = false,
   wide = false,
+  placeholder,
 }: {
   label: string;
   value: string | null;
   mono?: boolean;
   wide?: boolean;
+  /** What an empty field SAYS. A bare "—" makes the reader work out whether
+   * the value is missing, unknown, or not applicable; "None yet" answers it. */
+  placeholder?: string;
 }) {
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
@@ -1435,7 +1529,7 @@ function DetailRow({
           " mt-0.5 whitespace-pre-wrap"
         }
       >
-        {value ?? "—"}
+        {value ?? placeholder ?? "—"}
       </dd>
     </div>
   );

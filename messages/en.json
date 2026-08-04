@@ -1923,7 +1923,15 @@
     "organizers_col_live": "Live work",
     "organizers_why_owner": "Firm owner",
     "organizers_why_assignee": "Client owner",
-    "organizers_why_member": "On the team"
+    "organizers_why_member": "On the team",
+    "tasks_title": "Tasks",
+    "tasks_view_all": "View all tasks",
+    "tasks_empty": "No tasks yet — anything you or an engagement adds for this client shows up here.",
+    "task_status_todo": "To do",
+    "task_status_doing": "In progress",
+    "task_status_done": "Done",
+    "back_all_clients": "All clients",
+    "field_none_yet": "None yet"
   },
   "Engagements": {
     "add_comment": "Add a comment",

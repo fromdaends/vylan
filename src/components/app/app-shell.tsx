@@ -129,7 +129,13 @@ export function AppShell({
   // /files is full-bleed, but /files/organize is a normal review screen and
   // keeps the shell's centered column — same for /billing vs its sub-routes.
   const fullBleed =
-    pathname === "/files" || pathname === "/billing" || pathname === "/clients";
+    pathname === "/files" ||
+    pathname === "/billing" ||
+    pathname === "/clients" ||
+    // A client PROFILE too — its overview is a three-column grid that needs
+    // the width. Sub-routes (/clients/import, /clients/[id]/archive) are
+    // ordinary screens and keep the centred column.
+    /^\/clients\/(?!import$)[^/]+$/.test(pathname);
 
   // Close the mobile account sheet on route change (e.g. user tapped
   // a menu link). Ref-guarded to avoid setting state on every render.
