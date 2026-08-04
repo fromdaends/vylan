@@ -2796,7 +2796,12 @@
     "intro_message_placeholder": "A short note that appears at the top of what your client sees.",
     "intro_message_hint": "Optional. The client reads this first.",
     "field_assignee": "Assigned to",
-    "assignee_me": "Me"
+    "assignee_me": "Me",
+    "assignee_add": "Add someone to this job",
+    "assignee_primary": "{name} — owns this job",
+    "assignee_nobody": "No teammates to assign yet.",
+    "assignee_needs_migration": "Multiple assignees need a database update before this saves.",
+    "assignee_failed": "Could not change who is on this job. Try again."
   },
   "Attention": {
     "metric_active": "Active",

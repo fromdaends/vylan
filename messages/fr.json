@@ -2796,7 +2796,12 @@
     "intro_message_placeholder": "Une courte note affichée en haut de ce que votre client voit.",
     "intro_message_hint": "Optionnel. Le client le lit en premier.",
     "field_assignee": "Assigné à",
-    "assignee_me": "Moi"
+    "assignee_me": "Moi",
+    "assignee_add": "Ajouter quelqu'un à ce mandat",
+    "assignee_primary": "{name} — responsable de ce mandat",
+    "assignee_nobody": "Aucun coéquipier à assigner pour l'instant.",
+    "assignee_needs_migration": "Les assignations multiples nécessitent une mise à jour de la base de données.",
+    "assignee_failed": "Impossible de modifier qui travaille sur ce mandat. Réessayez."
   },
   "Attention": {
     "metric_active": "Actifs",
