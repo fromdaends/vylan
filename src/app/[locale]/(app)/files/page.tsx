@@ -69,7 +69,17 @@ export default async function FilesPage({
     // FULL WIDTH, not a centered 1024px column: this is a file manager, and a
     // file manager that leaves half the monitor empty reads as a web page about
     // files rather than the thing itself.
-    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
+    //
+    // Home is a FIXED page — its two columns are sized to the viewport and
+    // scroll internally — so it takes a matching fixed bottom margin. Browse
+    // and Settings are document-length lists and keep the deep pb-18 the rest
+    // of the app uses under a scrolling page.
+    <div
+      className={cn(
+        "w-full animate-in-fade px-6 pt-7 lg:px-11",
+        tab === "home" ? "pb-7" : "pb-18",
+      )}
+    >
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div>
           <h1 className="text-[26px] font-[650] tracking-[-0.02em]">

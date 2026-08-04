@@ -9,6 +9,7 @@ import { listHomeNotifications } from "@/lib/home/notifications";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { listFirmLinks } from "@/lib/db/firm-links";
 import { listClients } from "@/lib/db/clients";
+import { listEngagements } from "@/lib/db/engagements";
 import { getCalendarProvider } from "@/lib/calendar/provider";
 import { taskStats, todayInTimeZone } from "@/lib/tasks/dates";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -46,13 +47,23 @@ export default async function DashboardPage({
   const viewer = { userId: user.id, isOwner: user.role === "owner" };
 
   const calendar = getCalendarProvider();
-  const [firm, members, tasks, clients, links, connection, notifications] =
-    await Promise.all([
+  const [
+    firm,
+    members,
+    tasks,
+    clients,
+    engagements,
+    links,
+    connection,
+    notifications,
+  ] = await Promise.all([
       getCurrentFirm(),
       listFirmUsers(),
       listFirmTasks(),
       // For the quick-add's client picker — the same reason /work loads them.
       listClients(),
+      // And the jobs, so the quick-add can start a collection kind too.
+      listEngagements(),
       listFirmLinks(),
       calendar.getConnection(),
       // The banner is a nice-to-have glance — never let it crash the whole
@@ -90,6 +101,16 @@ export default async function DashboardPage({
   const activeMembers = members
     .filter((m) => !m.deactivated_at)
     .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
+
+  // Which built-in kinds each job already has, so the quick-add's picker can
+  // grey out the ones the database would refuse (1370) — same map /work builds.
+  const kindsByEngagement = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (!task.engagementId || task.kind === "task") continue;
+    const list = kindsByEngagement.get(task.engagementId) ?? [];
+    list.push(task.kind);
+    kindsByEngagement.set(task.engagementId, list);
+  }
 
   return (
     <div className="flex flex-col gap-7">
@@ -146,6 +167,12 @@ export default async function DashboardPage({
             display_name: c.display_name,
             type: c.type,
             email: c.email,
+          }))}
+          engagements={engagements.map((e) => ({
+            id: e.id,
+            clientId: e.client_id,
+            title: e.title,
+            existingKinds: kindsByEngagement.get(e.id) ?? [],
           }))}
           viewerId={user?.id ?? ""}
           today={today}

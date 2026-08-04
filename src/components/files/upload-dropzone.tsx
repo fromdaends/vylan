@@ -58,7 +58,9 @@ export function UploadDropzone({
           if (files.length > 0) openWith(files);
         }}
         className={cn(
-          "rounded-[14px] border-[1.5px] border-dashed px-5 py-6.5 text-center transition-colors",
+          // shrink-0: the Files Home rail is a fixed-height flex column; the
+          // dropzone keeps its size while Team activity absorbs the slack.
+          "shrink-0 rounded-[14px] border-[1.5px] border-dashed px-5 py-6.5 text-center transition-colors",
           dragging
             ? "border-accent bg-accent-subtle"
             : "border-border/90 bg-card",

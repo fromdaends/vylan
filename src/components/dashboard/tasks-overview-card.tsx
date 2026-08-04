@@ -23,6 +23,7 @@ import { cn } from "@/lib/cn";
 import { Input } from "@/components/ui/input";
 import {
   AddTaskDialog,
+  type AddTaskEngagement,
 } from "@/components/engagements/add-task-dialog";
 import type { ComboboxClient } from "@/components/clients/client-combobox";
 import {
@@ -62,6 +63,7 @@ export function TasksOverviewCard({
   tasks,
   members,
   clients,
+  engagements,
   viewerId,
   today,
   timeZone,
@@ -69,6 +71,8 @@ export function TasksOverviewCard({
   tasks: DashboardTask[];
   members: Person[];
   clients: ComboboxClient[];
+  /** For the quick-add's popover: a collection kind needs a job to hang off. */
+  engagements: AddTaskEngagement[];
   viewerId: string;
   /** YYYY-MM-DD in the firm's timezone — the anchor every group hangs off. */
   today: string;
@@ -434,8 +438,9 @@ export function TasksOverviewCard({
           />
         </div>
         <AddTaskDialog
-          mode="firm"
           clients={clients}
+          engagements={engagements}
+          members={members}
           open={addOpen}
           onOpenChange={setAddOpen}
           initialTitle={draft.trim()}

@@ -1406,6 +1406,7 @@ export default async function EngagementDetailPage({
           title: x.title,
           kind: x.kind,
           status: x.status,
+          priority: x.priority,
           assigneeIds: x.assigneeIds,
           clientId: x.clientId,
           engagementId: x.engagementId,
@@ -1435,12 +1436,14 @@ export default async function EngagementDetailPage({
         }))}
         members={activeMembers}
         canEdit={isLive}
+        currentUserId={user?.id ?? ""}
         addTask={
           isLive ? (
             <AddTaskDialog
               clientId={engagement.client_id}
               engagementId={engagement.id}
               existingKinds={internalTasks.map((x) => x.kind)}
+              members={activeMembers}
             />
           ) : null
         }

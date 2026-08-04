@@ -85,13 +85,20 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-5">
+    // ONE FIXED PAGE at desktop width: the row is sized to the viewport
+    // (100dvh minus the page chrome above it — heading, tab strip, paddings),
+    // both columns stretch to that same bottom edge, and the two lists inside
+    // (Team activity, Recent files) scroll internally instead of pushing the
+    // page longer. The min-h floor keeps a short window from crushing the rail
+    // cards — below it the page scrolls, which beats clipped controls.
+    // Under lg the columns wrap into a stack and the page scrolls normally.
+    <div className="flex flex-wrap items-start gap-5 lg:h-[calc(100dvh-200px)] lg:min-h-[520px] lg:flex-nowrap lg:items-stretch">
       {/* SIDE RAIL, on the LEFT. The things you DO — drop files in, check that
           filing is still connected, see who touched what — sit against the
           navigation edge; the things you READ get the open width to their
           right. Rail first in the DOM as well as on screen, so keyboard and
           screen-reader order match what you see. */}
-      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-5 lg:max-w-[300px]">
+      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-5 lg:min-h-0 lg:max-w-[300px]">
         <UploadDropzone clients={clients} />
         <CloudFiling t={t} storage={storage} />
         <TeamActivity
@@ -105,7 +112,7 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
       {/* MAIN COLUMN. flex-999 makes it take essentially all the spare width
           while still being allowed to wrap; 560px is the basis below which it
           drops under the rail rather than squeezing the file names. */}
-      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5">
+      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5 lg:min-h-0">
         {organize.available && <OrganizeBar t={t} total={organize.total} />}
         <RecentFiles
           t={t}
@@ -133,7 +140,7 @@ const CARD = "rounded-xl border border-border/70 bg-card";
 
 function OrganizeBar({ t, total }: { t: T; total: number }) {
   return (
-    <section className={`${CARD} flex items-center justify-between gap-4 px-5 py-3.5`}>
+    <section className={`${CARD} flex shrink-0 items-center justify-between gap-4 px-5 py-3.5`}>
       <div className="flex min-w-0 items-center gap-3.5">
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-accent-subtle text-accent">
           <Sparkles className="size-5" aria-hidden />
@@ -191,8 +198,11 @@ function RecentFiles({
         : t("home_source_portal");
 
   return (
-    <section className={`${CARD} overflow-hidden`}>
-      <div className="flex h-13 items-center justify-between px-5">
+    // flex-1 + internal scroll: on the fixed Home page this card grows to the
+    // row's bottom edge (aligning with the rail) and its list scrolls inside
+    // rather than lengthening the page.
+    <section className={`${CARD} flex flex-col overflow-hidden lg:min-h-0 lg:flex-1`}>
+      <div className="flex h-13 shrink-0 items-center justify-between px-5">
         <h2 className="text-[14.5px] font-semibold">{t("home_recent_title")}</h2>
         <Link
           href="/files?tab=browse&view=files&sort=date"
@@ -207,7 +217,7 @@ function RecentFiles({
           {t("home_recent_empty")}
         </p>
       ) : (
-        <ul>
+        <ul className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {recent.map((d) => (
             <li key={`${d.source}-${d.id}`}>
               {/* Right-click gets the SAME menu as a row in Browse — rename,
@@ -308,7 +318,7 @@ function CloudFiling({
     : null;
 
   return (
-    <section className={`${CARD} px-5 py-4.5`}>
+    <section className={`${CARD} shrink-0 px-5 py-4.5`}>
       <div className="flex items-center gap-2.5">
         {storage ? (
           <ProviderLogo provider={storage.provider} className="size-5.5 shrink-0" />
@@ -365,8 +375,12 @@ function TeamActivity({
   entries: FirmActivityEntry[];
 }) {
   return (
-    <section className={`${CARD} overflow-hidden`}>
-      <div className="flex h-12 items-center justify-between px-4.5">
+    // The rail's flexible card: it takes whatever height is left under the
+    // dropzone and Cloud filing, ends level with the Recent files card, and
+    // the feed scrolls inside it. This is what used to make the rail run past
+    // the main column — the feed's length now never sets the page's length.
+    <section className={`${CARD} flex flex-col overflow-hidden lg:min-h-0 lg:flex-1`}>
+      <div className="flex h-12 shrink-0 items-center justify-between px-4.5">
         <h2 className="text-sm font-semibold">{t("home_activity_title")}</h2>
         <Link
           href="/settings/audit"
@@ -380,8 +394,11 @@ function TeamActivity({
           {t("home_activity_empty")}
         </p>
       ) : (
-        <ul className="pb-2">
-          {entries.slice(0, 8).map((e) => {
+        // All fetched entries render (the query caps at 15): the card clips to
+        // its share of the rail and scrolls, so a longer feed costs nothing —
+        // the old slice(0, 8) existed only to keep the unclipped card short.
+        <ul className="pb-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          {entries.map((e) => {
             // Registered actions render their localized label; anything else
             // falls back to the raw code rather than crashing the page — the
             // audit view applies the same rule.
