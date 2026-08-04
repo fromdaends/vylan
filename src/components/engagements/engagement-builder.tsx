@@ -698,7 +698,6 @@ export function EngagementBuilder({
         title={t("new_title")}
         closeHref="/engagements"
         overlay={overlay}
-        compact
         labels={{
           close: tc("cancel"),
           save: t("wizard_save"),
