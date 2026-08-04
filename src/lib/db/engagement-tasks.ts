@@ -24,6 +24,41 @@ import { isMissingSchema } from "@/lib/db/quickbooks";
 export const TASK_STATUSES = ["todo", "doing", "done"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/**
+ * What sort of work a task is, and therefore which screen it opens (1370).
+ *
+ * The three built-in kinds POINT AT collections that live elsewhere —
+ * request_items and final_documents — and never copy them. That is the whole
+ * safety property: the client portal, the AI classifier and the filing engine
+ * all read those tables directly and none of them know this one exists.
+ *
+ * "task" is the plain kind and has no screen. A title, some owners and a
+ * checkbox is the whole of it, so a row that led somewhere would lead to a
+ * page showing one line.
+ */
+export const TASK_KINDS = [
+  "document_collection",
+  "signatures",
+  "deliverables",
+  "task",
+] as const;
+export type TaskKind = (typeof TASK_KINDS)[number];
+
+/** The kinds that open a screen. A plain task does not. */
+export const KINDS_WITH_SCREENS: readonly TaskKind[] = [
+  "document_collection",
+  "signatures",
+  "deliverables",
+];
+
+/** Anything unrecognised is a plain task — a kind from a newer build must
+ *  still render in an older one rather than blanking the row. */
+export function toTaskKind(v: unknown): TaskKind {
+  return (TASK_KINDS as readonly string[]).includes(v as string)
+    ? (v as TaskKind)
+    : "task";
+}
+
 export type EngagementTask = {
   id: string;
   /** Always set. The task's real parent. */
@@ -31,6 +66,7 @@ export type EngagementTask = {
   /** Null for a task that belongs to the client alone. */
   engagementId: string | null;
   title: string;
+  kind: TaskKind;
   notes: string | null;
   /** Everybody on it. Empty is a real state — "somebody needs to do this". */
   assigneeIds: string[];
@@ -62,7 +98,7 @@ export function toTaskStatus(v: unknown): TaskStatus {
 }
 
 const SELECT =
-  "id, client_id, engagement_id, title, notes, status, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
+  "id, client_id, engagement_id, title, kind, notes, status, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
 
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
@@ -78,6 +114,7 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
     clientId,
     engagementId: typeof r.engagement_id === "string" ? r.engagement_id : null,
     title,
+    kind: toTaskKind(r.kind),
     notes: typeof r.notes === "string" && r.notes.trim() ? r.notes : null,
     assigneeIds: rows
       .map((a) => (a as { user_id?: unknown }).user_id)
@@ -158,6 +195,8 @@ export async function createEngagementTask(input: {
   engagementId?: string | null;
   firmId: string;
   title: string;
+  /** Defaults to a plain task — the kind with no screen and no collection. */
+  kind?: TaskKind;
   dueDate?: string | null;
   createdBy?: string | null;
   /** Appended, so a new step lands at the bottom rather than the top. */
@@ -171,6 +210,7 @@ export async function createEngagementTask(input: {
       engagement_id: input.engagementId ?? null,
       firm_id: input.firmId,
       title: input.title,
+      kind: input.kind ?? "task",
       due_date: input.dueDate ?? null,
       order_index: input.orderIndex,
       created_by: input.createdBy ?? null,
