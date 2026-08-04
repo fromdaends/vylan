@@ -188,6 +188,16 @@ describe("TasksTable — the saved views", () => {
   // Founder: "The unnasigned and completed tab bars for sorting should be
   // removed like provided in the screenshot i sent." Both survive as FILTERS,
   // so nothing became unreachable — it stopped being a tab.
+  // ⚠️ CAUGHT ON THE LIVE SITE. The engagements list opens this table from a
+  // job's TOTAL ("2/2"), and on a fully-finished job the default "Active work"
+  // view showed "Nothing planned on your side yet" under a count of two.
+  it("can open on a view other than Active work", () => {
+    renderTable({ initialView: "all" });
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    const all = tabs.find((el) => /All work/.test(el.textContent ?? ""));
+    expect(all).toHaveAttribute("aria-selected", "true");
+  });
+
   it("keeps only three tabs: Active, Mine, All", () => {
     renderTable();
     const tabs = within(screen.getByRole("tablist"))

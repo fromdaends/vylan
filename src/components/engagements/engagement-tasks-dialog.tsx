@@ -79,7 +79,12 @@ export function EngagementTasksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      {/* sm:max-w — NOT max-w. DialogContent's own base class carries
+          `sm:max-w-lg`, and tailwind-merge treats a breakpoint variant and a
+          plain utility as different properties, so a bare `max-w-4xl` loses at
+          every width above `sm`. The panel rendered at ~440px and clipped the
+          table. */}
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{engagementTitle}</DialogTitle>
           {/* The client, because the list you clicked from shows both and a
@@ -103,6 +108,11 @@ export function EngagementTasksDialog({
           </div>
         ) : data ? (
           <TasksTable
+            // ⚠️ ALL WORK, not the table's usual "Active work". You clicked a
+            // TOTAL — "2/2" — so opening on a view that hides finished tasks
+            // answers a question you did not ask, and on a fully-done job it
+            // said "Nothing planned on your side yet" under a count of two.
+            initialView="all"
             tasks={data.tasks}
             members={data.members}
             canEdit
