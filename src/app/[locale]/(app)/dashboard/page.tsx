@@ -156,18 +156,23 @@ export default async function DashboardPage({
 
         <TasksOverviewCard
           statuses={taskStatuses}
+          // The SAME rows the Tasks page renders — the card draws them with
+          // the same table, so anything hand-picked here would be a field the
+          // two screens disagree about.
           tasks={tasks.map((t) => ({
             id: t.id,
             title: t.title,
+            kind: t.kind,
             status: t.status,
             statusId: t.statusId,
+            priority: t.priority,
             assigneeIds: t.assigneeIds,
             clientId: t.clientId,
             engagementId: t.engagementId,
             clientName: t.clientName,
             engagementTitle: t.engagementTitle,
             dueDate: t.dueDate,
-            completedAt: t.completedAt,
+            createdAt: t.createdAt,
           }))}
           members={activeMembers}
           clients={clients.map((c) => ({
@@ -183,8 +188,6 @@ export default async function DashboardPage({
             existingKinds: kindsByEngagement.get(e.id) ?? [],
           }))}
           viewerId={user?.id ?? ""}
-          today={today}
-          timeZone={timeZone}
         />
       </div>
     </div>

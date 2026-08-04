@@ -1,95 +1,52 @@
 "use client";
 
-// The Tasks card (design 2a) — the dashboard's main column: every open task in
-// the firm, grouped by urgency, with the same three-state checkbox, assignee
-// menu and due labels as every other task list.
+// The Overview's task panel — THE TASKS TABLE, not a second one.
 //
-// A DIFFERENT LAYOUT of the SAME row InternalWork draws, not a second task
-// list: the pieces (checkbox, who-for line, due indicator, assignee menu) come
-// from task-bits.tsx and the data comes from the same listFirmTasks() read.
-// The grouping is this card's whole personality — a flat list already exists
-// at /work, and this card exists to answer "what order do I do these in".
+// The founder, twice, and the second time bluntly: "the overview page is fucked
+// omg. it did not change in fact you made it worse."
 //
-// Groups are computed by lib/tasks/dates — the same functions the stats strip
-// counts with, so a strip saying "3 due this week" can never sit above a card
-// showing four.
+// They were right on both counts. This card had its own row design, its own
+// status handling, its own assignee picker and its own quick-add — a parallel
+// implementation of the Tasks page that happened to look similar the day it
+// was written. Then I added the firm's coloured status pill to it WITHOUT
+// noticing its checkbox only ever wrote the bucket and never the status id, so
+// a task ticked off here kept rendering "In progress" under a ticked box and a
+// strikethrough. Three signals, one of them lying.
+//
+// A pill that contradicts the checkbox beside it is worse than no pill, and
+// the reason it could happen at all is the reason this file is now thirty
+// lines: two implementations of one thing will always drift, and patching the
+// copy is how you get a third state nobody tested.
+//
+// So the card is a HEADER and the real table. Everything the rows do — the
+// tick with its undo, the coloured statuses, the type link, the assignee menu,
+// sorting, filtering — is the same code the Tasks page runs, because it IS the
+// Tasks page's code.
+//
+// ── WHAT WAS LOST, DELIBERATELY ────────────────────────────────────────────
+//
+// The old card grouped rows by due date (Overdue / Today / Later / Done today).
+// That framing has not disappeared: the stats strip directly above this card
+// says 0 Overdue, 0 Due today, 0 Due this week, and each cell links to /work
+// filtered the same way. The grouping was answering a question the row of
+// numbers above it already answers, in a list that then disagreed with the
+// Tasks page about what a task looks like.
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
-import { toast } from "sonner";
-import { cn } from "@/lib/cn";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
+import { ChevronRight } from "lucide-react";
+import {
+  TasksTable,
+  type TaskRow,
+  type FirmStatus,
+} from "@/components/engagements/tasks-table";
 import {
   AddTaskDialog,
   type AddTaskEngagement,
 } from "@/components/engagements/add-task-dialog";
-import type { ComboboxClient } from "@/components/clients/client-combobox";
-import {
-  DueIndicator,
-  NEXT_STATUS,
-  TaskAssigneeMenu,
-  TaskStatusCheckbox,
-  TaskWhoFor,
-  type Person,
-  type TaskStatus,
-} from "@/components/work/task-bits";
-import {
-  setTaskAssigneeAction,
-  updateTaskAction,
-  type TaskActionResult,
-} from "@/app/actions/engagement-tasks";
-import { groupTasks, type TaskGroups } from "@/lib/tasks/dates";
+import { type ComboboxClient } from "@/components/clients/client-combobox";
 
-/** A status the firm named (1420), as this card needs it. */
-export type DashboardStatus = {
-  id: string;
-  name: string;
-  color: string;
-  bucket: TaskStatus;
-};
-
-export type DashboardTask = {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  statusId?: string | null;
-  assigneeIds: string[];
-  clientId: string;
-  engagementId: string | null;
-  clientName: string | null;
-  engagementTitle: string | null;
-  dueDate: string | null;
-  completedAt: string | null;
-};
-
-/** The firm's label and colour for a row, falling back to nothing when the
- *  firm has no statuses of its own — a dot with no meaning is worse than none. */
-function StatusDot({
-  task,
-  statuses,
-}: {
-  task: DashboardTask;
-  statuses: DashboardStatus[];
-}) {
-  const status =
-    statuses.find((s) => s.id === task.statusId) ??
-    statuses.find((s) => s.bucket === task.status);
-  if (!status) return null;
-  return (
-    <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-      <span
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: status.color }}
-        aria-hidden
-      />
-      {status.name}
-    </span>
-  );
-}
-
-type Tab = "all" | "mine" | "done";
-
-type Patch = { id: string; status?: TaskStatus; assigneeIds?: string[] };
+type Person = { id: string; name: string };
 
 export function TasksOverviewCard({
   tasks,
@@ -98,265 +55,31 @@ export function TasksOverviewCard({
   engagements,
   statuses,
   viewerId,
-  today,
-  timeZone,
 }: {
-  tasks: DashboardTask[];
+  tasks: TaskRow[];
   members: Person[];
   clients: ComboboxClient[];
-  /** For the quick-add's popover: a collection kind needs a job to hang off. */
+  /** For the add popover: a collection kind needs a job to hang off. */
   engagements: AddTaskEngagement[];
-  /** The firm's own statuses, so a row here wears the same coloured label it
-   *  wears on the Tasks page rather than a second vocabulary. */
-  statuses: DashboardStatus[];
+  statuses: FirmStatus[];
   viewerId: string;
-  /** YYYY-MM-DD in the firm's timezone — the anchor every group hangs off. */
-  today: string;
-  timeZone: string;
 }) {
   const t = useTranslations("Dashboard");
-  const tWork = useTranslations("Engagements");
-  const locale = useLocale();
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-  const [tab, setTab] = useState<Tab>("all");
-
-  // Server truth with any in-flight change already applied — the exact
-  // optimistic shape InternalWork uses, so a tick lands instantly here too.
-  const [rows, patch] = useOptimistic(
-    tasks,
-    (state: DashboardTask[], p: Patch) =>
-      state.map((r) => (r.id === p.id ? { ...r, ...p } : r)),
-  );
-
-  function run(p: Patch, call: () => Promise<TaskActionResult>) {
-    startTransition(async () => {
-      patch(p);
-      const res = await call();
-      if (res.ok) {
-        router.refresh();
-        return;
-      }
-      toast.error(
-        res.needsMigration ? tWork("work_needs_migration") : tWork("work_failed"),
-      );
-    });
-  }
-
-  const openCount = rows.filter((r) => r.status !== "done").length;
-  const mineCount = rows.filter(
-    (r) => r.status !== "done" && r.assigneeIds.includes(viewerId),
-  ).length;
-
-  const shown = useMemo(
-    () =>
-      tab === "mine"
-        ? rows.filter(
-            (r) => r.status === "done" || r.assigneeIds.includes(viewerId),
-          )
-        : rows,
-    [rows, tab, viewerId],
-  );
-
-  const groups: TaskGroups<DashboardTask> = useMemo(
-    () => groupTasks(shown, today, timeZone),
-    [shown, today, timeZone],
-  );
-
-  // "Today — Monday, Aug 3"
-  const todayLabel = new Intl.DateTimeFormat(locale, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${today}T12:00:00Z`));
-
-  const doneRows = useMemo(
-    () => rows.filter((r) => r.status === "done"),
-    [rows],
-  );
-
-  const tabButton = (key: Tab, label: string, count?: number) => (
-    <button
-      type="button"
-      onClick={() => setTab(key)}
-      className={cn(
-        "rounded-full px-3 py-[5px] text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        tab === key
-          ? "bg-secondary text-foreground"
-          : "text-muted-foreground hover:bg-secondary",
-      )}
-    >
-      {label}
-      {count !== undefined && (
-        <span className={cn("ml-1 tabular-nums", tab === key && "text-muted-foreground")}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
-
-  const group = (
-    key: keyof TaskGroups<DashboardTask>,
-    label: string,
-    headerClass: string,
-    opts?: {
-      hideToday?: boolean;
-      showEmpty?: boolean;
-      /** Rows shown before the "+ n more" link. Overdue and Today are never
-       *  capped — hiding urgent work to save pixels is how it gets missed. */
-      max?: number;
-      moreHref?: string;
-    },
-  ) => {
-    const list = groups[key];
-    if (list.length === 0) return null;
-    const max = opts?.max ?? Infinity;
-    const visible = list.slice(0, max);
-    const hidden = list.length - visible.length;
-    return (
-      <div key={key}>
-        <p
-          className={cn(
-            "mt-[18px] text-[11px] font-semibold uppercase tracking-[0.08em] first:mt-5",
-            headerClass,
-          )}
-        >
-          {label}
-        </p>
-        <div className="mt-1">
-          {visible.map((task, i) => (
-            <div
-              key={task.id}
-              className={cn(
-                "group -mx-2 flex items-center gap-3 rounded-md px-2 py-[11px] transition-colors hover:bg-secondary/60",
-                i > 0 && "border-t border-border/50",
-              )}
-            >
-              <TaskStatusCheckbox
-                status={task.status}
-                onCycle={() =>
-                  run({ id: task.id, status: NEXT_STATUS[task.status] }, () =>
-                    updateTaskAction({
-                      taskId: task.id,
-                      engagementId: task.engagementId,
-                      status: NEXT_STATUS[task.status],
-                    }),
-                  )
-                }
-                ariaLabel={tWork("work_toggle", { title: task.title })}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "truncate text-sm font-medium",
-                      task.status === "done" &&
-                        "text-muted-foreground line-through decoration-border",
-                    )}
-                  >
-                    {task.title}
-                  </span>
-                  {/* THE SAME PILL as the Tasks page. This card used to show
-                      only a checkbox, so a task sitting in the firm's own
-                      "Needs review" read here as indistinguishable from one
-                      nobody had touched. */}
-                  <StatusDot task={task} statuses={statuses} />
-                </span>
-                <TaskWhoFor
-                  clientId={task.clientId}
-                  clientName={task.clientName}
-                  engagementId={task.engagementId}
-                  engagementTitle={task.engagementTitle}
-                  taskTitle={task.title}
-                  className="mt-px"
-                />
-              </span>
-              {/* FIXED right columns — due then assignee — so the values line
-                  up down the card instead of floating ragged after each
-                  title. The client profile's status column set the precedent:
-                  a mixed list stays scannable when its columns hold still. */}
-              <span className="flex w-[120px] flex-none items-center justify-end text-right">
-                <DueIndicator
-                  dueDate={task.dueDate}
-                  status={task.status}
-                  today={today}
-                  hideToday={opts?.hideToday}
-                  showEmpty={opts?.showEmpty}
-                />
-              </span>
-              <span className="flex w-[110px] flex-none items-center justify-end">
-                <TaskAssigneeMenu
-                  assigneeIds={task.assigneeIds}
-                  members={members}
-                  canEdit
-                  avatarSize={22}
-                  unassignedLabel={tWork("work_unassigned")}
-                  onToggle={(userId, on) =>
-                    run(
-                      {
-                        id: task.id,
-                        assigneeIds: on
-                          ? [...task.assigneeIds, userId]
-                          : task.assigneeIds.filter((x) => x !== userId),
-                      },
-                      () =>
-                        setTaskAssigneeAction({
-                          taskId: task.id,
-                          userId,
-                          on,
-                          engagementId: task.engagementId,
-                        }),
-                    )
-                  }
-                />
-              </span>
-            </div>
-          ))}
-          {hidden > 0 && opts?.moreHref && (
-            <Link
-              href={opts.moreHref}
-              className="block border-t border-border/50 py-2 pl-8 text-xs text-muted-foreground transition-colors hover:text-accent"
-            >
-              {t("tasks_more", { count: hidden })}
-            </Link>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const empty =
-    tab === "done"
-      ? doneRows.length === 0
-      : groups.overdue.length +
-          groups.today.length +
-          groups.week.length +
-          groups.later.length +
-          groups.doneToday.length ===
-        0;
 
   return (
-    <div className="rounded-xl border border-border bg-card px-7 py-6 shadow-card">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[19px] font-semibold tracking-[-0.01em]">
-          {t("tasks_card_title")}
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold tracking-tight">
+          {t("tasks_title")}
         </h2>
-        <div className="flex items-center gap-1.5">
-          {tabButton("all", t("tasks_tab_all"), openCount)}
-          {tabButton("mine", t("tasks_tab_mine"), mineCount)}
-          {tabButton("done", t("tasks_tab_done"))}
+        <div className="flex items-center gap-3">
           <Link
             href="/work"
-            className="ml-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+            className="flex items-center gap-0.5 text-sm text-accent transition-colors hover:underline"
           >
             {t("tasks_view_all")}
+            <ChevronRight className="size-3.5" aria-hidden />
           </Link>
-          {/* THE SAME BUTTON as the Tasks page and every job. Founder: "the
-              create new task button on the overview page is outdated. Make it
-              look and functioon like every other new task button." It was a
-              type-a-title bar with its own grey Add — a third way to make a
-              task, which is exactly what the merge in #1235 was for. */}
           <AddTaskDialog
             clients={clients}
             engagements={engagements}
@@ -365,106 +88,14 @@ export function TasksOverviewCard({
         </div>
       </div>
 
-      {empty ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          {tab === "done" ? t("tasks_done_empty") : t("tasks_empty")}
-        </p>
-      ) : tab === "done" ? (
-        // The Done tab is a plain list, newest finish first — an archive
-        // shelf, so no urgency groups and no due chips.
-        <div className="mt-1">
-          {doneRows.map((task, i) => (
-            <div
-              key={task.id}
-              className={cn(
-                "group -mx-2 flex items-center gap-3 rounded-md px-2 py-[11px] transition-colors hover:bg-secondary/60",
-                i > 0 && "border-t border-border/50",
-              )}
-            >
-              <TaskStatusCheckbox
-                status={task.status}
-                onCycle={() =>
-                  run({ id: task.id, status: NEXT_STATUS[task.status] }, () =>
-                    updateTaskAction({
-                      taskId: task.id,
-                      engagementId: task.engagementId,
-                      status: NEXT_STATUS[task.status],
-                    }),
-                  )
-                }
-                ariaLabel={tWork("work_toggle", { title: task.title })}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-muted-foreground line-through decoration-border">
-                  {task.title}
-                </span>
-                <TaskWhoFor
-                  clientId={task.clientId}
-                  clientName={task.clientName}
-                  engagementId={task.engagementId}
-                  engagementTitle={task.engagementTitle}
-                  taskTitle={task.title}
-                  className="mt-px"
-                />
-              </span>
-              <span className="flex w-[110px] flex-none items-center justify-end">
-                <TaskAssigneeMenu
-                  assigneeIds={task.assigneeIds}
-                  members={members}
-                  canEdit
-                  avatarSize={22}
-                  unassignedLabel={tWork("work_unassigned")}
-                  onToggle={(userId, on) =>
-                    run(
-                      {
-                        id: task.id,
-                        assigneeIds: on
-                          ? [...task.assigneeIds, userId]
-                          : task.assigneeIds.filter((x) => x !== userId),
-                      },
-                      () =>
-                        setTaskAssigneeAction({
-                          taskId: task.id,
-                          userId,
-                          on,
-                          engagementId: task.engagementId,
-                        }),
-                    )
-                  }
-                />
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* Overdue and Today are never capped — that IS the page. The
-              calmer groups cap with a "+ n more" so twenty later-tasks or a
-              productive afternoon can't bury the urgent ones (founder's call,
-              2026-08-03: "way too many tasks displayed at a time"). */}
-          {group("overdue", t("tasks_group_overdue"), "text-destructive")}
-          {group(
-            "today",
-            t("tasks_group_today", { date: todayLabel }),
-            "text-accent",
-            { hideToday: true },
-          )}
-          {group("week", t("tasks_group_week"), "text-muted-foreground", {
-            max: 5,
-            moreHref: "/work?due=week",
-          })}
-          {group("later", t("tasks_group_later"), "text-muted-foreground", {
-            showEmpty: true,
-            max: 5,
-            moreHref: "/work",
-          })}
-          {group("doneToday", t("tasks_group_done_today"), "text-success", {
-            max: 3,
-            moreHref: "/work?open=0",
-          })}
-        </>
-      )}
-
+      <TasksTable
+        tasks={tasks}
+        members={members}
+        canEdit
+        statuses={statuses}
+        currentUserId={viewerId}
+        variant="firm"
+      />
     </div>
   );
 }
