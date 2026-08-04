@@ -110,6 +110,37 @@ export type Engagement = {
  * on the proposal — the first one is the headline service, and a column that
  * truncates to "+2 more" must truncate the RIGHT two.
  */
+/**
+ * One engagement's priced service lines, in proposal order.
+ *
+ * The single-row twin of listItemNamesByEngagement, for the engagement's own
+ * page — which needs one job's lines, not every job's.
+ */
+export async function listEngagementItems(engagementId: string): Promise<
+  { id: string; name: string; rateCents: number | null }[]
+> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_items")
+    .select("id, name, rate_cents, order_index")
+    .eq("engagement_id", engagementId)
+    .order("order_index", { ascending: true });
+  if (error) {
+    // Deploy-ahead safe, as everywhere else here: an engagement page that 500s
+    // because 1450 is not applied is far worse than one with no Services list.
+    if (isMissingSchema(error)) return [];
+    throw error;
+  }
+  return (data ?? []).map((r) => {
+    const row = r as { id: string; name: string | null; rate_cents: number | null };
+    return {
+      id: row.id,
+      name: (row.name ?? "").trim(),
+      rateCents: row.rate_cents ?? null,
+    };
+  });
+}
+
 export async function listItemNamesByEngagement(): Promise<
   Map<string, string[]>
 > {
