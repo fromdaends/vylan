@@ -108,6 +108,8 @@ export type EngagementTask = {
   /** Newest first is the table's default order — a task you just made must be
    *  the one you can see. */
   createdAt: string | null;
+  /** Set on a SUBTASK, pointing at its parent (1430). One level only. */
+  parentId: string | null;
 };
 
 /** A task plus the names around it — what a firm-wide list needs to render. */
@@ -132,7 +134,7 @@ export function toTaskStatus(v: unknown): TaskStatus {
 }
 
 const SELECT =
-  "id, client_id, engagement_id, title, kind, notes, status, status_id, priority, due_date, order_index, completed_at, created_at, engagement_task_assignees(user_id)";
+  "id, client_id, engagement_id, title, kind, notes, status, status_id, priority, due_date, order_index, completed_at, created_at, parent_id, engagement_task_assignees(user_id)";
 
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
@@ -159,6 +161,7 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
     dueDate: typeof r.due_date === "string" ? r.due_date : null,
     orderIndex: typeof r.order_index === "number" ? r.order_index : 0,
     createdAt: typeof r.created_at === "string" ? r.created_at : null,
+    parentId: typeof r.parent_id === "string" ? r.parent_id : null,
     completedAt: typeof r.completed_at === "string" ? r.completed_at : null,
   };
 }
@@ -205,6 +208,41 @@ export async function countTasksByEngagement(): Promise<
   return out;
 }
 
+/**
+ * Every subtask under the given parents, in display order.
+ *
+ * Batched by parent id rather than one query per row: a job's task list asks
+ * for all of them at once, and a query per parent is the N+1 the perf sweep
+ * spent a day removing.
+ */
+export async function listSubtasksByParent(
+  parentIds: string[],
+): Promise<Map<string, EngagementTask[]>> {
+  const out = new Map<string, EngagementTask[]>();
+  if (parentIds.length === 0) return out;
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_tasks")
+    .select(SELECT)
+    .in("parent_id", parentIds)
+    .order("order_index", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) {
+    // Deploy-ahead safe: before 1430 the column does not exist, and a task list
+    // with no subtasks is far better than a page that 500s.
+    if (isMissingSchema(error)) return out;
+    throw error;
+  }
+  for (const row of data ?? []) {
+    const task = toTask(row as Record<string, unknown>);
+    if (!task?.parentId) continue;
+    const list = out.get(task.parentId) ?? [];
+    list.push(task);
+    out.set(task.parentId, list);
+  }
+  return out;
+}
+
 /** One job's tasks, in display order. */
 export async function listEngagementTasks(
   engagementId: string,
@@ -214,6 +252,9 @@ export async function listEngagementTasks(
     .from("engagement_tasks")
     .select(SELECT)
     .eq("engagement_id", engagementId)
+    // TOP-LEVEL ONLY. A subtask belongs to its parent's row, not beside it —
+    // one task with four subtasks must not read as five pieces of work.
+    .is("parent_id", null)
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
   if (error) {
@@ -242,6 +283,9 @@ export async function listFirmTasks(): Promise<FirmTask[]> {
   const { data, error } = await supabase
     .from("engagement_tasks")
     .select(`${SELECT}, clients(display_name), engagements(title)`)
+    // TOP-LEVEL ONLY — see listEngagementTasks. Subtasks are read for one
+    // parent, by listSubtasks below.
+    .is("parent_id", null)
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) {
@@ -284,6 +328,9 @@ export async function createEngagementTask(input: {
   createdBy?: string | null;
   /** Appended, so a new step lands at the bottom rather than the top. */
   orderIndex: number;
+  /** Makes this a SUBTASK of that task. client_id and engagement_id are then
+   *  copied FROM the parent by a trigger, whatever is passed here. */
+  parentId?: string | null;
 }): Promise<string> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
@@ -297,6 +344,7 @@ export async function createEngagementTask(input: {
       due_date: input.dueDate ?? null,
       priority: input.priority ?? "none",
       order_index: input.orderIndex,
+      parent_id: input.parentId ?? null,
       created_by: input.createdBy ?? null,
     })
     .select("id")

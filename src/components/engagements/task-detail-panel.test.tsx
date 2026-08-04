@@ -7,6 +7,15 @@ vi.mock("@/i18n/navigation", () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  // The panel renders SubtaskList, which refreshes after a write.
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("@/app/actions/engagement-tasks", () => ({
+  addTaskAction: vi.fn(async () => ({ ok: true })),
+  updateTaskAction: vi.fn(async () => ({ ok: true })),
+  deleteTaskAction: vi.fn(async () => ({ ok: true })),
+  setTaskAssigneeAction: vi.fn(async () => ({ ok: true })),
 }));
 
 import {
