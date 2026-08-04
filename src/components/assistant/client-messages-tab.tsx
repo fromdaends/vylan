@@ -23,6 +23,10 @@ import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { ClientThread } from "@/components/messages/client-thread";
+import {
+  ConversationSearch,
+  matchesConversation,
+} from "@/components/messages/conversation-search";
 import { TeamThread } from "@/components/assistant/team-thread";
 import type { FirmConversation } from "@/lib/db/client-messages";
 import type { TeamConversation } from "@/lib/db/team-messages";
@@ -99,6 +103,7 @@ export function ClientMessagesTab({
   // inbox that is NOT "you have no clients".
   const [notActivated, setNotActivated] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -173,6 +178,19 @@ export function ClientMessagesTab({
     setOpenId(null);
     void load();
   }, [load]);
+
+  // Find-a-person filter. Purely local to what's already loaded — the inbox is
+  // one query of the firm's clients, so there is nothing to go back to the
+  // server for.
+  const searching = query.trim().length > 0;
+  const visible = (conversations ?? []).filter((c) =>
+    matchesConversation(c.clientName, query),
+  );
+  const teamMatches = team != null && matchesConversation(team.firmName, query);
+  // Nothing to filter (no clients, or messaging not activated) means no reason
+  // to show the field — but keep it while a query is live, or clearing it would
+  // be impossible.
+  const showSearch = searching || (conversations?.length ?? 0) > 0;
 
   // --- Team thread view ---------------------------------------------------
   if (openId === TEAM_CONVERSATION_ID) {
@@ -254,6 +272,9 @@ export function ClientMessagesTab({
   // --- Inbox list ---------------------------------------------------------
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* Outside the scroller so it stays put while the list moves under it.
+          Hidden until there is actually something to filter. */}
+      {showSearch && <ConversationSearch value={query} onChange={setQuery} />}
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
         {conversations === null && !failed ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -274,7 +295,7 @@ export function ClientMessagesTab({
           </div>
         ) : (
           <>
-            {team && (
+            {teamMatches && team && (
               <div className="border-b border-border/60">
                 <TeamConversationRow
                   team={team}
@@ -287,7 +308,11 @@ export function ClientMessagesTab({
                 />
               </div>
             )}
-            {conversations && conversations.length === 0 ? (
+            {searching && visible.length === 0 && !teamMatches ? (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                {t("messages_search_no_matches")}
+              </p>
+            ) : conversations && conversations.length === 0 ? (
               <div
                 className={cn(
                   "flex flex-col items-center justify-center gap-2 px-6 text-center",
@@ -311,7 +336,7 @@ export function ClientMessagesTab({
               </div>
             ) : (
               <ul className="divide-y divide-border/60">
-                {(conversations ?? []).map((c) => (
+                {visible.map((c) => (
                   <li key={c.clientId}>
                     <ConversationRow
                       conversation={c}

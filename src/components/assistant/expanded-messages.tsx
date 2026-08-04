@@ -14,6 +14,10 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { ClientThread } from "@/components/messages/client-thread";
 import {
+  ConversationSearch,
+  matchesConversation,
+} from "@/components/messages/conversation-search";
+import {
   ConversationRow,
   TEAM_CONVERSATION_ID,
   TeamConversationRow,
@@ -72,6 +76,7 @@ export function ExpandedMessages({
   // inbox that is NOT "you have no clients".
   const [notActivated, setNotActivated] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -266,6 +271,15 @@ export function ExpandedMessages({
 
   const conv = conversations?.find((c) => c.clientId === openId) ?? null;
 
+  // Same find-a-person filter as the popup, same shared matcher — the two
+  // inboxes must never drift into two different search behaviours.
+  const searching = query.trim().length > 0;
+  const visible = (conversations ?? []).filter((c) =>
+    matchesConversation(c.clientName, query),
+  );
+  const teamMatches = team != null && matchesConversation(team.firmName, query);
+  const showSearch = searching || (conversations?.length ?? 0) > 0;
+
   return (
     <aside
       inert={!expanded}
@@ -342,6 +356,8 @@ export function ExpandedMessages({
       {/* Two-pane body: conversation list (left) + active thread (right). */}
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[40%] min-w-[220px] max-w-[340px] flex-col border-r border-border">
+          {/* Outside the scroller so it stays put while the list moves. */}
+          {showSearch && <ConversationSearch value={query} onChange={setQuery} />}
           <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
             {conversations === null && !failed ? (
               <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -362,7 +378,7 @@ export function ExpandedMessages({
               </div>
             ) : (
               <>
-                {team && (
+                {teamMatches && team && (
                   <div
                     className={cn(
                       "border-b border-border/60",
@@ -382,7 +398,11 @@ export function ExpandedMessages({
                     />
                   </div>
                 )}
-                {conversations && conversations.length === 0 ? (
+                {searching && visible.length === 0 && !teamMatches ? (
+                  <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    {t("messages_search_no_matches")}
+                  </p>
+                ) : conversations && conversations.length === 0 ? (
                   <div
                     className={cn(
                       "flex flex-col items-center justify-center gap-2 px-6 text-center",
@@ -401,7 +421,7 @@ export function ExpandedMessages({
                   </div>
                 ) : (
                   <ul className="divide-y divide-border/60">
-                    {(conversations ?? []).map((c) => (
+                    {visible.map((c) => (
                       <li
                         key={c.clientId}
                         className={cn(

@@ -3949,6 +3949,8 @@
     "messages_inbox_empty_hint": "Vos échanges avec vos clients s'affichent ici.",
     "messages_inbox_no_clients": "Aucun client",
     "messages_inbox_no_clients_hint": "Ajoutez un client et vous pourrez lui écrire d'ici.",
+    "messages_search_placeholder": "Rechercher",
+    "messages_search_no_matches": "Aucun résultat",
     "messages_back_to_inbox": "Toutes les conversations",
     "messages_no_messages_yet": "Aucun message",
     "messages_preview_you": "Vous : ",
