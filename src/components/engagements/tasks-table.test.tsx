@@ -427,3 +427,35 @@ describe("TasksTable — finishing a task is a moment, not a disappearance", () 
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 });
+
+// Founder: "make the tasks box a little shorter. It extendeds pretty long."
+// The Overview shows this table as a PANEL among other panels, so it caps the
+// rows — but the cap is on what is DRAWN, never on what is counted.
+describe("TasksTable — capped, for the Overview", () => {
+  it("draws only maxRows, and offers the rest", () => {
+    renderTable({ maxRows: 2, moreHref: "/work" });
+    expect(names()).toHaveLength(2);
+    expect(screen.getByRole("link", { name: /1 more/ }).getAttribute("href")).toBe(
+      "/work",
+    );
+  });
+
+  it("still COUNTS everything — a truncated list that under-reports is one you cannot trust", () => {
+    renderTable({ maxRows: 2, moreHref: "/work" });
+    // Three tasks are active; only two are drawn.
+    expect(
+      within(screen.getByRole("tablist")).getByRole("button", { name: /Active work/ })
+        .textContent,
+    ).toContain("3");
+  });
+
+  it("offers nothing extra when everything already fits", () => {
+    renderTable({ maxRows: 10, moreHref: "/work" });
+    expect(screen.queryByRole("link", { name: /more/ })).toBeNull();
+  });
+
+  it("is uncapped by default — the Tasks page shows the lot", () => {
+    renderTable();
+    expect(names()).toHaveLength(3);
+  });
+});
