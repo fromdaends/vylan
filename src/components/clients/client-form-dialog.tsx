@@ -53,6 +53,10 @@ type Props = {
   /** Active teammates, for the create-time team picker. Empty in a solo firm,
    *  which hides the control entirely. */
   teammates?: { id: string; name: string }[];
+  /** Opens on FIRST render only — for arriving from a link that means "make one
+   *  now" (the rail's Create panel sends ?new=1). Unlike `open` it does not
+   *  fight the user: once closed it stays closed. */
+  defaultOpen?: boolean;
   /** Controlled mode. Pass both to open this from somewhere that cannot host a
    *  trigger — a dropdown item, for instance: the menu unmounts the item on
    *  select, so a DialogTrigger inside one never gets to fire. */
@@ -66,6 +70,7 @@ export function ClientFormDialog({
   client,
   trigger,
   teammates = [],
+  defaultOpen = false,
   open: openProp,
   onOpenChange,
 }: Props) {
@@ -73,7 +78,9 @@ export function ClientFormDialog({
   const tc = useTranslations("Common");
   const tAuth = useTranslations("Auth");
   const controlled = openProp !== undefined;
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  // Seeded rather than forced — see AddTaskDialog. The rail's Create panel
+  // links here with ?new=1 and expects the form already open.
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlled ? openProp : uncontrolledOpen;
   const setOpen = (next: boolean) => {
     if (!controlled) setUncontrolledOpen(next);

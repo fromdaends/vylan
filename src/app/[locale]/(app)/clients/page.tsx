@@ -47,6 +47,8 @@ export default async function ClientsPage({
     sort?: string;
     active?: string;
     owner?: string;
+    // Arrives from the rail's Create panel and means "open the client form".
+    new?: string;
   }>;
 }) {
   const { locale: rawLocale } = await params;
@@ -239,6 +241,7 @@ export default async function ClientsPage({
               </Link>
               <ClientFormDialog
                 mode="create"
+                defaultOpen={sp.new === "1"}
                 locale={locale}
                 teammates={
                   teamEnabled

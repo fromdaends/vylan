@@ -1533,7 +1533,18 @@
     "quick_links_label": "Raccourcis",
     "quick_clients": "Clients",
     "quick_engagements": "Engagements actifs",
-    "quick_dashboard": "Tableau de bord complet"
+    "quick_dashboard": "Tableau de bord complet",
+    "create_title": "Créer",
+    "create_task": "Créer une tâche",
+    "create_client": "Ajouter un client",
+    "create_engagement": "Mandat",
+    "create_engagement_hint": "Démarrez un mandat pour un client et demandez-lui les documents nécessaires.",
+    "create_invoice": "Facture",
+    "create_invoice_hint": "Facturez un client et laissez-le payer depuis son portail.",
+    "create_import": "Importer des clients",
+    "create_import_hint": "Importez une liste de clients depuis un tableur.",
+    "create_template": "Modèle",
+    "create_template_hint": "Enregistrez un ensemble de demandes de documents réutilisable pour chaque client."
   },
   "Dashboard": {
     "greeting_morning": "Bonjour",

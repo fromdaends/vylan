@@ -1533,7 +1533,18 @@
     "quick_links_label": "Quick links",
     "quick_clients": "Clients",
     "quick_engagements": "Active engagements",
-    "quick_dashboard": "Full dashboard"
+    "quick_dashboard": "Full dashboard",
+    "create_title": "Create",
+    "create_task": "Create task",
+    "create_client": "Add client",
+    "create_engagement": "Engagement",
+    "create_engagement_hint": "Start a job for a client and ask them for the documents it needs.",
+    "create_invoice": "Invoice",
+    "create_invoice_hint": "Bill a client and let them pay it from their portal.",
+    "create_import": "Import clients",
+    "create_import_hint": "Bring a list of clients in from a spreadsheet.",
+    "create_template": "Template",
+    "create_template_hint": "Save a set of document requests you reuse for every client."
   },
   "Dashboard": {
     "greeting_morning": "Good morning",
