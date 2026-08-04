@@ -42,7 +42,10 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
-import { EngagementItemsEditor } from "@/components/engagements/engagement-items-editor";
+import {
+  EngagementItemsEditor,
+  type CatalogueService,
+} from "@/components/engagements/engagement-items-editor";
 import type { EngagementItemDraft } from "@/lib/engagements/items";
 import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
@@ -137,6 +140,7 @@ export function EngagementBuilder({
   locale,
   includeQuebecForms = true,
   servicePrices = {},
+  services = [],
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -164,6 +168,8 @@ export function EngagementBuilder({
   // Per-service default prices in cents (firms.service_prices), keyed by
   // engagement type — pre-fills the invoice amount.
   servicePrices?: Record<string, number>;
+  /** The firm's service catalogue (migration 1480). Empty until it is applied. */
+  services?: CatalogueService[];
   // Whether the firm can receive payments (Stripe Connect charges enabled).
   // Invoice automation is only offered when true.
   connectReady?: boolean;
@@ -539,6 +545,7 @@ export function EngagementBuilder({
               .filter((i) => i.name.trim().length > 0)
               .map((i) => ({
                 name: i.name.trim(),
+                service_id: i.serviceId,
                 description: i.description,
                 rate_cents: i.rateCents,
                 rate_type: i.rateType,
@@ -823,6 +830,7 @@ export function EngagementBuilder({
               items={serviceItems}
               onChange={setServiceItems}
               locale={locale}
+              services={services}
             />
           </CardContent>
         </Card>

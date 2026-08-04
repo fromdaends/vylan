@@ -33,6 +33,17 @@ import {
 } from "@/lib/engagements/items";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 
+/** One entry from the firm's catalogue, as this editor needs it. */
+export type CatalogueService = {
+  id: string;
+  name: string;
+  description: string | null;
+  rateCents: number | null;
+  rateType: RateType;
+  billingFrequency: BillingFrequency;
+  taxPct: number | null;
+};
+
 type FreqKey =
   | "item_freq_once"
   | "item_freq_weekly"
@@ -45,12 +56,19 @@ export function EngagementItemsEditor({
   items,
   onChange,
   locale,
+  /**
+   * The firm's service catalogue (migration 1480). Picking one COPIES its
+   * values onto the line — Canopy's model, and the founder's call: it suggests
+   * the price, it does not lock it.
+   */
+  services = [],
   /** The firm's default tax rate, used where a line does not set its own. */
   fallbackTaxPct = null,
 }: {
   items: EngagementItemDraft[];
   onChange: (next: EngagementItemDraft[]) => void;
   locale: AppLocale;
+  services?: CatalogueService[];
   fallbackTaxPct?: number | null;
 }) {
   const t = useTranslations("Engagements");
@@ -58,6 +76,31 @@ export function EngagementItemsEditor({
 
   function patch(idx: number, next: Partial<EngagementItemDraft>) {
     onChange(items.map((it, i) => (i === idx ? { ...it, ...next } : it)));
+  }
+
+  // Copy the catalogue entry onto the line. NOT a live link: the values land
+  // here and belong to this engagement from now on, so editing the service
+  // later cannot rewrite a proposal already sent.
+  //
+  // Anything the accountant already typed WINS. Somebody who entered a rate and
+  // then picked the service meant the rate.
+  function chooseService(idx: number, id: string) {
+    const item = items[idx];
+    if (id === "") return patch(idx, { serviceId: null });
+    const svc = services.find((s) => s.id === id);
+    if (!svc) return;
+    patch(idx, {
+      serviceId: svc.id,
+      name: item.name.trim() === "" ? svc.name : item.name,
+      description: item.description ?? svc.description,
+      rateCents: item.rateCents ?? svc.rateCents,
+      rateType: svc.rateType,
+      // Frequency is the ENGAGEMENT's call, not the catalogue's — the same
+      // service is monthly for one client and annual for another. The
+      // catalogue's value is only a starting point.
+      billingFrequency: svc.billingFrequency,
+      taxPct: item.taxPct ?? svc.taxPct,
+    });
   }
 
 
@@ -110,6 +153,29 @@ export function EngagementItemsEditor({
                     />
                   </div>
 
+
+                  {services.length > 0 && (
+                    <div>
+                      <Label htmlFor={`item-service-${idx}`} className="text-xs">
+                        {t("item_service")}
+                      </Label>
+                      <select
+                        id={`item-service-${idx}`}
+                        value={item.serviceId ?? ""}
+                        onChange={(e) => chooseService(idx, e.target.value)}
+                        className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {/* Blank first — a bespoke line belongs to no service,
+                            which is the ordinary case for one-off work. */}
+                        <option value="">{t("item_service_none")}</option>
+                        {services.map((svc) => (
+                          <option key={svc.id} value={svc.id}>
+                            {svc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div>

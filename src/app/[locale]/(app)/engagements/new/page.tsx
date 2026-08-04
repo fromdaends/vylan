@@ -10,6 +10,7 @@ import { assertLocale } from "@/lib/locale";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { can } from "@/lib/auth/capabilities";
+import { listFirmServices } from "@/lib/db/firm-services";
 
 export default async function NewEngagementPage({
   params,
@@ -23,13 +24,16 @@ export default async function NewEngagementPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [clients, templates, firm, user, firmRelationships] =
+  const [clients, templates, firm, user, firmRelationships, services] =
     await Promise.all([
       listClients({ includeArchived: false }),
       listTemplates(),
       getCurrentFirm(),
       getCurrentUser(),
       listLiveRelationshipsForFirm(),
+      // The firm's service catalogue (migration 1480). An empty list before it
+      // is applied, which the items step treats as an ordinary state.
+      listFirmServices(),
     ]);
 
   // Recipient safety (relationships spec §3): each business client's linked
