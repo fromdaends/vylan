@@ -291,7 +291,26 @@ export function AddTaskDialog({
         )}
       </PopoverTrigger>
 
-      <PopoverContent align="end" sideOffset={6} className="w-[340px] p-3">
+      {/* ⚠️ IT RAN OFF THE TOP OF THE SCREEN. The founder, with a screenshot:
+          "the add task button output box goes over the screen LOOK."
+
+          The button sits low on the engagement page, so Radix flips this above
+          it — and the kind list is TALLER than the space above, so the top of
+          it (Deliverables, Tax return) was cut off by the viewport with no way
+          to scroll to it. The two most-used kinds were the two you could not
+          reach.
+
+          The fix is to say how much room there actually is:
+          --radix-popover-content-available-height is the space Radix measured
+          on the side it chose, so capping to it and scrolling inside means the
+          panel can never exceed the window whichever way it opens. collisionPadding
+          keeps it off the very edge. */}
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={12}
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[340px] flex-col overflow-y-auto p-3"
+      >
         <div className="mb-2 flex items-start gap-2">
           {kind && (
             <button
