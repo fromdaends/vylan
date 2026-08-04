@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -37,9 +38,12 @@ export default async function DashboardPage({
   // Resolve the viewer first (React.cache'd, so this is ~free) so What's-new
   // can be scoped per-role: staff see their assigned work; owners see firm-wide.
   const user = await getCurrentUser();
-  const viewer = user
-    ? { userId: user.id, isOwner: user.role === "owner" }
-    : undefined;
+  // Redirect-first, like /work: without this, a signed-out request fires every
+  // loader below as `anon` in the instant before the layout's redirect wins,
+  // which logs scary permission-denied noise that has cost this repo a no-op
+  // migration once already.
+  if (!user) redirect(`/${locale}/login`);
+  const viewer = { userId: user.id, isOwner: user.role === "owner" };
 
   const calendar = getCalendarProvider();
   const [firm, members, tasks, clients, links, connection, notifications] =
