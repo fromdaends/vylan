@@ -31,10 +31,14 @@ export type ComboboxClient = {
 };
 
 export function ClientCombobox({
+  id,
   clients,
   value,
   onChange,
 }: {
+  /** Ties an external <Label htmlFor> to the trigger. Optional — the three
+   *  older callers label it their own way. */
+  id?: string;
   clients: ComboboxClient[];
   value: string | null;
   onChange: (id: string) => void;
@@ -48,6 +52,7 @@ export function ClientCombobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

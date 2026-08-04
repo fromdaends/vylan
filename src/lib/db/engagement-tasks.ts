@@ -59,6 +59,16 @@ export function toTaskKind(v: unknown): TaskKind {
     : "task";
 }
 
+export const TASK_PRIORITIES = ["none", "low", "medium", "high"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+/** Anything unrecognised reads as "none" rather than throwing — same rule as
+ *  toTaskStatus, and for the same reason: a row written by a newer build must
+ *  still render in an older one mid-rollout. */
+export function toTaskPriority(v: unknown): TaskPriority {
+  return TASK_PRIORITIES.includes(v as TaskPriority) ? (v as TaskPriority) : "none";
+}
+
 export type EngagementTask = {
   id: string;
   /** Always set. The task's real parent. */
@@ -71,6 +81,7 @@ export type EngagementTask = {
   /** Everybody on it. Empty is a real state — "somebody needs to do this". */
   assigneeIds: string[];
   status: TaskStatus;
+  priority: TaskPriority;
   dueDate: string | null;
   orderIndex: number;
   completedAt: string | null;
@@ -98,7 +109,7 @@ export function toTaskStatus(v: unknown): TaskStatus {
 }
 
 const SELECT =
-  "id, client_id, engagement_id, title, kind, notes, status, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
+  "id, client_id, engagement_id, title, kind, notes, status, priority, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
 
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
@@ -120,6 +131,7 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
       .map((a) => (a as { user_id?: unknown }).user_id)
       .filter((u): u is string => typeof u === "string"),
     status: toTaskStatus(r.status),
+    priority: toTaskPriority(r.priority),
     dueDate: typeof r.due_date === "string" ? r.due_date : null,
     orderIndex: typeof r.order_index === "number" ? r.order_index : 0,
     completedAt: typeof r.completed_at === "string" ? r.completed_at : null,
@@ -198,6 +210,10 @@ export async function createEngagementTask(input: {
   /** Defaults to a plain task — the kind with no screen and no collection. */
   kind?: TaskKind;
   dueDate?: string | null;
+  priority?: TaskPriority;
+  /** Everybody to put on it at creation. The founder: "creating a task should
+   *  ask for a due date and whatever relevant information. Not only after." */
+  assigneeIds?: string[];
   createdBy?: string | null;
   /** Appended, so a new step lands at the bottom rather than the top. */
   orderIndex: number;
@@ -212,6 +228,7 @@ export async function createEngagementTask(input: {
       title: input.title,
       kind: input.kind ?? "task",
       due_date: input.dueDate ?? null,
+      priority: input.priority ?? "none",
       order_index: input.orderIndex,
       created_by: input.createdBy ?? null,
     })
@@ -221,7 +238,21 @@ export async function createEngagementTask(input: {
     if (isMissingSchema(error)) throw new EngagementTasksUnsupportedError();
     throw error;
   }
-  return (data as { id: string }).id;
+  const id = (data as { id: string }).id;
+
+  // Assignees are a join table, so they are a second write. Deliberately NOT
+  // fatal: a task that exists with nobody on it is recoverable in one click,
+  // and one that failed to exist because the join insert did is not.
+  const people = [...new Set(input.assigneeIds ?? [])];
+  if (people.length > 0) {
+    const { error: assignErr } = await supabase
+      .from("engagement_task_assignees")
+      .insert(people.map((userId) => ({ task_id: id, user_id: userId })));
+    if (assignErr) {
+      console.error("[engagement-tasks] assign-on-create failed:", assignErr);
+    }
+  }
+  return id;
 }
 
 /**
@@ -239,6 +270,7 @@ export async function updateEngagementTask(input: {
     notes?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
+    priority?: TaskPriority;
   };
   actorId?: string | null;
 }): Promise<void> {
@@ -248,6 +280,7 @@ export async function updateEngagementTask(input: {
   if (p.title !== undefined) row.title = p.title;
   if (p.notes !== undefined) row.notes = p.notes;
   if (p.dueDate !== undefined) row.due_date = p.dueDate;
+  if (p.priority !== undefined) row.priority = p.priority;
   if (p.status !== undefined) {
     row.status = p.status;
     row.completed_at = p.status === "done" ? new Date().toISOString() : null;
