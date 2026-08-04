@@ -2362,8 +2362,8 @@
     "toast_deleted_forever": "Engagement supprimé définitivement",
     "toast_undo": "Annuler",
     "forever_title": "Supprimer définitivement ?",
-    "forever_checking": "Vérification des fichiers de cet engagement…",
-    "forever_desc": "{count, plural, one {# fichier de cet engagement sera conservé — il sera déplacé dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.} other {# fichiers de cet engagement seront conservés — ils seront déplacés dans les fichiers du client. L’engagement lui-même, sa liste de documents et son historique seront supprimés pour de bon ; il n’y a pas de retour en arrière.}}",
+    "forever_checking": "Vérification que chaque document de cet engagement a bien été classé dans votre stockage…",
+    "forever_desc": "{count, plural, one {# document de cet engagement n’a jamais été classé dans votre stockage. Si vous le supprimez maintenant, ce document sera perdu pour de bon — il n’y a pas de retour en arrière.} other {# documents de cet engagement n’ont jamais été classés dans votre stockage. Si vous le supprimez maintenant, ces documents seront perdus pour de bon — il n’y a pas de retour en arrière.}}",
     "forever_confirm": "Supprimer définitivement",
     "forever_failed": "Une erreur est survenue — rien n’a été supprimé. Réessayez.",
     "views_label": "Vues des engagements",
@@ -2637,7 +2637,8 @@
     "wl_service_t1": "Impôt des particuliers (T1)",
     "wl_service_t2": "Impôt des sociétés (T2)",
     "wl_service_bookkeeping": "Tenue de livres",
-    "wl_service_custom": "Personnalisé"
+    "wl_service_custom": "Personnalisé",
+    "count_engagements": "{count, plural, =0 {Aucun mandat} one {# mandat} other {# mandats}}"
   },
   "Attention": {
     "metric_active": "Actifs",
