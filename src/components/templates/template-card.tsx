@@ -78,6 +78,8 @@ export function TemplateCard({
   href,
   footer,
   className,
+  badge,
+  serviceCount,
 }: TemplateCardData & {
   /** When set, the card body is a link. Without a footer the WHOLE card is
    *  the anchor; with one, the footer's forms/buttons stay outside the link
@@ -86,6 +88,23 @@ export function TemplateCard({
   /** Action row rendered at the bottom (the firm-template edit/delete case). */
   footer?: ReactNode;
   className?: string;
+  /**
+   * A small pill beside the name — used by ENGAGEMENT templates to say whether
+   * they are the team's or private to one person.
+   *
+   * A prop rather than a second card. An engagement template and a document
+   * request template are the same object on this page: a saved shape you reuse,
+   * with a name, a glyph, a count of what the client is asked for, and a peek
+   * inside. The only things the engagement one adds are this pill and the
+   * priced-scope line below. Copy-paste-then-trim is exactly how the two drift
+   * apart, which CLAUDE.md's cohesion rule exists to stop.
+   */
+  badge?: ReactNode;
+  /**
+   * How many PRICED lines the template carries. Engagement templates only —
+   * a document request has no money in it, so it never passes this.
+   */
+  serviceCount?: number;
 }) {
   const t = useTranslations("Templates");
   // Lowercase + createElement: the resolved glyph is a stable lucide component,
@@ -101,9 +120,12 @@ export function TemplateCard({
           {createElement(icon, { className: "h-5 w-5", "aria-hidden": true })}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
-            {cleanLabel(name)}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
+              {cleanLabel(name)}
+            </h3>
+            {badge}
+          </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
             <span className="tabular-nums">
               {t("documents_count", { count: itemCount })}
@@ -115,6 +137,18 @@ export function TemplateCard({
                 </span>
                 <span className="tabular-nums">
                   {t("required_count", { count: requiredCount })}
+                </span>
+              </>
+            )}
+            {/* > 0 rather than != null: a template with no priced lines should
+                say nothing here, not "0 services". */}
+            {serviceCount != null && serviceCount > 0 && (
+              <>
+                <span className="text-border" aria-hidden>
+                  ·
+                </span>
+                <span className="tabular-nums">
+                  {t("services_count", { count: serviceCount })}
                 </span>
               </>
             )}

@@ -34,7 +34,13 @@ export default async function NewEngagementPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ client?: string; template?: string }>;
+  searchParams: Promise<{
+    client?: string;
+    template?: string;
+    /** A saved WHOLE engagement (1500), from "Use" on the Templates page.
+     *  Distinct from `template`, which is a document request. */
+    engagement_template?: string;
+  }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -110,6 +116,9 @@ export default async function NewEngagementPage({
         templates={templates}
         initialClientId={sp.client}
         initialTemplateId={sp.template}
+        // Arriving with a saved engagement already chosen skips the start
+        // chooser — the choice it asks for has been made.
+        initialEngagementTemplateId={sp.engagement_template}
         locale={locale}
         includeQuebecForms={firm?.include_quebec_forms ?? true}
         servicePrices={firm?.service_prices ?? {}}

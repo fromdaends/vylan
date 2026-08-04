@@ -26,6 +26,8 @@ import {
 import { parseWorkflowDefinition } from "@/lib/workflow/definition";
 import { ServiceCatalogue } from "@/components/templates/service-catalogue";
 import { AutoNewTemplate } from "@/components/templates/auto-new-template";
+import { listEngagementTemplates } from "@/lib/db/engagement-templates";
+import { ArchiveEngagementTemplate } from "@/components/templates/archive-engagement-template";
 
 export default async function TemplatesPage({
   params,
@@ -40,12 +42,20 @@ export default async function TemplatesPage({
   setRequestLocale(locale);
 
   const sp = await searchParams;
-  const [templates, services, user, currentFirm] = await Promise.all([
-    listTemplates(),
-    listFirmServices(),
-    getCurrentUser(),
-    getCurrentFirm(),
-  ]);
+  const [templates, services, user, currentFirm, engagementTemplates] =
+    await Promise.all([
+      listTemplates(),
+      listFirmServices(),
+      getCurrentUser(),
+      // The workflows switch (chunk 2b, #1337).
+      getCurrentFirm(),
+      // Whole saved engagements (migration 1500). Until now these were readable
+      // from exactly ONE place — the new-engagement page's start chooser — so a
+      // template you saved could be used but never seen, renamed or removed.
+      // archiveEngagementTemplateAction already revalidated this route for a
+      // section that did not exist yet.
+      listEngagementTemplates(),
+    ]);
   // Part A switch (1510): with it on, template cards open their detail page
   // (built-ins read-only) and carry a one-line automation summary. Off = the
   // page exactly as it was.
@@ -102,7 +112,87 @@ export default async function TemplatesPage({
           for why this is a client effect rather than a server redirect. */}
       {sp.new === "document" && <AutoNewTemplate locale={locale} />}
 
-      {/* SERVICES FIRST — what you SELL comes before what you ask a client to
+      {/* WHOLE ENGAGEMENTS FIRST.
+          Services used to lead this page, and as a rule — building blocks
+          before the things built from them — that was defensible. But an
+          engagement template CONTAINS services and documents, so it is the
+          thing a firm reaches for most and the thing Canopy's own Templates
+          page leads with. The blocks stay directly beneath it. */}
+      <Section
+        id="engagement-templates"
+        title={t("section_engagement_templates")}
+        count={engagementTemplates.length}
+      >
+        <p className="-mt-1 mb-4 max-w-xl text-sm text-muted-foreground">
+          {t("engagement_templates_subtitle")}
+        </p>
+        {engagementTemplates.length === 0 ? (
+          <EmptyState>
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <FilePlus2 className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-medium text-foreground">
+              {t("engagement_templates_empty")}
+            </p>
+            {/* Says exactly where the button is, because there is no way to
+                create one FROM this page yet — you save an engagement you are
+                already building. A "create" button here would have to open the
+                whole engagement builder, which is its own piece of work. */}
+            <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+              {t("engagement_templates_empty_hint")}
+            </p>
+          </EmptyState>
+        ) : (
+          <CardGrid>
+            {engagementTemplates.map((tmpl) => (
+              <TemplateCard
+                key={tmpl.id}
+                name={tmpl.name}
+                // The engagement's own type drives the glyph, the same way it
+                // does for a document request. "custom" is the honest fallback
+                // for a template saved before a type was picked.
+                type={tmpl.payload.type ?? "custom"}
+                itemCount={tmpl.payload.checklist.length}
+                requiredCount={
+                  tmpl.payload.checklist.filter((it) => it.required).length
+                }
+                serviceCount={tmpl.payload.items.length}
+                preview={tmpl.payload.checklist
+                  .slice(0, 3)
+                  .map((it) =>
+                    locale === "fr"
+                      ? it.label_fr || it.label_en
+                      : it.label_en || it.label_fr,
+                  )}
+                badge={
+                  tmpl.access === "private" ? (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {t("access_private")}
+                    </span>
+                  ) : null
+                }
+                footer={
+                  <>
+                    <ArchiveEngagementTemplate
+                      id={tmpl.id}
+                      name={tmpl.name}
+                    />
+                    <Link
+                      href={`/engagements/new?engagement_template=${tmpl.id}`}
+                    >
+                      <Button size="sm" variant="secondary">
+                        {t("use_in_new")}
+                      </Button>
+                    </Link>
+                  </>
+                }
+              />
+            ))}
+          </CardGrid>
+        )}
+      </Section>
+
+      {/* SERVICES — what you SELL comes before what you ask a client to
           send you. The founder put the catalogue here rather than in Settings
           because it is the same kind of thing as the lists below: something you
           set up once and reuse on every engagement. */}

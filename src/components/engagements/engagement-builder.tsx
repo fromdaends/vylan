@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -178,6 +178,7 @@ export function EngagementBuilder({
   templates,
   initialClientId,
   initialTemplateId,
+  initialEngagementTemplateId,
   locale,
   includeQuebecForms = true,
   servicePrices = {},
@@ -204,6 +205,10 @@ export function EngagementBuilder({
   // matches a template the form opens on it; otherwise (direct open, or a
   // stale/unknown id) it falls back to the first template.
   initialTemplateId?: string;
+  /** A saved WHOLE engagement (1500) chosen before arriving — "Use" on the
+   *  Templates page. Unlike the other deep links this one DOES skip the start
+   *  chooser, because it is an answer to the chooser's own question. */
+  initialEngagementTemplateId?: string;
   locale: "fr" | "en";
   // Firm-wide setting (migration 0350). When false, the Quebec-only RL slips
   // never appear in this firm's checklists, whatever the client's province.
@@ -429,7 +434,31 @@ export function EngagementBuilder({
   // Deep links (?client=, ?template=) do not skip it either: they answer WHICH
   // CLIENT or which document checklist, which is a different question from
   // whether to start from a saved engagement.
-  const [started, setStarted] = useState(false);
+  //
+  // ?engagement_template= is the ONE deep link that does skip it: it answers
+  // the chooser's own question. Matched against the loaded list rather than
+  // trusted, so a stale or private-to-someone-else id still shows the chooser
+  // instead of dropping you into a blank form that silently applied nothing.
+  const initialEngagementTemplate =
+    initialEngagementTemplateId != null
+      ? engagementTemplates.find((x) => x.id === initialEngagementTemplateId)
+      : undefined;
+  const [started, setStarted] = useState(initialEngagementTemplate != null);
+
+  // Apply that template once, on mount. An effect rather than initial state
+  // because applying it means setting a dozen pieces of state through the same
+  // path the chooser uses — a second, initializer-shaped copy of that would be
+  // two ways to load a template and one of them would rot.
+  const appliedInitialTemplate = useRef(false);
+  useEffect(() => {
+    if (appliedInitialTemplate.current) return;
+    if (!initialEngagementTemplate) return;
+    appliedInitialTemplate.current = true;
+    applyEngagementTemplate(initialEngagementTemplate.id);
+    // Runs once for the id the page was opened with; applyEngagementTemplate
+    // closes over setState functions, which are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEngagementTemplate?.id]);
 
   // A tick means "this step has what it NEEDS", not "you have been here".
   // Rewarding a visit would put a tick on an empty Documents step, which is the
