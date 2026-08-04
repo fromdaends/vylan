@@ -120,9 +120,12 @@ export function EngagementTabs({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-semibold tracking-tight text-foreground">
-        {t("engagement_work")}
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {t("engagement_work")}
+        </h2>
+        {addTask}
+      </div>
       {/* THE SAME TABLE the firm-wide Tasks page draws, minus the Client column
           — every row on a job has the same client, and a column with one value
           is decoration. The founder's complaint was exactly this: "the task view
@@ -135,7 +138,6 @@ export function EngagementTabs({
         statuses={statuses}
         currentUserId={currentUserId}
         variant="job"
-        addTask={addTask}
         onOpen={setOpen}
       />
     </section>

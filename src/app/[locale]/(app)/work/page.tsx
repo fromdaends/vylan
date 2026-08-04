@@ -81,8 +81,14 @@ export default async function WorkPage({
   // sorting and filters then operate within it.
   const due = toDueFilter(sp.due);
   const today = todayInTimeZone(firm.timezone ?? "America/Toronto");
+
+  // RESTORED after I deleted it by accident while moving the Add button: the
+  // dashboard's stats strip links here as /work?due=overdue|today|week, and a
+  // cell saying 3 must land on a list of 3. Applied to what the TABLE receives;
+  // its own tabs, sorting and filters then operate within that cut.
+  // No ?due= means no cut — the whole list, and the table's own tabs take over.
   const shown = due
-    ? tasks.filter((x) => matchesDueFilter(x, due, today))
+    ? tasks.filter((task) => matchesDueFilter(task, due, today))
     : tasks;
 
   const t = await getTranslations("Engagements");
@@ -106,10 +112,29 @@ export default async function WorkPage({
           to do, across every client" was describing the page to somebody who is
           already looking at it. work_subtitle is left in the message files
           rather than deleted; removing a key is on the ask-first list. */}
-      <header>
+      {/* The button sits level with the title, not tucked beside the tabs.
+          Founder: "move up the button so its more centered" — and it is the one
+          thing you come to this screen to DO, so it belongs in the header
+          rather than in the row of view switches. */}
+      <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           {t("work_title")}
         </h1>
+        <AddTaskDialog
+          clients={clients.map((c) => ({
+            id: c.id,
+            display_name: c.display_name,
+            type: c.type,
+            email: c.email,
+          }))}
+          engagements={engagements.map((e) => ({
+            id: e.id,
+            clientId: e.client_id,
+            title: e.title,
+            existingKinds: kindsByEngagement.get(e.id) ?? [],
+          }))}
+          members={activeMembers}
+        />
       </header>
 
       <TasksTable
@@ -119,23 +144,6 @@ export default async function WorkPage({
         statuses={statuses}
         currentUserId={user.id}
         variant="firm"
-        addTask={
-          <AddTaskDialog
-            clients={clients.map((c) => ({
-              id: c.id,
-              display_name: c.display_name,
-              type: c.type,
-              email: c.email,
-            }))}
-            engagements={engagements.map((e) => ({
-              id: e.id,
-              clientId: e.client_id,
-              title: e.title,
-              existingKinds: kindsByEngagement.get(e.id) ?? [],
-            }))}
-            members={activeMembers}
-          />
-        }
       />
     </div>
   );

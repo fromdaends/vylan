@@ -65,6 +65,7 @@ import {
   Check,
   ChevronRight,
   ChevronsUpDown,
+  Plus,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -117,6 +118,7 @@ export type TaskRow = {
   engagementTitle?: string | null;
   notes?: string | null;
   dueDate?: string | null;
+  createdAt?: string | null;
   /** "2 of 3 done" for a kind that owns a collection. Job page only. */
   meta?: string;
 };
@@ -149,7 +151,15 @@ export type TaskView = "active" | "mine" | "unassigned" | "done" | "all";
 // the status menu — so nothing became unreachable, it stopped being a tab.
 const VIEWS: TaskView[] = ["active", "mine", "all"];
 
-type SortKey = "status" | "title" | "client" | "kind" | "assignee" | "priority" | "due";
+type SortKey =
+  | "created"
+  | "status"
+  | "title"
+  | "client"
+  | "kind"
+  | "assignee"
+  | "priority"
+  | "due";
 
 export function TasksTable({
   tasks,
@@ -158,7 +168,6 @@ export function TasksTable({
   currentUserId,
   statuses,
   variant = "firm",
-  addTask,
   onOpen,
 }: {
   tasks: TaskRow[];
@@ -171,8 +180,6 @@ export function TasksTable({
   currentUserId: string;
   /** "job" drops the Client column — one value in it is decoration. */
   variant?: "firm" | "job";
-  /** The "+ Add task" control, rendered in the toolbar. */
-  addTask?: React.ReactNode;
   /** Opens a task's own screen. Job page only; see task-detail-panel.tsx. */
   onOpen?: (taskId: string) => void;
 }) {
@@ -188,9 +195,13 @@ export function TasksTable({
   );
 
   const [view, setView] = useState<TaskView>("active");
+  // NEWEST FIRST until you say otherwise. Founder: "tasks should auto sort for
+  // newest to appear ontop always unless changed by filters and stuff." A task
+  // you just made must be the one you can see — landing it in the middle of a
+  // hundred rows sorted by due date is indistinguishable from it not saving.
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({
-    key: "due",
-    desc: false,
+    key: "created",
+    desc: true,
   });
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [clientFilter, setClientFilter] = useState<string[]>([]);
@@ -289,22 +300,26 @@ export function TasksTable({
     );
     const key = sort.key;
     const value = (r: TaskRow): string | number =>
-      key === "status"
-        ? STATUS_RANK[r.status]
-        : key === "priority"
-          ? PRIORITY_RANK[r.priority]
-          : key === "client"
-            ? (r.clientName ?? "").toLowerCase()
-            : key === "kind"
-              ? kindLabel(r.kind).toLowerCase()
-              : key === "assignee"
-                ? (nameById.get(r.assigneeIds[0] ?? "") ?? "").toLowerCase()
-                : key === "due"
-                  ? // No date sorts LAST whichever way the column is pointing.
-                    // A blank is not "the earliest deadline in the firm", which
-                    // is what an empty string would make it.
-                    (r.dueDate ?? "9999-12-31")
-                  : r.title.toLowerCase();
+      key === "created"
+        ? // Missing timestamps sort OLDEST, so a row from before this column
+          // existed never jumps to the top of "newest".
+          (r.createdAt ?? "")
+        : key === "status"
+          ? STATUS_RANK[r.status]
+          : key === "priority"
+            ? PRIORITY_RANK[r.priority]
+            : key === "client"
+              ? (r.clientName ?? "").toLowerCase()
+              : key === "kind"
+                ? kindLabel(r.kind).toLowerCase()
+                : key === "assignee"
+                  ? (nameById.get(r.assigneeIds[0] ?? "") ?? "").toLowerCase()
+                  : key === "due"
+                    ? // No date sorts LAST whichever way the column is
+                      // pointing. A blank is not "the earliest deadline in the
+                      // firm", which is what an empty string would make it.
+                      (r.dueDate ?? "9999-12-31")
+                    : r.title.toLowerCase();
     return [...filtered].sort((a, b) => {
       const av = value(a);
       const bv = value(b);
@@ -367,7 +382,6 @@ export function TasksTable({
             <span className="tabular-nums opacity-60">{counts[v]}</span>
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2 pb-1.5">{addTask}</div>
       </div>
 
       {filtersOn && (
@@ -385,14 +399,12 @@ export function TasksTable({
         </div>
       )}
 
-      {shown.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          {filtersOn || view !== "active"
-            ? t("tasks_none_match")
-            : t(firmWide ? "work_empty_firm" : "work_empty")}
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
+      {/* THE HEADER ROW ALWAYS RENDERS. Founder: "when there is no tasks the
+          top sorting bars are gone... They should be there no matter what."
+          Right — the controls that got you to an empty result are the ones you
+          need to undo it, and a screen that removes them strands you. The
+          message goes in a row INSIDE the table instead. */}
+      <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
@@ -410,6 +422,12 @@ export function TasksTable({
                     value: v.id,
                     label: v.name,
                   }))}
+                  // Subtle, at the foot of the menu: the moment you notice a
+                  // status is missing is the moment you are looking at this
+                  // list, and sending somebody to Settings to find that out is
+                  // the long way round.
+                  footerHref="/settings/statuses"
+                  footerLabel={t("statuses_new")}
                 />
                 {/* Nothing to narrow a free-text name by, and A→Z on it answers
                     no question anybody brings here. The founder said so
@@ -506,10 +524,21 @@ export function TasksTable({
                   run={run}
                 />
               ))}
+            {shown.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={firmWide ? 8 : 7}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    {filtersOn || view !== "active"
+                      ? t("tasks_none_match")
+                      : t(firmWide ? "work_empty_firm" : "work_empty")}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
-        </div>
-      )}
+      </div>
 
       <TaskDetailPanel
         task={rows.find((r) => r.id === detailId) ?? null}
@@ -588,6 +617,8 @@ function ColumnMenu({
   options,
   selected = [],
   onChange,
+  footerHref,
+  footerLabel,
 }: {
   label: string;
   t: ReturnType<typeof useTranslations<"Engagements">>;
@@ -601,6 +632,9 @@ function ColumnMenu({
   options?: { value: string; label: string }[];
   selected?: string[];
   onChange?: (next: string[]) => void;
+  /** A quiet way out of the menu to where these values are managed. */
+  footerHref?: string;
+  footerLabel?: string;
 }) {
   const active = sort.key === sortKey;
   const filtering = selected.length > 0;
@@ -690,6 +724,20 @@ function ColumnMenu({
                   </DropdownMenuItem>
                 </>
               )}
+              {footerHref && footerLabel && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href={footerHref}
+                      className="cursor-pointer gap-2 text-xs text-muted-foreground"
+                    >
+                      <Plus className="size-3" aria-hidden />
+                      {footerLabel}
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
             </>
           )}
         </DropdownMenuContent>
@@ -731,6 +779,11 @@ function Row({
     .filter((a): a is Person => Boolean(a.name));
   // Only a kind with a real screen is clickable through.
   const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
+  const isDone = status.bucket === "done";
+  // The firm's FIRST done and first todo — where the box sends a task. Its own
+  // order decides, so a firm that put "Filed" above "Delivered" gets Filed.
+  const doneStatus = statusOptions.find((s) => s.bucket === "done");
+  const todoStatus = statusOptions.find((s) => s.bucket === "todo");
   const overdue =
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
@@ -748,9 +801,45 @@ function Row({
       className="group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40"
     >
       <td className="px-2 py-2">
-        {/* A MENU, not a cycle. Three states could be clicked through; a firm
-            with nine cannot, and "click Done eight times to get back to To do"
-            is the kind of control that only works in a demo. */}
+        <div className="flex items-center gap-2">
+        {/* ONE CLICK TO TICK IT OFF. The founder, on the first version of this
+            column: "how are you supposed to mark a task done. thats a major
+            design flaw" — and they were right. Replacing the checkbox with a
+            status menu made the single most common action on a task list cost
+            two clicks and a read.
+            So both live here: the BOX finishes it (and un-finishes it), the
+            PILL beside it is for saying which of the firm's states it is in.
+            A menu was still the right call for the pill — nine statuses cannot
+            be clicked through — but it was never a replacement for this. */}
+        <button
+          type="button"
+          disabled={!canEdit || !doneStatus || !todoStatus}
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = isDone ? todoStatus : doneStatus;
+            if (!next) return;
+            run(
+              { id: task.id, status: next.bucket, statusId: next.id },
+              () =>
+                updateTaskAction({
+                  taskId: task.id,
+                  engagementId: task.engagementId,
+                  statusId: next.id.startsWith("bucket:") ? null : next.id,
+                  status: next.id.startsWith("bucket:") ? next.bucket : undefined,
+                }),
+            );
+          }}
+          aria-label={t("task_mark_done", { title: task.title })}
+          aria-pressed={isDone}
+          className={cn(
+            "flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-40",
+            isDone
+              ? "border-foreground bg-foreground text-background"
+              : "border-border hover:border-foreground/60",
+          )}
+        >
+          {isDone && <Check className="size-3" aria-hidden />}
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={!canEdit}>
             <button
@@ -815,6 +904,7 @@ function Row({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </td>
 
       <td className="px-2 py-2">
