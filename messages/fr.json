@@ -2709,10 +2709,8 @@
     "tasks_panel_failed": "Impossible de charger ces tâches.",
     "tasks_panel_open_engagement": "Ouvrir le mandat à la place",
     "tasks_panel_loading": "Chargement des tâches",
-<<<<<<< HEAD
     "item_service": "Service",
-    "item_service_none": "Hors catalogue"
-=======
+    "item_service_none": "Hors catalogue",
     "details_card_title": "Détails du mandat",
     "details_signatures": "{signed}/{total} signatures",
     "details_signed": "Signé",
@@ -2725,7 +2723,6 @@
     "details_on_acceptance": "À l'acceptation",
     "details_services": "Services",
     "details_no_services": "Aucun service sur ce mandat pour l'instant."
->>>>>>> origin/main
   },
   "Attention": {
     "metric_active": "Actifs",
