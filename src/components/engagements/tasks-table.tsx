@@ -81,6 +81,7 @@ import {
 } from "@/app/actions/engagement-tasks";
 import { TaskDetailPanel } from "@/components/engagements/task-detail-panel";
 import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { taskKindLabelKey, taskKindHasScreen } from "@/lib/tasks/kinds";
 import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 
@@ -444,29 +445,21 @@ export function TasksTable({
     <div className="flex flex-col gap-3">
       {/* SAVED VIEWS. Each is a question somebody opens this screen with; the
           count is on the tab because "is there anything unassigned" is answered
-          by the number alone, without clicking. */}
-      <div
-        role="tablist"
-        className="flex flex-wrap items-center gap-1 border-b border-border"
-      >
-        {VIEWS.map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setView(v)}
-            aria-current={view === v ? "true" : undefined}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-              view === v
-                ? "border-foreground font-semibold text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t(`view_${v}` as "view_active")}{" "}
-            <span className="tabular-nums opacity-60">{counts[v]}</span>
-          </button>
-        ))}
-      </div>
+          by the number alone, without clicking.
+
+          The strip itself moved to components/ui/view-tabs.tsx when the
+          engagements page needed the same row. It looked identical to this the
+          day it was written and had drifted into a strip of pills by the time
+          the founder saw the two side by side — so now there is one of it. */}
+      <ViewTabs
+        activeKey={view}
+        onSelect={(key) => setView(key as TaskView)}
+        tabs={VIEWS.map((v) => ({
+          key: v,
+          label: t(`view_${v}` as "view_active"),
+          count: counts[v],
+        }))}
+      />
 
       {filtersOn && (
         <div className="flex items-center gap-2">
