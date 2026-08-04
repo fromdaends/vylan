@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -266,8 +266,25 @@ export function EngagementBuilder({
   const [templateId, setTemplateId] = useState<string>(
     initialTemplate?.id ?? "",
   );
-  const [title, setTitle] = useState("");
-  const [titleTouched, setTitleTouched] = useState(false);
+  // A saved engagement chosen BEFORE arriving — "Use" on the Templates page,
+  // via ?engagement_template=. Matched against the loaded list rather than
+  // trusted: a stale id, or one private to somebody else, resolves to undefined
+  // and the builder simply opens normally with the start chooser.
+  //
+  // Its four fields seed the state directly rather than being applied by an
+  // effect after mount. A mount effect would have to call four setters — which
+  // is a render-then-correct flash, and the React Compiler rejects it outright.
+  const initialEngagementTemplate =
+    initialEngagementTemplateId != null
+      ? engagementTemplates.find((x) => x.id === initialEngagementTemplateId)
+      : undefined;
+  const seededTitle =
+    initialEngagementTemplate?.payload.title.trim() ? initialEngagementTemplate.payload.title : "";
+
+  const [title, setTitle] = useState(seededTitle);
+  // Seeded titles count as touched, so the auto-title does not overwrite what
+  // the template supplied the moment a client is picked.
+  const [titleTouched, setTitleTouched] = useState(seededTitle !== "");
   const [dueDate, setDueDate] = useState("");
   // Canopy's step 1 (migration 1510).
   const [startDate, setStartDate] = useState("");
@@ -323,6 +340,21 @@ export function EngagementBuilder({
   const [invoiceLock, setInvoiceLock] = useState(false);
   const [invoiceAttachment, setInvoiceAttachment] = useState<File | null>(null);
   const [items, setItems] = useState<TemplateItem[]>(() => {
+    // A saved engagement's own checklist wins over the document template's:
+    // it is the more specific answer, and it is what the person clicking "Use"
+    // asked for. Province filtering is deliberately NOT applied to it — those
+    // lines were chosen by hand for this kind of work, not generated.
+    const fromEngagementTemplate = initialEngagementTemplate?.payload.checklist;
+    if (fromEngagementTemplate && fromEngagementTemplate.length > 0) {
+      return fromEngagementTemplate.map((c) => ({
+        label_en: c.label_en,
+        label_fr: c.label_fr,
+        description_en: c.description_en ?? "",
+        description_fr: c.description_fr ?? "",
+        doc_type: c.doc_type ?? null,
+        required: c.required,
+      })) as TemplateItem[];
+    }
     // If we already know the client (e.g. started from a client's page), seed
     // the checklist with only the documents that apply to their province.
     const initialProvince =
@@ -350,7 +382,12 @@ export function EngagementBuilder({
   // rail grows as they land.
   // The priced scope (migration 1450). Starts empty — an engagement without one
   // is still perfectly valid, and is what every engagement was until now.
-  const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>([]);
+  // COPIED, not shared. The editor mutates this list; handing it the prop's own
+  // array would let editing a draft engagement reach back into the template
+  // object the page loaded.
+  const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>(() => [
+    ...(initialEngagementTemplate?.payload.items ?? []),
+  ]);
 
   // What the work CONSISTS OF (1370's engagement_tasks).
   //
@@ -435,30 +472,10 @@ export function EngagementBuilder({
   // CLIENT or which document checklist, which is a different question from
   // whether to start from a saved engagement.
   //
-  // ?engagement_template= is the ONE deep link that does skip it: it answers
-  // the chooser's own question. Matched against the loaded list rather than
-  // trusted, so a stale or private-to-someone-else id still shows the chooser
-  // instead of dropping you into a blank form that silently applied nothing.
-  const initialEngagementTemplate =
-    initialEngagementTemplateId != null
-      ? engagementTemplates.find((x) => x.id === initialEngagementTemplateId)
-      : undefined;
+  // ?engagement_template= is the ONE deep link that DOES skip it: it answers
+  // the chooser's own question. Its payload is already seeded into state above,
+  // so skipping the chooser shows a form that is filled in, not a blank one.
   const [started, setStarted] = useState(initialEngagementTemplate != null);
-
-  // Apply that template once, on mount. An effect rather than initial state
-  // because applying it means setting a dozen pieces of state through the same
-  // path the chooser uses — a second, initializer-shaped copy of that would be
-  // two ways to load a template and one of them would rot.
-  const appliedInitialTemplate = useRef(false);
-  useEffect(() => {
-    if (appliedInitialTemplate.current) return;
-    if (!initialEngagementTemplate) return;
-    appliedInitialTemplate.current = true;
-    applyEngagementTemplate(initialEngagementTemplate.id);
-    // Runs once for the id the page was opened with; applyEngagementTemplate
-    // closes over setState functions, which are stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialEngagementTemplate?.id]);
 
   // A tick means "this step has what it NEEDS", not "you have been here".
   // Rewarding a visit would put a tick on an empty Documents step, which is the
