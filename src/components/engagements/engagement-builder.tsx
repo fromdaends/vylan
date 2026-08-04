@@ -333,18 +333,23 @@ export function EngagementBuilder({
     }
   }
 
-  // The start chooser (Canopy's opening question) shows FIRST and the builder
-  // is not rendered behind it. Skipped entirely when the firm has no engagement
-  // templates and the caller did not deep-link a client — asking "template or
-  // scratch?" with nothing to pick is a question with one answer.
+  // The start chooser (Canopy's opening question) shows FIRST and the builder is
+  // not rendered behind it. ALWAYS — including for a firm with no templates at
+  // all.
   //
-  // Also skipped when arriving from a client page with ?client= or ?template=,
-  // because that link already answered it.
-  const [started, setStarted] = useState(
-    engagementTemplates.length === 0 ||
-      initialClientId != null ||
-      initialTemplateId != null,
-  );
+  // It used to skip itself when there was nothing to pick, on the grounds that a
+  // question with one answer is not a question. The founder overruled that and
+  // was right: "even without owning an engagement template still have that pre
+  // two option thing... it shouldnt directly bring you to the start from
+  // scratch." The question is not there only to be answered — it is how anybody
+  // finds out engagement templates exist at all. A firm that is never shown the
+  // choice never learns it had one, and the empty state on that card says
+  // exactly what is missing and how to get it.
+  //
+  // Deep links (?client=, ?template=) do not skip it either: they answer WHICH
+  // CLIENT or which document checklist, which is a different question from
+  // whether to start from a saved engagement.
+  const [started, setStarted] = useState(false);
 
   // A tick means "this step has what it NEEDS", not "you have been here".
   // Rewarding a visit would put a tick on an empty Documents step, which is the
