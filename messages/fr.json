@@ -2165,7 +2165,7 @@
     "access_needs_migration": "Cela fonctionnera dans un instant — la mise à jour de la base de données n'a pas encore été appliquée.",
     "scope_all": "Tous les engagements",
     "new": "Nouvel engagement",
-    "new_title": "Nouvel engagement",
+    "new_title": "Créer un mandat",
     "new_subtitle": "Définissez la portée et le prix, choisissez ce dont vous avez besoin du client, et comment il est facturé.",
     "back": "Retour",
     "section_client": "Client",

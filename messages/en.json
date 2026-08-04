@@ -2165,7 +2165,7 @@
     "access_needs_migration": "This will work in a moment — the database change hasn't been applied yet.",
     "scope_all": "All engagements",
     "new": "New engagement",
-    "new_title": "New engagement",
+    "new_title": "Create engagement",
     "new_subtitle": "Set the scope and price, choose what you need from the client, and how they're billed.",
     "back": "Back",
     "section_client": "Client",

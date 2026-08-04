@@ -64,9 +64,18 @@ export function EngagementModalShell({
     <div className="w-full animate-in-fade px-4 pb-14 pt-5 sm:px-6 lg:px-8">
       <div
         className={cn(
-          "mx-auto flex max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card",
-          // A real shadow, because this is meant to read as a sheet laid over
-          // the app rather than another region of the page.
+          "mx-auto flex max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
+          // LIGHTER than the page, not merely bordered. Measured on the live
+          // site, the app background is pure black and `bg-card` is oklch 0.14
+          // — near enough identical that the sheet read as another region of
+          // the page rather than something laid on top of it.
+          //
+          // A dimming backdrop, which is how Canopy separates its modal, does
+          // nothing here: you cannot darken black. On a dark theme the only
+          // move available is to RAISE the surface, which is what
+          // --surface-elevated (oklch 0.175) exists for. The cards inside stay
+          // on --card and therefore read as inset panels, which is the correct
+          // hierarchy rather than an accident.
           "shadow-[0_24px_60px_-30px_rgb(0_0_0_/_0.55)]",
         )}
       >
