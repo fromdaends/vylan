@@ -1,4 +1,4 @@
-// The two feature switches (migration 1510, firms.workflows_enabled /
+// The two feature switches (migration 1560, firms.workflows_enabled /
 // firms.ai_suggestions_enabled).
 //
 // POLARITY: these default OFF — the opposite of ai_enabled's default-on —

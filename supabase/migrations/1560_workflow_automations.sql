@@ -180,7 +180,7 @@ alter table public.firms add column if not exists workflows_enabled boolean not 
 alter table public.firms add column if not exists ai_suggestions_enabled boolean not null default false;
 
 comment on column public.firms.workflows_enabled is
-  'Part A switch: engagement workflows (automations library + stage engine effects). Off = byte-identical to pre-1510 behaviour.';
+  'Part A switch: engagement workflows (automations library + stage engine effects). Off = byte-identical to pre-1560 behaviour.';
 comment on column public.firms.ai_suggestions_enabled is
   'Part B switch: AI workflow suggestions (propose-and-approve only). Independent of workflows_enabled.';
 

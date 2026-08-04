@@ -737,7 +737,7 @@ export function EngagementBuilder({
             start_date: startDate || null,
             assigned_user_id: assigneeId || null,
             intro_message: introMessage.trim() || null,
-            // Which document template the checklist came from (1510): the
+            // Which document template the checklist came from (1560): the
             // engagement's workflow snapshot copies THAT template's flow —
             // the customized one, not the family default.
             template_id: selectedTemplate.id,

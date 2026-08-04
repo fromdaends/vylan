@@ -1,7 +1,7 @@
 // The automations library — reading and writing the firm's named workflow
-// playbooks (migration 1510).
+// playbooks (migration 1560).
 //
-// READS DEGRADE, WRITES REFUSE, the client-members.ts shape: before 1510 is
+// READS DEGRADE, WRITES REFUSE, the client-members.ts shape: before 1560 is
 // applied a read returns an empty library (true for that environment) and a
 // write throws a plain error naming the migration.
 //
@@ -96,7 +96,7 @@ export async function createAutomation(input: {
     .single();
   if (error) {
     if (isMissingSchema(error)) {
-      throw new Error("Automations need a database update (migration 1510).");
+      throw new Error("Automations need a database update (migration 1560).");
     }
     throw error;
   }

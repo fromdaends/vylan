@@ -77,7 +77,7 @@ type StageEngagementRow = {
   invoice_auto_mode?: "off" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   completed_at?: string | null;
-  // Workflow snapshot + confirm gates (migration 1510). Absent pre-1510 —
+  // Workflow snapshot + confirm gates (migration 1560). Absent pre-1560 —
   // the middle select tier below — which reads as "no workflow": legacy path.
   workflow?: unknown;
   stage_gates?: unknown;
@@ -109,7 +109,7 @@ async function loadEngagementRow(
     console.error("[stage-sync] load engagement failed:", wideErr);
     return null;
   }
-  // Pre-1510: no workflow columns. Everything else works as before.
+  // Pre-1560: no workflow columns. Everything else works as before.
   const { data, error } = await sb
     .from("engagements")
     .select(FULL_COLUMNS)
@@ -235,7 +235,7 @@ async function loadStageFacts(
 
 // The workflow walk's extra signals, on top of the legacy facts. Two more
 // small reads (workflow tasks + the materialization ledger), both tolerating
-// an unapplied 1510 as "none", which is the truth for that environment.
+// an unapplied 1560 as "none", which is the truth for that environment.
 async function loadWorkflowFacts(
   sb: SupabaseClient,
   row: StageEngagementRow,
@@ -416,7 +416,7 @@ export async function syncEngagementStage(
 
     const { facts, items, sigs, invoice } = await loadStageFacts(sb, row);
 
-    // Workflow engagements (1510) resolve by their own snapshot's walk; the
+    // Workflow engagements (1560) resolve by their own snapshot's walk; the
     // firm switch is a kill-switch back to legacy behaviour mid-flight.
     // Everything without a snapshot — every engagement that predates the
     // feature — takes the legacy resolver, byte-identical to before.

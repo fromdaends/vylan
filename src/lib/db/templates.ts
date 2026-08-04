@@ -47,7 +47,7 @@ export type Template = {
   type: EngagementType;
   items: TemplateItem[];
   created_at: string;
-  // Workflow copy + provenance (migration 1510). Optional so reads survive
+  // Workflow copy + provenance (migration 1560). Optional so reads survive
   // the pre-migration window. Parse with parseWorkflowDefinition; the
   // automation_id is provenance only, never read through for behaviour.
   workflow?: unknown;
@@ -90,7 +90,7 @@ export async function cloneTemplateToFirm(
   // The workflow rides along (spec: cloning a template copies its workflow
   // with its checklist), with automation_id as provenance. Included only when
   // the source has one, and retried without on a missing-column error, so a
-  // pre-1510 environment still clones exactly as before.
+  // pre-1560 environment still clones exactly as before.
   const workflowCols =
     source.workflow != null
       ? { workflow: source.workflow, automation_id: source.automation_id ?? null }
