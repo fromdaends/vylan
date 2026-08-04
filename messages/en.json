@@ -1931,7 +1931,15 @@
     "task_status_doing": "In progress",
     "task_status_done": "Done",
     "back_all_clients": "All clients",
-    "field_none_yet": "None yet"
+    "field_none_yet": "None yet",
+    "empty_search_title": "Nobody matches “{query}”",
+    "empty_search_hint": "Try a different name, or clear the search.",
+    "filter_button": "Sort & filter",
+    "filter_active": "Filtered: {list}",
+    "filter_show_label": "Show",
+    "filter_active_only": "Active work only",
+    "filter_include_archived": "Include archived",
+    "filter_clear": "Clear"
   },
   "Engagements": {
     "add_comment": "Add a comment",

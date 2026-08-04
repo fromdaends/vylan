@@ -260,7 +260,6 @@ export default async function ClientsPage({
         actions={headerActions}
         clients={clients}
         summaries={summaries}
-        engagementsByClient={engagementsByClient}
         owners={owners}
         currentUserId={currentUserId}
         ownerFilter={ownerFilter}

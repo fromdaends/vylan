@@ -4,22 +4,35 @@ import { useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/cn";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Search, ArrowUpDown, Users } from "lucide-react";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/cn";
+import { ArrowUpDown, Check, X } from "lucide-react";
 import { SORT_OPTIONS, type SortKey } from "./sort";
-import { OWNER_FILTERS } from "./owner";
+
+// ONE control — "Sort & filter" — instead of a tab strip, two selects and two
+// checkboxes strung across the top of the list.
+//
+// They are all still here, one click away, grouped into check-marked sections.
+// What is ACTIVE is stated in plain words to the right of the button, and the
+// button carries a count: a filter you cannot see is indistinguishable from
+// "my clients disappeared", which is the failure this shape has to avoid.
+//
+// Every item navigates rather than setting state, so a filtered list stays a
+// real URL — linkable, refreshable, back-buttonable. Search is the exception
+// and always was: it is an in-memory filter on an already-loaded list, held by
+// the parent view, and it lives in the page header.
+
+const TYPES = ["all", "individual", "business"] as const;
 
 export function ClientsToolbar({
-  query,
-  onQueryChange,
   type,
   includeArchived,
   sort,
@@ -27,18 +40,11 @@ export function ClientsToolbar({
   ownerFilter,
   teamEnabled,
 }: {
-  // Search is now a pure client-side filter held by the parent
-  // view — typing in the input updates this prop on every keystroke
-  // and the parent re-filters the rendered list in memory. No URL
-  // round-trip, no server fetch, no debounce. Other filters
-  // (type / sort / active / archived) still round-trip via the URL.
-  query: string;
-  onQueryChange: (next: string) => void;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
   sort: SortKey;
   activeOnly: boolean;
-  // "all" | "mine" | a specific member id.
+  /** "all" | "mine" | a specific member id. */
   ownerFilter: string;
   teamEnabled: boolean;
 }) {
@@ -50,138 +56,156 @@ export function ClientsToolbar({
 
   function setParam(key: string, value: string | null) {
     const next = new URLSearchParams(search?.toString() ?? "");
-    if (value === null || value === "") {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
+    if (value === null || value === "") next.delete(key);
+    else next.set(key, value);
     const qs = next.toString();
     startTransition(() => {
       router.replace(qs ? `${pathname}?${qs}` : pathname);
     });
   }
 
+  // Sort is not a "filter" — it never hides a row — so it is deliberately left
+  // out of the count and the summary.
+  const activeCount =
+    (type !== "all" ? 1 : 0) +
+    (teamEnabled && ownerFilter !== "all" ? 1 : 0) +
+    (activeOnly ? 1 : 0) +
+    (includeArchived ? 1 : 0);
+
+  const summary: string[] = [];
+  if (type !== "all") summary.push(t(`filter_${type}`));
+  if (teamEnabled && ownerFilter === "mine") summary.push(t("owner_mine"));
+  if (activeOnly) summary.push(t("filter_active_only"));
+  if (includeArchived) summary.push(t("filter_include_archived"));
+
+  const check = (on: boolean) => (
+    <Check
+      className={cn("size-3.5 text-accent", on ? "opacity-100" : "opacity-0")}
+      aria-hidden
+    />
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-3 justify-between">
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* The page HEADER owns the one search box now (it sits beside Import
-            and Add client, per the handoff). Kept mounted but hidden so the
-            live-filter state has exactly one input driving it. */}
-        <div className="relative hidden">
-          <Search
-            className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            placeholder={t("search_placeholder")}
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            className="pl-8 w-full sm:w-72"
-            aria-label={t("search_label")}
-          />
-        </div>
-        <div
-          role="tablist"
-          className="inline-flex items-center gap-5 overflow-x-auto"
-        >
-          {(
-            [
-              ["all", t("filter_all")],
-              ["individual", t("filter_individual")],
-              ["business", t("filter_business")],
-            ] as const
-          ).map(([value, label]) => {
-            const active = type === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setParam("type", value === "all" ? null : value)}
-                className={cn(
-                  "shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium transition-colors",
-                  active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <Select
-          value={sort}
-          onValueChange={(v) =>
-            setParam("sort", v === "recent" ? null : v)
-          }
-        >
-          <SelectTrigger
-            size="sm"
-            className="w-[12rem]"
-            aria-label={t("sort_label")}
-          >
-            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-            <SelectValue placeholder={t("sort_label")} />
-          </SelectTrigger>
-          <SelectContent>
-            {SORT_OPTIONS.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {t(`sort_${opt}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {teamEnabled && (
-          <Select
-            value={ownerFilter}
-            // Always write the choice — the default is dynamic ("mine" when you
-            // own clients, else "all"), so clearing the param can't represent it.
-            onValueChange={(v) => setParam("owner", v)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-[11rem]"
-              aria-label={t("owner_filter_label")}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="h-9 gap-2 rounded-[9px] px-3.5 text-[13.5px] font-medium"
             >
-              <Users className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue placeholder={t("owner_filter_label")} />
-            </SelectTrigger>
-            <SelectContent>
-              {OWNER_FILTERS.map((opt) => (
-                <SelectItem key={opt} value={opt}>
-                  {t(`owner_${opt}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <ArrowUpDown
+                className="size-3.5 text-muted-foreground"
+                aria-hidden
+              />
+              {t("filter_button")}
+              {activeCount > 0 && (
+                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-[5px] text-[11px] font-semibold text-accent-foreground">
+                  {activeCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[420px] w-60 overflow-y-auto p-1.5"
+          >
+            <Section label={t("sort_label")} />
+            {SORT_OPTIONS.map((key) => (
+              <DropdownMenuItem
+                key={key}
+                className="gap-2 rounded-[7px] text-[13px]"
+                onSelect={() => setParam("sort", key === "recent" ? null : key)}
+              >
+                {check(sort === key)}
+                {t(`sort_${key}`)}
+              </DropdownMenuItem>
+            ))}
+
+            <DropdownMenuSeparator />
+            <Section label={t("col_type")} />
+            {TYPES.map((v) => (
+              <DropdownMenuItem
+                key={v}
+                className="gap-2 rounded-[7px] text-[13px]"
+                onSelect={() => setParam("type", v === "all" ? null : v)}
+              >
+                {check(type === v)}
+                {t(`filter_${v}`)}
+              </DropdownMenuItem>
+            ))}
+
+            {teamEnabled && (
+              <>
+                <DropdownMenuSeparator />
+                <Section label={t("col_owner")} />
+                <DropdownMenuItem
+                  className="gap-2 rounded-[7px] text-[13px]"
+                  onSelect={() => setParam("owner", null)}
+                >
+                  {check(ownerFilter === "all")}
+                  {t("owner_all")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2 rounded-[7px] text-[13px]"
+                  onSelect={() => setParam("owner", "mine")}
+                >
+                  {check(ownerFilter === "mine")}
+                  {t("owner_mine")}
+                </DropdownMenuItem>
+              </>
+            )}
+
+            <DropdownMenuSeparator />
+            <Section label={t("filter_show_label")} />
+            {/* Both are TOGGLES — selecting an active one turns it back off,
+                which is why they check-mark rather than sitting in a group. */}
+            <DropdownMenuItem
+              className="gap-2 rounded-[7px] text-[13px]"
+              onSelect={() => setParam("active", activeOnly ? null : "1")}
+            >
+              {check(activeOnly)}
+              {t("filter_active_only")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 rounded-[7px] text-[13px]"
+              onSelect={() =>
+                setParam("archived", includeArchived ? null : "1")
+              }
+            >
+              {check(includeArchived)}
+              {t("filter_include_archived")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {activeCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            className="h-9 gap-1.5 rounded-lg px-2.5 text-[13px] text-muted-foreground"
+            onClick={() => startTransition(() => router.replace(pathname))}
+          >
+            <X className="size-3.5" />
+            {t("filter_clear")}
+          </Button>
         )}
       </div>
-      <div className="flex items-center gap-4 text-sm text-muted-foreground select-none">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={activeOnly}
-            onChange={(e) => setParam("active", e.target.checked ? "1" : null)}
-            className="size-4"
-          />
-          {t("active_only")}
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeArchived}
-            onChange={(e) => setParam("archived", e.target.checked ? "1" : null)}
-            className="size-4"
-          />
-          {t("show_archived")}
-          {pending && (
-            <span className="text-xs text-muted-foreground/70">…</span>
-          )}
-        </label>
-      </div>
+
+      {summary.length > 0 && (
+        <span className="text-[12.5px] text-muted-foreground">
+          {t("filter_active", { list: summary.join(" · ") })}
+        </span>
+      )}
     </div>
+  );
+}
+
+function Section({ label }: { label: string }) {
+  return (
+    <DropdownMenuLabel className="text-[10.5px] font-semibold tracking-[0.07em] uppercase text-muted-foreground">
+      {label}
+    </DropdownMenuLabel>
   );
 }
