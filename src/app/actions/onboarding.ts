@@ -10,6 +10,11 @@ import { getCurrentUser } from "@/lib/db/users";
 import { getPathname } from "@/i18n/navigation";
 import { parseEmailList } from "@/lib/validators";
 import { trialEndsAtFrom } from "@/lib/trial";
+import {
+  findPilotInvite,
+  pilotFirmFields,
+  markPilotInviteRedeemed,
+} from "@/lib/pilot-invites";
 import { notifyFounderNewSignup } from "@/lib/demo-notify";
 import { createInvite } from "@/app/actions/team";
 
@@ -88,32 +93,70 @@ export async function submitStep1(
     // policies on `firms` and `users`, so first-time onboarding must bypass
     // RLS through the server-side service-role path.
     const admin = getServiceRoleSupabase();
+    // Has this email been pre-authorised for a pilot (migration 1490)? Applied
+    // HERE, at the instant the firm is created, rather than flipped by hand
+    // afterwards: until someone notices the signup and goes and flips it, the
+    // firm is an ordinary trial capped at ten AI checks for its LIFETIME, so a
+    // pilot who signs up on a Friday burns the whole allowance before anyone is
+    // watching and reports the ceiling as a bug. Null (no invite, or any lookup
+    // failure at all) means an ordinary trial — see findPilotInvite.
+    const invite = await findPilotInvite(auth.user.email);
+    const pilot = invite ? pilotFirmFields(invite, Date.now()) : null;
+
     // Every firm created from the public signup flow starts a 14-day free
     // trial with full access. is_demo = true marks it "unconverted" (drives
     // the trial banner + the day-14 "book a meeting" gate) until they convert
     // to a paid plan. Existing/paid firms keep is_demo = false from the
-    // migration default.
-    const { data: firm, error: firmErr } = await admin
+    // migration default. A pilot is still is_demo and still unconverted — it
+    // just runs longer and meters monthly instead of on the lifetime ceiling.
+    const baseFirm = {
+      name: parsed.data.firm_name,
+      brand_color: parsed.data.brand_color,
+      locale_default: userMetaLocale,
+      plan: "trial",
+      is_demo: true,
+      // New accounts start with both document auto-rejects ON (founder
+      // default): unreadable/incomplete/wrong-document uploads and exact
+      // duplicates are auto-bounced back to the client instead of queued for
+      // review. Set explicitly here (the firms columns default false, 0029 /
+      // 0270) — onboarding is the only firm-creation path, so this is what new
+      // accounts get. Existing firms keep whatever they've chosen.
+      auto_reject_unusable_docs: true,
+      auto_reject_duplicates: true,
+    };
+
+    let created = await admin
       .from("firms")
-      .insert({
-        name: parsed.data.firm_name,
-        brand_color: parsed.data.brand_color,
-        locale_default: userMetaLocale,
-        plan: "trial",
-        is_demo: true,
-        trial_ends_at: trialEndsAtFrom(Date.now()),
-        // New accounts start with both document auto-rejects ON (founder
-        // default): unreadable/incomplete/wrong-document uploads and exact
-        // duplicates are auto-bounced back to the client instead of queued for
-        // review. Set explicitly here (the firms columns default false, 0029 /
-        // 0270) — onboarding is the only firm-creation path, so this is what new
-        // accounts get. Existing firms keep whatever they've chosen.
-        auto_reject_unusable_docs: true,
-        auto_reject_duplicates: true,
-      })
+      .insert(
+        pilot
+          ? {
+              ...baseFirm,
+              trial_ends_at: pilot.trial_ends_at,
+              is_pilot: true,
+              ai_monthly_cap: pilot.ai_monthly_cap,
+            }
+          : { ...baseFirm, trial_ends_at: trialEndsAtFrom(Date.now()) },
+      )
       .select("id")
       .single();
-    if (firmErr || !firm) {
+    // If the pilot columns are what broke the insert (1250 not applied on this
+    // database), retry as an ordinary trial rather than refusing to create the
+    // account. A misconfigured pilot must cost someone a smaller allowance, not
+    // the ability to sign up at all.
+    let pilotApplied = pilot !== null;
+    if (created.error && pilot) {
+      created = await admin
+        .from("firms")
+        .insert({ ...baseFirm, trial_ends_at: trialEndsAtFrom(Date.now()) })
+        .select("id")
+        .single();
+      // The fallback firm is an ordinary trial, so the invite was NOT consumed
+      // and must stay outstanding — otherwise it is marked redeemed against a
+      // firm that never got the pilot terms, and the mistake is invisible.
+      pilotApplied = false;
+    }
+    const firm = created.data;
+    if (created.error || !firm) {
       return { error: "create_failed" };
     }
 
@@ -127,6 +170,14 @@ export async function submitStep1(
     });
     if (userErr) {
       return { error: "create_failed" };
+    }
+    // Consume the invite only once the account is fully formed (firm AND owner
+    // row), and only if the pilot terms actually landed. Best-effort: the
+    // account already exists, so a failure here must not surface as a signup
+    // error — worst case the invite stays outstanding, which is visible in the
+    // table rather than silent.
+    if (pilotApplied && auth.user.email) {
+      await markPilotInviteRedeemed(auth.user.email, firm.id);
     }
     // No demo seeding: a free-trial firm gets a real, empty workspace and
     // brings in its own clients.
