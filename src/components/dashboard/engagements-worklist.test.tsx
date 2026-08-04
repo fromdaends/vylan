@@ -712,3 +712,79 @@ describe("Engagement items counts tasks", () => {
     expect(q.queryAllByRole("progressbar")).toHaveLength(0);
   });
 });
+
+// ── THE STATUS MENU MUST SPEAK THE COLUMN'S OWN LANGUAGE ───────────────────
+//
+// Founder: "the new statuses dont exist within the filter sorting on the
+// engagements page." #1307 moved the Status COLUMN onto the agreement words
+// and left the MENU offering workflow stages, so you could filter by
+// "Awaiting payment" and get rows whose Status cell read "Active" — a filter
+// for a value that appears nowhere on screen.
+describe("the Status filter offers the statuses the column actually shows", () => {
+  const ROWS = [
+    // Never sent → Draft.
+    row({
+      id: "a1",
+      title: "Unsent one",
+      status: "draft",
+      startedAt: null,
+      daysSinceClientActivity: null,
+      stage: "collecting",
+    }),
+    // Sent, client has done something → Active. Carries a workflow stage that
+    // the column deliberately no longer shows.
+    row({
+      id: "a2",
+      title: "Live one",
+      status: "in_progress",
+      startedAt: "2026-07-01T00:00:00.000Z",
+      daysSinceClientActivity: 2,
+      stage: "awaiting_payment",
+    }),
+  ];
+
+  function renderTable() {
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <WorklistTable rows={ROWS} locale="en" emptyText="none" />
+      </NextIntlClientProvider>,
+    );
+    return within(container);
+  }
+
+  const headerName = (label: string) =>
+    en.Engagements.column_menu.replace("{label}", label);
+
+  function openStatusMenu(q: ReturnType<typeof within>) {
+    fireEvent.pointerDown(
+      q.getByRole("button", { name: headerName(en.Dashboard.wl_col_status) }),
+      { button: 0, ctrlKey: false },
+    );
+  }
+
+  it("offers the agreement words, never a workflow stage", () => {
+    const q = renderTable();
+    openStatusMenu(q);
+    // The two states these rows actually resolve to.
+    expect(screen.getByRole("menuitemcheckbox", { name: /Draft/i })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: /Active/i })).toBeTruthy();
+    // ⚠️ THE BUG ITSELF. "Awaiting payment" is a workflow stage; row a2 still
+    // carries stage=awaiting_payment, so a menu built from `stage` WILL offer
+    // it. Watched failing against the real bug before being trusted.
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Awaiting payment/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Collecting documents/i }),
+    ).toBeNull();
+  });
+
+  it("actually filters on the word it offered", () => {
+    const q = renderTable();
+    openStatusMenu(q);
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Draft/i }));
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(q.queryByText("Unsent one")).toBeTruthy();
+    expect(q.queryByText("Live one")).toBeNull();
+  });
+});

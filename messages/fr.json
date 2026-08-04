@@ -2113,6 +2113,8 @@
     "sort_asc": "Trier A → Z",
     "sort_desc": "Trier Z → A",
     "sort_earliest": "Plus tôt d'abord",
+    "sort_agr_earliest": "Les moins avancés d'abord",
+    "sort_agr_latest": "Les plus avancés d'abord",
     "sort_latest": "Plus tard d'abord",
     "sort_lowest": "Plus faible d'abord",
     "sort_highest": "Plus élevée d'abord",

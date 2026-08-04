@@ -17,7 +17,11 @@
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
-import type { AgreementStatus } from "@/lib/engagements/agreement";
+import {
+  AGREEMENT_STATUSES,
+  agreementLabelKey,
+  type AgreementStatus,
+} from "@/lib/engagements/agreement";
 
 type LabelKey =
   | "agr_draft"
@@ -27,14 +31,11 @@ type LabelKey =
   | "agr_complete"
   | "agr_cancelled";
 
-const LABEL_KEY: Record<AgreementStatus, LabelKey> = {
-  draft: "agr_draft",
-  sent: "agr_sent",
-  accepted: "agr_accepted",
-  active: "agr_active",
-  complete: "agr_complete",
-  cancelled: "agr_cancelled",
-};
+// Delegates to the shared key builder so the chip and the Status filter menu
+// can never name the same state differently.
+const LABEL_KEY = Object.fromEntries(
+  AGREEMENT_STATUSES.map((s) => [s, agreementLabelKey(s)]),
+) as Record<AgreementStatus, LabelKey>;
 
 // Only three colours across six states, deliberately. A distinct hue per state
 // is what made the old column six different washes saying nothing extra: what
