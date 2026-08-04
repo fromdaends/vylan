@@ -38,6 +38,7 @@ export function ClientsToolbar({
   sort,
   activeOnly,
   ownerFilter,
+  ownerDefault,
   teamEnabled,
 }: {
   type: "all" | "individual" | "business";
@@ -46,6 +47,11 @@ export function ClientsToolbar({
   activeOnly: boolean;
   /** "all" | "mine" | a specific member id. */
   ownerFilter: string;
+  /** What owner filter this page opens on. In team mode /clients opens on YOUR
+   * book, so "mine" is the resting state — counting it as an active filter put
+   * a permanent badge and a Clear button on a list nobody had filtered, and
+   * Clear then had nothing to clear. */
+  ownerDefault: string;
   teamEnabled: boolean;
 }) {
   const router = useRouter();
@@ -64,17 +70,21 @@ export function ClientsToolbar({
     });
   }
 
-  // Sort is not a "filter" — it never hides a row — so it is deliberately left
-  // out of the count and the summary.
+  // What counts as "active" is what DIFFERS FROM THE DEFAULT VIEW, not what is
+  // simply set. Sort is excluded entirely — it never hides a row, so counting
+  // it would explain a short list with something that cannot shorten one.
+  const ownerChanged = teamEnabled && ownerFilter !== ownerDefault;
   const activeCount =
     (type !== "all" ? 1 : 0) +
-    (teamEnabled && ownerFilter !== "all" ? 1 : 0) +
+    (ownerChanged ? 1 : 0) +
     (activeOnly ? 1 : 0) +
     (includeArchived ? 1 : 0);
 
   const summary: string[] = [];
   if (type !== "all") summary.push(t(`filter_${type}`));
-  if (teamEnabled && ownerFilter === "mine") summary.push(t("owner_mine"));
+  if (ownerChanged) {
+    summary.push(ownerFilter === "all" ? t("owner_all") : t("owner_mine"));
+  }
   if (activeOnly) summary.push(t("filter_active_only"));
   if (includeArchived) summary.push(t("filter_include_archived"));
 
@@ -139,19 +149,22 @@ export function ClientsToolbar({
               <>
                 <DropdownMenuSeparator />
                 <Section label={t("col_owner")} />
+                {/* "My clients" is the default, so it CLEARS the param rather
+                    than writing a redundant one; widening to the firm is the
+                    thing that gets recorded in the URL. */}
                 <DropdownMenuItem
                   className="gap-2 rounded-[7px] text-[13px]"
                   onSelect={() => setParam("owner", null)}
                 >
-                  {check(ownerFilter === "all")}
-                  {t("owner_all")}
+                  {check(ownerFilter === "mine")}
+                  {t("owner_mine")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="gap-2 rounded-[7px] text-[13px]"
-                  onSelect={() => setParam("owner", "mine")}
+                  onSelect={() => setParam("owner", "all")}
                 >
-                  {check(ownerFilter === "mine")}
-                  {t("owner_mine")}
+                  {check(ownerFilter === "all")}
+                  {t("owner_all")}
                 </DropdownMenuItem>
               </>
             )}
@@ -186,6 +199,8 @@ export function ClientsToolbar({
             disabled={pending}
             className="h-9 gap-1.5 rounded-lg px-2.5 text-[13px] text-muted-foreground"
             onClick={() => startTransition(() => router.replace(pathname))}
+            // pathname alone = every param dropped = the default view, which is
+            // exactly what "Clear" should mean.
           >
             <X className="size-3.5" />
             {t("filter_clear")}
