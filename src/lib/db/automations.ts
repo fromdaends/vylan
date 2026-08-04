@@ -124,6 +124,30 @@ export async function updateAutomation(
   return toAutomation(data as Row);
 }
 
+/**
+ * How many templates (visible to this firm) point at each automation — the
+ * list's "Used by N templates" line. Provenance display only; behaviour never
+ * reads through these pointers.
+ */
+export async function listAutomationTemplateUseCounts(): Promise<
+  Record<string, number>
+> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("templates")
+    .select("automation_id")
+    .not("automation_id", "is", null);
+  if (error) {
+    if (isMissingSchema(error)) return {};
+    throw error;
+  }
+  const counts: Record<string, number> = {};
+  for (const r of (data ?? []) as { automation_id: string }[]) {
+    counts[r.automation_id] = (counts[r.automation_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** Retire, never delete: past engagements' provenance keeps pointing here. */
 export async function archiveAutomation(id: string): Promise<void> {
   const supabase = await getServerSupabase();

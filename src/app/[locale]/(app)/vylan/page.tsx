@@ -9,6 +9,15 @@ import { loadAutomation } from "@/lib/performance/automation";
 import type { PerformanceRange } from "@/lib/performance/types";
 import { AutomatedJobsPanel } from "@/components/vylan/automated-jobs-panel";
 import { AiPerformanceTab } from "@/components/vylan/ai-performance-tab";
+import {
+  AutomationsPanel,
+  type AutomationRow,
+} from "@/components/vylan/automations-panel";
+import {
+  listAutomations,
+  listAutomationTemplateUseCounts,
+} from "@/lib/db/automations";
+import { listActiveFirmUsers } from "@/lib/db/users";
 
 // The "Vylan" hub: the firm's own automation surface, reached from the rail's
 // Sparkles tab.
@@ -25,7 +34,7 @@ import { AiPerformanceTab } from "@/components/vylan/ai-performance-tab";
 // forwards rather than 404s.
 export const dynamic = "force-dynamic";
 
-type VylanTab = "jobs" | "ai";
+type VylanTab = "jobs" | "automations" | "ai";
 
 function parseRange(value: string | undefined): PerformanceRange {
   return value === "this_month" || value === "all_time"
@@ -49,10 +58,33 @@ export default async function VylanHubPage({
 
   setRequestLocale(locale);
   const t = await getTranslations("VylanHub");
-  const tab: VylanTab = sp.tab === "ai" ? "ai" : "jobs";
+
+  // The automations library rides the Part A switch (1510): a firm that
+  // hasn't been turned on sees the hub exactly as before — no tab, and a
+  // stale ?tab=automations link falls back to Automated jobs.
+  const firm = await getCurrentFirm();
+  const workflowsOn =
+    (firm as { workflows_enabled?: boolean } | null)?.workflows_enabled ===
+    true;
+
+  const tab: VylanTab =
+    sp.tab === "ai"
+      ? "ai"
+      : sp.tab === "automations" && workflowsOn
+        ? "automations"
+        : "jobs";
 
   const tabs = [
     { id: "jobs" as const, label: t("tab_jobs"), href: "/vylan" },
+    ...(workflowsOn
+      ? [
+          {
+            id: "automations" as const,
+            label: t("tab_automations"),
+            href: "/vylan?tab=automations",
+          },
+        ]
+      : []),
     { id: "ai" as const, label: t("tab_ai"), href: "/vylan?tab=ai" },
   ];
 
@@ -93,10 +125,44 @@ export default async function VylanHubPage({
 
       {tab === "ai" ? (
         <AiPerformancePanel locale={locale} rangeParam={sp.range} />
+      ) : tab === "automations" ? (
+        <AutomationsSection />
       ) : (
         <AutomatedJobsPanel />
       )}
     </div>
+  );
+}
+
+async function AutomationsSection() {
+  // Same signed-out guard as the AI panel below: the layout's redirect races
+  // this render, and firing RLS'd reads as `anon` fills the log with denials
+  // for a page that will never be shown.
+  const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
+  if (!firm || !user) return null;
+
+  const [automations, useCounts, members] = await Promise.all([
+    listAutomations(),
+    listAutomationTemplateUseCounts(),
+    listActiveFirmUsers(),
+  ]);
+
+  const rows: AutomationRow[] = automations.map((a) => ({
+    id: a.id,
+    firmId: a.firmId,
+    name: a.name,
+    definition: a.definition,
+    usedBy: useCounts[a.id] ?? 0,
+  }));
+
+  return (
+    <AutomationsPanel
+      automations={rows}
+      members={members.map((m) => ({
+        id: m.id,
+        name: m.display_name ?? m.name,
+      }))}
+    />
   );
 }
 
