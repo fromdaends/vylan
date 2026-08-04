@@ -29,6 +29,7 @@ import {
 } from "@/app/actions/clients";
 import type { ClientOwner } from "./owner";
 import type { Client } from "@/lib/db/clients";
+import { clientTabHref } from "@/lib/clients/tabs";
 import type { EngagementStatus } from "@/lib/db/engagements";
 import type { EngagementType } from "@/lib/db/templates";
 import type { AppLocale } from "@/lib/format";
@@ -137,6 +138,19 @@ const COL = {
 const HEADER_ROW =
   "flex h-[42px] items-center border-b border-border/60 bg-muted/50 px-5 text-[11px] font-semibold tracking-[0.06em] uppercase text-muted-foreground";
 
+
+/**
+ * Keep a click inside the row from ALSO triggering the row's own navigation —
+ * the name link and the ⋯ menu handle their own clicks.
+ *
+ * Written out rather than passing the bare identifier `stop`: `window.stop` is
+ * a real DOM global, so `onClick={stop}` type-checks, lints and builds cleanly
+ * and then throws "stop is not defined" only when the row actually renders on
+ * the server. It shipped once exactly that way.
+ */
+function stop(e: React.MouseEvent) {
+  e.stopPropagation();
+}
 
 function ClientRow({
   client,
@@ -338,17 +352,17 @@ function ClientMenuItems({
         client={client}
         trigger={<Item onSelect={(e) => e.preventDefault()}>{t("edit")}</Item>}
       />
-      {/* One of exactly two cross-links between Clients and Files (the other
-            is "View client profile" in the Files client view). Deliberately not
-            more: the two surfaces answer different questions and the spec is
-            explicit that Files must not grow into a second Clients page. */}
+      {/* ONE entry for this client's documents. There used to be two — "View
+          files" into /files?client=, and "Documents" at /clients/<id>/archive,
+          which is now itself just a redirect to the client's Files tab. Two
+          labels for one destination is a menu asking the reader to guess which
+          one they meant.
+
+          It points at the client's OWN Files tab rather than the Files
+          section: you are already standing in Clients, and the surviving
+          cross-link keeps Files from growing into a second Clients page. */}
       <Item asChild>
-        <Link href={`/files?client=${client.id}`}>{t("view_files")}</Link>
-      </Item>
-      <Item asChild>
-        <Link href={`/clients/${client.id}/archive`}>
-          {t("document_archive")}
-        </Link>
+        <Link href={clientTabHref(client.id, "files")}>{t("view_files")}</Link>
       </Item>
       {client.archived_at ? (
         <form action={restoreClientAction}>
