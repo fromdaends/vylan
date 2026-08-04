@@ -356,9 +356,9 @@ describe("status column — workflow stage", () => {
 
   function statusCellOf(q: ReturnType<typeof renderWorklist>) {
     const tr = q.getByRole("link", { name: /Stage Row/i }).closest("tr")!;
-    // Status is the last cell before the actions column.
-    const cells = within(tr as HTMLElement).getAllByRole("cell");
-    return cells[cells.length - 2];
+    // By its own marker, not by counting from the end — Status has moved twice
+    // and a positional lookup broke silently both times.
+    return tr.querySelector('[data-column="status"]') as HTMLElement;
   }
 
   it("shows the stage chip instead of the In progress pill", () => {
@@ -585,6 +585,23 @@ describe("every column header sorts and filters, on every list", () => {
     expect(q.getByText(en.Engagements.tasks_none_match)).toBeInTheDocument();
   });
 
+  // ⚠️ FOUND BY CLICKING IT ON THE LIVE SITE, not by a test: the count used to
+  // be rendered by the page AROUND the table, which can only count what it
+  // handed over. Tick one value in a column menu and it still read "10
+  // engagements" above three rows.
+  it("counts what is on screen after a filter, not what was handed in", async () => {
+    const q = renderTable({ countLabel: (n: number) => `${n} engagements` });
+    expect(q.getByText("2 engagements")).toBeInTheDocument();
+
+    openHeader(q, en.Dashboard.wl_col_client);
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Acme Ltd" }),
+    );
+    closeMenu();
+
+    expect(q.getByText("1 engagements")).toBeInTheDocument();
+  });
+
   it("shows the service and the task count, in Canopy's words", () => {
     const q = renderTable();
     // Service items = what was sold; engagement items = the tasks inside it.
@@ -625,22 +642,26 @@ describe("the assignee is the way to the person", () => {
 // Founder: "the completion rate slash progress of an engagement shall no longer
 // be tracked based off the amount of documents have been received. It should be
 // tracked based off the amount of tasks that are finished."
-describe("the progress bar counts tasks", () => {
-  it("fills to the share of tasks DONE, with the dim segment for those under way", () => {
+describe("Engagement items counts tasks", () => {
+  // ⚠️ THE BAR IS GONE — the founder asked for Canopy's UI exactly, and its
+  // Engagement items column is a value, not a gauge. The count says everything
+  // the bar did and one thing it could not: three tasks left is not thirty.
+  it("shows how many of the tasks are done", () => {
     const q = renderWorklist([
       row({ id: "e1", title: "Half done", approvedPct: 0.5, awaitingPct: 0.25, tasksDone: 2, tasksTotal: 4 }),
     ]);
-    const bar = q.getAllByRole("progressbar")[0];
-    expect(bar.getAttribute("aria-valuenow")).toBe("50");
-  });
-
-  it("shows nothing at all for a job with no tasks yet", () => {
-    // A 0% bar would say "started and got nowhere" about work nobody has
-    // planned. An em-dash says the honest thing: there is nothing to measure.
-    const q = renderWorklist([
-      row({ id: "e2", title: "Nothing planned", approvedPct: 0, awaitingPct: 0, tasksDone: 0, tasksTotal: 0 }),
-    ]);
+    expect(q.getByText("2/4")).toBeInTheDocument();
     expect(q.queryAllByRole("progressbar")).toHaveLength(0);
   });
 
+  it("shows nothing at all for a job with no tasks yet", () => {
+    // "0/0" would say "started and got nowhere" about work nobody has planned.
+    // An em-dash says the honest thing: there is nothing to measure.
+    const q = renderWorklist([
+      row({ id: "e2", title: "Nothing planned", approvedPct: 0, awaitingPct: 0, tasksDone: 0, tasksTotal: 0 }),
+    ]);
+    const tr = q.getByRole("link", { name: /Nothing planned/i }).closest("tr")!;
+    expect(within(tr as HTMLElement).getAllByText("—").length).toBeGreaterThan(0);
+    expect(q.queryAllByRole("progressbar")).toHaveLength(0);
+  });
 });

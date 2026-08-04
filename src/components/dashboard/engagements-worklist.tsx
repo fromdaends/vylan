@@ -367,6 +367,7 @@ export function WorklistTable({
   firmId,
   presenceRoster,
   bulkAssignMembers,
+  countLabel,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -412,6 +413,15 @@ export function WorklistTable({
   // the main engagements list — and there is no checkbox column at all, so the
   // Overview, the Inbox and the teammate profile are untouched.
   bulkAssignMembers?: { id: string; name: string }[];
+  /**
+   * "10 engagements", drawn directly above the header row as Canopy does.
+   *
+   * ⚠️ IT LIVES HERE, not on the page around the table. The page can only count
+   * what it handed over, and the column menus filter INSIDE this component — so
+   * a count rendered out there sat at 10 while the table showed 3, which is
+   * worse than no count at all. Whoever does the filtering owns the number.
+   */
+  countLabel?: (count: number) => string;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -651,6 +661,11 @@ export function WorklistTable({
 
   return (
     <div className="border-t border-border">
+      {countLabel && (
+        <p className="px-4 py-2.5 text-sm tabular-nums text-muted-foreground">
+          {countLabel(visibleRows.length)}
+        </p>
+      )}
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -695,13 +710,13 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
             />
-            {/* CLIENT, and the divider before it — the same seam the Tasks
-                table has, where the row stops describing the work and starts
-                saying whose it is. Canopy puts one in the same place. */}
+            {/* Canopy rules EVERY column, not just the seam before Client —
+                the grid is what makes a wide row scannable, because the eye
+                tracks a line rather than a gap. */}
             <ColumnMenu
               label={t("wl_col_client")}
               t={tEng}
-              className="hidden border-l border-border px-4 lg:table-cell"
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
               sortKey="client"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -718,7 +733,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_service")}
               t={tEng}
-              className="hidden px-4 lg:table-cell"
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
               sortKey="service"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -737,7 +752,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_items")}
               t={tEng}
-              className="hidden px-4 md:table-cell"
+              className="hidden border-l border-border/60 px-4 md:table-cell"
               sortKey="items"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -748,7 +763,7 @@ export function WorklistTable({
               <ColumnMenu
                 label={t("wl_col_assigned")}
                 t={tEng}
-                className="hidden px-4 lg:table-cell"
+                className="hidden border-l border-border/60 px-4 lg:table-cell"
                 sortKey="assignee"
                 sort={sort ?? UNSORTED}
                 setSort={setSort}
@@ -768,25 +783,8 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_due")}
               t={tEng}
-              className="hidden px-4 sm:table-cell"
+              className="hidden border-l border-border/60 px-4 sm:table-cell"
               sortKey="due"
-              sort={sort ?? UNSORTED}
-              setSort={setSort}
-              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
-            />
-            {/* START DATE — when it actually began, which is when it went to
-                the client. A draft has not begun, so it shows its creation
-                date instead of an empty cell.
-
-                xl only, deliberately. It is reference rather than triage: you
-                sort by it once a quarter, you read the due date every day. On a
-                laptop the two dates side by side would squeeze the columns that
-                earn their place. */}
-            <ColumnMenu
-              label={t("wl_col_started")}
-              t={tEng}
-              className="hidden px-4 xl:table-cell"
-              sortKey="started"
               sort={sort ?? UNSORTED}
               setSort={setSort}
               sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
@@ -794,7 +792,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_status")}
               t={tEng}
-              className="px-4"
+              className="border-l border-border/60 px-4"
               sortKey="status"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -807,6 +805,23 @@ export function WorklistTable({
                 value: v,
                 label: stageLabel(v),
               }))}
+            />
+            {/* START DATE — when it actually began, which is when it went to
+                the client. A draft has not begun, so it shows its creation
+                date instead of an empty cell.
+
+                xl only, deliberately. It is reference rather than triage: you
+                sort by it once a quarter, you read the due date every day. On a
+                laptop the two dates side by side would squeeze the columns that
+                earn their place. */}
+            <ColumnMenu
+              label={t("wl_col_started")}
+              t={tEng}
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
+              sortKey="started"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
             />
             {reassignMembers && reassignMembers.length > 0 && (
               <TableHead className="w-10 px-2" />
@@ -869,7 +884,6 @@ export function WorklistTable({
                   : null
               }
               unassignedText={t("wl_unassigned")}
-              pctLabel={(pct) => t("wl_pct_complete", { pct })}
               canDelete={canDelete}
               countdownText={countdownFor?.(r) ?? null}
               teamEnabled={teamEnabled}
@@ -905,7 +919,6 @@ function WorklistRowView({
   staleText,
   readyText,
   unassignedText,
-  pctLabel,
   canDelete,
   countdownText,
   onOptimisticRemoval,
@@ -927,7 +940,6 @@ function WorklistRowView({
   staleText: string | null;
   readyText: string | null;
   unassignedText: string;
-  pctLabel: (pct: number) => string;
   canDelete: boolean;
   countdownText: string | null;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
@@ -952,16 +964,12 @@ function WorklistRowView({
   const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
-  // Otherwise the % is the APPROVED share of required items; the dimmer
-  // second segment is the submitted-awaiting-review share, so "everything's
-  // in but not yet cleared" reads at a glance instead of a premature 100%.
+  // The fallback for a row whose task counts have not landed: the approved
+  // share of its required items. `awaitingPct` fed the bar's dim second
+  // segment and has no reader now the bar is gone — it stays on the row type
+  // because the loader still computes it and the Overview may want it back.
   const pct =
     row.status === "complete" ? 100 : Math.round(row.approvedPct * 100);
-  const awaitingPctValue =
-    row.status === "complete" ? 0 : Math.round(row.awaitingPct * 100);
-  // Drafts haven't been sent and cancelled work is moot — neither has a
-  // meaningful progress bar (and an unfetched-items draft would otherwise
-  // read as 100%).
   // A job with no tasks yet has nothing to measure. It reads "—" rather than a
   // 0% bar, which would say "started and got nowhere" about work nobody has
   // planned. Drafts and cancelled work stay out for the same reason.
@@ -1047,7 +1055,10 @@ function WorklistRowView({
               <div className="flex items-center gap-1.5">
                 <Link
                   href={`/engagements/${row.id}`}
-                  className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  // Canopy renders both name columns as links, in blue. Ours
+                  // were links already but painted like plain text, so the one
+                  // thing on the row you are meant to click did not look it.
+                  className="font-medium text-accent hover:underline focus-visible:underline focus-visible:outline-none"
                 >
                   {row.title}
                 </Link>
@@ -1118,11 +1129,11 @@ function WorklistRowView({
                 because "whose is this" is a question you answer by GOING there.
                 The row's own click handler bails on any <a>, so this does not
                 fight it. */}
-            <TableCell className="hidden border-l border-border px-4 py-3 align-top text-sm lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
               {row.clientId ? (
                 <Link
                   href={`/clients/${row.clientId}`}
-                  className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  className="text-accent hover:underline focus-visible:underline focus-visible:outline-none"
                 >
                   {row.clientName}
                 </Link>
@@ -1133,49 +1144,32 @@ function WorklistRowView({
 
             {/* SERVICE ITEMS — what was sold. Quiet by design: it repeats down
                 the column, so it must not compete with the engagement's name. */}
-            <TableCell className="hidden px-4 py-3 align-top text-sm text-muted-foreground lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
               {row.type ? serviceLabel(row.type) : "—"}
             </TableCell>
 
-            <TableCell className="hidden px-4 py-3 align-top md:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top md:table-cell">
+              {/* ⚠️ THE BAR CAME OUT. Canopy's Engagement items column is a
+                  VALUE, not a gauge, and the founder asked for its UI exactly.
+
+                  The bar was also saying the same thing twice: "2/5" is the
+                  share AND the amount left, and only the number can tell you
+                  the difference between three tasks to go and thirty. What the
+                  bar added was a second thing to read in a column that already
+                  answered the question. */}
               {!showProgress ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : (
-                <div className="flex items-center gap-2">
-                  <div
-                    className="flex h-1.5 w-20 overflow-hidden rounded-full bg-muted"
-                    role="progressbar"
-                    aria-valuenow={pct}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={pctLabel(pct)}
-                  >
-                    {/* Solid = tasks DONE; dim = tasks under way (#1239). */}
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                    <div
-                      className="h-full bg-primary/35 transition-all"
-                      style={{ width: `${awaitingPctValue}%` }}
-                    />
-                  </div>
-                  {/* The COUNT, not just a share. The bar now measures tasks
-                      (#1239), and "2 of 5" says what a percentage cannot: how
-                      much work is actually left. It also makes this column
-                      speak the same language as the Tasks page, where every
-                      parent row carries the same figure. */}
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {row.tasksTotal > 0
-                      ? `${row.tasksDone}/${row.tasksTotal}`
-                      : `${pct}%`}
-                  </span>
-                </div>
+                <span className="text-sm tabular-nums text-foreground">
+                  {row.tasksTotal > 0
+                    ? `${row.tasksDone}/${row.tasksTotal}`
+                    : `${pct}%`}
+                </span>
               )}
             </TableCell>
 
             {teamEnabled && (
-              <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
+              <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
                 {/* A person is a place. This name is where you actually think
                     "what else is she on?", so it has to be the way there —
                     until now nobody in the app was clickable, and the only
@@ -1191,22 +1185,22 @@ function WorklistRowView({
                 ) : row.assigneeName ? (
                   <span className="text-foreground">{row.assigneeName}</span>
                 ) : (
-                  <span className="italic text-muted-foreground">
-                    {unassignedText}
+                  // An em dash, as Canopy does — "Unassigned" in a column of
+                  // names reads as somebody's name for the length of a glance.
+                  //
+                  // The word stays for screen readers: a lone dash announced
+                  // aloud is not "nobody", it is nothing at all.
+                  <span className="text-muted-foreground">
+                    <span className="sr-only">{unassignedText}</span>
+                    <span aria-hidden>—</span>
                   </span>
                 )}
               </TableCell>
             )}
 
-            <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top sm:table-cell">
               <div className={cn("text-sm tabular-nums", dueTone)}>
                 {formatDate(row.dueDate, locale, "medium")}
-              </div>
-            </TableCell>
-
-            <TableCell className="hidden px-4 py-3 align-top xl:table-cell">
-              <div className="text-sm tabular-nums text-muted-foreground">
-                {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
               </div>
             </TableCell>
 
@@ -1224,7 +1218,14 @@ function WorklistRowView({
                 Everything else (draft / complete / cancelled, or any row before
                 migration 0690 lands) keeps the status pill: those have no
                 workflow position to show. */}
-            <TableCell className="px-4 py-3 align-top">
+            <TableCell
+              // A stable hook for the tests. Status has now moved twice, and a
+              // helper that counted cells from the end broke silently both
+              // times — a positional assertion is really a test of the column
+              // order dressed up as a test of the pill.
+              data-column="status"
+              className="border-l border-border/60 px-4 py-3 align-top"
+            >
               {row.stage ? (
                 <StageChip stage={row.stage} />
               ) : (
@@ -1243,6 +1244,12 @@ function WorklistRowView({
             {/* Opt-in reassign menu (the teammate profile passes the teammates
                 to hand work to). Built here inside the client component so no
                 function crosses the server→client boundary. */}
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top lg:table-cell">
+              <div className="text-sm tabular-nums text-muted-foreground">
+                {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
+              </div>
+            </TableCell>
+
             {reassignMembers && reassignMembers.length > 0 && (
               <TableCell className="px-2 py-3 align-top">
                 <EngagementReassignMenu

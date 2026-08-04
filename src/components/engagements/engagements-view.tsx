@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
 // ROUTER must be the i18n one. usePathname (i18n) returns a locale-STRIPPED path
 // ("/engagements"), and feeding that to next/navigation's router navigates to the
@@ -10,39 +10,27 @@ import { Search, Users } from "lucide-react";
 // French accountant clicking a filter chip gets thrown back into English. The
 // i18n router re-applies the current locale prefix.
 import { useSearchParams } from "next/navigation";
-import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   WorklistTable,
   type WorklistRow,
 } from "@/components/dashboard/engagements-worklist";
-import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { daysUntilPurge } from "@/lib/engagements/lifecycle";
 import {
   ENGAGEMENT_VIEWS,
   viewLabelKey,
   type EngagementView,
 } from "@/lib/engagements/views";
-import type { EngagementStage } from "@/lib/engagements/stage";
 import {
   DIR_PARAM,
   SORT_PARAM,
   STAGE_PARAM,
-  countByStage,
   filterRowsByStage,
   parseStageFilter,
   parseStageSort,
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
-import { StageFilterSelect } from "./stage-filter-select";
-import { cn } from "@/lib/cn";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import type { AppLocale } from "@/lib/format";
 
 // One All-Engagements sub-page. The server has already loaded + filtered the
@@ -77,17 +65,13 @@ export function EngagementsView({
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
   const tStage = useTranslations("Stage");
-  const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const [, startUrlTransition] = useTransition();
   const [query, setQuery] = useState("");
 
-  // Stage filter + stage sort live in the URL, not in component state, so a
-  // filtered view can be bookmarked and shared, and so it survives opening an
-  // engagement and coming back (the browser restores the query string). Only
-  // the Active view offers them — an engagement's stage is a property of live
-  // work, so filtering the Drafts or Cancelled lists by it would be noise.
+  // Read-only now. Nothing on this page WRITES ?stage= or ?sort= any more —
+  // both became column menus on the table — but a link shared before that still
+  // opens in the order and the slice it promised, instead of quietly showing
+  // something else.
   const stageFilteringOn = view === "active";
   const stageFilter = stageFilteringOn
     ? parseStageFilter(searchParams?.get(STAGE_PARAM))
@@ -99,79 +83,47 @@ export function EngagementsView({
     ? parseStageSort(searchParams?.get(SORT_PARAM), searchParams?.get(DIR_PARAM))
     : null;
 
-  // Write the query string. Mirrors the app's existing URL-filter pattern
-  // (clients-toolbar): replace, not push, so the Back button leaves the page
-  // rather than stepping back through every filter the accountant tried — and so
-  // the URL captured when they open an engagement is the filtered one.
-  function setParams(next: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    for (const [key, value] of Object.entries(next)) {
-      if (value === null || value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const qs = params.toString();
-    startUrlTransition(() => {
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    });
-  }
-
-  const selectStage = (stage: EngagementStage | null) =>
-    setParams({ [STAGE_PARAM]: stage });
-
-  // Scope filter — All firm / Mine, and deliberately nothing else.
+  // ⚠️ NO SCOPE FILTER ANY MORE, AND THE DEFAULT CHANGED WITH IT.
   //
-  // This used to offer every teammate as a third kind of option, reachable by
-  // ?assignee=<id> from the team page. It was a filter doing navigation's job:
-  // the page still said "Active engagements", nothing on it named whose work you
-  // were looking at, and the empty state read "No active engagements. Create one
-  // to get started." — telling an owner with 15 live jobs that they had none.
-  // The lens also died on any lifecycle tab (separate routes, no param), so
-  // clicking "Completed" from a teammate's lens silently showed you your own.
-  // A teammate's work is a question about the teammate, answered on their
-  // profile (/settings/team/<id>), which already carried the same rows.
+  // This page used to open on "My engagements" for anyone in a firm with a
+  // team, and the picker was the only way back to the whole list. With the
+  // picker gone that default would have been a filter nobody could see and
+  // nobody could clear — an owner would open the page and quietly be shown a
+  // fraction of their firm's work. So the list now starts as ALL of it, and
+  // narrowing to one person is the Assignee column's menu.
   //
-  // "All firm" survives because it is not a question about a person.
-  const [scope, setScope] = useState<string>(teamEnabled ? "mine" : "all");
-  const chooseScope = (s: string) => setScope(s);
+  // (The old picker's own history is worth keeping: it once offered every
+  // teammate as an option, reachable by ?assignee=<id>. That was a filter doing
+  // navigation's job — the page still said "Active engagements" and named
+  // nobody — and a teammate's work is a question about the teammate, answered
+  // on their profile.)
 
   const q = query.trim().toLowerCase();
 
-  // Everything EXCEPT the stage filter: search + the my/all scope. This is what
-  // the per-stage counts are computed from, so each count is exactly what
-  // choosing that stage would reveal — and picking one doesn't zero the others.
-  const beforeStageFilter = useMemo(() => {
-    let base =
+  // Search — the one thing above the table that a column menu cannot do, since
+  // it looks at the engagement name and the client name together.
+  const searched = useMemo(
+    () =>
       q !== ""
         ? rows.filter(
             (r) =>
               r.title.toLowerCase().includes(q) ||
               r.clientName.toLowerCase().includes(q),
           )
-        : rows;
-    // Resolve the scope to an assignee id: "all" -> no filter, "mine" -> me, any
-    // other value -> that teammate. selectAssignedTo handles any id.
-    const scopedUserId =
-      scope === "all" ? null : scope === "mine" ? currentUserId : scope;
-    if (teamEnabled && scopedUserId) {
-      base = selectAssignedTo(base, scopedUserId);
-    }
-    return base;
-  }, [rows, q, scope, currentUserId, teamEnabled]);
-
-  const stageCounts = useMemo(
-    () => countByStage(beforeStageFilter),
-    [beforeStageFilter],
+        : rows,
+    [rows, q],
   );
 
   const visible = useMemo(() => {
-    const filtered = filterRowsByStage(beforeStageFilter, stageFilter);
-    // Stage sort when asked for, otherwise the table's long-standing default:
-    // newest first. sortRowsByStage breaks its own ties by recency too, so the
-    // two orders agree inside a stage instead of scrambling.
+    // A ?stage= link from before the column menus still opens filtered, so an
+    // old bookmark is not silently ignored. Nothing writes the param now.
+    const filtered = filterRowsByStage(searched, stageFilter);
+    // Newest first, which is where every column menu starts from. Sorting is
+    // the table's own now.
     return stageSort
       ? sortRowsByStage(filtered, stageSort)
       : [...filtered].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-  }, [beforeStageFilter, stageFilter, stageSort]);
+  }, [searched, stageFilter, stageSort]);
 
   const badgeFor = (v: EngagementView): number | null => {
     if (v === "ready" && badges.ready > 0) return badges.ready;
@@ -181,96 +133,47 @@ export function EngagementsView({
 
   // The pills mirror the sidebar accordion (active sub-page highlighted) and
   // are the only way to switch views on mobile, where the sidebar is a bottom
-  // tab bar. usePathname is locale-stripped by the i18n nav helper.
+  // tab bar. Which one is current comes from the `view` prop — each sub-page is
+  // its own route and already knows which it is, so matching the pathname a
+  // second time was one more thing to keep in step.
   const hrefFor = (v: EngagementView) =>
     v === "active" ? "/engagements" : `/engagements/${v}`;
-  const isActive = (v: EngagementView) =>
-    v === "active"
-      ? pathname === "/engagements"
-      : pathname === `/engagements/${v}`;
 
   return (
     <div className="space-y-5">
-      <div
-        role="tablist"
-        aria-label={t("views_label")}
-        className="flex flex-wrap items-center gap-1.5"
-      >
-        {ENGAGEMENT_VIEWS.map((v) => {
-          const active = isActive(v);
-          const count = badgeFor(v);
-          return (
-            <Link
-              key={v}
-              href={hrefFor(v)}
-              role="tab"
-              aria-selected={active}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-              )}
-            >
-              {t(viewLabelKey(v))}
-              {count != null && (
-                <span
-                  className={cn(
-                    "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums",
-                    v === "deleted"
-                      ? "bg-destructive/15 text-destructive"
-                      : "bg-accent/15 text-accent",
-                  )}
-                >
-                  {count}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
+      {/* ⚠️ THE PILLS ARE GONE, THE VIEWS ARE NOT. The founder: "remove the top
+          header sorter buttons... it doesnt align with canopys design and
+          neither the task view page."
 
-      {/* Recently Deleted: surface the 30-day recovery policy up front so a
-          finding-it-here user isn't surprised by the eventual purge. */}
-      {view === "deleted" && (
-        <p className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-          {t("deleted_policy_note")}
-        </p>
-      )}
+          What did not align was the TREATMENT — a filled pill around the active
+          view and coloured badge chips around the counts, which made a row of
+          tabs read as a strip of buttons. Both references they named have this
+          exact row; Canopy's is "Active | All Engagements | Awaiting Acceptance
+          | Drafts". Deleting the views would also have stranded Drafts,
+          Completed, Archived and Recently deleted — four routes with no other
+          way in now the rail flyout is two buttons (#1260).
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* The pickers travel together, so the toolbar stays one line instead of
-            spending a whole row on filters. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {teamEnabled && (
-            <Select value={scope} onValueChange={chooseScope}>
-              <SelectTrigger
-                size="sm"
-                className="w-[13rem] self-start"
-                aria-label={t("scope_label")}
-              >
-                <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder={t("scope_label")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("scope_all")}</SelectItem>
-                <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {/* Stage filter — Active only. An engagement's stage is a property of
-              live work, so filtering Drafts or Cancelled by it would be noise. */}
-          {stageFilteringOn && (
-            <StageFilterSelect
-              counts={stageCounts}
-              selected={stageFilter}
-              onSelect={selectStage}
-            />
-          )}
-        </div>
-        <div className="relative sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          Search rides the same row rather than sitting on its own. Since the
+          two filter pickers came out, it was alone on a line with an empty half
+          beside it — a band of nothing between the tabs and the table. */}
+      <div className="flex flex-col gap-3 border-b border-border sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <ViewTabs
+          className="flex-1 border-b-0"
+          ariaLabel={t("views_label")}
+          activeKey={view}
+          tabs={ENGAGEMENT_VIEWS.map((v) => ({
+            key: v,
+            label: t(viewLabelKey(v)),
+            href: hrefFor(v),
+            count: badgeFor(v),
+            // Recently deleted counts DOWN to a purge, so its number is a
+            // warning rather than a total. It keeps the destructive colour on
+            // the digits alone — the chip around them is what came out.
+            tone: v === "deleted" ? ("destructive" as const) : undefined,
+          }))}
+        />
+        <div className="relative pb-2 sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-[calc(50%-0.25rem)] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
             value={query}
@@ -281,6 +184,27 @@ export function EngagementsView({
           />
         </div>
       </div>
+
+      {/* Recently Deleted: surface the 30-day recovery policy up front so a
+          finding-it-here user isn't surprised by the eventual purge. */}
+      {view === "deleted" && (
+        <p className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          {t("deleted_policy_note")}
+        </p>
+      )}
+
+      {/* ⚠️ THE TWO PICKERS THAT USED TO SIT HERE ARE GONE — the founder, of the
+          row above the table: "get rid of these top things for sorting."
+
+          They were a "My engagements / All firm" select and an "All stages"
+          select, and both now exist as the Assignee and Status column menus:
+          same two questions, asked on the column that answers them, instead of
+          a bar of controls sitting above a table that could not sort itself.
+
+          The search that stayed moved UP onto the tab row — alone down here it
+          left a band of empty page between the tabs and the table. The count
+          moved INTO the table (countLabel below), because it has to be counted
+          after the column menus have filtered and only the table knows that. */}
 
       <WorklistTable
         rows={visible}
@@ -296,6 +220,7 @@ export function EngagementsView({
               : t(`view_${view}_empty`)
         }
         canDelete={canDelete}
+        countLabel={(count) => t("count_engagements", { count })}
         growNameColumn
         teamEnabled={teamEnabled}
         // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.

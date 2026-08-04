@@ -42,6 +42,7 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
+import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
 import { SelectableTemplateCard } from "@/components/templates/template-card";
@@ -100,6 +101,19 @@ export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
 // creation (payable right away), vs. the deferred on_completion / delayed
 // automation. "off" = no invoice.
 export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
+
+// The rail's order IS the order of the decision: who it is for, what you are
+// asking them for, what it costs, how hard you chase.
+const WIZARD_STEPS = ["details", "documents", "billing", "reminders"] as const;
+type WizardStep = (typeof WIZARD_STEPS)[number];
+// Spelled out so a typo in the template literal is a compile error rather than
+// a `Engagements.wizard_step_detials` rendering on screen — this repo has been
+// bitten twice by next-intl failing silently on a bad key.
+type WizardStepKey =
+  | "wizard_step_details"
+  | "wizard_step_documents"
+  | "wizard_step_billing"
+  | "wizard_step_reminders";
 
 export function EngagementBuilder({
   clients,
@@ -233,6 +247,38 @@ export function EngagementBuilder({
     );
   });
   const [error, setError] = useState<string | null>(null);
+
+  // ── The wizard ────────────────────────────────────────────────────────────
+  //
+  // Founder's reference is Canopy's Create Engagement modal: a left rail of
+  // steps, each ticked once it has what it needs, with one step's worth of form
+  // on the right.
+  //
+  // This is a REGROUPING, not a rewrite. Every card below is the same card it
+  // was on the single-page form, with the same state and the same handlers —
+  // they are only shown one group at a time and put in an order that follows
+  // the decision rather than the order they happened to be built in.
+  //
+  // FOUR steps, not Canopy's five. Terms and Tasks are not here because Vylan
+  // has neither yet, and a step that opens on an empty panel is worse than a
+  // step that is not offered: it reads as broken rather than as unbuilt. The
+  // rail grows as they land.
+  const [step, setStep] = useState<WizardStep>("details");
+
+  // A tick means "this step has what it NEEDS", not "you have been here".
+  // Rewarding a visit would put a tick on an empty Documents step, which is the
+  // one thing that actually blocks sending.
+  const stepComplete: Record<WizardStep, boolean> = {
+    details: clientId != null && title.trim().length > 0,
+    documents: items.length > 0,
+    // Money and chasing are genuinely optional — a draft with neither is a
+    // valid engagement — so they are complete by definition. They still get a
+    // tick rather than nothing, because an empty circle beside a step you were
+    // never required to fill reads as an error.
+    billing: true,
+    reminders: true,
+  };
+  const stepIndex = WIZARD_STEPS.indexOf(step);
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
   const [emptyAttempts, setEmptyAttempts] = useState(0);
@@ -524,7 +570,29 @@ export function EngagementBuilder({
   }
 
   return (
-    <div className="space-y-6">
+    // Rail left, one step's worth of form right. The rail is sticky so it stays
+    // a table of contents on a long step rather than scrolling away with it.
+    // The rail is a FIXED 17rem and the form takes everything else. A
+    // fractional rail (1fr_3fr) would grow the table of contents on a wide
+    // monitor, which is the one thing on this page that gains nothing from
+    // extra width — the form is where the room is needed.
+    <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
+      <div className="lg:sticky lg:top-6">
+        <EngagementWizardRail
+          label={t("wizard_nav_label")}
+          current={step}
+          onSelect={setStep}
+          steps={WIZARD_STEPS.map((k) => ({
+            key: k,
+            label: t(`wizard_step_${k}` as WizardStepKey),
+            complete: stepComplete[k],
+            // Only the two that actually stop you sending are marked required.
+            required: k === "details" || k === "documents",
+          }))}
+        />
+      </div>
+
+      <div className="space-y-6">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>
@@ -537,851 +605,895 @@ export function EngagementBuilder({
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("section_client")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {clients.length === 0 ? (
-            /* A firm with no clients yet would otherwise see the combobox's
-               bare "No client found" — a confusing dead end. Guide them to add
-               a client first (clients are created from the Clients page). */
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
-              <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <UserPlus className="size-5" aria-hidden />
-              </span>
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
-                  {t("no_clients_title")}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {t("no_clients_body")}
-                </p>
-              </div>
-              <Button asChild size="sm" className="mt-1">
-                <Link href="/clients">
-                  <UserPlus className="size-4" />
-                  {t("no_clients_cta")}
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            /* chooseClient re-filters the checklist for the new client's province */
-            <ClientCombobox
-              clients={clients}
-              value={clientId}
-              onChange={chooseClient}
-            />
-          )}
-          {scopeWarning && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-              {t("rel_scope_warning", {
-                name: scopeWarning.name,
-                scopes: scopeWarning.scopes
-                  .map((s) => tClients(`rel_scope_${s}`))
-                  .join(", "),
-              })}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("section_template")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div
-            role="radiogroup"
-            aria-label={t("section_template")}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
-            {orderedTemplates.map((tmpl) => (
-              <SelectableTemplateCard
-                key={tmpl.id}
-                groupName="template"
-                selected={templateId === tmpl.id}
-                onSelect={() => pickTemplate(tmpl.id)}
-                name={localizedTemplateName(tmpl, locale)}
-                type={tmpl.type}
-                itemCount={tmpl.items.length}
-                requiredCount={tmpl.items.filter((it) => it.required).length}
-                preview={tmpl.items
-                  .slice(0, 3)
-                  .map((it) =>
-                    locale === "fr"
-                      ? it.label_fr || it.label_en
-                      : it.label_en || it.label_fr,
-                  )}
-                builtin={tmpl.firm_id == null}
-              />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("section_details")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="title">{t("field_title")}</Label>
-            <Input
-              id="title"
-              value={effectiveTitle}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setTitleTouched(true);
-              }}
-              placeholder={defaultTitle}
-              required
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="due_date">{t("field_due_date_optional")}</Label>
-            <Input
-              id="due_date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-fit"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("due_date_hint")}
-            </p>
-          </div>
-          {/* Structured tax year (migration 0900). Optional — drives document
-              filing's {year} and, later, the AI's expected-year context. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="tax_year">{t("builder_tax_year_label")}</Label>
-            <select
-              id="tax_year"
-              value={taxYear}
-              onChange={(e) => setTaxYear(e.target.value)}
-              className="h-10 w-fit min-w-32 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-all hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              <option value="">{t("builder_tax_year_none")}</option>
-              {TAX_YEAR_OPTIONS.map((y) => (
-                <option key={y} value={String(y)}>
-                  {y}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              {t("builder_tax_year_hint")}
-            </p>
-          </div>
-          {/* "AI Analyze" toggle. On by default; turning it off means no
-              document uploaded to this engagement is ever sent to the AI —
-              helps the firm control AI usage on engagements that don't need it. */}
-          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-            <div className="space-y-0.5">
-              <Label
-                htmlFor="ai-analyze"
-                className="flex items-center gap-1.5 cursor-pointer"
-              >
-                <Sparkles className="size-4 text-muted-foreground" aria-hidden />
-                {t("ai_analyze_label")}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t("ai_analyze_hint")}
-              </p>
-            </div>
-            <Switch
-              id="ai-analyze"
-              checked={aiEnabled}
-              onCheckedChange={setAiEnabled}
-              ariaLabel={t("ai_analyze_label")}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Repeat (recurring series, migration 0770) — its own top-level card
-          (founder feedback: Repeat / Reminders / Invoice should read as
-          separate sections, not one packed Details card). Invoice recurrence
-          stays IN here with Repeat: it's a property of the series. */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            <Repeat className="size-4 text-muted-foreground" aria-hidden />
-            {t("repeat_section_label")}
-          </CardTitle>
-          <Select
-            value={repeatFrequency}
-            onValueChange={(value) => {
-              const next = value as
-                | "off"
-                | "monthly"
-                | "quarterly"
-                | "yearly"
-                | "custom";
-              setRepeatFrequency(next);
-              // Default the day to today when Custom is first chosen (the fixed
-              // frequencies anchor on the setup day implicitly). Set on a real
-              // interaction so first paint stays deterministic.
-              if (next === "custom" && repeatAnchorDay === "") {
-                setRepeatAnchorDay(String(new Date().getDate()));
-              }
-            }}
-          >
-            <SelectTrigger
-              id="repeat-frequency"
-              className="w-40"
-              aria-label={t("repeat_section_label")}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="off">{t("repeat_off")}</SelectItem>
-              <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
-              <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
-              <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
-              <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t("repeat_section_hint")}
-          </p>
-
-          {/* Custom schedule: every N months, on a chosen day. */}
-          {repeatFrequency === "custom" && (
-            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span>{t("repeat_custom_every")}</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={repeatIntervalMonths}
-                  onChange={(e) => setRepeatIntervalMonths(e.target.value)}
-                  aria-label={t("repeat_custom_every_label")}
-                  className="h-8 w-20"
-                />
-                <span>{t("repeat_custom_months")}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span>{t("repeat_custom_on_day")}</span>
-                {/* Same calendar picker as the engagement page's Repeat dialog,
-                    so setting a schedule feels identical in both places. */}
-                <DayOfMonthPicker
-                  value={
-                    repeatAnchorDay === "" ? null : Number(repeatAnchorDay)
-                  }
-                  locale={locale}
-                  onChange={(day) => setRepeatAnchorDay(String(day))}
-                />
-              </div>
-            </div>
-          )}
-
-          {repeatFrequency !== "off" && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <span>{t("repeat_due_offset_label")}</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={repeatOffsetDays}
-                  onChange={(e) => setRepeatOffsetDays(e.target.value)}
-                  aria-label={t("repeat_due_offset_label")}
-                  className="h-8 w-20"
-                />
-                <span>{t("repeat_due_offset_suffix")}</span>
-              </div>
-            )}
-
-          {/* Invoice recurrence (Phase 4) — WITH Repeat, it's a property of
-              the series (founder spec). With an invoice timing chosen it's
-              the switch; with the Invoice card off it's a "Set up the
-              invoice" shortcut that scrolls there, so the setting stays
-              discoverable. The recurrence decides WHETHER each occurrence
-              bills; the invoice timing decides WHEN. */}
-          {repeatFrequency !== "off" && connectReady && (
-            <div className="flex items-start justify-between gap-4 border-t border-border/60 pt-3">
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="repeat-invoice-recreate"
-                  className="flex cursor-pointer items-center gap-1.5"
-                >
-                  <Receipt
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  {t("repeat_invoice_label")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {invoiceMode !== "off"
-                    ? t("repeat_invoice_hint")
-                    : t("repeat_invoice_off_hint")}
-                </p>
-              </div>
-              {invoiceMode !== "off" ? (
-                <Switch
-                  id="repeat-invoice-recreate"
-                  checked={repeatInvoiceRecreate}
-                  onCheckedChange={setRepeatInvoiceRecreate}
-                  ariaLabel={t("repeat_invoice_label")}
-                />
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() =>
-                    invoiceSectionRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "center",
-                    })
-                  }
-                >
-                  {t("repeat_invoice_set_button")}
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Automatic reminders — its own top-level card. */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-1.5 text-base">
-            <BellRing className="size-4 text-muted-foreground" aria-hidden />
-            {t("reminder_section_label")}
-          </CardTitle>
-          <Switch
-            id="automatic-reminders"
-            checked={reminderSettings.enabled}
-            onCheckedChange={(enabled) =>
-              setReminderSettings((current) => ({ ...current, enabled }))
-            }
-            ariaLabel={t("reminder_section_label")}
-          />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t("reminder_section_hint")}
-          </p>
-          {selectedClient && !selectedClient.email && (
-            <p className="text-xs font-medium text-destructive">
-              {t("reminder_missing_email")}
-            </p>
-          )}
-
-            {reminderSettings.enabled && (
-              <>
-                {reminderDefaultSettings ? (
-                  <div className="grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-[10rem_1fr] sm:items-center">
-                    <Label htmlFor="reminder-preset" className="text-xs text-muted-foreground">
-                      {t("reminder_preset_label")}
-                    </Label>
-                    <Select
-                      value={reminderPreset}
-                      onValueChange={(value) =>
-                        applyReminderPreset(
-                          value as "firm" | "vylan" | "custom",
-                        )
-                      }
-                    >
-                      <SelectTrigger id="reminder-preset" className="max-w-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="firm">
-                          {t("reminder_preset_firm")}
-                        </SelectItem>
-                        <SelectItem value="vylan">
-                          {t("reminder_preset_vylan")}
-                        </SelectItem>
-                        {reminderPreset === "custom" && (
-                          <SelectItem value="custom">
-                            {t("reminder_preset_custom")}
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : canManageReminderDefaults ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <p className="text-xs text-muted-foreground">
-                      {t("reminder_no_default_hint")}
+      {/* STEP 1 — who it is for and what it is called. Client, template and the name/dates were three cards in a row already; the wizard just names that group. */}
+      {step === "details" && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("section_client")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {clients.length === 0 ? (
+                /* A firm with no clients yet would otherwise see the combobox's
+                   bare "No client found" — a confusing dead end. Guide them to add
+                   a client first (clients are created from the Clients page). */
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
+                  <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserPlus className="size-5" aria-hidden />
+                  </span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {t("no_clients_title")}
                     </p>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <Link href="/settings?tab=automation">
-                        {t("reminder_create_default")}
-                      </Link>
-                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      {t("no_clients_body")}
+                    </p>
                   </div>
-                ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
-                  <p className="text-xs text-muted-foreground">
-                    {t("reminder_schedule_summary")}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRemindersExpanded((open) => !open)}
-                    aria-expanded={remindersExpanded}
-                  >
-                    {remindersExpanded
-                      ? t("reminder_hide_customization")
-                      : t("reminder_customize")}
-                    <ChevronDown
-                      className={
-                        "size-4 transition-transform " +
-                        (remindersExpanded ? "rotate-180" : "")
-                      }
-                    />
+                  <Button asChild size="sm" className="mt-1">
+                    <Link href="/clients">
+                      <UserPlus className="size-4" />
+                      {t("no_clients_cta")}
+                    </Link>
                   </Button>
                 </div>
+              ) : (
+                /* chooseClient re-filters the checklist for the new client's province */
+                <ClientCombobox
+                  clients={clients}
+                  value={clientId}
+                  onChange={chooseClient}
+                />
+              )}
+              {scopeWarning && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+                  {t("rel_scope_warning", {
+                    name: scopeWarning.name,
+                    scopes: scopeWarning.scopes
+                      .map((s) => tClients(`rel_scope_${s}`))
+                      .join(", "),
+                  })}
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
-                {remindersExpanded && (
-                  <div className="space-y-3">
-                    {reminderSettings.steps.map((step) => (
-                      <div
-                        key={step.tone}
-                        className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
-                            <input
-                              type="checkbox"
-                              checked={step.enabled}
-                              onChange={(event) =>
-                                updateReminderStep(step.tone, {
-                                  enabled: event.target.checked,
-                                })
-                              }
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("section_template")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                role="radiogroup"
+                aria-label={t("section_template")}
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+              >
+                {orderedTemplates.map((tmpl) => (
+                  <SelectableTemplateCard
+                    key={tmpl.id}
+                    groupName="template"
+                    selected={templateId === tmpl.id}
+                    onSelect={() => pickTemplate(tmpl.id)}
+                    name={localizedTemplateName(tmpl, locale)}
+                    type={tmpl.type}
+                    itemCount={tmpl.items.length}
+                    requiredCount={tmpl.items.filter((it) => it.required).length}
+                    preview={tmpl.items
+                      .slice(0, 3)
+                      .map((it) =>
+                        locale === "fr"
+                          ? it.label_fr || it.label_en
+                          : it.label_en || it.label_fr,
+                      )}
+                    builtin={tmpl.firm_id == null}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("section_details")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="title">{t("field_title")}</Label>
+                <Input
+                  id="title"
+                  value={effectiveTitle}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setTitleTouched(true);
+                  }}
+                  placeholder={defaultTitle}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="due_date">{t("field_due_date_optional")}</Label>
+                <Input
+                  id="due_date"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-fit"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("due_date_hint")}
+                </p>
+              </div>
+              {/* Structured tax year (migration 0900). Optional — drives document
+                  filing's {year} and, later, the AI's expected-year context. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="tax_year">{t("builder_tax_year_label")}</Label>
+                <select
+                  id="tax_year"
+                  value={taxYear}
+                  onChange={(e) => setTaxYear(e.target.value)}
+                  className="h-10 w-fit min-w-32 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-all hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  <option value="">{t("builder_tax_year_none")}</option>
+                  {TAX_YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={String(y)}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t("builder_tax_year_hint")}
+                </p>
+              </div>
+              {/* "AI Analyze" toggle. On by default; turning it off means no
+                  document uploaded to this engagement is ever sent to the AI —
+                  helps the firm control AI usage on engagements that don't need it. */}
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="ai-analyze"
+                    className="flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="size-4 text-muted-foreground" aria-hidden />
+                    {t("ai_analyze_label")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("ai_analyze_hint")}
+                  </p>
+                </div>
+                <Switch
+                  id="ai-analyze"
+                  checked={aiEnabled}
+                  onCheckedChange={setAiEnabled}
+                  ariaLabel={t("ai_analyze_label")}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* STEP 2 — what you are asking the client for. This card used to be LAST on the page, below invoicing and reminders, which buried the one part of an engagement the client actually sees. */}
+      {step === "documents" && (
+        <>
+          <Card
+            className={
+              highlightEmptyChecklist
+                ? "ring-2 ring-destructive transition-shadow"
+                : "transition-shadow"
+            }
+          >
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">
+                {t("section_checklist")}{" "}
+                <span className="text-muted-foreground font-normal">
+                  ({items.length})
+                </span>
+              </CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={addItem}>
+                <Plus className="size-4" />
+                {t("add_item")}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {items.length === 0 ? (
+                <div
+                  className={
+                    "text-sm text-center py-8 " +
+                    (highlightEmptyChecklist
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground")
+                  }
+                >
+                  {t("checklist_empty")}
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {items.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className="rounded-lg border border-border bg-card p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="flex flex-col items-center pt-1 text-muted-foreground">
+                          <button
+                            type="button"
+                            onClick={() => moveItem(idx, -1)}
+                            disabled={idx === 0}
+                            className="hover:text-foreground disabled:opacity-30"
+                            aria-label={t("move_up")}
+                          >
+                            ↑
+                          </button>
+                          <GripVertical className="size-3" aria-hidden />
+                          <button
+                            type="button"
+                            onClick={() => moveItem(idx, 1)}
+                            disabled={idx === items.length - 1}
+                            className="hover:text-foreground disabled:opacity-30"
+                            aria-label={t("move_down")}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          {/* One label for the whole site. We mirror it into both
+                              label_fr + label_en so the stored data + the client
+                              portal stay consistent in either language. */}
+                          <Input
+                            value={item.label_en || item.label_fr}
+                            onChange={(e) =>
+                              updateItem(idx, {
+                                label_fr: e.target.value,
+                                label_en: e.target.value,
+                              })
+                            }
+                            placeholder={t("label_placeholder")}
+                            aria-label={t("label_placeholder")}
+                          />
+                          <Textarea
+                            value={item.description_fr ?? ""}
+                            onChange={(e) =>
+                              updateItem(idx, {
+                                description_fr: e.target.value || null,
+                              })
+                            }
+                            placeholder={t("description_fr_placeholder")}
+                            rows={1}
+                            className="text-xs"
+                          />
+                          <div className="flex items-center gap-3 text-xs">
+                            <DocTypePicker
+                              value={item.doc_type}
+                              onChange={(dt) => updateItem(idx, { doc_type: dt })}
+                              className="h-8 w-[14rem] max-w-full text-xs"
+                              province={selectedProvince}
+                              includeQuebecForms={includeQuebecForms}
                             />
-                            {t(`reminder_tone_${step.tone}`)}
-                          </label>
-                          <div className="max-w-xl space-y-1.5 text-xs text-muted-foreground">
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              <ClampedNumberInput
-                                min={1}
-                                max={365}
-                                value={step.days}
-                                disabled={!step.enabled}
-                                onCommit={(days) =>
-                                  updateReminderStep(step.tone, { days })
+                            <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={item.required}
+                                onChange={(e) =>
+                                  updateItem(idx, { required: e.target.checked })
                                 }
-                                aria-label={t("reminder_days_label")}
-                                className="h-8 w-20"
                               />
-                              <span>
-                                {step.timing === "after_due"
-                                  ? t("reminder_days_after_due")
-                                  : t("reminder_days_after_send")}
-                              </span>
-                              <span className="ml-1">
-                                {t("reminder_repeat_prefix")}
-                              </span>
-                              <ClampedNumberInput
-                                min={1}
-                                max={12}
-                                value={step.repeatCount}
-                                disabled={!step.enabled}
-                                onCommit={(repeatCount) =>
-                                  updateReminderStep(step.tone, { repeatCount })
-                                }
-                                aria-label={t("reminder_repeat_label")}
-                                className="h-8 w-16"
-                              />
-                              <span>{t("reminder_repeat_suffix")}</span>
-                            </div>
-                            {step.enabled && (
-                              <p className="text-right text-[0.7rem] leading-relaxed text-muted-foreground/80">
-                                {reminderSchedulePreview(step)
-                                  ? t("reminder_send_schedule", {
-                                      dates: reminderSchedulePreview(step)!,
-                                    })
-                                  : t("reminder_send_schedule_needs_due")}
-                              </p>
-                            )}
+                              {t("required")}
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => removeItem(idx)}
+                              className="ml-auto text-destructive hover:underline inline-flex items-center gap-1"
+                            >
+                              <Trash2 className="size-3" />
+                              {tc("delete")}
+                            </button>
                           </div>
                         </div>
-
-                        {step.enabled && (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">
-                                {t("reminder_subject_label")}
-                              </Label>
-                              <Input
-                                value={step.customSubject ?? ""}
-                                maxLength={160}
-                                onChange={(event) =>
-                                  updateReminderStep(step.tone, {
-                                    customSubject: event.target.value || null,
-                                  })
-                                }
-                                placeholder={t("reminder_subject_placeholder")}
-                              />
-                            </div>
-                            <div className="space-y-1.5 sm:row-span-2">
-                              <Label className="text-xs text-muted-foreground">
-                                {t("reminder_message_label")}
-                              </Label>
-                              <Textarea
-                                value={step.customMessage ?? ""}
-                                maxLength={2000}
-                                rows={4}
-                                onChange={(event) =>
-                                  updateReminderStep(step.tone, {
-                                    customMessage: event.target.value || null,
-                                  })
-                                }
-                                placeholder={t("reminder_message_placeholder")}
-                              />
-                            </div>
-                            <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
-                              {t("reminder_tokens_hint")}
-                            </p>
-                          </div>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-        </CardContent>
-      </Card>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
-      {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
-          wrapper div is the scroll target of the Repeat card's "Set up the
-          invoice" shortcut. Without Stripe Connect the card still shows, with
-          the connect note, so the section isn't silently absent. */}
-      <div ref={invoiceSectionRef}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-1.5 text-base">
-              <Receipt className="size-4 text-muted-foreground" aria-hidden />
-              {t("invoice_section_label")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {connectReady ? (
-              <>
-              <p className="text-xs text-muted-foreground">
-                {t("invoice_section_hint")}
-              </p>
+      {/* STEP 3 — money. Repeat and Invoice belong together: whether the job recurs and what it costs are one decision, and they were separated by the whole reminders section. */}
+      {step === "billing" && (
+        <>
+          {/* Repeat (recurring series, migration 0770) — its own top-level card
+              (founder feedback: Repeat / Reminders / Invoice should read as
+              separate sections, not one packed Details card). Invoice recurrence
+              stays IN here with Repeat: it's a property of the series. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                <Repeat className="size-4 text-muted-foreground" aria-hidden />
+                {t("repeat_section_label")}
+              </CardTitle>
               <Select
-                value={invoiceMode}
-                onValueChange={(v) => setInvoiceMode(v as InvoiceTiming)}
+                value={repeatFrequency}
+                onValueChange={(value) => {
+                  const next = value as
+                    | "off"
+                    | "monthly"
+                    | "quarterly"
+                    | "yearly"
+                    | "custom";
+                  setRepeatFrequency(next);
+                  // Default the day to today when Custom is first chosen (the fixed
+                  // frequencies anchor on the setup day implicitly). Set on a real
+                  // interaction so first paint stays deterministic.
+                  if (next === "custom" && repeatAnchorDay === "") {
+                    setRepeatAnchorDay(String(new Date().getDate()));
+                  }
+                }}
               >
-                <SelectTrigger className="max-w-xs">
+                <SelectTrigger
+                  id="repeat-frequency"
+                  className="w-40"
+                  aria-label={t("repeat_section_label")}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="off">{t("invoice_mode_off")}</SelectItem>
-                  <SelectItem value="now">{t("invoice_mode_now")}</SelectItem>
-                  <SelectItem value="on_completion">
-                    {t("invoice_mode_on_completion")}
-                  </SelectItem>
-                  <SelectItem value="delayed">
-                    {t("invoice_mode_delayed")}
-                  </SelectItem>
+                  <SelectItem value="off">{t("repeat_off")}</SelectItem>
+                  <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
+                  <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
+                  <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+                  <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
                 </SelectContent>
               </Select>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {t("repeat_section_hint")}
+              </p>
 
-              {invoiceMode === "delayed" && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">
-                    {t("invoice_delay_prefix")}
-                  </span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={invoiceDelayDays}
-                    onChange={(e) => setInvoiceDelayDays(e.target.value)}
-                    className="w-20"
-                    aria-label={t("invoice_delay_label")}
-                  />
-                  <span className="text-muted-foreground">
-                    {t("invoice_delay_suffix")}
-                  </span>
+              {/* Custom schedule: every N months, on a chosen day. */}
+              {repeatFrequency === "custom" && (
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span>{t("repeat_custom_every")}</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={24}
+                      value={repeatIntervalMonths}
+                      onChange={(e) => setRepeatIntervalMonths(e.target.value)}
+                      aria-label={t("repeat_custom_every_label")}
+                      className="h-8 w-20"
+                    />
+                    <span>{t("repeat_custom_months")}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span>{t("repeat_custom_on_day")}</span>
+                    {/* Same calendar picker as the engagement page's Repeat dialog,
+                        so setting a schedule feels identical in both places. */}
+                    <DayOfMonthPicker
+                      value={
+                        repeatAnchorDay === "" ? null : Number(repeatAnchorDay)
+                      }
+                      locale={locale}
+                      onChange={(day) => setRepeatAnchorDay(String(day))}
+                    />
+                  </div>
                 </div>
               )}
 
-              {invoiceMode !== "off" && (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    {t("invoice_amount_label")}
-                  </Label>
-                  {/* The saved-price choice only exists when there IS a saved
-                      price. Before this, the first radio stayed on screen with
-                      the label "No saved price for this service" and disabled —
-                      a sentence of FACT dressed as an option, which reads as a
-                      button that won't work (the founder reported exactly
-                      that). With nothing to choose between, say why in one line
-                      and let them type the amount. */}
-                  {hasSavedPrice ? (
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
-                      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <input
-                          type="radio"
-                          name="invoice-amount-source"
-                          checked={invoiceUseDefault}
-                          onChange={() => setInvoiceUseDefault(true)}
-                        />
-                        {t("invoice_use_default", {
-                          amount: ((invoiceDefaultCents ?? 0) / 100).toFixed(2),
-                        })}
-                      </label>
-                      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <input
-                          type="radio"
-                          name="invoice-amount-source"
-                          checked={!invoiceUseDefault}
-                          onChange={() => setInvoiceUseDefault(false)}
-                        />
-                        {t("invoice_custom")}
-                      </label>
-                    </div>
-                  ) : (
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      {t("invoice_no_default_hint")}
+              {repeatFrequency !== "off" && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>{t("repeat_due_offset_label")}</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={repeatOffsetDays}
+                      onChange={(e) => setRepeatOffsetDays(e.target.value)}
+                      aria-label={t("repeat_due_offset_label")}
+                      className="h-8 w-20"
+                    />
+                    <span>{t("repeat_due_offset_suffix")}</span>
+                  </div>
+                )}
+
+              {/* Invoice recurrence (Phase 4) — WITH Repeat, it's a property of
+                  the series (founder spec). With an invoice timing chosen it's
+                  the switch; with the Invoice card off it's a "Set up the
+                  invoice" shortcut that scrolls there, so the setting stays
+                  discoverable. The recurrence decides WHETHER each occurrence
+                  bills; the invoice timing decides WHEN. */}
+              {repeatFrequency !== "off" && connectReady && (
+                <div className="flex items-start justify-between gap-4 border-t border-border/60 pt-3">
+                  <div className="space-y-0.5">
+                    <Label
+                      htmlFor="repeat-invoice-recreate"
+                      className="flex cursor-pointer items-center gap-1.5"
+                    >
+                      <Receipt
+                        className="size-4 text-muted-foreground"
+                        aria-hidden
+                      />
+                      {t("repeat_invoice_label")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {invoiceMode !== "off"
+                        ? t("repeat_invoice_hint")
+                        : t("repeat_invoice_off_hint")}
                     </p>
+                  </div>
+                  {invoiceMode !== "off" ? (
+                    <Switch
+                      id="repeat-invoice-recreate"
+                      checked={repeatInvoiceRecreate}
+                      onCheckedChange={setRepeatInvoiceRecreate}
+                      ariaLabel={t("repeat_invoice_label")}
+                    />
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() =>
+                        invoiceSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        })
+                      }
+                    >
+                      {t("repeat_invoice_set_button")}
+                    </Button>
                   )}
-                  {(!invoiceUseDefault || !hasSavedPrice) && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm text-muted-foreground">$</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
+              wrapper div is the scroll target of the Repeat card's "Set up the
+              invoice" shortcut. Without Stripe Connect the card still shows, with
+              the connect note, so the section isn't silently absent. */}
+          <div ref={invoiceSectionRef}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  <Receipt className="size-4 text-muted-foreground" aria-hidden />
+                  {t("invoice_section_label")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {connectReady ? (
+                  <>
+                  <p className="text-xs text-muted-foreground">
+                    {t("invoice_section_hint")}
+                  </p>
+                  <Select
+                    value={invoiceMode}
+                    onValueChange={(v) => setInvoiceMode(v as InvoiceTiming)}
+                  >
+                    <SelectTrigger className="max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">{t("invoice_mode_off")}</SelectItem>
+                      <SelectItem value="now">{t("invoice_mode_now")}</SelectItem>
+                      <SelectItem value="on_completion">
+                        {t("invoice_mode_on_completion")}
+                      </SelectItem>
+                      <SelectItem value="delayed">
+                        {t("invoice_mode_delayed")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {invoiceMode === "delayed" && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {t("invoice_delay_prefix")}
+                      </span>
                       <Input
                         type="number"
-                        min={0.5}
-                        step={0.01}
-                        value={invoiceCustomAmount}
-                        onChange={(e) => setInvoiceCustomAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="w-32"
-                        aria-label={t("invoice_amount_label")}
+                        min={1}
+                        max={365}
+                        value={invoiceDelayDays}
+                        onChange={(e) => setInvoiceDelayDays(e.target.value)}
+                        className="w-20"
+                        aria-label={t("invoice_delay_label")}
                       />
+                      <span className="text-muted-foreground">
+                        {t("invoice_delay_suffix")}
+                      </span>
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* Optional description + the deliverables lock (migration 0610).
-                  The lock is captured here; it gates the Final documents section
-                  in a later phase. */}
-              {invoiceMode !== "off" && (
-                <div className="space-y-3 border-t border-border/60 pt-3">
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="invoice-description"
-                      className="text-xs text-muted-foreground"
-                    >
-                      {t("request_payment_description")}
-                    </Label>
-                    <Textarea
-                      id="invoice-description"
-                      value={invoiceDescription}
-                      onChange={(e) => setInvoiceDescription(e.target.value)}
-                      rows={2}
-                      maxLength={500}
-                      placeholder={t("request_payment_description_ph")}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="automated-invoice-attachment"
-                      className="text-xs text-muted-foreground"
-                    >
-                      {t("invoice_attachment")}
-                    </Label>
-                    <label
-                      htmlFor="automated-invoice-attachment"
-                      className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50"
-                    >
-                      <Upload className="size-4" aria-hidden />
-                      {invoiceAttachment?.name ?? t("invoice_attachment_choose")}
-                    </label>
-                    <input
-                      id="automated-invoice-attachment"
-                      type="file"
-                      accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
-                      className="sr-only"
-                      onChange={(event) =>
-                        setInvoiceAttachment(event.target.files?.[0] ?? null)
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("invoice_attachment_hint")}
-                    </p>
-                  </div>
-                  <label className="flex items-start gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5"
-                      checked={invoiceLock}
-                      onChange={(e) => setInvoiceLock(e.target.checked)}
-                    />
-                    <span>
-                      <span className="block">{t("invoice_lock_label")}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {t("invoice_lock_hint")}
-                      </span>
-                    </span>
-                  </label>
-                </div>
-              )}
-              </>
-            ) : (
-              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                {t("invoice_auto_needs_connect")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card
-        className={
-          highlightEmptyChecklist
-            ? "ring-2 ring-destructive transition-shadow"
-            : "transition-shadow"
-        }
-      >
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            {t("section_checklist")}{" "}
-            <span className="text-muted-foreground font-normal">
-              ({items.length})
-            </span>
-          </CardTitle>
-          <Button type="button" variant="outline" size="sm" onClick={addItem}>
-            <Plus className="size-4" />
-            {t("add_item")}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {items.length === 0 ? (
-            <div
-              className={
-                "text-sm text-center py-8 " +
-                (highlightEmptyChecklist
-                  ? "text-destructive font-medium"
-                  : "text-muted-foreground")
-              }
-            >
-              {t("checklist_empty")}
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {items.map((item, idx) => (
-                <li
-                  key={idx}
-                  className="rounded-lg border border-border bg-card p-3"
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="flex flex-col items-center pt-1 text-muted-foreground">
-                      <button
-                        type="button"
-                        onClick={() => moveItem(idx, -1)}
-                        disabled={idx === 0}
-                        className="hover:text-foreground disabled:opacity-30"
-                        aria-label={t("move_up")}
-                      >
-                        ↑
-                      </button>
-                      <GripVertical className="size-3" aria-hidden />
-                      <button
-                        type="button"
-                        onClick={() => moveItem(idx, 1)}
-                        disabled={idx === items.length - 1}
-                        className="hover:text-foreground disabled:opacity-30"
-                        aria-label={t("move_down")}
-                      >
-                        ↓
-                      </button>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      {/* One label for the whole site. We mirror it into both
-                          label_fr + label_en so the stored data + the client
-                          portal stay consistent in either language. */}
-                      <Input
-                        value={item.label_en || item.label_fr}
-                        onChange={(e) =>
-                          updateItem(idx, {
-                            label_fr: e.target.value,
-                            label_en: e.target.value,
-                          })
-                        }
-                        placeholder={t("label_placeholder")}
-                        aria-label={t("label_placeholder")}
-                      />
-                      <Textarea
-                        value={item.description_fr ?? ""}
-                        onChange={(e) =>
-                          updateItem(idx, {
-                            description_fr: e.target.value || null,
-                          })
-                        }
-                        placeholder={t("description_fr_placeholder")}
-                        rows={1}
-                        className="text-xs"
-                      />
-                      <div className="flex items-center gap-3 text-xs">
-                        <DocTypePicker
-                          value={item.doc_type}
-                          onChange={(dt) => updateItem(idx, { doc_type: dt })}
-                          className="h-8 w-[14rem] max-w-full text-xs"
-                          province={selectedProvince}
-                          includeQuebecForms={includeQuebecForms}
-                        />
-                        <label className="flex items-center gap-1.5 select-none cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={item.required}
-                            onChange={(e) =>
-                              updateItem(idx, { required: e.target.checked })
-                            }
+                  {invoiceMode !== "off" && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">
+                        {t("invoice_amount_label")}
+                      </Label>
+                      {/* The saved-price choice only exists when there IS a saved
+                          price. Before this, the first radio stayed on screen with
+                          the label "No saved price for this service" and disabled —
+                          a sentence of FACT dressed as an option, which reads as a
+                          button that won't work (the founder reported exactly
+                          that). With nothing to choose between, say why in one line
+                          and let them type the amount. */}
+                      {hasSavedPrice ? (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <input
+                              type="radio"
+                              name="invoice-amount-source"
+                              checked={invoiceUseDefault}
+                              onChange={() => setInvoiceUseDefault(true)}
+                            />
+                            {t("invoice_use_default", {
+                              amount: ((invoiceDefaultCents ?? 0) / 100).toFixed(2),
+                            })}
+                          </label>
+                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <input
+                              type="radio"
+                              name="invoice-amount-source"
+                              checked={!invoiceUseDefault}
+                              onChange={() => setInvoiceUseDefault(false)}
+                            />
+                            {t("invoice_custom")}
+                          </label>
+                        </div>
+                      ) : (
+                        <p className="text-xs leading-snug text-muted-foreground">
+                          {t("invoice_no_default_hint")}
+                        </p>
+                      )}
+                      {(!invoiceUseDefault || !hasSavedPrice) && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm text-muted-foreground">$</span>
+                          <Input
+                            type="number"
+                            min={0.5}
+                            step={0.01}
+                            value={invoiceCustomAmount}
+                            onChange={(e) => setInvoiceCustomAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-32"
+                            aria-label={t("invoice_amount_label")}
                           />
-                          {t("required")}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(idx)}
-                          className="ml-auto text-destructive hover:underline inline-flex items-center gap-1"
-                        >
-                          <Trash2 className="size-3" />
-                          {tc("delete")}
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                  )}
 
-      <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                  {/* Optional description + the deliverables lock (migration 0610).
+                      The lock is captured here; it gates the Final documents section
+                      in a later phase. */}
+                  {invoiceMode !== "off" && (
+                    <div className="space-y-3 border-t border-border/60 pt-3">
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="invoice-description"
+                          className="text-xs text-muted-foreground"
+                        >
+                          {t("request_payment_description")}
+                        </Label>
+                        <Textarea
+                          id="invoice-description"
+                          value={invoiceDescription}
+                          onChange={(e) => setInvoiceDescription(e.target.value)}
+                          rows={2}
+                          maxLength={500}
+                          placeholder={t("request_payment_description_ph")}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="automated-invoice-attachment"
+                          className="text-xs text-muted-foreground"
+                        >
+                          {t("invoice_attachment")}
+                        </Label>
+                        <label
+                          htmlFor="automated-invoice-attachment"
+                          className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50"
+                        >
+                          <Upload className="size-4" aria-hidden />
+                          {invoiceAttachment?.name ?? t("invoice_attachment_choose")}
+                        </label>
+                        <input
+                          id="automated-invoice-attachment"
+                          type="file"
+                          accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                          className="sr-only"
+                          onChange={(event) =>
+                            setInvoiceAttachment(event.target.files?.[0] ?? null)
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t("invoice_attachment_hint")}
+                        </p>
+                      </div>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={invoiceLock}
+                          onChange={(e) => setInvoiceLock(e.target.checked)}
+                        />
+                        <span>
+                          <span className="block">{t("invoice_lock_label")}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {t("invoice_lock_hint")}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                  </>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                    {t("invoice_auto_needs_connect")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* STEP 4 — chasing. Canopy has no equivalent step; Vylan does, because Vylan chases the documents from step 2 on your behalf. */}
+      {step === "reminders" && (
+        <>
+          {/* Automatic reminders — its own top-level card. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                <BellRing className="size-4 text-muted-foreground" aria-hidden />
+                {t("reminder_section_label")}
+              </CardTitle>
+              <Switch
+                id="automatic-reminders"
+                checked={reminderSettings.enabled}
+                onCheckedChange={(enabled) =>
+                  setReminderSettings((current) => ({ ...current, enabled }))
+                }
+                ariaLabel={t("reminder_section_label")}
+              />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {t("reminder_section_hint")}
+              </p>
+              {selectedClient && !selectedClient.email && (
+                <p className="text-xs font-medium text-destructive">
+                  {t("reminder_missing_email")}
+                </p>
+              )}
+
+                {reminderSettings.enabled && (
+                  <>
+                    {reminderDefaultSettings ? (
+                      <div className="grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-[10rem_1fr] sm:items-center">
+                        <Label htmlFor="reminder-preset" className="text-xs text-muted-foreground">
+                          {t("reminder_preset_label")}
+                        </Label>
+                        <Select
+                          value={reminderPreset}
+                          onValueChange={(value) =>
+                            applyReminderPreset(
+                              value as "firm" | "vylan" | "custom",
+                            )
+                          }
+                        >
+                          <SelectTrigger id="reminder-preset" className="max-w-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="firm">
+                              {t("reminder_preset_firm")}
+                            </SelectItem>
+                            <SelectItem value="vylan">
+                              {t("reminder_preset_vylan")}
+                            </SelectItem>
+                            {reminderPreset === "custom" && (
+                              <SelectItem value="custom">
+                                {t("reminder_preset_custom")}
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : canManageReminderDefaults ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                        <p className="text-xs text-muted-foreground">
+                          {t("reminder_no_default_hint")}
+                        </p>
+                        <Button type="button" variant="outline" size="sm" asChild>
+                          <Link href="/settings?tab=automation">
+                            {t("reminder_create_default")}
+                          </Link>
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                      <p className="text-xs text-muted-foreground">
+                        {t("reminder_schedule_summary")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRemindersExpanded((open) => !open)}
+                        aria-expanded={remindersExpanded}
+                      >
+                        {remindersExpanded
+                          ? t("reminder_hide_customization")
+                          : t("reminder_customize")}
+                        <ChevronDown
+                          className={
+                            "size-4 transition-transform " +
+                            (remindersExpanded ? "rotate-180" : "")
+                          }
+                        />
+                      </Button>
+                    </div>
+
+                    {remindersExpanded && (
+                      <div className="space-y-3">
+                        {reminderSettings.steps.map((step) => (
+                          <div
+                            key={step.tone}
+                            className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                                <input
+                                  type="checkbox"
+                                  checked={step.enabled}
+                                  onChange={(event) =>
+                                    updateReminderStep(step.tone, {
+                                      enabled: event.target.checked,
+                                    })
+                                  }
+                                />
+                                {t(`reminder_tone_${step.tone}`)}
+                              </label>
+                              <div className="max-w-xl space-y-1.5 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <ClampedNumberInput
+                                    min={1}
+                                    max={365}
+                                    value={step.days}
+                                    disabled={!step.enabled}
+                                    onCommit={(days) =>
+                                      updateReminderStep(step.tone, { days })
+                                    }
+                                    aria-label={t("reminder_days_label")}
+                                    className="h-8 w-20"
+                                  />
+                                  <span>
+                                    {step.timing === "after_due"
+                                      ? t("reminder_days_after_due")
+                                      : t("reminder_days_after_send")}
+                                  </span>
+                                  <span className="ml-1">
+                                    {t("reminder_repeat_prefix")}
+                                  </span>
+                                  <ClampedNumberInput
+                                    min={1}
+                                    max={12}
+                                    value={step.repeatCount}
+                                    disabled={!step.enabled}
+                                    onCommit={(repeatCount) =>
+                                      updateReminderStep(step.tone, { repeatCount })
+                                    }
+                                    aria-label={t("reminder_repeat_label")}
+                                    className="h-8 w-16"
+                                  />
+                                  <span>{t("reminder_repeat_suffix")}</span>
+                                </div>
+                                {step.enabled && (
+                                  <p className="text-right text-[0.7rem] leading-relaxed text-muted-foreground/80">
+                                    {reminderSchedulePreview(step)
+                                      ? t("reminder_send_schedule", {
+                                          dates: reminderSchedulePreview(step)!,
+                                        })
+                                      : t("reminder_send_schedule_needs_due")}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {step.enabled && (
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs text-muted-foreground">
+                                    {t("reminder_subject_label")}
+                                  </Label>
+                                  <Input
+                                    value={step.customSubject ?? ""}
+                                    maxLength={160}
+                                    onChange={(event) =>
+                                      updateReminderStep(step.tone, {
+                                        customSubject: event.target.value || null,
+                                      })
+                                    }
+                                    placeholder={t("reminder_subject_placeholder")}
+                                  />
+                                </div>
+                                <div className="space-y-1.5 sm:row-span-2">
+                                  <Label className="text-xs text-muted-foreground">
+                                    {t("reminder_message_label")}
+                                  </Label>
+                                  <Textarea
+                                    value={step.customMessage ?? ""}
+                                    maxLength={2000}
+                                    rows={4}
+                                    onChange={(event) =>
+                                      updateReminderStep(step.tone, {
+                                        customMessage: event.target.value || null,
+                                      })
+                                    }
+                                    placeholder={t("reminder_message_placeholder")}
+                                  />
+                                </div>
+                                <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
+                                  {t("reminder_tokens_hint")}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        {stepIndex > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setStep(WIZARD_STEPS[stepIndex - 1])}
+            disabled={pending}
+          >
+            {t("wizard_back")}
+          </Button>
+        )}
+
+        {/* Save draft stays on EVERY step, not just the last. An engagement you
+            have half-filled is worth keeping, and a wizard that only lets you
+            save at the end punishes you for being interrupted. */}
         <Button
           type="button"
           variant="outline"
+          className="ml-auto"
           onClick={() => submit(false)}
           disabled={pending}
         >
           {pending ? tc("saving") : t("save_draft")}
         </Button>
-        <Button
-          type="button"
-          onClick={() => submit(true)}
-          disabled={pending}
-        >
-          {pending ? tc("saving") : t("create_and_send")}
-        </Button>
+
+        {stepIndex < WIZARD_STEPS.length - 1 ? (
+          <Button
+            type="button"
+            onClick={() => setStep(WIZARD_STEPS[stepIndex + 1])}
+            disabled={pending}
+          >
+            {t("wizard_next")}
+          </Button>
+        ) : (
+          <Button type="button" onClick={() => submit(true)} disabled={pending}>
+            {pending ? tc("saving") : t("create_and_send")}
+          </Button>
+        )}
+      </div>
       </div>
     </div>
   );

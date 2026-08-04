@@ -37,7 +37,7 @@ import {
 import {
   CLIENT_MESSAGING_SCHEMA_MISSING,
   countUnreadForClient,
-  getThreadForEngagement,
+  getThreadForClient,
   listClientMessages,
   toPortalMessage,
   type PortalMessage,
@@ -431,15 +431,17 @@ export async function loadPortalContext(
       r.status as SignatureStatus;
   }
 
-  // Client messaging (Phase 2): the thread + the client's unread count.
-  // Tolerant of the tables being absent before migration 0650 (the portal
-  // then hides its Messages entry entirely).
+  // Client messaging: the client's ONE forever thread with the firm + their
+  // unread count. Keyed on the CLIENT since 1440, so the same conversation
+  // shows no matter which engagement's link they opened. Tolerant of the
+  // tables/columns being absent before 0650/1440 (the portal then hides its
+  // Messages entry entirely).
   let portalMessages: PortalMessage[] = [];
   let messagesUnread = 0;
   let messagingReady = false;
   const [msgRows, msgThread] = await Promise.all([
-    listClientMessages(sb, engagement.id),
-    getThreadForEngagement(sb, engagement.id),
+    listClientMessages(sb, engagement.client_id),
+    getThreadForClient(sb, engagement.client_id),
   ]);
   if (
     msgRows !== CLIENT_MESSAGING_SCHEMA_MISSING &&

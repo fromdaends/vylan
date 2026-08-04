@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { EngagementMessages } from "./engagement-messages";
+import { ClientThread } from "./client-thread";
 import type { ClientMessageRow } from "@/lib/db/client-messages";
 import en from "../../../messages/en.json";
 
@@ -26,17 +26,15 @@ afterEach(() => {
 });
 
 function renderMessages(
-  overrides: Partial<Parameters<typeof EngagementMessages>[0]> = {},
+  overrides: Partial<Parameters<typeof ClientThread>[0]> = {},
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <EngagementMessages
-        engagementId="e1"
+      <ClientThread
+        clientId="c1"
         clientName="Marie Tremblay"
         initialMessages={[]}
         notActivated={false}
-        readOnly={false}
-        readOnlyReason={null}
         locale="en"
         {...overrides}
       />
@@ -63,7 +61,7 @@ const sampleMessages: ClientMessageRow[] = [
   },
 ];
 
-describe("EngagementMessages", () => {
+describe("ClientThread", () => {
   it("shows the client's name in the header and the human-to-human caption", () => {
     renderMessages();
     expect(
@@ -128,7 +126,7 @@ describe("EngagementMessages", () => {
       expect(screen.getByText("New note")).toBeInTheDocument(),
     );
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/api/engagements/e1/messages");
+    expect(url).toBe("/api/clients/c1/messages");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ body: "New note" });
   });
@@ -157,20 +155,20 @@ describe("EngagementMessages", () => {
     ).toHaveValue("Hello");
   });
 
-  it("hides the composer and explains why on a complete engagement", () => {
-    renderMessages({
-      initialMessages: sampleMessages,
-      readOnly: true,
-      readOnlyReason: "complete",
-    });
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  // The composer used to disappear when the engagement completed. The chat is
+  // the CLIENT's now and never closes on this side, so it must always be there
+  // — this is the regression guard for that ruling.
+  it("always keeps the composer open, whatever the client's work looks like", () => {
+    renderMessages({ initialMessages: sampleMessages });
     expect(
-      screen.getByText(en.ClientMessages.read_only_complete),
+      screen.getByRole("button", { name: new RegExp(en.ClientMessages.send) }),
     ).toBeInTheDocument();
-    // History stays visible.
     expect(
-      screen.getByText("Hi Marie, your T4 looks good."),
+      screen.getByPlaceholderText("Write a message to Marie Tremblay…"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(en.ClientMessages.read_only_complete),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Seen under the firm's latest message once the client read past it", () => {
@@ -193,7 +191,7 @@ describe("EngagementMessages", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the quiet gated state before migration 0650", () => {
+  it("shows the quiet gated state before the messaging migrations land", () => {
     renderMessages({ notActivated: true });
     expect(
       screen.getByText(en.ClientMessages.not_activated),

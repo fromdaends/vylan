@@ -86,136 +86,143 @@ describe("isClientMessagingSchemaMissing", () => {
 });
 
 describe("buildFirmConversations", () => {
-  const engagements = [
-    {
-      id: "e-live",
-      title: "GST/QST 2026",
-      status: "in_progress",
-      clientName: "Acme Corp",
-      createdAt: "2026-01-01T00:00:00Z",
-    },
-    {
-      id: "e-draft",
-      title: "Draft return",
-      status: "draft",
-      clientName: "Beta Inc",
-      createdAt: "2026-02-01T00:00:00Z",
-    },
-    {
-      id: "e-complete",
-      title: "T1 2025",
-      status: "complete",
-      clientName: "Gamma Ltd",
-      createdAt: "2026-03-01T00:00:00Z",
-    },
-    {
-      id: "e-silent",
-      title: "New mandate",
-      status: "sent",
-      clientName: "Delta Co",
-      createdAt: "2026-06-01T00:00:00Z",
-    },
+  // Every ACTIVE client earns a row since 1440 — the inbox is a contacts list,
+  // not just the conversations already started.
+  const clients = [
+    { id: "c-acme", displayName: "Acme Corp" },
+    { id: "c-beta", displayName: "Beta Inc" },
+    { id: "c-gamma", displayName: "Gamma Ltd" },
+    { id: "c-delta", displayName: "Delta Co" },
   ];
   const threads = [
-    { engagement_id: "e-live", firm_last_read_at: "2026-07-01T10:00:00Z" },
-    { engagement_id: "e-complete", firm_last_read_at: null },
+    { client_id: "c-acme", firm_last_read_at: "2026-07-01T10:00:00Z" },
+    { client_id: "c-gamma", firm_last_read_at: null },
   ];
   // Newest-first, as the DB returns them.
   const messages = [
     {
-      engagement_id: "e-live",
+      client_id: "c-acme",
       sender: "client" as const,
       body: "Any update?",
       created_at: "2026-07-02T09:00:00Z",
     },
     {
-      engagement_id: "e-live",
+      client_id: "c-acme",
       sender: "firm" as const,
       body: "Working on it",
       created_at: "2026-07-01T09:00:00Z",
     },
     {
-      engagement_id: "e-complete",
+      client_id: "c-gamma",
       sender: "firm" as const,
       body: "All done, thanks",
       created_at: "2026-06-15T12:00:00Z",
     },
     {
-      engagement_id: "e-complete",
+      client_id: "c-gamma",
       sender: "client" as const,
       body: "Here are my docs",
       created_at: "2026-06-14T12:00:00Z",
     },
   ];
 
-  it("includes live + threaded engagements, drops silent drafts, sorts by recency", () => {
-    const rows = buildFirmConversations(engagements, threads, messages);
-    // e-draft (draft, no thread) is excluded; the rest sort by last activity.
-    expect(rows.map((r) => r.engagementId)).toEqual([
-      "e-live",
-      "e-complete",
-      "e-silent",
+  it("lists every active client, conversations first then the silent ones by name", () => {
+    const rows = buildFirmConversations(clients, threads, messages);
+    expect(rows.map((r) => r.clientId)).toEqual([
+      // Real conversations, newest activity first...
+      "c-acme",
+      "c-gamma",
+      // ...then never-messaged clients, alphabetically.
+      "c-beta",
+      "c-delta",
     ]);
   });
 
-  it("summarizes the last message and firm-unread per conversation", () => {
-    const rows = buildFirmConversations(engagements, threads, messages);
-    const live = rows.find((r) => r.engagementId === "e-live")!;
-    expect(live.clientName).toBe("Acme Corp");
-    expect(live.lastMessage).toEqual({
+  it("summarizes the last message and firm-unread per client", () => {
+    const rows = buildFirmConversations(clients, threads, messages);
+    const acme = rows.find((r) => r.clientId === "c-acme")!;
+    expect(acme.clientName).toBe("Acme Corp");
+    expect(acme.lastMessage).toEqual({
       sender: "client",
       body: "Any update?",
       createdAt: "2026-07-02T09:00:00Z",
     });
     // One client message after the 07-01 read pointer.
-    expect(live.unreadCount).toBe(1);
+    expect(acme.unreadCount).toBe(1);
 
-    const complete = rows.find((r) => r.engagementId === "e-complete")!;
+    const gamma = rows.find((r) => r.clientId === "c-gamma")!;
     // Newest message wins as the preview even though it's the firm's.
-    expect(complete.lastMessage?.body).toBe("All done, thanks");
+    expect(gamma.lastMessage?.body).toBe("All done, thanks");
     // Read pointer null → the one client message counts as unread.
-    expect(complete.unreadCount).toBe(1);
+    expect(gamma.unreadCount).toBe(1);
   });
 
-  it("shows a live engagement with no messages as an empty, unread-free row", () => {
-    const rows = buildFirmConversations(engagements, threads, messages);
-    const silent = rows.find((r) => r.engagementId === "e-silent")!;
+  it("shows a never-messaged client as an empty row with no timestamp", () => {
+    const rows = buildFirmConversations(clients, threads, messages);
+    const silent = rows.find((r) => r.clientId === "c-delta")!;
     expect(silent.lastMessage).toBeNull();
     expect(silent.unreadCount).toBe(0);
-    // Falls back to the engagement's own timestamp for sorting.
-    expect(silent.lastActivityAt).toBe("2026-06-01T00:00:00Z");
+    // Not the client's created_at: there is no activity to date, so the row
+    // shows none rather than implying a conversation that never happened.
+    expect(silent.lastActivityAt).toBeNull();
+  });
+
+  it("folds every engagement's history into the client's one conversation", () => {
+    // The same client wrote from two different engagement portals; 1440 means
+    // that is ONE thread, and the newest message anywhere is the preview.
+    const merged = buildFirmConversations(
+      [{ id: "c-acme", displayName: "Acme Corp" }],
+      [{ client_id: "c-acme", firm_last_read_at: null }],
+      [
+        {
+          client_id: "c-acme",
+          sender: "client" as const,
+          body: "About the GST filing",
+          created_at: "2026-07-02T09:00:00Z",
+        },
+        {
+          client_id: "c-acme",
+          sender: "client" as const,
+          body: "And about the T2",
+          created_at: "2026-05-02T09:00:00Z",
+        },
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.lastMessage?.body).toBe("About the GST filing");
+    // Both count — they are one conversation, not two.
+    expect(merged[0]!.unreadCount).toBe(2);
   });
 
   it("counts no unread once the firm read pointer passes the newest client message", () => {
-    const readPast = [
-      { engagement_id: "e-live", firm_last_read_at: "2026-07-03T00:00:00Z" },
-    ];
     const rows = buildFirmConversations(
-      engagements.filter((e) => e.id === "e-live"),
-      readPast,
-      messages.filter((m) => m.engagement_id === "e-live"),
+      clients.filter((c) => c.id === "c-acme"),
+      [{ client_id: "c-acme", firm_last_read_at: "2026-07-03T00:00:00Z" }],
+      messages.filter((m) => m.client_id === "c-acme"),
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.unreadCount).toBe(0);
   });
 
-  // Archiving a client stamps clients.archived_at and nothing else — their
-  // engagements stay live — so the inbox has to check the CLIENT's stamp or an
-  // archived client keeps a row and keeps feeding the unread badge.
+  // Archiving is the "off the board" action: the client's whole conversation
+  // goes, history included, and stops feeding the unread badge.
   describe("archived clients", () => {
-    const archived = engagements.map((e) =>
-      e.id === "e-live" ? { ...e, clientArchivedAt: "2026-07-05T00:00:00Z" } : e,
+    const archived = clients.map((c) =>
+      c.id === "c-acme" ? { ...c, archivedAt: "2026-07-05T00:00:00Z" } : c,
     );
 
     it("drops an archived client's conversation, messages and all", () => {
       const rows = buildFirmConversations(archived, threads, messages);
-      expect(rows.map((r) => r.engagementId)).not.toContain("e-live");
-      // Everyone else is untouched.
-      expect(rows.map((r) => r.engagementId)).toEqual(["e-complete", "e-silent"]);
+      expect(rows.map((r) => r.clientId)).not.toContain("c-acme");
+      expect(rows.map((r) => r.clientId)).toEqual([
+        "c-gamma",
+        "c-beta",
+        "c-delta",
+      ]);
     });
 
     it("takes the archived client's unread out of the badge total", () => {
-      const before = buildFirmConversations(engagements, threads, messages);
+      const before = buildFirmConversations(clients, threads, messages);
       const after = buildFirmConversations(archived, threads, messages);
       const total = (rows: { unreadCount: number }[]) =>
         rows.reduce((n, r) => n + r.unreadCount, 0);
@@ -224,18 +231,18 @@ describe("buildFirmConversations", () => {
     });
 
     it("brings the conversation back when the client is restored", () => {
-      const restored = archived.map((e) =>
-        e.id === "e-live" ? { ...e, clientArchivedAt: null } : e,
+      const restored = archived.map((c) =>
+        c.id === "c-acme" ? { ...c, archivedAt: null } : c,
       );
       const rows = buildFirmConversations(restored, threads, messages);
-      expect(rows.map((r) => r.engagementId)).toContain("e-live");
+      expect(rows.map((r) => r.clientId)).toContain("c-acme");
     });
 
     it("treats a missing stamp as not archived, never hiding a live thread", () => {
-      // Undefined is what an older caller (or a read that didn't return the
-      // column) produces — it must fail OPEN.
-      const rows = buildFirmConversations(engagements, threads, messages);
-      expect(rows.map((r) => r.engagementId)).toContain("e-live");
+      // Undefined is what a read that didn't return the column produces — it
+      // must fail OPEN.
+      const rows = buildFirmConversations(clients, threads, messages);
+      expect(rows.map((r) => r.clientId)).toContain("c-acme");
     });
   });
 });

@@ -1,15 +1,19 @@
 "use client";
 
-// Client messaging (Phase 1) — the HUMAN accountant<->client thread, shown as
-// its own tab on the engagement page. Deliberately unmistakable from the AI
-// assistant panel: different place (in-page tab, not the right-edge panel),
-// different name ("Messages with {client}"), and human-to-human styling
-// (initials on every message, a "your client receives these messages" caption,
-// no AI iconography anywhere).
+// The HUMAN accountant<->client thread: ONE general conversation per client
+// that runs forever (migration 1440 — it used to be one per engagement, which
+// split a relationship into three chats and closed each one when its
+// engagement finished). Deliberately unmistakable from the AI assistant chat
+// next door: human-to-human styling (initials on every message, a "your client
+// receives these messages" caption, no AI iconography anywhere).
 //
-// Near-live cadence (founder call): loads with the page, refreshes every few
-// seconds only while the tab is actually visible, and appends your own message
-// on send. Opening the tab stamps the firm's read pointer.
+// There is no read-only state on this side any more. The accountant can write
+// to a client whenever they like; it is the CLIENT who is gated, and only by
+// whether they still hold a live portal link.
+//
+// Near-live cadence (founder call): loads with its host, refreshes every few
+// seconds only while actually visible, and appends your own message on send.
+// Becoming visible stamps the firm's read pointer.
 
 import {
   Fragment,
@@ -36,28 +40,24 @@ const MAX_LENGTH = 4000;
 // lands within a few seconds instead of the old comment-cadence minute.
 const POLL_MS = 4_000;
 
-export function EngagementMessages({
-  engagementId,
+export function ClientThread({
+  clientId,
   clientName,
   initialMessages,
   initialClientLastReadAt = null,
   notActivated,
-  readOnly,
-  readOnlyReason,
   locale,
   deferInitialLoad = false,
   hideHeader = false,
 }: {
-  engagementId: string;
+  clientId: string;
   clientName: string | null;
   initialMessages: ClientMessageRow[];
   // When the CLIENT last opened the thread — powers the accountant-side-only
   // "Seen" marker under the firm's latest message. Never shown to clients.
   initialClientLastReadAt?: string | null;
-  // Migration 0650 not applied yet — show the quiet gated state.
+  // Migration 0650/1440 not applied yet — show the quiet gated state.
   notActivated: boolean;
-  readOnly: boolean;
-  readOnlyReason: "complete" | "cancelled" | "draft" | null;
   locale: "fr" | "en";
   // Panel hosting: no server-rendered messages were passed, the component
   // fetches on first visibility — show a quiet loading state until then
@@ -93,14 +93,14 @@ export function EngagementMessages({
 
   const markRead = useCallback(() => {
     // Fire-and-forget; the badge was already cleared visually by the tab.
-    fetch(`/api/engagements/${engagementId}/messages/read`, {
+    fetch(`/api/clients/${clientId}/messages/read`, {
       method: "POST",
     }).catch(() => undefined);
-  }, [engagementId]);
+  }, [clientId]);
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch(`/api/engagements/${engagementId}/messages`);
+      const res = await fetch(`/api/clients/${clientId}/messages`);
       if (!res.ok) return;
       const data = (await res.json()) as {
         messages?: ClientMessageRow[];
@@ -124,7 +124,7 @@ export function EngagementMessages({
     } catch {
       // Background refresh only — never surface an error for it.
     }
-  }, [engagementId, markRead, newestClientAt]);
+  }, [clientId, markRead, newestClientAt]);
 
   // Visibility tracking: the tab switcher keeps this mounted but hidden, so
   // "the accountant opened the tab" = the root actually intersecting the
@@ -148,7 +148,7 @@ export function EngagementMessages({
     // Deliberately NOT keyed on `messages`: the observer only needs to exist
     // once; the refs carry current state into its callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notActivated, engagementId]);
+  }, [notActivated, clientId]);
 
   useEffect(() => {
     if (notActivated) return;
@@ -172,7 +172,7 @@ export function EngagementMessages({
     setSending(true);
     setSendError(false);
     try {
-      const res = await fetch(`/api/engagements/${engagementId}/messages`, {
+      const res = await fetch(`/api/clients/${clientId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body }),
@@ -312,72 +312,59 @@ export function EngagementMessages({
         )}
       </div>
 
-      {/* Docked composer (or the read-only note on a closed engagement). */}
-      {readOnly ? (
-        <div className="shrink-0 border-t border-border px-4 py-3">
-          <p className="text-sm text-muted-foreground">
-            {readOnlyReason === "cancelled"
-              ? t("read_only_cancelled")
-              : readOnlyReason === "draft"
-                ? t("read_only_draft")
-                : t("read_only_complete")}
+      {/* Docked composer. Always present on the accountant's side — the chat
+          belongs to the client relationship, not to any one engagement, so
+          nothing closes it. */}
+      <div className="shrink-0 border-t border-border px-4 pt-3 pb-4">
+        <div className="flex items-end gap-2">
+          <Textarea
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value.slice(0, MAX_LENGTH));
+              setSendError(false);
+            }}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter starts a new line — the messaging
+              // convention. Without this, Enter only added blank lines and
+              // the send button was the sole way out.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSend();
+              }
+            }}
+            placeholder={placeholder}
+            rows={1}
+            className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
+            aria-label={placeholder}
+          />
+          {/* Icon only — the paper plane is unambiguous and keeps a small
+              surface uncluttered. The label lives on aria-label/title. */}
+          <Button
+            type="button"
+            size="icon"
+            onClick={handleSend}
+            disabled={sending || draft.trim().length === 0}
+            className="size-11 shrink-0 rounded-full"
+            aria-label={sending ? t("sending") : t("send")}
+            title={t("send")}
+          >
+            <Send className="size-4" aria-hidden />
+          </Button>
+        </div>
+        <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
+          <p
+            className={cn("text-xs text-destructive", !sendError && "invisible")}
+            role={sendError ? "alert" : undefined}
+          >
+            {t("send_failed")}
           </p>
-        </div>
-      ) : (
-        <div className="shrink-0 border-t border-border px-4 pt-3 pb-4">
-          <div className="flex items-end gap-2">
-            <Textarea
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value.slice(0, MAX_LENGTH));
-                setSendError(false);
-              }}
-              onKeyDown={(e) => {
-                // Enter sends; Shift+Enter starts a new line — the messaging
-                // convention. Without this, Enter only added blank lines and
-                // the send button was the sole way out.
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder={placeholder}
-              rows={1}
-              className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
-              aria-label={placeholder}
-            />
-            {/* Icon only — the paper plane is unambiguous and keeps a small
-                surface uncluttered. The label lives on aria-label/title. */}
-            <Button
-              type="button"
-              size="icon"
-              onClick={handleSend}
-              disabled={sending || draft.trim().length === 0}
-              className="size-11 shrink-0 rounded-full"
-              aria-label={sending ? t("sending") : t("send")}
-              title={t("send")}
-            >
-              <Send className="size-4" aria-hidden />
-            </Button>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
-            <p
-              className={cn(
-                "text-xs text-destructive",
-                !sendError && "invisible",
-              )}
-              role={sendError ? "alert" : undefined}
-            >
-              {t("send_failed")}
+          {remaining <= 500 && (
+            <p className="text-xs text-muted-foreground">
+              {t("chars_left", { count: remaining })}
             </p>
-            {remaining <= 500 && (
-              <p className="text-xs text-muted-foreground">
-                {t("chars_left", { count: remaining })}
-              </p>
-            )}
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

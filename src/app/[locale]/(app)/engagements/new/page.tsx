@@ -54,7 +54,15 @@ export default async function NewEngagementPage({
   const tCommon = await getTranslations("Common");
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    // FULL WIDTH, like Clients and Work. It was max-w-3xl — 768px — which was
+    // fine for one column of stacked cards and became the whole problem the
+    // moment a step rail took 15rem out of it: the form had ~500px to live in
+    // while half the screen sat empty. Founder: "why is the list ui so skinny".
+    //
+    // Capped at 1400px rather than truly edge-to-edge so the rail and the form
+    // stay a readable distance apart on an ultrawide monitor.
+    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
+      <div className="mx-auto max-w-[1400px] space-y-6">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
@@ -91,6 +99,7 @@ export default async function NewEngagementPage({
         canManageReminderDefaults={can(user, "firm.settings")}
         authorizedContacts={authorizedContacts}
       />
+      </div>
     </div>
   );
 }

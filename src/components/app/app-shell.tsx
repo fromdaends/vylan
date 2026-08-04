@@ -18,7 +18,6 @@ import {
   FileText,
   CircleCheckBig,
   FolderOpen,
-  FolderPlus,
   Gauge,
   LayoutDashboard,
   ListTodo,
@@ -268,19 +267,26 @@ export function AppShell({
         // drop it for now rather than ship a button that half-means it.
         createPanel={{
           title: tHome("create_title"),
+          // Bare nouns — "Task", not "Create task". The panel is already titled
+          // Create, so repeating the verb on every button says it four times on
+          // one small surface and makes the three labels different lengths for
+          // no reason. Do not put the verbs back.
           actions: [
             { href: "/work?new=1", label: tHome("create_task"), icon: CircleCheckBig },
             { href: "/clients?new=1", label: tHome("create_client"), icon: UserPlus },
-            // Promoted out of the list below at the founder's request. It is
-            // NOT also a row: the same link twice in one short panel reads as a
-            // mistake, and this is the version they asked to see.
+          ],
+          items: [
+            // Engagement is a ROW, not a button. It was briefly promoted to the
+            // strip and the founder moved it back: the strip is for the two you
+            // reach for constantly, and a third button made it the same weight
+            // as Task and Client when it is not used nearly as often. As a row
+            // it also gets its line of explanation back, which the other three
+            // rows have and a button cannot carry.
             {
               href: "/engagements/new",
               label: tHome("create_engagement"),
-              icon: FolderPlus,
+              description: tHome("create_engagement_hint"),
             },
-          ],
-          items: [
             {
               // Plain /billing, NOT ?new=1: the invoice picker renders nothing
               // at all for a firm with no payment rails connected, so an

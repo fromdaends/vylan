@@ -191,7 +191,7 @@ describe("TasksTable — the saved views", () => {
   it("keeps only three tabs: Active, Mine, All", () => {
     renderTable();
     const tabs = within(screen.getByRole("tablist"))
-      .getAllByRole("button")
+      .getAllByRole("tab")
       .map((b) => b.textContent?.replace(/\d+/g, "").trim());
     expect(tabs).toEqual([
       C.view_active,
@@ -208,7 +208,7 @@ describe("TasksTable — the saved views", () => {
 
   it("still answers 'what is done', from the Status column", async () => {
     renderTable();
-    fireEvent.click(within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }));
+    fireEvent.click(within(screen.getByRole("tablist")).getByRole("tab", { name: /All work/ }));
     await pickValue(C.col_status as string, "Done");
     expect(names()).toEqual(["Delta finished"]);
   });
@@ -351,7 +351,7 @@ describe("TasksTable — the two screens", () => {
       "text-destructive",
     );
 
-    fireEvent.click(within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }));
+    fireEvent.click(within(screen.getByRole("tablist")).getByRole("tab", { name: /All work/ }));
     const doneRow = screen
       .getByRole("button", { name: /Details for Delta finished/ })
       .closest("tr")!;
@@ -418,7 +418,7 @@ describe("TasksTable — finishing a task is a moment, not a disappearance", () 
   it("un-ticking needs no toast — the row coming back IS the confirmation", () => {
     renderTable();
     fireEvent.click(
-      within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }),
+      within(screen.getByRole("tablist")).getByRole("tab", { name: /All work/ }),
     );
     toastSuccess.mockClear();
     fireEvent.click(
@@ -444,7 +444,7 @@ describe("TasksTable — capped, for the Overview", () => {
     renderTable({ maxRows: 2, moreHref: "/work" });
     // Three tasks are active; only two are drawn.
     expect(
-      within(screen.getByRole("tablist")).getByRole("button", { name: /Active work/ })
+      within(screen.getByRole("tablist")).getByRole("tab", { name: /Active work/ })
         .textContent,
     ).toContain("3");
   });

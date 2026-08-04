@@ -1,13 +1,23 @@
-// Client messaging, portal side (Phase 2): the client sends a message,
-// POST {token, body}.
+// Client messaging, portal side: the client sends a message, POST {token, body}.
+//
+// The portal is the client's ONLY way into the conversation (founder rule), and
+// since 1440 the conversation is the CLIENT's forever thread — so whichever
+// engagement's link they happen to be holding, the message lands in the same
+// one place. The token still decides IF they may write; it no longer decides
+// WHERE the message goes.
 //
 // Safety on the unauthenticated write path:
-//   * magic token -> exactly one engagement (shape + expiry + not cancelled)
+//   * magic token -> exactly one engagement (shape + PIN + expiry + not
+//     cancelled), which resolves to exactly one client
 //   * rate-limited per token (same budget as the other portal mutations)
 //   * body length capped (mirrors the DB check constraint)
-//   * refused on complete engagements (read-only after completion) — the
-//     server-side backstop behind the disabled composer
 //   * TEXT ONLY by design: no attachment fields exist anywhere in this flow.
+//
+// NO LONGER refused on complete engagements (founder ruling, 2026-08-05): the
+// thread isn't about the engagement any more, so finishing one must not mute
+// the client — including on a reply to a message the firm just sent them. A
+// cancelled or expired link is still the off switch, enforced upstream in
+// findEngagementForToken.
 
 import { notify } from "@/lib/notifications/notify";
 import { clientName } from "@/lib/notifications/emit";
@@ -26,9 +36,6 @@ import { checkRateLimit, PORTAL_MUTATION_PER_TOKEN } from "@/lib/rate-limit";
 import { scheduleFirmMessageNotification } from "@/lib/client-messages-notify";
 
 export const runtime = "nodejs";
-
-// Statuses that accept a client message (mirrors the firm-side route).
-const WRITABLE_STATUSES = new Set(["sent", "in_progress"]);
 
 export async function POST(request: NextRequest) {
   const json = await request.json().catch(() => null);
@@ -54,9 +61,6 @@ export async function POST(request: NextRequest) {
   if (!engagement) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  if (!WRITABLE_STATUSES.has(engagement.status)) {
-    return NextResponse.json({ error: "read_only" }, { status: 400 });
-  }
 
   const sb = getServiceRoleSupabase();
   // Sender name shown in the thread: the client's display name on file.
@@ -68,13 +72,19 @@ export async function POST(request: NextRequest) {
   const senderName =
     (client?.display_name as string | undefined)?.trim() || "Client";
 
-  const threadId = await getOrCreateThread(sb, engagement.firm_id, engagement.id);
+  const threadId = await getOrCreateThread(
+    sb,
+    engagement.firm_id,
+    engagement.client_id,
+  );
   if (threadId === CLIENT_MESSAGING_SCHEMA_MISSING) {
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
   }
 
   const message = await insertClientMessage(sb, {
     firmId: engagement.firm_id,
+    clientId: engagement.client_id,
+    // Provenance only: which portal they were standing in when they wrote.
     engagementId: engagement.id,
     senderName,
     body,
@@ -88,7 +98,7 @@ export async function POST(request: NextRequest) {
   // timer (one email per burst of replies). All best-effort — never fail an
   // already-written send.
   try {
-    await markThreadReadByClient(sb, engagement.id);
+    await markThreadReadByClient(sb, engagement.client_id);
     await logActivity(engagement.firm_id, engagement.id, "client_message_sent", {
       message_id: message.id,
     });
@@ -96,7 +106,7 @@ export async function POST(request: NextRequest) {
     console.error("[portal messages] post-send bookkeeping failed:", e);
   }
   try {
-    await scheduleFirmMessageNotification(engagement.id);
+    await scheduleFirmMessageNotification(engagement.client_id);
   } catch (e) {
     console.error("[portal messages] notify scheduling failed:", e);
   }
