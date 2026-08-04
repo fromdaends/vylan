@@ -114,3 +114,30 @@ export function workSummary(tasks: { done: boolean }[]): {
 export function isClosed(s: AgreementStatus): boolean {
   return s === "complete" || s === "cancelled";
 }
+
+/**
+ * Read the agreement status off a worklist row.
+ *
+ * A separate adapter rather than widening resolveAgreementStatus's input,
+ * because the list's row shape is a display concern and the resolver is the
+ * rule. It also documents the two derivations the list can make honestly
+ * without a new query:
+ *
+ *  - `sentAt` — the list carries `startedAt`, which IS sent_at (falling back to
+ *    created_at). A draft has not been sent whatever that column says, so the
+ *    status gate comes first.
+ *  - `clientHasEngaged` — the list already computes days since the client last
+ *    did anything. A number means they have; null means they have not.
+ */
+export function agreementStatusForRow(row: {
+  status: EngagementStatus;
+  startedAt?: string | null;
+  daysSinceClientActivity: number | null;
+}): AgreementStatus {
+  return resolveAgreementStatus({
+    status: row.status,
+    sentAt: row.status === "draft" ? null : (row.startedAt ?? null),
+    completedAt: null,
+    clientHasEngaged: row.daysSinceClientActivity != null,
+  });
+}
