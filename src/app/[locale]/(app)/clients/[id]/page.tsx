@@ -772,9 +772,10 @@ export default async function ClientDetailPage({
                 {t("private_badge")}
               </StatusCapsule>
             )}
-          </div>
-          {teamEnabled && (
-            <div className="mt-3">
+            {/* Who owns this client, beside the name — the one thing added to
+                the design, because "whose client is this" is the question the
+                header is asked most and it was a row further down. */}
+            {teamEnabled && (
               <ClientAssignee
                 clientId={client.id}
                 assigneeId={client.assigned_user_id}
@@ -782,8 +783,8 @@ export default async function ClientDetailPage({
                 assigneeDeactivated={!!owner?.deactivated_at}
                 members={assignableMembers}
               />
-            </div>
-          )}
+            )}
+          </div>
           </div>
         </div>
         {/* The corner is now empty of controls — everything moved onto the
@@ -834,18 +835,23 @@ export default async function ClientDetailPage({
           thirds of the screen — the exact "you just moved the little block"
           shape the founder rejected, one level up. A tab whose content is a
           table has no rail to put beside it. */}
-      {/* THREE COLUMNS on Overview — Canopy's shape: reference on the left,
-          the work in the middle, money and documents on the right.
-          `items-stretch` (the grid default) is deliberate: cards fill their row
-          so the column bottoms line up instead of ending in a ragged edge.
-          Collapses to two columns under ~1180px and one under ~880px, which is
-          what the arbitrary breakpoints below encode — the reference prototype
-          used a JS resize listener only because inline styles cannot carry
-          media queries. */}
+      {/* THE OVERVIEW GRID, exactly as designed: two rows, and the cards are
+          DIRECT grid children so row 1 (Tasks | Recent files) and row 2
+          (Notes | Payments) each stretch to a common height and the column
+          bottoms line up. Wrapping them in per-column stacks is what made the
+          columns end ragged.
+
+            >=1180  details | tasks  | files      details spans both rows
+                            | notes  | payments
+            >= 880  details | tasks / notes / files / payments   (spans 4)
+            < 880   one column, in reading order
+
+          Real media queries, not the prototype's JS resize listener — inline
+          styles simply cannot carry them. */}
       <div
         className={
           tab === "overview"
-            ? "grid gap-5 min-[880px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)] min-[1180px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(260px,340px)]"
+            ? "grid gap-5 min-[880px]:grid-cols-[minmax(240px,320px)_minmax(0,1fr)] min-[1180px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(260px,340px)]"
             : ""
         }
       >
@@ -859,7 +865,7 @@ export default async function ClientDetailPage({
           across to the work. Sticky, so a long engagements table no longer
           scrolls the rail away into whitespace. */}
       {tab === "overview" && (
-      <div className="space-y-4 lg:sticky lg:top-6">
+      <div className="space-y-5 self-start min-[880px]:row-span-4 min-[1180px]:row-span-2">
       <Panel title={t("details_title")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
@@ -948,7 +954,125 @@ export default async function ClientDetailPage({
       </div>
       )}
 
-      {/* ── Main column: the work ────────────────────────────────────────── */}
+      {/* TASKS — a VIEW of the one task list (see the Tasks rule in
+          CLAUDE.md), not a second store. Whatever is created on an engagement
+          for this client, or straight on the client, shows up here the moment
+          it exists; this page owns none of it.
+
+          Status sits in a FIXED left column so the titles line up down the
+          card — Canopy's treatment, and the reason a mixed-status list stays
+          scannable instead of zig-zagging. */}
+      {tab === "overview" && (
+        <Panel
+          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-1"
+          title={t("tasks_title")}
+          action={
+            <Link
+              href="/work"
+              className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+            >
+              {t("tasks_view_all")}
+            </Link>
+          }
+        >
+          {clientTasks.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("tasks_empty")}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/45">
+              {clientTasks.slice(0, 6).map((task) => (
+                <li key={task.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-[138px] shrink-0">
+                    <StatusCapsule
+                      tone={
+                        task.status === "done"
+                          ? "success"
+                          : task.status === "doing"
+                            ? "accent"
+                            : "muted"
+                      }
+                    >
+                      {t(`task_status_${task.status}`)}
+                    </StatusCapsule>
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {task.title}
+                  </span>
+                  <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                    {task.dueDate
+                      ? formatDate(task.dueDate, locale, "compact")
+                      : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
+
+      {tab === "overview" && (
+        <Panel
+          className="min-h-[240px] min-[880px]:col-start-2 min-[880px]:row-start-2"
+          title={t("notes_title")}
+        >
+          <ClientNotes
+            clientId={client.id}
+            notes={clientNotes}
+            viewerId={me?.id ?? null}
+            locale={locale}
+          />
+        </Panel>
+      )}
+
+      {tab === "overview" && recentFiles.length > 0 && (
+        <Panel
+          className="min-[880px]:col-start-2 min-[880px]:row-start-3 min-[1180px]:col-start-3 min-[1180px]:row-start-1"
+          title={t("recent_files")}
+          action={
+            <Link
+              href={`/clients/${client.id}/archive`}
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t("view_all_files")}
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-border/50">
+            {recentFiles.map((file) => (
+              <li key={file.id} className="flex items-center gap-3 py-2.5">
+                <FileText
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{file.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatDate(file.createdAt, locale, "medium")}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {tab === "overview" && canSeeMoney && clientPayments.length > 0 && (
+        <Panel
+          className="min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
+          title={tEng("payments_history")}
+          flush
+        >
+          <PaymentsList
+            rows={clientPayments}
+            showClient={false}
+            currentUserId={me?.id}
+          />
+        </Panel>
+      )}
+
+      {/* ── The other tabs render one full-width column ───────────────── */}
+      {tab !== "overview" && (
       <div className="space-y-6">
 
       {/* ── ORGANIZERS TAB: who works on this client ──────────────────────
@@ -1137,122 +1261,6 @@ export default async function ClientDetailPage({
         </Panel>
       )}
 
-      {tab === "overview" && (
-      <Panel
-        title={`${t("engagements")} (${engagements.length})`}
-        aside={
-          // The overview is a SUMMARY, so it shows the five most recent and
-          // hands the rest to the tab. It used to print every engagement a
-          // client has ever had, which on a long-standing client pushed the
-          // rest of the overview off the screen.
-          engagements.length > OVERVIEW_ENGAGEMENT_PREVIEW ? (
-            <Link
-              href={clientTabHref(client.id, "engagements")}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {tHome("view_all")}
-            </Link>
-          ) : null
-        }
-        action={
-          !client.archived_at ? (
-            <Link href={`/engagements/new?client=${client.id}`}>
-              <Button size="sm">
-                <Plus className="size-4" />
-                {tEng("new")}
-              </Button>
-            </Link>
-          ) : null
-        }
-        flush
-      >
-        {engagements.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">
-            {t("engagements_empty")}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">{tWl("wl_col_status")}</th>
-                  <th className="px-4 py-2 font-medium">{t("engagements")}</th>
-                  {teamEnabled && (
-                    <th className="hidden px-4 py-2 font-medium lg:table-cell">
-                      {tWl("wl_col_assigned")}
-                    </th>
-                  )}
-                  <th className="hidden px-4 py-2 font-medium sm:table-cell">
-                    {tWl("wl_col_due")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {engagements.slice(0, OVERVIEW_ENGAGEMENT_PREVIEW).map((e) => {
-                  const derived = derivedStatusById.get(e.id) ?? e.status;
-                  const pay = paymentByEng.get(e.id);
-                  const holder = firmUsers.find(
-                    (u) => u.id === e.assigned_user_id,
-                  );
-                  return (
-                    <tr
-                      key={e.id}
-                      className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
-                    >
-                      <td className="px-4 py-3 align-middle">
-                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                          <span
-                            aria-hidden
-                            className={cn(
-                              "size-1.5 shrink-0 rounded-full",
-                              e.stage
-                                ? STAGE_BG_CLASS[e.stage]
-                                : "bg-muted-foreground",
-                            )}
-                          />
-                          <span className="text-muted-foreground">
-                            {tStatus(derived)}
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        <Link
-                          href={`/engagements/${e.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {e.title}
-                        </Link>
-                        <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
-                          {e.series_id && (
-                            <RecurringBadge label={tEng("repeat_badge")} compact />
-                          )}
-                          {pay && pay.status !== "canceled" && (
-                            <PaymentBadge status={pay.status} />
-                          )}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {e.type.toUpperCase()}
-                        </span>
-                      </td>
-                      {teamEnabled && (
-                        <td className="hidden px-4 py-3 align-middle text-muted-foreground lg:table-cell">
-                          {holder ? userDisplayLabel(holder) : "—"}
-                        </td>
-                      )}
-                      <td className="hidden whitespace-nowrap px-4 py-3 align-middle text-muted-foreground sm:table-cell">
-                        {e.due_date
-                          ? formatDate(e.due_date, locale, "medium")
-                          : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-      )}
 
         {/* Moved out of the rail. Connecting a client's books and setting
             their portal PIN are ACTIONS on the client, and the rail is
@@ -1368,130 +1376,8 @@ export default async function ClientDetailPage({
           </Panel>
         )}
 
-      {/* Recent files — Canopy's overview card: the last handful, newest
-          first, with a quiet "View all" to the full archive. The overview
-          should answer "what has been coming in from this client lately"
-          without making you leave it. */}
-      {/* What the firm knows about this client, in its own words, with a name
-          and a date on every line. Always rendered — an empty notes box is an
-          invitation, and a section that only appears once it has content is a
-          feature nobody discovers. */}
-      {/* TASKS — a VIEW of the one task list (see the Tasks rule in
-          CLAUDE.md), not a second store. Whatever is created on an engagement
-          for this client, or straight on the client, shows up here the moment
-          it exists; this page owns none of it.
-
-          Status sits in a FIXED left column so the titles line up down the
-          card — Canopy's treatment, and the reason a mixed-status list stays
-          scannable instead of zig-zagging. */}
-      {tab === "overview" && (
-        <Panel
-          title={t("tasks_title")}
-          action={
-            <Link
-              href="/work"
-              className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
-            >
-              {t("tasks_view_all")}
-            </Link>
-          }
-        >
-          {clientTasks.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {t("tasks_empty")}
-            </p>
-          ) : (
-            <ul className="divide-y divide-border/45">
-              {clientTasks.slice(0, 6).map((task) => (
-                <li key={task.id} className="flex items-center gap-3 py-2.5">
-                  <span className="w-[138px] shrink-0">
-                    <StatusCapsule
-                      tone={
-                        task.status === "done"
-                          ? "success"
-                          : task.status === "doing"
-                            ? "accent"
-                            : "muted"
-                      }
-                    >
-                      {t(`task_status_${task.status}`)}
-                    </StatusCapsule>
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {task.title}
-                  </span>
-                  <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                    {task.dueDate
-                      ? formatDate(task.dueDate, locale, "compact")
-                      : "—"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      )}
-
-      {tab === "overview" && (
-        <Panel title={t("notes_title")}>
-          <ClientNotes
-            clientId={client.id}
-            notes={clientNotes}
-            viewerId={me?.id ?? null}
-            locale={locale}
-          />
-        </Panel>
-      )}
-
       </div>
-
-      {/* ── Right column: what came in, and what was billed ──────────────── */}
-      <div className="space-y-5">
-
-      {tab === "overview" && recentFiles.length > 0 && (
-        <Panel
-          title={t("recent_files")}
-          action={
-            <Link
-              href={`/clients/${client.id}/archive`}
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {t("view_all_files")}
-            </Link>
-          }
-        >
-          <ul className="divide-y divide-border/50">
-            {recentFiles.map((file) => (
-              <li key={file.id} className="flex items-center gap-3 py-2.5">
-                <FileText
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{file.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {formatDate(file.createdAt, locale, "medium")}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Panel>
       )}
-
-      {/* Money. A Junior sees the WORK on a client and not what it was billed
-          for — the payments history is amounts, dates and status, which is
-          exactly the thing money.view withholds. */}
-      {tab === "overview" && canSeeMoney && clientPayments.length > 0 && (
-        <Panel title={tEng("payments_history")} flush>
-          <PaymentsList
-            rows={clientPayments}
-            showClient={false}
-            currentUserId={me?.id}
-          />
-        </Panel>
-      )}
-      </div>
       </div>
     </div>
   );
