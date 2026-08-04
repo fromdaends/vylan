@@ -47,6 +47,11 @@ export type Template = {
   type: EngagementType;
   items: TemplateItem[];
   created_at: string;
+  // Workflow copy + provenance (migration 1510). Optional so reads survive
+  // the pre-migration window. Parse with parseWorkflowDefinition; the
+  // automation_id is provenance only, never read through for behaviour.
+  workflow?: unknown;
+  automation_id?: string | null;
 };
 
 export async function listTemplates(): Promise<Template[]> {

@@ -38,6 +38,12 @@ export type Engagement = {
   // reads survive the pre-migration window (column absent → undefined → treated
   // as ON everywhere via the `=== false` checks).
   ai_enabled?: boolean;
+  // Workflow snapshot + confirm-gate latches (migration 1510). Optional so
+  // reads survive the pre-migration window. Null/absent = no workflow — the
+  // legacy stage resolver applies unchanged. Parse with parseWorkflowSnapshot
+  // / parseStageGates (src/lib/workflow/definition.ts); never read raw.
+  workflow?: unknown;
+  stage_gates?: unknown;
   // Invoice automation (migration 0590). How/whether the client's invoice is
   // sent automatically at completion: 'off' (manual, default), 'on_completion'
   // (send when marked complete), 'delayed' (send invoice_delay_days days after).
@@ -391,6 +397,11 @@ export type CreateEngagementInput = {
   // the RLS policy can't do it (assigned_user_id has no FK constraint to a
   // firm-scoped view).
   assigned_user_id?: string | null;
+  // Workflow snapshot (migration 1510) — a WorkflowSnapshot built by the
+  // create action (definition copied from the template or family default,
+  // assignees resolved to user ids). Written best-effort AFTER the insert so
+  // a pre-1510 environment costs the automation, never the engagement.
+  workflow?: unknown;
   items: TemplateItem[];
 };
 
@@ -585,6 +596,19 @@ export async function createEngagementWithItems(
       .single());
   }
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
+
+  // Workflow snapshot (1510), deliberately OUTSIDE the tiered insert above: a
+  // missing column (pre-1510) or a write hiccup costs the automation — the
+  // engagement then simply runs legacy — never the engagement itself.
+  if (input.workflow != null) {
+    const { error: wfErr } = await supabase
+      .from("engagements")
+      .update({ workflow: input.workflow })
+      .eq("id", (engagement as { id: string }).id);
+    if (wfErr && !isUnknownColumnError(wfErr)) {
+      console.error("[engagements] workflow snapshot write failed:", wfErr);
+    }
+  }
 
   if (input.items.length > 0) {
     // Shared with addItemToEngagement so the two ways an item is born cannot
