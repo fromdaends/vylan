@@ -44,7 +44,13 @@
 // refuses it (1370) — but "you already have one" is an answer and an empty
 // space is not.
 
-import { useId, useMemo, useState, useTransition } from "react";
+import {
+  useId,
+  useMemo,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -109,6 +115,11 @@ export function AddTaskDialog({
   clients = [],
   engagements = [],
   members = [],
+  trigger,
+  initialTitle,
+  open: controlledOpen,
+  onOpenChange,
+  onCreated,
 }: {
   /** Fixed on a job's page; absent on the firm-wide Tasks page. */
   clientId?: string;
@@ -120,11 +131,31 @@ export function AddTaskDialog({
   /** Every open job, so a collection kind can be attached from the Tasks page. */
   engagements?: AddTaskEngagement[];
   members?: { id: string; name: string }[];
+  /** Replaces the default "+ Add task" button as the popover's anchor — the
+   *  dashboard's quick-add opens this same popover from its own footer rather
+   *  than growing a second add-task UI. */
+  trigger?: ReactNode;
+  /** Seeds the name field on open — what the quick-add row already typed. */
+  initialTitle?: string;
+  /** Controlled-open pair, for a caller whose trigger lives outside. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Called after a task is actually created — the quick-add clears itself. */
+  onCreated?: () => void;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  // Controlled when the caller owns the trigger (the dashboard quick-add),
+  // self-managed everywhere else.
+  const open = controlledOpen ?? openSelf;
+  const setOpen = (o: boolean) => {
+    setOpenSelf(o);
+    onOpenChange?.(o);
+  };
+  // Tracks what initialTitle was last seeded, so each fresh open re-seeds.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind | null>(null);
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState<string | null>(null);
@@ -138,6 +169,13 @@ export function AddTaskDialog({
   // and the test that could not find the due-date field by its label is the
   // same bug seen from the outside.
   const uid = useId();
+
+  // Seed the quick-add's typed title on each open (render-time, not an
+  // effect, so the field is right on the first paint of the popover).
+  if (open && initialTitle !== undefined && seededFor !== initialTitle) {
+    setTitle(initialTitle);
+    setSeededFor(initialTitle);
+  }
 
   const clientKnown = Boolean(fixedClientId);
   const jobKnown = Boolean(fixedEngagementId);
@@ -183,6 +221,7 @@ export function AddTaskDialog({
     setDueDate("");
     setPriority("none");
     setAssigneeIds([]);
+    setSeededFor(null);
   }
 
   const ready =
@@ -210,6 +249,7 @@ export function AddTaskDialog({
       if (res.ok) {
         setOpen(false);
         reset();
+        onCreated?.();
         startTransition(() => router.refresh());
       } else {
         toast.error(
@@ -237,10 +277,12 @@ export function AddTaskDialog({
       }}
     >
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="secondary">
-          <Plus className="size-4" aria-hidden />
-          {t("add_task")}
-        </Button>
+        {trigger ?? (
+          <Button type="button" size="sm" variant="secondary">
+            <Plus className="size-4" aria-hidden />
+            {t("add_task")}
+          </Button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent align="end" sideOffset={6} className="w-[340px] p-3">

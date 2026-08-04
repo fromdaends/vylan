@@ -30,17 +30,25 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import {
+  matchesDueFilter,
+  toDueFilter,
+  todayInTimeZone,
+} from "@/lib/tasks/dates";
 import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
 import { TasksTable } from "@/components/engagements/tasks-table";
 
 export default async function WorkPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ due?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+  const sp = await searchParams;
 
   const user = await getCurrentUser();
   if (!user) redirect(`/${locale}/login`);
@@ -61,6 +69,17 @@ export default async function WorkPage({
     // off, so the dialog asks for one rather than hiding the option.
     listEngagements(),
   ]);
+
+  // The dashboard's stats strip links here as /work?due=overdue|today|week —
+  // a cell saying 3 must land on a list of 3, decided by the SAME functions
+  // that counted (lib/tasks/dates, anchored to the firm's today). The cut is
+  // applied server-side to what the table receives; the table's own tabs,
+  // sorting and filters then operate within it.
+  const due = toDueFilter(sp.due);
+  const today = todayInTimeZone(firm.timezone ?? "America/Toronto");
+  const shown = due
+    ? tasks.filter((x) => matchesDueFilter(x, due, today))
+    : tasks;
 
   const t = await getTranslations("Engagements");
   const activeMembers = members
@@ -89,7 +108,7 @@ export default async function WorkPage({
       </header>
 
       <TasksTable
-        tasks={tasks}
+        tasks={shown}
         members={activeMembers}
         canEdit
         currentUserId={user.id}

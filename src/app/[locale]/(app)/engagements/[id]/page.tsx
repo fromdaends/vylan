@@ -1411,6 +1411,8 @@ export default async function EngagementDetailPage({
           clientId: x.clientId,
           engagementId: x.engagementId,
           notes: x.notes,
+          // Drawn by DueIndicator on the row (design 2a) — the same label the
+          // dashboard and /work use.
           dueDate: x.dueDate,
           // The count belongs to the collection the task POINTS AT, which only
           // this page has loaded — so it is computed here and passed down

@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { DashboardHeader } from "./dashboard-header";
-import { formatDate } from "@/lib/format";
 import en from "../../../messages/en.json";
 
 // next-intl's locale-aware <Link> pulls in next/navigation, which has no
@@ -25,7 +24,7 @@ function renderHeader(props: { firstName: string | null; subtitle: string }) {
 }
 
 describe("DashboardHeader", () => {
-  it("greets the user by first name, shows firm + LOCAL today's date, and links to Import clients", () => {
+  it("greets the user by first name and shows the firm name WITHOUT a date or action buttons", () => {
     renderHeader({ firstName: "Zach", subtitle: "Acme Co" });
 
     // The greeting is time-aware (the exact word depends on the clock), so we
@@ -33,11 +32,11 @@ describe("DashboardHeader", () => {
     const heading = screen.getByRole("heading", { level: 1 });
     expect(heading.textContent ?? "").toMatch(/Zach/);
 
-    // Firm name · today's date, formatted from THIS machine's clock (the
-    // component appends the user-local date itself; the page no longer bakes
-    // in the server's UTC "today").
-    const localToday = formatDate(new Date(), "en", "long");
-    expect(screen.getByText(`Acme Co · ${localToday}`)).toBeInTheDocument();
+    // The subtitle is the firm name ONLY (design 2a): the date moved into the
+    // agenda card, where "what day is it" sits beside "what is my day". A
+    // subtitle reading "Acme Co · <anything>" is the old design leaking back.
+    expect(screen.getByText("Acme Co")).toBeInTheDocument();
+    expect(screen.queryByText(/Acme Co ·/)).not.toBeInTheDocument();
 
     // "New engagement" is NOT here any more: the icon rail's "+" is the single
     // primary entry point, and having both was two buttons for one action.
@@ -50,20 +49,18 @@ describe("DashboardHeader", () => {
         .some((a) => a.getAttribute("href") === "/engagements/new"),
     ).toBe(false);
 
-    // Import clients → the CSV import flow.
-    const importClients = screen.getByRole("link", {
-      name: en.Clients.import_title,
-    });
-    expect(importClients.getAttribute("href") ?? "").toContain(
-      "/clients/import",
-    );
+    // "Import clients" left too (founder's call, 2026-08-03): importing is a
+    // clients-section job, not a standing button on the Overview. Only the
+    // bell (passed in via the `bell` slot) shares the header now.
+    expect(
+      screen.queryByRole("link", { name: en.Clients.import_title }),
+    ).not.toBeInTheDocument();
   });
 
-  it("still renders a greeting + the local date when the user has no name", () => {
+  it("still renders a greeting + the firm name when the user has no name", () => {
     renderHeader({ firstName: null, subtitle: "Acme Co" });
 
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    const localToday = formatDate(new Date(), "en", "long");
-    expect(screen.getByText(`Acme Co · ${localToday}`)).toBeInTheDocument();
+    expect(screen.getByText("Acme Co")).toBeInTheDocument();
   });
 });
