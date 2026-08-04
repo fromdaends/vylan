@@ -1553,6 +1553,7 @@
     "tasks_done_empty": "Nothing finished yet today.",
     "tasks_quickadd_placeholder": "Add a task… type a title, then pick a client and a due date",
     "tasks_quickadd_add": "Add",
+    "tasks_more": "{count, plural, one {# more} other {# more}}",
     "welcome_name": "Welcome, {name}!",
     "welcome_there": "there",
     "attention_status": "You have {count, plural, one {# engagement that needs your attention.} other {# engagements that need your attention.}}",

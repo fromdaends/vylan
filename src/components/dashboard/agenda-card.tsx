@@ -43,12 +43,12 @@ export function AgendaCard({
   const day = addDays(initialDay, offset);
 
   // "MONDAY, AUGUST" over a large "3" — weekday + month up top, day below.
+  // Assembled by hand: asking Intl for weekday+month together lets the locale
+  // pick the order, and English chose "August Monday" on the real page.
   const d = new Date(`${day}T12:00:00Z`);
-  const eyebrow = new Intl.DateTimeFormat(locale, {
-    weekday: "long",
-    month: "long",
-    timeZone: "UTC",
-  }).format(d);
+  const part = (opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(d);
+  const eyebrow = `${part({ weekday: "long" })}, ${part({ month: "long" })}`;
   const dayNumber = new Intl.DateTimeFormat(locale, {
     day: "numeric",
     timeZone: "UTC",

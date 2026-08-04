@@ -1553,6 +1553,7 @@
     "tasks_done_empty": "Rien de terminé pour l'instant.",
     "tasks_quickadd_placeholder": "Ajouter une tâche… saisissez un titre, puis choisissez un client et une échéance",
     "tasks_quickadd_add": "Ajouter",
+    "tasks_more": "{count, plural, one {# de plus} other {# de plus}}",
     "welcome_name": "Bonjour, {name} !",
     "welcome_there": "vous",
     "attention_status": "Vous avez {count, plural, one {# engagement qui demande votre attention.} other {# engagements qui demandent votre attention.}}",
