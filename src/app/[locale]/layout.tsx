@@ -9,8 +9,6 @@ import { brand } from "@/lib/brand";
 import { siteUrl } from "@/lib/site-url";
 import { socialMetadata } from "@/lib/og/metadata";
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import { Suspense } from "react";
-import { RouteProgress } from "@/components/app/route-progress";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -92,14 +90,6 @@ export default async function LocaleLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>
-          {/* The page-loading hairline, mounted once for the WHOLE site —
-              marketing pages and the signed-in app both. It reads the URL to
-              know when a navigation finished, and useSearchParams() would opt
-              every page into client rendering without this Suspense boundary;
-              inside one, only the bar waits. */}
-          <Suspense fallback={null}>
-            <RouteProgress />
-          </Suspense>
           <NextIntlClientProvider>{children}</NextIntlClientProvider>
         </ThemeProvider>
         <Analytics />
