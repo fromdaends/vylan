@@ -139,7 +139,7 @@ describe("message notification email builders", () => {
     expect(fr.html).toContain("Ouvrir la conversation");
   });
 
-  it("firm email names the client, counts the burst, and links the engagement", () => {
+  it("firm email names the client, counts the burst, and links the thread", () => {
     const out = buildFirmMessageEmail({
       accountantName: "Zach",
       clientName: "Marie Tremblay",
@@ -154,6 +154,51 @@ describe("message notification email builders", () => {
     );
     expect(out.html).toContain("One question");
     expect(out.html).toContain("https://vylan.app/en/engagements/e1");
-    expect(out.text).toContain("Open the engagement");
+    expect(out.text).toContain("Open the conversation");
+  });
+
+  // Since 1440 the chat is the CLIENT's, not an engagement's, so the notify
+  // jobs pass a null title and every "about X" clause has to disappear cleanly
+  // rather than rendering "about null" / a dangling em dash.
+  it("drops the engagement clause from both emails when there is no title", () => {
+    const toClient = buildClientMessageEmail({
+      clientName: "Marie",
+      firmName: "Cabinet T",
+      senderName: "Zach",
+      engagementTitle: null,
+      snippet: "Your T4 looks good",
+      count: 1,
+      url: "https://vylan.app/r/tok?view=messages",
+      locale: "en",
+    });
+    expect(toClient.text).toContain("Zach sent you a message:");
+    expect(toClient.text).not.toContain("about");
+    expect(toClient.text).not.toContain("null");
+
+    const toFirm = buildFirmMessageEmail({
+      accountantName: "Zach",
+      clientName: "Marie Tremblay",
+      engagementTitle: null,
+      snippet: "One question",
+      count: 2,
+      url: "https://vylan.app/en/clients/c1",
+      locale: "en",
+    });
+    expect(toFirm.subject).toBe("Marie Tremblay sent you 2 messages");
+    expect(toFirm.text).toContain("Marie Tremblay replied (2 new messages)");
+    expect(toFirm.text).not.toContain("null");
+
+    const frClient = buildClientMessageEmail({
+      clientName: "Marie",
+      firmName: "Cabinet T",
+      senderName: "Zach",
+      engagementTitle: null,
+      snippet: "Bonjour",
+      count: 3,
+      url: "https://vylan.app/r/tok?view=messages",
+      locale: "fr",
+    });
+    expect(frClient.text).toContain("Zach vous a écrit 3 messages.");
+    expect(frClient.text).not.toContain("au sujet de");
   });
 });

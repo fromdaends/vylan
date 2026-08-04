@@ -1,16 +1,24 @@
-// Client messaging (Phase 1) — the human accountant<->client thread, one per
-// engagement. NOT the AI assistant chat (that's engagement-chat/db.ts): the
-// two features share zero tables and zero components on purpose.
+// Client messaging — the human accountant<->client thread, ONE PER CLIENT and
+// permanent. NOT the AI assistant chat (that's engagement-chat/db.ts): the two
+// features share zero tables and zero components on purpose.
+//
+// The thread used to be keyed on the engagement (0650), which gave a client
+// with three engagements three separate conversations, each going read-only
+// when its engagement completed. Migration 1440 re-keys it on the CLIENT:
+// one forever chat, no engagement framing, no status gate on the firm side.
+// Messages still carry engagement_id as provenance (which portal the client
+// was standing in), but nothing scopes on it any more.
 //
 // Firm-side helpers here run on the caller's RLS-scoped session client, so
-// firm isolation is enforced by the database, not by this code. Client-side
-// (portal) access ships in Phase 2 and goes through the service role after
-// magic-token validation — the client never touches these tables directly.
+// firm isolation is enforced by the database, not by this code. The client
+// never touches these tables directly: the portal's /api/portal/messages
+// routes validate the magic token, resolve it to a client, and read/write via
+// the service role.
 //
-// GATED on migration 0650: every reader/writer treats a missing table as
-// "messaging not activated yet" (returns the sentinel) instead of throwing,
-// so the code can deploy before the SQL is applied — the repo's tiered
-// pattern (same as engagement-chat on 0550).
+// GATED on migrations 0650 + 1440: every reader/writer treats a missing table
+// OR a missing column as "messaging not activated yet" (returns the sentinel)
+// instead of throwing, so the code can deploy before the SQL is applied — the
+// repo's tiered pattern (same as engagement-chat on 0550).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -35,20 +43,24 @@ export type ClientMessageThreadRow = {
 // Server-side cap, mirrored by the DB check constraint and the composer.
 export const CLIENT_MESSAGE_MAX_LENGTH = 4000;
 
-// How many messages the thread loads. Oldest are dropped first; at comment
-// cadence (a few per engagement) nobody should ever hit this.
-export const CLIENT_MESSAGE_PAGE_SIZE = 500;
+// How many messages the thread loads. Oldest are dropped first. Raised from
+// 500 with 1440: this is now a conversation that runs for the life of the
+// client relationship rather than the life of one engagement, so the ceiling
+// has to be years of chat, not months.
+export const CLIENT_MESSAGE_PAGE_SIZE = 1000;
 
-// Sentinel for "migration 0650 not applied on this environment".
+// Sentinel for "the messaging migrations aren't applied on this environment".
 export const CLIENT_MESSAGING_SCHEMA_MISSING = Symbol(
   "client-messaging-schema-missing",
 );
 export type MessagingSchemaMissing = typeof CLIENT_MESSAGING_SCHEMA_MISSING;
 
 // PostgREST reports a missing TABLE as PGRST205 (schema-cache miss on the
-// relation); Postgres proper reports undefined_table 42P01. Missing-column
-// codes (PGRST204 / 42703) are included for safety during partial applies.
-// Match on codes ONLY, never message text (same rule as engagement-chat).
+// relation); Postgres proper reports undefined_table 42P01. The missing-COLUMN
+// codes (PGRST204 / 42703) are what cover the 1440 window specifically — every
+// query below names client_id, so an unapplied 1440 lands here and degrades to
+// "not activated" instead of erroring. Match on codes ONLY, never message text
+// (same rule as engagement-chat).
 export function isClientMessagingSchemaMissing(
   err: { code?: string | null } | null | undefined,
 ): boolean {
@@ -100,19 +112,18 @@ export function toPortalMessage(m: ClientMessageRow): PortalMessage {
   };
 }
 
-// The engagement's thread state row, or null when no thread exists yet (no
-// messages ever sent), or the sentinel pre-migration. RLS scopes to the
-// caller's firm.
-export async function getThreadForEngagement(
+// The client's thread state row, or null when no thread exists yet (nothing
+// ever sent), or the sentinel pre-migration. RLS scopes to the caller's firm.
+export async function getThreadForClient(
   sb: SupabaseClient,
-  engagementId: string,
+  clientId: string,
 ): Promise<ClientMessageThreadRow | null | MessagingSchemaMissing> {
   const res = await sb
     .from("client_message_threads")
     .select(
       "id, firm_last_read_at, client_last_read_at, client_last_notified_at",
     )
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .maybeSingle();
   if (res.error) {
     if (isClientMessagingSchemaMissing(res.error)) {
@@ -123,17 +134,17 @@ export async function getThreadForEngagement(
   return (res.data as ClientMessageThreadRow | null) ?? null;
 }
 
-// Get-or-create the engagement's thread row, returning its id. Handles the
-// unique(engagement_id) race with a teammate's first message by re-reading.
+// Get-or-create the client's thread row, returning its id. Handles the
+// unique(client_id) race with a teammate's first message by re-reading.
 export async function getOrCreateThread(
   sb: SupabaseClient,
   firmId: string,
-  engagementId: string,
+  clientId: string,
 ): Promise<string | MessagingSchemaMissing> {
   const existing = await sb
     .from("client_message_threads")
     .select("id")
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .maybeSingle();
   if (existing.error) {
     if (isClientMessagingSchemaMissing(existing.error)) {
@@ -145,7 +156,7 @@ export async function getOrCreateThread(
 
   const inserted = await sb
     .from("client_message_threads")
-    .insert({ firm_id: firmId, engagement_id: engagementId })
+    .insert({ firm_id: firmId, client_id: clientId })
     .select("id")
     .maybeSingle();
   if (inserted.error) {
@@ -156,7 +167,7 @@ export async function getOrCreateThread(
       const reread = await sb
         .from("client_message_threads")
         .select("id")
-        .eq("engagement_id", engagementId)
+        .eq("client_id", clientId)
         .maybeSingle();
       if (reread.error) throw reread.error;
       const id = (reread.data as { id: string } | null)?.id;
@@ -169,16 +180,17 @@ export async function getOrCreateThread(
   return id;
 }
 
-// The thread's messages, oldest first (fetch newest-first for the LIMIT,
-// then reverse so callers render in order).
+// The client's whole conversation, oldest first (fetch newest-first for the
+// LIMIT, then reverse so callers render in order). Spans every engagement the
+// client has ever had — that is the point of 1440.
 export async function listClientMessages(
   sb: SupabaseClient,
-  engagementId: string,
+  clientId: string,
 ): Promise<ClientMessageRow[] | MessagingSchemaMissing> {
   const res = await sb
     .from("client_messages")
     .select("id, sender, sender_user_id, sender_name, body, created_at")
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .order("created_at", { ascending: false })
     .limit(CLIENT_MESSAGE_PAGE_SIZE);
   if (res.error) {
@@ -193,11 +205,16 @@ export async function listClientMessages(
 // Insert a firm-authored message. The RLS insert policy enforces sender =
 // 'firm' + self-authorship; this helper just shapes the row. Returns the
 // inserted row so the composer can append it without a refetch.
+//
+// engagementId is optional and PROVENANCE ONLY — nothing reads it for scoping.
+// The accountant writes from the client inbox, which has no engagement, so it
+// is normally null.
 export async function insertFirmMessage(
   sb: SupabaseClient,
   row: {
     firmId: string;
-    engagementId: string;
+    clientId: string;
+    engagementId?: string | null;
     userId: string;
     senderName: string;
     body: string;
@@ -207,7 +224,8 @@ export async function insertFirmMessage(
     .from("client_messages")
     .insert({
       firm_id: row.firmId,
-      engagement_id: row.engagementId,
+      client_id: row.clientId,
+      engagement_id: row.engagementId ?? null,
       sender: "firm",
       sender_user_id: row.userId,
       sender_name: row.senderName,
@@ -224,15 +242,19 @@ export async function insertFirmMessage(
   return res.data as ClientMessageRow;
 }
 
-// Insert a client-authored message. SERVICE ROLE ONLY (Phase 2): called by
-// the /api/portal/messages routes after magic-token validation — the RLS
-// insert policy deliberately refuses sender='client' from any authenticated
-// session, so this cannot run on a session client.
+// Insert a client-authored message. SERVICE ROLE ONLY: called by the
+// /api/portal/messages routes after magic-token validation — the RLS insert
+// policy deliberately refuses sender='client' from any authenticated session,
+// so this cannot run on a session client.
+//
+// engagementId records WHICH portal they wrote from; it does not scope the
+// message, which lands in the client's one thread either way.
 export async function insertClientMessage(
   sb: SupabaseClient,
   row: {
     firmId: string;
-    engagementId: string;
+    clientId: string;
+    engagementId?: string | null;
     senderName: string;
     body: string;
   },
@@ -241,7 +263,8 @@ export async function insertClientMessage(
     .from("client_messages")
     .insert({
       firm_id: row.firmId,
-      engagement_id: row.engagementId,
+      client_id: row.clientId,
+      engagement_id: row.engagementId ?? null,
       sender: "client",
       sender_user_id: null,
       sender_name: row.senderName,
@@ -263,12 +286,12 @@ export async function insertClientMessage(
 // No-op (false) when the thread doesn't exist yet — nothing to mark.
 export async function markThreadReadByClient(
   sb: SupabaseClient,
-  engagementId: string,
+  clientId: string,
 ): Promise<boolean | MessagingSchemaMissing> {
   const res = await sb
     .from("client_message_threads")
     .update({ client_last_read_at: new Date().toISOString() })
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .select("id");
   if (res.error) {
     if (isClientMessagingSchemaMissing(res.error)) {
@@ -284,13 +307,13 @@ export async function markThreadReadByClient(
 // idempotent: a rerun sees nothing newer than the stamp and skips.
 export async function markClientNotified(
   sb: SupabaseClient,
-  engagementId: string,
+  clientId: string,
   at: string,
 ): Promise<boolean | MessagingSchemaMissing> {
   const res = await sb
     .from("client_message_threads")
     .update({ client_last_notified_at: at })
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .select("id");
   if (res.error) {
     if (isClientMessagingSchemaMissing(res.error)) {
@@ -306,12 +329,12 @@ export async function markClientNotified(
 // whitelists firm_last_read_at only.
 export async function markThreadReadByFirm(
   sb: SupabaseClient,
-  engagementId: string,
+  clientId: string,
 ): Promise<boolean | MessagingSchemaMissing> {
   const res = await sb
     .from("client_message_threads")
     .update({ firm_last_read_at: new Date().toISOString() })
-    .eq("engagement_id", engagementId)
+    .eq("client_id", clientId)
     .select("id");
   if (res.error) {
     if (isClientMessagingSchemaMissing(res.error)) {
@@ -326,16 +349,12 @@ export async function markThreadReadByFirm(
 // Firm inbox — the accountant's social-style, cross-client conversation list.
 // ---------------------------------------------------------------------------
 
-// One row in the accountant's message inbox: an engagement's thread summarized
-// for the list (client + engagement identity, the last-message preview, and how
-// many client messages the firm hasn't read).
+// One row in the accountant's message inbox: a CLIENT's forever thread
+// summarized for the list (who it's with, the last-message preview, and how
+// many of their messages the firm hasn't read).
 export type FirmConversation = {
-  engagementId: string;
-  engagementTitle: string;
-  clientName: string | null;
-  // Engagement status — drives the read-only composer, and which rows can start
-  // a fresh conversation (live) vs. only show history.
-  status: string;
+  clientId: string;
+  clientName: string;
   lastMessage: {
     body: string;
     sender: ClientMessageSender;
@@ -343,131 +362,112 @@ export type FirmConversation = {
   } | null;
   // Client messages newer than the firm's read stamp for this thread.
   unreadCount: number;
-  // Sort key: the last message's time, or the engagement's own timestamp when
-  // nothing has been exchanged yet.
-  lastActivityAt: string;
+  // The last message's time, or null when nothing has ever been exchanged —
+  // the row shows no timestamp rather than a misleading "created 3 months ago".
+  lastActivityAt: string | null;
 };
 
-// Engagement statuses that can start/continue a conversation. Mirrors the API
-// route's WRITABLE_STATUSES; complete/cancelled threads stay visible (history)
-// but read-only.
-const CONVERSATION_LIVE_STATUSES = new Set(["sent", "in_progress"]);
-
-// PURE: fold the three raw result sets — active-scope engagements, threads, and
-// messages (newest-first) — into the sorted inbox. Exported for unit tests.
+// PURE: fold the three raw result sets — the firm's active clients, threads,
+// and messages (newest-first) — into the sorted inbox. Exported for unit tests.
 //
-// An engagement earns a row when it's live (messageable now) OR it already has
-// a thread (history to show); draft/other engagements without a thread are left
-// out. Rows sort by most recent activity, so live-but-silent engagements fall
-// below the ones with real messages.
+// EVERY ACTIVE CLIENT GETS A ROW (founder ruling): the inbox reads like a
+// contacts list, so you can start a chat with anyone without hunting for them
+// first. Archived clients are excluded entirely, history included — archiving
+// is the "off the board" action, and before 1440 this was a live bug (the old
+// version filtered on the ENGAGEMENT's flags, which archiving a client never
+// sets, so archived clients' conversations kept feeding the unread badge).
 //
-// ARCHIVED CLIENTS ARE EXCLUDED. Archiving a client stamps clients.archived_at
-// and nothing else — it deliberately does NOT archive that client's engagements
-// — so filtering on the engagement's own flags (which is all this did) left
-// every archived client's conversations sitting in the inbox and still feeding
-// the unread badge. Restoring the client brings them straight back.
+// Sort: real conversations first, newest activity at the top; then the silent
+// clients alphabetically. Recency is meaningless for a client you have never
+// messaged, and putting "created most recently" up there pushes live threads
+// down for no reason.
 export function buildFirmConversations(
-  engagements: {
+  clients: {
     id: string;
-    title: string;
-    status: string;
-    clientName: string | null;
-    createdAt: string;
-    // Optional so callers that predate this (and any environment where the
-    // column doesn't come back) keep working. Undefined therefore has to mean
-    // "not archived": failing OPEN shows a conversation that could have been
-    // hidden, while failing closed would silently swallow live client threads.
-    clientArchivedAt?: string | null;
+    displayName: string;
+    archivedAt?: string | null;
   }[],
-  threads: { engagement_id: string; firm_last_read_at: string | null }[],
+  threads: { client_id: string; firm_last_read_at: string | null }[],
   // Newest-first, as the DB returns them.
   messages: {
-    engagement_id: string;
+    client_id: string;
     sender: ClientMessageSender;
     body: string;
     created_at: string;
   }[],
 ): FirmConversation[] {
-  const readAtByEng = new Map<string, string | null>();
-  for (const t of threads)
-    readAtByEng.set(t.engagement_id, t.firm_last_read_at);
+  const readAtByClient = new Map<string, string | null>();
+  for (const t of threads) readAtByClient.set(t.client_id, t.firm_last_read_at);
 
-  const lastByEng = new Map<
+  const lastByClient = new Map<
     string,
     { body: string; sender: ClientMessageSender; createdAt: string }
   >();
-  const unreadByEng = new Map<string, number>();
+  const unreadByClient = new Map<string, number>();
   for (const m of messages) {
-    // Newest-first, so the first one seen per engagement is its last message.
-    if (!lastByEng.has(m.engagement_id)) {
-      lastByEng.set(m.engagement_id, {
+    // Newest-first, so the first one seen per client is their last message.
+    if (!lastByClient.has(m.client_id)) {
+      lastByClient.set(m.client_id, {
         body: m.body,
         sender: m.sender,
         createdAt: m.created_at,
       });
     }
     if (m.sender === "client") {
-      const cutoff = readAtByEng.get(m.engagement_id) ?? null;
+      const cutoff = readAtByClient.get(m.client_id) ?? null;
       const cutoffMs = cutoff ? new Date(cutoff).getTime() : 0;
       if (new Date(m.created_at).getTime() > cutoffMs) {
-        unreadByEng.set(
-          m.engagement_id,
-          (unreadByEng.get(m.engagement_id) ?? 0) + 1,
+        unreadByClient.set(
+          m.client_id,
+          (unreadByClient.get(m.client_id) ?? 0) + 1,
         );
       }
     }
   }
 
   const rows: FirmConversation[] = [];
-  for (const e of engagements) {
-    // An archived client is off the board entirely — history included. Checked
-    // before the thread test so even a conversation with real messages goes.
-    if (e.clientArchivedAt) continue;
-    const hasThread = readAtByEng.has(e.id);
-    if (!hasThread && !CONVERSATION_LIVE_STATUSES.has(e.status)) continue;
-    const last = lastByEng.get(e.id) ?? null;
+  for (const c of clients) {
+    if (c.archivedAt) continue;
+    const last = lastByClient.get(c.id) ?? null;
     rows.push({
-      engagementId: e.id,
-      engagementTitle: e.title,
-      clientName: e.clientName,
-      status: e.status,
+      clientId: c.id,
+      clientName: c.displayName,
       lastMessage: last,
-      unreadCount: unreadByEng.get(e.id) ?? 0,
-      lastActivityAt: last?.createdAt ?? e.createdAt,
+      unreadCount: unreadByClient.get(c.id) ?? 0,
+      lastActivityAt: last?.createdAt ?? null,
     });
   }
 
-  rows.sort(
-    (a, b) =>
-      new Date(b.lastActivityAt).getTime() -
-      new Date(a.lastActivityAt).getTime(),
-  );
+  rows.sort((a, b) => {
+    if (a.lastActivityAt && b.lastActivityAt) {
+      return (
+        new Date(b.lastActivityAt).getTime() -
+        new Date(a.lastActivityAt).getTime()
+      );
+    }
+    if (a.lastActivityAt) return -1;
+    if (b.lastActivityAt) return 1;
+    return a.clientName.localeCompare(b.clientName);
+  });
   return rows;
 }
 
 // Load the accountant's cross-client inbox on their RLS-scoped session client.
-// Three cheap reads (threads, active-scope engagements, recent messages) folded
-// by buildFirmConversations — no SQL view/RPC, so nothing to migrate.
+// Three cheap reads (clients, threads, recent messages) folded by
+// buildFirmConversations — no SQL view/RPC, so nothing to migrate.
 export async function listFirmConversations(
   sb: SupabaseClient,
 ): Promise<FirmConversation[] | MessagingSchemaMissing> {
-  // Threads (one per engagement that's ever had a message) + the firm read
-  // stamp, and the active-scope engagement list — independent reads, one
-  // parallel batch (this loader runs every 10s while the messages panel is
-  // open, so its depth is a recurring cost, not a one-off).
-  //
-  // Engagement `.is()` filters are the ENGAGEMENT's own flags; archiving a
-  // CLIENT never sets those, so the client's stamp comes back here and
-  // buildFirmConversations drops its rows.
-  const [threadsRes, engRes] = await Promise.all([
-    sb.from("client_message_threads").select("engagement_id, firm_last_read_at"),
+  // Independent reads, one parallel batch (this loader runs every 10s while
+  // the messages panel is open, so its depth is a recurring cost).
+  const [threadsRes, clientsRes] = await Promise.all([
+    sb.from("client_message_threads").select("client_id, firm_last_read_at"),
     sb
-      .from("engagements")
-      .select("id, title, status, created_at, clients(display_name, archived_at)")
-      .is("deleted_at", null)
+      .from("clients")
+      .select("id, display_name, archived_at")
       .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(300),
+      .order("display_name", { ascending: true })
+      .limit(500),
   ]);
   if (threadsRes.error) {
     if (isClientMessagingSchemaMissing(threadsRes.error)) {
@@ -476,46 +476,40 @@ export async function listFirmConversations(
     throw threadsRes.error;
   }
   const threads = (threadsRes.data ?? []) as {
-    engagement_id: string;
+    client_id: string;
     firm_last_read_at: string | null;
   }[];
-  if (engRes.error) throw engRes.error;
-  type EngRow = {
-    id: string;
-    title: string;
-    status: string;
-    created_at: string;
-    clients: { display_name: string | null; archived_at: string | null } | null;
-  };
-  const engagements = ((engRes.data ?? []) as unknown as EngRow[]).map((e) => ({
-    id: e.id,
-    title: e.title,
-    status: e.status,
-    clientName: e.clients?.display_name ?? null,
-    clientArchivedAt: e.clients?.archived_at ?? null,
-    createdAt: e.created_at,
+  if (clientsRes.error) throw clientsRes.error;
+  const clients = (
+    (clientsRes.data ?? []) as {
+      id: string;
+      display_name: string | null;
+      archived_at: string | null;
+    }[]
+  ).map((c) => ({
+    id: c.id,
+    displayName: c.display_name ?? "",
+    archivedAt: c.archived_at,
   }));
 
-  // Only pull messages for engagements we'll actually show (threaded or live,
-  // and not belonging to an archived client). Excluding the archived ones here
-  // matters beyond saving a read: this query is capped, so their history would
-  // otherwise eat room that a live conversation's last message needs.
-  const threadEngIds = new Set(threads.map((t) => t.engagement_id));
-  const relevantIds = engagements
-    .filter(
-      (e) =>
-        !e.clientArchivedAt &&
-        (threadEngIds.has(e.id) || CONVERSATION_LIVE_STATUSES.has(e.status)),
-    )
-    .map((e) => e.id);
-  if (relevantIds.length === 0) return [];
+  // Only pull messages for clients that actually have a thread. A thread is
+  // get-or-created on every send, so "no thread" means "no messages" — this
+  // keeps the `.in()` list to the handful of real conversations instead of
+  // every client on the books.
+  const activeIds = new Set(clients.map((c) => c.id));
+  const relevantIds = threads
+    .map((t) => t.client_id)
+    .filter((id) => id && activeIds.has(id));
+  if (relevantIds.length === 0) {
+    return buildFirmConversations(clients, threads, []);
+  }
 
   // Recent messages, newest-first; grouped in memory for last-message + unread.
   // Comment-cadence volume; the cap only bounds a very chatty firm.
   const msgRes = await sb
     .from("client_messages")
-    .select("engagement_id, sender, body, created_at")
-    .in("engagement_id", relevantIds)
+    .select("client_id, sender, body, created_at")
+    .in("client_id", relevantIds)
     .order("created_at", { ascending: false })
     .limit(2000);
   if (msgRes.error) {
@@ -525,11 +519,11 @@ export async function listFirmConversations(
     throw msgRes.error;
   }
   const messages = (msgRes.data ?? []) as {
-    engagement_id: string;
+    client_id: string;
     sender: ClientMessageSender;
     body: string;
     created_at: string;
   }[];
 
-  return buildFirmConversations(engagements, threads, messages);
+  return buildFirmConversations(clients, threads, messages);
 }

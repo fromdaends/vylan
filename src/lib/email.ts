@@ -1164,7 +1164,10 @@ export function buildClientMessageEmail(opts: {
   firmLogoUrl?: string | null;
   brandColor?: string | null;
   senderName: string;
-  engagementTitle: string;
+  // Null since 1440 — the accountant<->client chat is one general thread per
+  // client, not a per-engagement one, so there is no "about X" to name. Kept
+  // as an option because the clause reads well when a title IS meaningful.
+  engagementTitle: string | null;
   snippet: string;
   count: number;
   url: string;
@@ -1172,6 +1175,7 @@ export function buildClientMessageEmail(opts: {
 }): { subject: string; html: string; text: string } {
   const fr = opts.locale === "fr";
   const brand = sanitizeColor(opts.brandColor) ?? DEFAULT_BRAND;
+  const about = opts.engagementTitle;
   const subject = fr
     ? opts.count > 1
       ? `${opts.count} nouveaux messages de ${opts.firmName}`
@@ -1184,11 +1188,11 @@ export function buildClientMessageEmail(opts: {
     : `Hi ${opts.clientName},`;
   const intro = fr
     ? opts.count > 1
-      ? `${opts.senderName} vous a écrit ${opts.count} messages au sujet de « ${opts.engagementTitle} ». Le plus récent :`
-      : `${opts.senderName} vous a écrit au sujet de « ${opts.engagementTitle} » :`
+      ? `${opts.senderName} vous a écrit ${opts.count} messages${about ? ` au sujet de « ${about} »` : ""}. Le plus récent :`
+      : `${opts.senderName} vous a écrit${about ? ` au sujet de « ${about} »` : ""} :`
     : opts.count > 1
-      ? `${opts.senderName} sent you ${opts.count} messages about "${opts.engagementTitle}". The latest:`
-      : `${opts.senderName} sent you a message about "${opts.engagementTitle}":`;
+      ? `${opts.senderName} sent you ${opts.count} messages${about ? ` about "${about}"` : ""}. The latest:`
+      : `${opts.senderName} sent you a message${about ? ` about "${about}"` : ""}:`;
   const cta = fr ? "Ouvrir la conversation" : "Open the conversation";
   const linkLabel = fr
     ? "Ou copiez ce lien dans votre navigateur :"
@@ -1271,31 +1275,39 @@ export function buildClientMessageEmail(opts: {
 export function buildFirmMessageEmail(opts: {
   accountantName: string | null;
   clientName: string;
-  engagementTitle: string;
+  // Null since 1440 — see buildClientMessageEmail. The subject then names the
+  // client alone, which is the useful half of it anyway.
+  engagementTitle: string | null;
   snippet: string;
   count: number;
   url: string;
   locale: "fr" | "en";
 }): { subject: string; html: string; text: string } {
   const fr = opts.locale === "fr";
+  const suffix = opts.engagementTitle ? ` — ${opts.engagementTitle}` : "";
+  const inThread = opts.engagementTitle
+    ? fr
+      ? ` dans « ${opts.engagementTitle} »`
+      : ` in "${opts.engagementTitle}"`
+    : "";
   const subject = fr
     ? opts.count > 1
-      ? `${opts.clientName} vous a envoyé ${opts.count} messages — ${opts.engagementTitle}`
-      : `${opts.clientName} vous a envoyé un message — ${opts.engagementTitle}`
+      ? `${opts.clientName} vous a envoyé ${opts.count} messages${suffix}`
+      : `${opts.clientName} vous a envoyé un message${suffix}`
     : opts.count > 1
-      ? `${opts.clientName} sent you ${opts.count} messages — ${opts.engagementTitle}`
-      : `${opts.clientName} sent you a message — ${opts.engagementTitle}`;
+      ? `${opts.clientName} sent you ${opts.count} messages${suffix}`
+      : `${opts.clientName} sent you a message${suffix}`;
   const greeting = fr
     ? `Bonjour${opts.accountantName ? ` ${opts.accountantName}` : ""},`
     : `Hi${opts.accountantName ? ` ${opts.accountantName}` : ""},`;
   const intro = fr
     ? opts.count > 1
-      ? `${opts.clientName} a répondu dans « ${opts.engagementTitle} » (${opts.count} nouveaux messages). Le plus récent :`
-      : `${opts.clientName} a répondu dans « ${opts.engagementTitle} » :`
+      ? `${opts.clientName} a répondu${inThread} (${opts.count} nouveaux messages). Le plus récent :`
+      : `${opts.clientName} a répondu${inThread} :`
     : opts.count > 1
-      ? `${opts.clientName} replied in "${opts.engagementTitle}" (${opts.count} new messages). The latest:`
-      : `${opts.clientName} replied in "${opts.engagementTitle}":`;
-  const cta = fr ? "Ouvrir le mandat" : "Open the engagement";
+      ? `${opts.clientName} replied${inThread} (${opts.count} new messages). The latest:`
+      : `${opts.clientName} replied${inThread}:`;
+  const cta = fr ? "Ouvrir la conversation" : "Open the conversation";
 
   const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
 <p>${escapeHtml(greeting)}</p>

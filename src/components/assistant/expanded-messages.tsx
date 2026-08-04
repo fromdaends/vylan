@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import { ChevronsRight, Loader2, MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
-import { EngagementMessages } from "@/components/engagements/engagement-messages";
+import { ClientThread } from "@/components/messages/client-thread";
 import {
   ConversationRow,
   TEAM_CONVERSATION_ID,
@@ -42,7 +42,7 @@ import type { TeamConversation } from "@/lib/db/team-messages";
 // Opt-in (opened from the popup's Expand control), NOT the old default panel.
 // Desktop only — on mobile the compact popup already fills the screen, so an
 // accidental expand there just collapses back. Reuses the conversation list
-// row, the EngagementMessages thread, and the panel's width prefs verbatim.
+// row, the ClientThread conversation, and the panel's width prefs verbatim.
 const POLL_MS = 10_000;
 
 export function ExpandedMessages({
@@ -56,6 +56,7 @@ export function ExpandedMessages({
 }) {
   const t = useTranslations("Assistant");
   const tTeam = useTranslations("TeamChat");
+  const tMessages = useTranslations("ClientMessages");
   const { expanded } = useSyncExternalStore(
     subscribeChatLauncher,
     getChatLauncherState,
@@ -67,6 +68,9 @@ export function ExpandedMessages({
   );
   const [team, setTeam] = useState<TeamConversation | null>(null);
   const [failed, setFailed] = useState(false);
+  // The messaging migrations aren't applied on this environment — an empty
+  // inbox that is NOT "you have no clients".
+  const [notActivated, setNotActivated] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -79,10 +83,12 @@ export function ExpandedMessages({
       const data = (await res.json()) as {
         conversations?: FirmConversation[];
         team?: TeamConversation | null;
+        notActivated?: boolean;
       };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
         setTeam(data.team ?? null);
+        setNotActivated(data.notActivated === true);
         setFailed(false);
       }
     } catch {
@@ -253,14 +259,12 @@ export function ExpandedMessages({
     }
     setConversations((prev) =>
       prev
-        ? prev.map((c) => (c.engagementId === id ? { ...c, unreadCount: 0 } : c))
+        ? prev.map((c) => (c.clientId === id ? { ...c, unreadCount: 0 } : c))
         : prev,
     );
   }, []);
 
-  const conv = conversations?.find((c) => c.engagementId === openId) ?? null;
-  const status = conv?.status ?? "in_progress";
-  const isLive = status === "sent" || status === "in_progress";
+  const conv = conversations?.find((c) => c.clientId === openId) ?? null;
 
   return (
     <aside
@@ -390,22 +394,24 @@ export function ExpandedMessages({
                       aria-hidden
                     />
                     <p className="text-sm font-medium text-foreground">
-                      {t("messages_inbox_empty")}
+                      {notActivated
+                        ? tMessages("not_activated")
+                        : t("messages_inbox_no_clients")}
                     </p>
                   </div>
                 ) : (
                   <ul className="divide-y divide-border/60">
                     {(conversations ?? []).map((c) => (
                       <li
-                        key={c.engagementId}
+                        key={c.clientId}
                         className={cn(
-                          c.engagementId === openId && "bg-muted/60",
+                          c.clientId === openId && "bg-muted/60",
                         )}
                       >
                         <ConversationRow
                           conversation={c}
                           locale={locale}
-                          onOpen={() => openConversation(c.engagementId)}
+                          onOpen={() => openConversation(c.clientId)}
                           youPrefix={t("messages_preview_you")}
                           noMessages={t("messages_no_messages_yet")}
                           unreadLabel={(n) =>
@@ -424,26 +430,16 @@ export function ExpandedMessages({
         <div className="min-w-0 flex-1">
           {openId === TEAM_CONVERSATION_ID ? (
             // TeamThread keeps its built-in header here — in the two-pane
-            // layout it plays the same role as EngagementMessages' header.
+            // layout it plays the same role as ClientThread's header.
             <TeamThread locale={locale} active={expanded} />
           ) : openId ? (
-            <EngagementMessages
+            <ClientThread
               key={openId}
-              engagementId={openId}
+              clientId={openId}
               clientName={conv?.clientName ?? null}
               initialMessages={[]}
               deferInitialLoad
               notActivated={false}
-              readOnly={!isLive}
-              readOnlyReason={
-                status === "cancelled"
-                  ? "cancelled"
-                  : status === "complete"
-                    ? "complete"
-                    : status === "draft"
-                      ? "draft"
-                      : null
-              }
               locale={locale}
             />
           ) : (

@@ -1,15 +1,18 @@
-// Client messaging, accountant side — COMPATIBILITY SHIM.
+// Client messaging, accountant side.
+//   GET  /api/clients/[id]/messages — the thread + unread count (poll)
+//   POST /api/clients/[id]/messages — send a firm message
 //
-// The conversation moved from the engagement to the client (migration 1440):
-// /api/clients/[id]/messages is the real route now. This one stays because the
-// repo's deploy-skew policy applies to every client-fetched surface — a browser
-// still running the previous bundle polls this URL, and 404ing it would freeze
-// somebody's open thread mid-deploy. It resolves the engagement to its client
-// and serves that client's thread, so an old tab shows the same (now merged)
-// conversation the new one does.
+// The client's ONE forever conversation (migration 1440). There is no
+// engagement in this path and no status gate on it: the founder's rule is that
+// the accountant can write to a client at any time, whatever state their work
+// is in. The client's side is gated instead — they can only reply through a
+// live portal link.
 //
-// Nothing in the current codebase calls this. When the next session is
-// confident no old bundles are in flight, it can go.
+// API routes (not server actions) for the same reason as the add-item route:
+// stable URLs across redeploys. Auth + firm scoping are enforced by RLS —
+// getServerSupabase carries the accountant's session, and every read/write on
+// the messaging tables is policy-checked against current_firm_id(), so a
+// foreign client id simply yields an empty thread / a refused insert.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -29,21 +32,6 @@ import { scheduleClientMessageNotification } from "@/lib/client-messages-notify"
 
 export const runtime = "nodejs";
 
-// The engagement read runs under RLS, so a foreign id resolves to nothing —
-// the engagement id can never widen access beyond the caller's firm.
-async function clientIdForEngagement(
-  supabase: Awaited<ReturnType<typeof getServerSupabase>>,
-  engagementId: string,
-): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("engagements")
-    .select("client_id")
-    .eq("id", engagementId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as { client_id: string } | null)?.client_id ?? null;
-}
-
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -54,14 +42,10 @@ export async function GET(
   if (!auth.user) {
     return NextResponse.json({ error: "unauth" }, { status: 401 });
   }
-  const clientId = await clientIdForEngagement(supabase, id);
-  if (!clientId) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
 
   const [messages, thread] = await Promise.all([
-    listClientMessages(supabase, clientId),
-    getThreadForClient(supabase, clientId),
+    listClientMessages(supabase, id),
+    getThreadForClient(supabase, id),
   ]);
   if (
     messages === CLIENT_MESSAGING_SCHEMA_MISSING ||
@@ -72,6 +56,8 @@ export async function GET(
   return NextResponse.json({
     messages,
     unread: countUnreadForFirm(messages, thread?.firm_last_read_at ?? null),
+    // For the accountant-side-only "Seen" indicator. The CLIENT is never
+    // shown the firm's read state (spec rule) — this only flows firm-ward.
     clientLastReadAt: thread?.client_last_read_at ?? null,
   });
 }
@@ -95,28 +81,37 @@ export async function POST(
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const clientId = await clientIdForEngagement(supabase, id);
-  if (!clientId) {
+  // The client read runs under RLS, so a foreign id 404s here — the client id
+  // can never widen access beyond the caller's firm. An ARCHIVED client is
+  // refused: archiving takes them off the board, and the inbox already drops
+  // their conversation, so accepting a write would strand the message
+  // somewhere nobody can see it.
+  const { data: client, error: clientErr } = await supabase
+    .from("clients")
+    .select("id, archived_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (clientErr) throw clientErr;
+  if (!client) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  // No engagement-status gate any more: the chat is the client's, and it never
-  // closes. The old WRITABLE_STATUSES check lived here.
+  if (client.archived_at) {
+    return NextResponse.json({ error: "archived" }, { status: 400 });
+  }
 
   const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
   if (!firm || !user) {
     return NextResponse.json({ error: "unauth" }, { status: 401 });
   }
 
-  const threadId = await getOrCreateThread(supabase, firm.id, clientId);
+  const threadId = await getOrCreateThread(supabase, firm.id, id);
   if (threadId === CLIENT_MESSAGING_SCHEMA_MISSING) {
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
   }
 
   const message = await insertFirmMessage(supabase, {
     firmId: firm.id,
-    clientId,
-    // Provenance: this caller WAS standing in an engagement, so record it.
-    engagementId: id,
+    clientId: id,
     userId: user.id,
     senderName: userDisplayLabel(user),
     body,
@@ -125,13 +120,17 @@ export async function POST(
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
   }
 
+  // Sending implies you've seen the thread — clear your own unread state so
+  // your reply doesn't leave a stale badge. Then (re)start the debounced
+  // client-email timer: a burst of sends keeps pushing it back, producing
+  // ONE email. Both best-effort; never fail an already-written send.
   try {
-    await markThreadReadByFirm(supabase, clientId);
+    await markThreadReadByFirm(supabase, id);
   } catch (e) {
     console.error("[client-messages] read-stamp after send failed:", e);
   }
   try {
-    await scheduleClientMessageNotification(clientId);
+    await scheduleClientMessageNotification(id);
   } catch (e) {
     console.error("[client-messages] notify scheduling failed:", e);
   }
