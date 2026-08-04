@@ -24,7 +24,7 @@ export const GOOGLE_CALENDAR_STATE_COOKIE = "gcal_oauth_state";
 // connector next door. Filing decides where the FIRM's client documents land —
 // an owner-level decision. This connects YOUR OWN calendar to YOUR OWN
 // dashboard panel; requiring the owner's permission to see your own meetings
-// would be absurd. Every row is scoped to the connecting user by RLS (1440).
+// would be absurd. Every row is scoped to the connecting user by RLS (1450).
 export async function POST() {
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
