@@ -268,6 +268,10 @@ export function AppShell({
         // drop it for now rather than ship a button that half-means it.
         createPanel={{
           title: tHome("create_title"),
+          // Bare nouns — "Task", not "Create task". The panel is already titled
+          // Create, so repeating the verb on every button says it four times on
+          // one small surface and makes the three labels different lengths for
+          // no reason. Do not put the verbs back.
           actions: [
             { href: "/work?new=1", label: tHome("create_task"), icon: CircleCheckBig },
             { href: "/clients?new=1", label: tHome("create_client"), icon: UserPlus },
