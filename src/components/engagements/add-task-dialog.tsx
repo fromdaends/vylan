@@ -56,11 +56,7 @@ import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
   Check,
-  CheckSquare,
   ChevronLeft,
-  FileSignature,
-  FolderCheck,
-  Inbox,
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -84,19 +80,23 @@ import {
   ClientCombobox,
   type ComboboxClient,
 } from "@/components/clients/client-combobox";
+import { type TaskKind } from "@/lib/db/engagement-tasks";
 import { addTaskAction } from "@/app/actions/engagement-tasks";
+import {
+  TASK_KIND_META,
+  taskKindHasScreen,
+  taskKindHintKey,
+  taskKindLabelKey,
+} from "@/lib/tasks/kinds";
+import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 
-type Kind = "document_collection" | "signatures" | "deliverables" | "task";
+type Kind = TaskKind;
 type Priority = "none" | "low" | "medium" | "high";
 
-/** `once` kinds own a collection keyed by engagement_id, so they need a job and
- *  a job may only have one of each. */
-const KINDS: { kind: Kind; icon: typeof Inbox; once: boolean }[] = [
-  { kind: "document_collection", icon: Inbox, once: true },
-  { kind: "signatures", icon: FileSignature, once: true },
-  { kind: "deliverables", icon: FolderCheck, once: true },
-  { kind: "task", icon: CheckSquare, once: false },
-];
+/** Every kind, in order, from the one place that defines them. The three with
+ *  a screen own a collection keyed by engagement_id, so they need a job and a
+ *  job may only have one of each; the rest are ordinary tasks with a name. */
+const KINDS = TASK_KIND_META;
 
 const PRIORITIES: Priority[] = ["none", "low", "medium", "high"];
 
@@ -182,36 +182,23 @@ export function AddTaskDialog({
   const effectiveClientId = fixedClientId ?? clientId;
   const effectiveEngagementId = fixedEngagementId ?? engagementId;
 
-  const label = (k: Kind) =>
-    k === "document_collection"
-      ? t("kind_document_collection")
-      : k === "signatures"
-        ? t("kind_signatures")
-        : k === "deliverables"
-          ? t("kind_deliverables")
-          : t("kind_task");
-
-  const hint = (k: Kind) =>
-    k === "document_collection"
-      ? t("kind_document_collection_hint")
-      : k === "signatures"
-        ? t("kind_signatures_hint")
-        : k === "deliverables"
-          ? t("kind_deliverables_hint")
-          : t("kind_task_hint");
+  const label = (k: Kind) => t(taskKindLabelKey(k) as "kind_task");
+  const hint = (k: Kind) => t(taskKindHintKey(k) as "kind_task_hint");
 
   // Which jobs a collection kind could attach to. Narrowed to the chosen client
   // first, then to the ones that do not already have this kind — the database
   // refuses a duplicate, and an option that always errors is worse than none.
   const jobOptions = useMemo(() => {
-    if (!kind || kind === "task" || !effectiveClientId) return [];
+    if (!kind || !taskKindHasScreen(kind) || !effectiveClientId) return [];
     return engagements.filter(
       (e) => e.clientId === effectiveClientId && !e.existingKinds.includes(kind),
     );
   }, [kind, effectiveClientId, engagements]);
 
   // A collection kind chosen away from a job needs one picked.
-  const needsJob = Boolean(kind && kind !== "task" && !jobKnown);
+  // Only a kind that OWNS a collection needs a job. A labelled task —
+  // Notice, Meeting, Review — belongs to a client and may have no job at all.
+  const needsJob = Boolean(kind && taskKindHasScreen(kind) && !jobKnown);
 
   function reset() {
     setKind(null);
@@ -266,7 +253,7 @@ export function AddTaskDialog({
   }
 
   const taken = (k: (typeof KINDS)[number]) =>
-    k.once && jobKnown && existingKinds.includes(k.kind);
+    k.hasScreen && jobKnown && existingKinds.includes(k.kind);
 
   return (
     <Popover
@@ -323,7 +310,7 @@ export function AddTaskDialog({
                   )}
                 >
                   <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <k.icon className="size-3.5" aria-hidden />
+                    <TaskKindIcon kind={k.kind} className="size-3.5" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[13px] font-medium">

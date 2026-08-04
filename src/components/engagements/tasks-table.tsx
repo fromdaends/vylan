@@ -65,9 +65,6 @@ import {
   Check,
   ChevronRight,
   ChevronsUpDown,
-  FileSignature,
-  FolderCheck,
-  Inbox,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -89,6 +86,8 @@ import {
   type TaskActionResult,
 } from "@/app/actions/engagement-tasks";
 import { TaskDetailPanel } from "@/components/engagements/task-detail-panel";
+import { taskKindLabelKey, taskKindHasScreen } from "@/lib/tasks/kinds";
+import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 
 type TaskStatus = "todo" | "doing" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -115,12 +114,6 @@ const NEXT: Record<TaskStatus, TaskStatus> = {
   todo: "doing",
   doing: "done",
   done: "todo",
-};
-
-const KIND_ICON: Partial<Record<string, typeof Inbox>> = {
-  document_collection: Inbox,
-  signatures: FileSignature,
-  deliverables: FolderCheck,
 };
 
 // Rank, not alphabet. Sorting priority by its own name puts "high" between
@@ -212,14 +205,10 @@ export function TasksTable({
     });
   }
 
+  // One source for every kind's label, icon and hint — see lib/tasks/kinds.ts
+  // for why the ternary chain that used to live here had to go.
   const kindLabel = (kind: string) =>
-    kind === "document_collection"
-      ? t("kind_document_collection")
-      : kind === "signatures"
-        ? t("kind_signatures")
-        : kind === "deliverables"
-          ? t("kind_deliverables")
-          : t("kind_task");
+    t(taskKindLabelKey(kind) as "kind_task");
 
   const inView = (r: TaskRow, v: TaskView) =>
     v === "all"
@@ -682,8 +671,8 @@ function Row({
   const assignees = task.assigneeIds
     .map((id) => ({ id, name: nameById.get(id) }))
     .filter((a): a is Person => Boolean(a.name));
-  const Icon = KIND_ICON[task.kind];
-  const openable = Boolean(onOpenScreen && Icon);
+  // Only a kind with a real screen is clickable through.
+  const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
   const overdue =
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
@@ -807,18 +796,18 @@ function Row({
           !firmWide && "border-l border-border",
         )}
       >
-        {Icon && task.engagementId ? (
+        {taskKindHasScreen(task.kind) && task.engagementId ? (
           <Link
             href={`/engagements/${task.engagementId}?task=${task.id}`}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1.5 text-accent transition-colors hover:underline"
           >
-            <Icon className="size-3.5 shrink-0" aria-hidden />
+            <TaskKindIcon kind={task.kind} className="size-3.5" />
             <span className="truncate">{kindLabel(task.kind)}</span>
           </Link>
         ) : (
           <span className="flex items-center gap-1.5">
-            {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
+            <TaskKindIcon kind={task.kind} className="size-3.5" />
             <span className="truncate">{kindLabel(task.kind)}</span>
           </span>
         )}
