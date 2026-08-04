@@ -18,7 +18,12 @@ import { assertLocale } from "@/lib/locale";
 import { Plus, FilePlus2 } from "lucide-react";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { can } from "@/lib/auth/capabilities";
+import {
+  buildWorkflowSummaryLine,
+} from "@/lib/workflow/summary";
+import { parseWorkflowDefinition } from "@/lib/workflow/definition";
 import { ServiceCatalogue } from "@/components/templates/service-catalogue";
 import { AutoNewTemplate } from "@/components/templates/auto-new-template";
 
@@ -35,11 +40,18 @@ export default async function TemplatesPage({
   setRequestLocale(locale);
 
   const sp = await searchParams;
-  const [templates, services, user] = await Promise.all([
+  const [templates, services, user, currentFirm] = await Promise.all([
     listTemplates(),
     listFirmServices(),
     getCurrentUser(),
+    getCurrentFirm(),
   ]);
+  // Part A switch (1510): with it on, template cards open their detail page
+  // (built-ins read-only) and carry a one-line automation summary. Off = the
+  // page exactly as it was.
+  const workflowsOn =
+    (currentFirm as { workflows_enabled?: boolean } | null)
+      ?.workflows_enabled === true;
   // Editing what the firm SELLS is a firm-settings decision, not something
   // anyone with an engagement can do. The server action enforces this too —
   // this only decides whether the controls are drawn.
@@ -53,6 +65,7 @@ export default async function TemplatesPage({
 
   const t = await getTranslations("Templates");
   const tEng = await getTranslations("Engagements");
+  const tAuto = await getTranslations("Automations");
 
   // Localized "peek inside" + required count, computed once per template.
   const cardData = (tmpl: Template) => {
@@ -60,12 +73,18 @@ export default async function TemplatesPage({
       .slice(0, 3)
       .map((it) => (locale === "fr" ? it.label_fr : it.label_en));
     const requiredCount = tmpl.items.filter((it) => it.required).length;
+    const workflowDef = workflowsOn
+      ? parseWorkflowDefinition(tmpl.workflow)
+      : null;
     return {
       name: localizedTemplateName(tmpl, locale),
       type: tmpl.type,
       itemCount: tmpl.items.length,
       requiredCount,
       preview,
+      workflowSummary: workflowDef
+        ? buildWorkflowSummaryLine(workflowDef, tAuto)
+        : null,
     };
   };
 
@@ -113,6 +132,7 @@ export default async function TemplatesPage({
             <TemplateCard
               key={tmpl.id}
               {...cardData(tmpl)}
+              href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
               footer={
                 <>
                   <form action={cloneTemplateAction}>
@@ -171,6 +191,7 @@ export default async function TemplatesPage({
               <TemplateCard
                 key={tmpl.id}
                 {...cardData(tmpl)}
+                href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
                 footer={
                   <>
                     <form action={deleteTemplateAction}>

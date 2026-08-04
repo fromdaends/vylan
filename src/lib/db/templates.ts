@@ -87,23 +87,48 @@ export async function cloneTemplateToFirm(
   if (!u) throw new Error("Not authenticated");
   if (!u.firm_id) throw new Error("No firm for user");
 
-  const { data, error } = await supabase
+  // The workflow rides along (spec: cloning a template copies its workflow
+  // with its checklist), with automation_id as provenance. Included only when
+  // the source has one, and retried without on a missing-column error, so a
+  // pre-1510 environment still clones exactly as before.
+  const workflowCols =
+    source.workflow != null
+      ? { workflow: source.workflow, automation_id: source.automation_id ?? null }
+      : {};
+  let { data, error } = await supabase
     .from("templates")
     .insert({
       firm_id: u.firm_id,
       name: newName ?? `${source.name} (copie)`,
       type: source.type,
       items: source.items,
+      ...workflowCols,
     })
     .select("*")
     .single();
+  if (
+    error &&
+    (error.code === "PGRST204" || error.code === "42703") &&
+    source.workflow != null
+  ) {
+    ({ data, error } = await supabase
+      .from("templates")
+      .insert({
+        firm_id: u.firm_id,
+        name: newName ?? `${source.name} (copie)`,
+        type: source.type,
+        items: source.items,
+      })
+      .select("*")
+      .single());
+  }
   if (error) throw error;
   return data as Template;
 }
 
 export async function updateTemplate(
   id: string,
-  patch: Partial<Pick<Template, "name" | "items">>,
+  patch: Partial<Pick<Template, "name" | "items" | "workflow" | "automation_id">>,
 ): Promise<Template> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase

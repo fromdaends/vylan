@@ -42,7 +42,7 @@ import {
   updateAutomationAction,
 } from "@/app/actions/automations";
 import { BUILTIN_AUTOMATION_IDS, type WorkflowDefinition } from "@/lib/workflow/definition";
-import { workflowSummaryFacts } from "@/lib/workflow/summary";
+import { buildWorkflowSummaryLine } from "@/lib/workflow/summary";
 
 export type AutomationRow = {
   id: string;
@@ -53,8 +53,9 @@ export type AutomationRow = {
 };
 
 // Built-in names ship in the rows as English; the UI localizes by fixed id,
-// the same trick builtin-names.ts plays for templates.
-const BUILTIN_NAME_KEYS: Record<string, string> = {
+// the same trick builtin-names.ts plays for templates. Exported: the template
+// page's picker names the same rows and must never spell them differently.
+export const BUILTIN_NAME_KEYS: Record<string, string> = {
   [BUILTIN_AUTOMATION_IDS.return]: "builtin_return",
   [BUILTIN_AUTOMATION_IDS.gst]: "builtin_gst",
   [BUILTIN_AUTOMATION_IDS.bookkeeping]: "builtin_bookkeeping",
@@ -118,19 +119,8 @@ export function AutomationsPanel({
     });
   }
 
-  const summaryLine = (def: WorkflowDefinition | null): string => {
-    if (!def) return "";
-    const f = workflowSummaryFacts(def);
-    const bits: string[] = [t("summary_stages", { count: f.stageCount })];
-    if (f.sendsLetter && f.activatesChecklist) {
-      bits.push(t("summary_letter_checklist"));
-    } else if (f.activatesChecklist) {
-      bits.push(t("summary_checklist"));
-    }
-    if (f.taskCount > 0) bits.push(t("summary_tasks", { count: f.taskCount }));
-    if (f.finalCondition) bits.push(t(`summary_ends_${f.finalCondition}`));
-    return bits.join(" · ");
-  };
+  const summaryLine = (def: WorkflowDefinition | null): string =>
+    def ? buildWorkflowSummaryLine(def, t) : "";
 
   return (
     <section aria-labelledby="automations-lib" className="mb-10">
