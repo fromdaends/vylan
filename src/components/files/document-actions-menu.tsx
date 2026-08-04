@@ -47,6 +47,7 @@ import {
   deleteDocumentAction,
   moveDocumentAction,
   renameDocumentAction,
+  restoreDocumentAction,
   setDocumentVisibilityAction,
 } from "@/app/actions/documents";
 import { BROWSE_CATEGORIES, categoryForDocType } from "@/lib/files/axes";
@@ -89,7 +90,7 @@ function useDocMenu(props: DocumentMenuMeta) {
   const t = useTranslations("Files");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [dialog, setDialog] = useState<null | "rename" | "move" | "delete">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "move">(null);
 
   const [newName, setNewName] = useState(name);
   const [moveType, setMoveType] = useState<string>(docType ?? "none");
@@ -143,13 +144,31 @@ function useDocMenu(props: DocumentMenuMeta) {
     });
   }
 
-  function submitDelete() {
+  // No confirmation. Delete is a recoverable move to Recently deleted, and the
+  // drag-to-trash path already lands it instantly with an Undo on the toast —
+  // the menu asking "are you sure?" first was the odd one out (founder: it
+  // should just move to the bin, not make you wait). Same toast, same Undo.
+  function deleteNow() {
     startTransition(async () => {
       const res = await deleteDocumentAction({ source, id });
       if (res.ok) {
-        setDialog(null);
         router.refresh();
-        toast.success(t("delete_done"));
+        toast.success(t("delete_done"), {
+          action: {
+            label: t("undo"),
+            onClick: () => {
+              startTransition(async () => {
+                const undone = await restoreDocumentAction({ source, id });
+                if (undone.ok) {
+                  router.refresh();
+                  toast.success(t("restore_done", { name }));
+                } else {
+                  toast.error(t("action_failed"));
+                }
+              });
+            },
+          },
+        });
       } else {
         toast.error(t("action_failed"));
       }
@@ -226,25 +245,6 @@ function useDocMenu(props: DocumentMenuMeta) {
             </Button>
             <Button onClick={submitRename} disabled={pending || !newName.trim()}>
               {t("save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete — a soft delete, so the copy says "recoverable", not "gone".
-          Overstating it would make people hesitate over an undoable action. */}
-      <Dialog open={dialog === "delete"} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("delete_title")}</DialogTitle>
-            <DialogDescription>{t("delete_help", { name })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialog(null)} disabled={pending}>
-              {t("cancel")}
-            </Button>
-            <Button variant="destructive" onClick={submitDelete} disabled={pending}>
-              {t("action_delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -331,6 +331,7 @@ function useDocMenu(props: DocumentMenuMeta) {
     setNewName,
     download,
     toggleVisibility,
+    deleteNow,
     dialogs,
   };
 }
@@ -415,10 +416,7 @@ function DocMenuItems({
       </Item>
       <Item
         className="gap-2 text-destructive focus:text-destructive"
-        onSelect={(e) => {
-          e.preventDefault();
-          menu.setDialog("delete");
-        }}
+        onSelect={() => menu.deleteNow()}
       >
         <Trash2 className="size-4" />
         {t("action_delete")}

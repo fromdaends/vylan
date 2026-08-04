@@ -148,8 +148,12 @@ describe("rowMenuItemKeys", () => {
   it("archived engagement (staff): Open, Unarchive — no Delete", () => {
     expect(rowMenuItemKeys("archived", false)).toEqual(["open", "unarchive"]);
   });
-  it("deleted engagement (owner): Open, Restore", () => {
-    expect(rowMenuItemKeys("deleted", true)).toEqual(["open", "restore"]);
+  it("deleted engagement (owner): Open, Restore, Delete forever", () => {
+    expect(rowMenuItemKeys("deleted", true)).toEqual([
+      "open",
+      "restore",
+      "delete_forever",
+    ]);
   });
   it("deleted engagement (staff): Open only — staff can't restore", () => {
     expect(rowMenuItemKeys("deleted", false)).toEqual(["open"]);

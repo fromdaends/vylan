@@ -47,13 +47,14 @@ import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { purgeOneEngagement } from "@/lib/engagements/purge";
 import { BULK_ASSIGN_MAX } from "@/lib/engagements/bulk-assign";
 import { normalizeHandoffNote } from "@/lib/engagements/handoff-note";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
-import { getBrandingImageUrlForEmail } from "@/lib/storage";
+import { BUCKET, getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
@@ -701,6 +702,108 @@ export async function restoreEngagementAction(formData: FormData) {
   await restoreEngagement(id);
   await logUserActivity(user.firm_id, id, "engagement_restored", {});
   revalidateEngagementPaths(id);
+}
+
+export type DeleteForeverResult =
+  | { ok: true; purged: true }
+  // Not deleted yet: the engagement still holds documents that were never
+  // filed to the firm's connected storage. The UI warns, then retries with
+  // force: true if the owner insists.
+  | { ok: true; purged: false; unfiledCount: number }
+  | { ok: false };
+
+/**
+ * "Delete forever" on a Recently-deleted row: skip the rest of the 30-day
+ * window and purge NOW. Owner-only, and ONLY for an engagement that is already
+ * soft-deleted — an active engagement can never be hard-deleted in one step.
+ *
+ * The founder's rule on when to ask first: if every client document was filed
+ * to the firm's storage while the engagement was live, deleting is safe and
+ * needs no question; if some never were, this returns unfiledCount instead of
+ * deleting, and the UI shows a warning that must be explicitly confirmed
+ * (force: true).
+ */
+export async function deleteEngagementForeverAction(input: {
+  id: string;
+  force?: boolean;
+}): Promise<DeleteForeverResult> {
+  const id = input.id;
+  if (typeof id !== "string" || !id) return { ok: false };
+  const user = await getCurrentUser();
+  if (!user || !canDeleteEngagements(user.role)) return { ok: false };
+
+  // Prove visibility through the RLS session client before any service-role
+  // work (same prove-then-act discipline as the document delete).
+  const engagement = await getEngagement(id);
+  if (
+    !engagement ||
+    engagement.firm_id !== user.firm_id ||
+    !engagement.deleted_at
+  ) {
+    return { ok: false };
+  }
+
+  const service = getServiceRoleSupabase();
+
+  if (!input.force) {
+    // Documents that would be lost for good: LIVE rows (a file the firm
+    // already binned itself doesn't warrant a warning) with no 'filed' ledger
+    // entry on the firm's storage. Client uploads and firm deliverables both
+    // count — both live only in Vylan until the filing engine has copied them.
+    let unfiled = 0;
+    for (const [table, source] of [
+      ["uploaded_files", "checklist"],
+      ["final_documents", "final"],
+    ] as const) {
+      const { data: rows, error } = await service
+        .from(table)
+        .select("id")
+        .eq("engagement_id", id)
+        .is("deleted_at", null);
+      if (error) return { ok: false };
+      const ids = ((rows ?? []) as { id: string }[]).map((r) => r.id);
+      if (ids.length === 0) continue;
+      const { data: filed, error: filedErr } = await service
+        .from("filed_documents")
+        .select("file_id")
+        .eq("firm_id", user.firm_id)
+        .eq("source", source)
+        .eq("status", "filed")
+        .in("file_id", ids);
+      // Pre-0900 (no filing schema) reads as "nothing filed" — the truth.
+      const filedIds = new Set(
+        (((filedErr ? [] : filed) ?? []) as { file_id: string }[]).map(
+          (r) => r.file_id,
+        ),
+      );
+      unfiled += ids.filter((i) => !filedIds.has(i)).length;
+    }
+    if (unfiled > 0) return { ok: true, purged: false, unfiledCount: unfiled };
+  }
+
+  try {
+    await purgeOneEngagement(
+      {
+        supabase: service,
+        removeStorageObjects: async (paths) => {
+          const { error } = await service.storage.from(BUCKET).remove(paths);
+          if (error) throw error;
+        },
+      },
+      {
+        id: engagement.id,
+        firm_id: engagement.firm_id,
+        title: engagement.title ?? null,
+        deleted_at: engagement.deleted_at,
+      },
+      { type: "user", id: user.id },
+    );
+  } catch (e) {
+    console.error("[deleteEngagementForeverAction] purge failed:", e);
+    return { ok: false };
+  }
+  revalidateEngagementPaths(id);
+  return { ok: true, purged: true };
 }
 
 // Reassign an engagement's accountability to another ACTIVE firm member. Any

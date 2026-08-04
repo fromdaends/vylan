@@ -147,6 +147,13 @@ export async function BrowseTab({
     // one thing the host route needs to still be the right page.
     for (const [k, v] of Object.entries(baseParams ?? {})) q.set(k, v);
     const s = q.toString();
+    // A link that clears EVERY param would collapse to a bare /files — which
+    // resolves to the HOME tab now, not this browser. The root "Files" crumb
+    // did exactly that: clicking it threw you out of the file manager onto the
+    // dashboard-ish Home. Any link this browser writes must stay in Browse.
+    // Hosted browsers (the client page) always carry baseParams, so only the
+    // /files case can collapse.
+    if (!s && basePath === "/files") return `${basePath}?tab=browse`;
     return s ? `${basePath}?${s}` : basePath;
   }
 
