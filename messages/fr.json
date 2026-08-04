@@ -2168,6 +2168,7 @@
     "new_title": "Créer un mandat",
     "new_subtitle": "Définissez la portée et le prix, choisissez ce dont vous avez besoin du client, et comment il est facturé.",
     "back": "Retour",
+    "back_to_list": "Retour vers {list}",
     "section_client": "Client",
     "no_clients_title": "Aucun client pour le moment",
     "no_clients_body": "Ajoutez d'abord un client, puis revenez ici pour créer son engagement.",

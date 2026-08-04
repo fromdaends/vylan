@@ -50,7 +50,12 @@ export function EngagementStartChooser({
   const mine = templates.filter((x) => x.access === "private");
 
   return (
-    <div className="mx-auto max-w-xl space-y-5 py-4">
+    // Fills the box and centres itself in it. The shell is now ONE fixed size
+    // for every step (founder: "it should be consistent throughout the entire
+    // engagement creating process"), which means this short question sits in a
+    // tall box — so it centres rather than clinging to the top edge, where it
+    // read as content that had failed to fill the panel.
+    <div className="mx-auto flex h-full max-w-xl flex-col justify-center gap-5 py-4">
       <div>
         <h2 className="text-lg font-semibold tracking-tight">
           {t("start_title")}

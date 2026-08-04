@@ -69,8 +69,8 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { ArrowLeft, Plus, Lock, FileText } from "lucide-react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Plus, Lock, FileText } from "lucide-react";
+import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
 import { cn } from "@/lib/cn";
@@ -722,13 +722,7 @@ export default async function ClientDetailPage({
       {/* One way back, stated plainly. A two-crumb breadcrumb ("Clients /
           Zachary Thresh") spends a line telling you the name you can already
           read at 26px directly underneath it. */}
-      <Link
-        href="/clients"
-        className="-ml-2 inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        {t("back_all_clients")}
-      </Link>
+      <BackLink href="/clients" label={t("back_all_clients")} />
 
       {/* Canopy puts the identity AND the section tabs in one bordered card at
           the top, so "who am I looking at" and "which part of them" are one
