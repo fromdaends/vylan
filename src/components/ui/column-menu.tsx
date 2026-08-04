@@ -92,7 +92,10 @@ export function ColumnMenu({
             // caption — something you skim past — when it is in fact the
             // control that sorts and filters the column.
             className={cn(
-              "flex w-full items-center gap-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              // whitespace-nowrap because the count badge appears WITHOUT warning, the
+              // moment you tick a value — and a two-word label that wraps at that
+              // moment shoves every column sideways while you are reading them.
+              "flex w-full items-center gap-1 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active || filtering
                 ? "text-foreground"
                 : "text-foreground/80 hover:text-foreground",

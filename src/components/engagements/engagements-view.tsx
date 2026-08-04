@@ -206,13 +206,10 @@ export function EngagementsView({
           Search stays. It is not a filter on one column — it looks across the
           engagement name and the client name at once, which no column menu
           does. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* "64 engagements", as Canopy puts it directly above the table. Small,
-            quiet, and the one number that tells you whether what you are
-            looking at is the whole list or the tail of a search. */}
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {t("count_engagements", { count: visible.length })}
-        </p>
+      {/* The count moved INTO the table (countLabel below). It has to be
+          counted after the column menus have filtered, and only the table knows
+          that — out here it sat at 10 while the table showed 3. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -240,6 +237,7 @@ export function EngagementsView({
               : t(`view_${view}_empty`)
         }
         canDelete={canDelete}
+        countLabel={(count) => t("count_engagements", { count })}
         growNameColumn
         teamEnabled={teamEnabled}
         // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.
