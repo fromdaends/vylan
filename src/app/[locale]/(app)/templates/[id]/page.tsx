@@ -7,6 +7,7 @@ import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { TemplateEditor } from "@/components/templates/template-editor";
 import { TemplateDetailShell } from "@/components/templates/template-detail-shell";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
+import { cleanLabel } from "@/lib/text/clean-label";
 import { assertLocale } from "@/lib/locale";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 
@@ -40,7 +41,7 @@ export default async function TemplateEditPage({
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
-  const displayName = localizedTemplateName(tmpl, locale);
+  const displayName = cleanLabel(localizedTemplateName(tmpl, locale));
 
   if (!workflowsOn) {
     // Pre-1510 behaviour, byte for byte: firm templates only.

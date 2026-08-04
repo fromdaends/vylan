@@ -21,12 +21,11 @@ import {
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
 
-// Em dashes read as AI slop, so we never show them — even if older seeded data
-// still contains them. Collapse "X — Y" to "X Y" at render time (the seed
-// migrations also clean the underlying data).
-export function cleanLabel(s: string): string {
-  return s.replace(/\s*—\s*/g, " ").replace(/\s{2,}/g, " ").trim();
-}
+// Re-exported from the neutral module so existing importers keep working;
+// the implementation moved to lib/text so SERVER components (page titles,
+// breadcrumbs) can use it without the client-module stub footgun.
+export { cleanLabel } from "@/lib/text/clean-label";
+import { cleanLabel } from "@/lib/text/clean-label";
 
 // Give each template a meaningful glyph instead of one generic file icon for
 // everything. We match the name first (so each built-in reads at a glance —

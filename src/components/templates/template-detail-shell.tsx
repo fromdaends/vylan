@@ -18,7 +18,7 @@
 // Built-in TEMPLATES render everything read-only with Clone to customize —
 // the same one-step door the templates list already has.
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Copy, FileText, ListChecks, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -88,14 +88,15 @@ export function TemplateDetailShell({
     template.automation_id ?? null,
   );
   // What the last save (or first load) looked like — dirtiness is a fact
-  // about divergence from THIS, not from the automation.
-  const savedRef = useRef({
+  // about divergence from THIS, not from the automation. State, not a ref:
+  // it participates in render (the save bar appears from it).
+  const [savedState, setSavedState] = useState(() => ({
     def: JSON.stringify(initialDef),
     automationId: template.automation_id ?? null,
-  });
+  }));
   const dirty =
-    JSON.stringify(draft) !== savedRef.current.def ||
-    (automationId ?? null) !== savedRef.current.automationId;
+    JSON.stringify(draft) !== savedState.def ||
+    (automationId ?? null) !== savedState.automationId;
 
   const [busy, startTransition] = useTransition();
 
@@ -131,10 +132,10 @@ export function TemplateDetailShell({
         saveBackToAutomation: saveBack,
       });
       if (res.ok) {
-        savedRef.current = {
+        setSavedState({
           def: JSON.stringify(draft),
           automationId: automationId ?? null,
-        };
+        });
         toast.success(
           saveBack && res.savedBack && provenance
             ? t("saved_back_toast", { name: automationName(provenance) })
