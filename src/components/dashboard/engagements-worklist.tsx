@@ -60,6 +60,11 @@ import {
 } from "@/lib/dashboard/worklist-select";
 import { cn } from "@/lib/cn";
 import {
+  RowMenuItems,
+  CONTEXT_MENU_PARTS,
+  DROPDOWN_MENU_PARTS,
+} from "@/components/engagements/row-menu-items";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -1534,113 +1539,17 @@ function WorklistRowView({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  {items.map((it, i) => {
-                    const Icon = it.icon;
-                    // A submenu item (the Stage picker) opens a child list
-                    // instead of acting on click.
-                    if (it.submenu) {
-                      return (
-                        <DropdownMenuSub key={it.key}>
-                          <DropdownMenuSubTrigger>
-                            <Icon />
-                            {it.label}
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="w-52">
-                            {it.submenu.map((sub) => (
-                              <DropdownMenuItem
-                                key={sub.key}
-                                onSelect={sub.onSelect}
-                                className="gap-2"
-                              >
-                                <span
-                                  aria-hidden
-                                  className={cn(
-                                    "size-2 shrink-0 rounded-full",
-                                    sub.dotClass,
-                                  )}
-                                />
-                                <span className="flex-1">{sub.label}</span>
-                                {sub.checked && (
-                                  <Check className="size-3.5 shrink-0 text-muted-foreground" />
-                                )}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      );
-                    }
-                    return (
-                      <Fragment key={it.key}>
-                        {/* Destructive actions get their own group, the way Drive
-                            fences off "Move to trash" — a stray click on Delete is
-                            the one that actually costs something. */}
-                        {it.variant === "destructive" && i > 0 && (
-                          <DropdownMenuSeparator />
-                        )}
-                        <DropdownMenuItem
-                          variant={it.variant}
-                          onSelect={it.onSelect}
-                        >
-                          <Icon />
-                          {it.label}
-                        </DropdownMenuItem>
-                      </Fragment>
-                    );
-                  })}
+                  <RowMenuItems items={items} parts={DROPDOWN_MENU_PARTS} />
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
           </TableRow>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-44">
-          {items.map((it, i) => {
-            const Icon = it.icon;
-            if (it.submenu) {
-              return (
-                <ContextMenuSub key={it.key}>
-                  <ContextMenuSubTrigger>
-                    <Icon />
-                    {it.label}
-                  </ContextMenuSubTrigger>
-                  <ContextMenuSubContent className="w-52">
-                    {it.submenu.map((sub) => (
-                      <ContextMenuItem
-                        key={sub.key}
-                        onSelect={sub.onSelect}
-                        className="gap-2"
-                      >
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "size-2 shrink-0 rounded-full",
-                            sub.dotClass,
-                          )}
-                        />
-                        <span className="flex-1">{sub.label}</span>
-                        {sub.checked && (
-                          <Check className="size-3.5 shrink-0 text-muted-foreground" />
-                        )}
-                      </ContextMenuItem>
-                    ))}
-                  </ContextMenuSubContent>
-                </ContextMenuSub>
-              );
-            }
-            return (
-              <Fragment key={it.key}>
-                {it.variant === "destructive" && i > 0 && (
-                  <ContextMenuSeparator />
-                )}
-                <ContextMenuItem
-                  variant={it.variant}
-                  onSelect={it.onSelect}
-                >
-                  <Icon />
-                  {it.label}
-                </ContextMenuItem>
-              </Fragment>
-            );
-          })}
+          {/* ONE renderer, shared with the tasks list. It used to be pasted
+              here and again in the dropdown above, which is why tasks could
+              not be given "the same UI" without a third copy. */}
+          <RowMenuItems items={items} parts={CONTEXT_MENU_PARTS} />
         </ContextMenuContent>
       </ContextMenu>
       {dialog}

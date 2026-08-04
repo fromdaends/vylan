@@ -101,10 +101,11 @@ export function ClientsTable({
   const idsKey = clients.map((c) => c.id).join(",");
   useEffect(() => {
     const ids = idsKey ? idsKey.split(",") : [];
-    if (ids.length === 0) {
-      setCommentCounts({});
-      return;
-    }
+    // No synchronous setState here: an empty list has no rows to draw, and
+    // clearing state in an effect body triggers a cascading render (the
+    // react-hooks/set-state-in-effect rule). Counts are looked up BY ID, so a
+    // stale entry for a row that is no longer visible is never read.
+    if (ids.length === 0) return;
     let alive = true;
     void loadCommentCountsAction({ kind: "client", ids }).then((counts) => {
       if (alive) setCommentCounts(counts);

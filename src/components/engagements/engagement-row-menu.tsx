@@ -55,6 +55,12 @@ export type RowMenuSubItem = {
   label: string;
   // Tailwind background class for the leading colour dot (stage hues).
   dotClass?: string;
+  // An INLINE colour for the same dot, for palettes that are not fixed at build
+  // time — a firm's own task statuses (1420) store a hex, so there is no class
+  // to name. Exactly one of dotClass / dotColor is set; a submenu that sets
+  // neither renders an invisible dot, which is how the task status picker first
+  // came out.
+  dotColor?: string;
   checked?: boolean;
   onSelect: () => void;
 };
