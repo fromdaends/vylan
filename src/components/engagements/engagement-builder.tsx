@@ -572,7 +572,11 @@ export function EngagementBuilder({
   return (
     // Rail left, one step's worth of form right. The rail is sticky so it stays
     // a table of contents on a long step rather than scrolling away with it.
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:items-start">
+    // The rail is a FIXED 17rem and the form takes everything else. A
+    // fractional rail (1fr_3fr) would grow the table of contents on a wide
+    // monitor, which is the one thing on this page that gains nothing from
+    // extra width — the form is where the room is needed.
+    <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
       <div className="lg:sticky lg:top-6">
         <EngagementWizardRail
           label={t("wizard_nav_label")}
@@ -662,7 +666,7 @@ export function EngagementBuilder({
               <div
                 role="radiogroup"
                 aria-label={t("section_template")}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
               >
                 {orderedTemplates.map((tmpl) => (
                   <SelectableTemplateCard
