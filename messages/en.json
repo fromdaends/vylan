@@ -1626,7 +1626,11 @@
     "stats_active": "Active",
     "stats_ready": "Ready to review",
     "stats_waiting_clients": "Waiting on clients",
-    "stats_due_soon": "Due within 7 days"
+    "stats_due_soon": "Due within 7 days",
+    "wl_col_client": "Client",
+    "wl_col_service": "Service items",
+    "wl_col_items": "Engagement items",
+    "wl_col_started": "Start date"
   },
   "App": {
     "nav_primary_label": "Primary navigation",
@@ -2618,7 +2622,11 @@
     "bulk_select_all": "Select all",
     "bulk_moved": "{count, plural, one {# engagement moved} other {# engagements moved}}",
     "bulk_too_many": "You can move up to {max} at a time.",
-    "bulk_failed": "Couldn't move those. Please try again."
+    "bulk_failed": "Couldn't move those. Please try again.",
+    "wl_service_t1": "Personal tax (T1)",
+    "wl_service_t2": "Corporate tax (T2)",
+    "wl_service_bookkeeping": "Bookkeeping",
+    "wl_service_custom": "Custom"
   },
   "Attention": {
     "metric_active": "Active",
@@ -2789,7 +2797,9 @@
     "sort_by_stage": "Sort by stage",
     "sort_stage_asc": "Sorted by stage, earliest first",
     "sort_stage_desc": "Sorted by stage, furthest along first",
-    "empty_for_stage": "No active engagements at this stage."
+    "empty_for_stage": "No active engagements at this stage.",
+    "sort_earliest": "Earliest stage first",
+    "sort_latest": "Furthest along first"
   },
   "Pricing": {
     "title": "Simple, flat pricing",

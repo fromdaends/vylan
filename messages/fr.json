@@ -1626,7 +1626,11 @@
     "stats_active": "Actifs",
     "stats_ready": "À réviser",
     "stats_waiting_clients": "En attente des clients",
-    "stats_due_soon": "Échéance sous 7 jours"
+    "stats_due_soon": "Échéance sous 7 jours",
+    "wl_col_client": "Client",
+    "wl_col_service": "Services",
+    "wl_col_items": "Éléments",
+    "wl_col_started": "Date de début"
   },
   "App": {
     "nav_primary_label": "Navigation principale",
@@ -2618,7 +2622,11 @@
     "bulk_select_all": "Tout sélectionner",
     "bulk_moved": "{count, plural, one {# engagement déplacé} other {# engagements déplacés}}",
     "bulk_too_many": "Vous pouvez en déplacer {max} à la fois au maximum.",
-    "bulk_failed": "Impossible de les déplacer. Veuillez réessayer."
+    "bulk_failed": "Impossible de les déplacer. Veuillez réessayer.",
+    "wl_service_t1": "Impôt des particuliers (T1)",
+    "wl_service_t2": "Impôt des sociétés (T2)",
+    "wl_service_bookkeeping": "Tenue de livres",
+    "wl_service_custom": "Personnalisé"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -2789,7 +2797,9 @@
     "sort_by_stage": "Trier par étape",
     "sort_stage_asc": "Trié par étape, du début à la fin",
     "sort_stage_desc": "Trié par étape, les plus avancés d'abord",
-    "empty_for_stage": "Aucun mandat actif à cette étape."
+    "empty_for_stage": "Aucun mandat actif à cette étape.",
+    "sort_earliest": "Étape la plus tôt d'abord",
+    "sort_latest": "Les plus avancés d'abord"
   },
   "Pricing": {
     "title": "Tarification simple et claire",

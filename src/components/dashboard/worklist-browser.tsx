@@ -12,14 +12,11 @@ import { StageFilterSelect } from "@/components/engagements/stage-filter-select"
 import {
   countByStage,
   filterRowsByStage,
-  sortRowsByStage,
-  nextStageSort,
-  type StageSortDir,
 } from "@/lib/engagements/stage-filter";
 import type { AppLocale } from "@/lib/format";
 import type { EngagementStage } from "@/lib/engagements/stage";
 
-// A worklist you can search, filter by stage and sort — the toolbar half of the
+// A worklist you can search and filter by stage — the toolbar half of the
 // /engagements screen, over a row set the SERVER has already narrowed.
 //
 // ONE component for every "here is somebody's / something's work" list: the
@@ -80,7 +77,6 @@ export function WorklistBrowser({
   const tDash = useTranslations("Dashboard");
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<EngagementStage | null>(null);
-  const [stageSort, setStageSort] = useState<StageSortDir | null>(null);
 
   const q = query.trim().toLowerCase();
 
@@ -101,8 +97,10 @@ export function WorklistBrowser({
     }
     // sortRowsByStage takes a real direction, not a nullable one: no direction
     // means the caller's own order (newest first), which `rows` already is.
-    return stageSort ? sortRowsByStage(out, stageSort) : out;
-  }, [rows, stageFilter, stageSort, q, searchClientNames]);
+    // Sorting is the TABLE's now — every column header is a menu, so this
+    // list no longer decides an order beyond its own filtering.
+    return out;
+  }, [rows, stageFilter, q, searchClientNames]);
 
   // Stage is a property of LIVE work. On a completed or archived list every row
   // has no stage, so the filter would offer six options that all read 0 and a
@@ -159,10 +157,6 @@ export function WorklistBrowser({
         // No bulk checkbox column. The firm-wide list is where you triage in
         // bulk; on one client or one person it would be a column of ticks for
         // four rows.
-        statusSort={stageFilteringOn ? stageSort : null}
-        onStatusSortToggle={
-          stageFilteringOn ? () => setStageSort(nextStageSort) : undefined
-        }
       />
     </div>
   );

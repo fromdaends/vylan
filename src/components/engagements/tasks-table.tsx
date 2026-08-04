@@ -87,6 +87,7 @@ import {
   type TaskActionResult,
 } from "@/app/actions/engagement-tasks";
 import { TaskDetailPanel } from "@/components/engagements/task-detail-panel";
+import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
 import { taskKindLabelKey, taskKindHasScreen } from "@/lib/tasks/kinds";
 import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 
@@ -228,7 +229,7 @@ export function TasksTable({
   // newest to appear ontop always unless changed by filters and stuff." A task
   // you just made must be the one you can see — landing it in the middle of a
   // hundred rows sorted by due date is indistinguishable from it not saving.
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({
+  const [sort, setSort] = useState<SortState>({
     key: "created",
     desc: true,
   });
@@ -589,7 +590,7 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_lowest"), t("sort_highest")]}
                   selected={priorityFilter}
-                  onChange={(v) => setPriorityFilter(v as TaskPriority[])}
+                  onChange={(v: string[]) => setPriorityFilter(v as TaskPriority[])}
                   options={(["high", "medium", "low", "none"] as TaskPriority[]).map(
                     (v) => ({ value: v, label: t(`priority_${v}` as "priority_none") }),
                   )}
@@ -705,159 +706,6 @@ type Patch =
         | "priority"
       >
     >);
-
-type SortState = { key: SortKey; desc: boolean };
-
-/**
- * A column header that is a MENU: its two sort directions, then its values.
- *
- * The values are the point. "Sort by client" floats one client's rows to the
- * top of a hundred; "show me only this client" answers the question. An arrow
- * could never do the second, which is what made the first version feel — the
- * founder's word — redundant.
- *
- * Omitting `options` gives a sort-only menu, which is right for a date: there
- * is nothing to tick in a column of a hundred distinct days.
- */
-function ColumnMenu({
-  label,
-  t,
-  className,
-  sortKey,
-  sort,
-  setSort,
-  sortLabels,
-  options,
-  selected = [],
-  onChange,
-  footerHref,
-  footerLabel,
-}: {
-  label: string;
-  t: ReturnType<typeof useTranslations<"Engagements">>;
-  className?: string;
-  sortKey: SortKey;
-  sort: SortState;
-  setSort: (next: SortState) => void;
-  /** [ascending, descending] — worded for the column. "Earliest first" beats
-   *  "A → Z" on a date, and "Lowest first" beats it on a priority. */
-  sortLabels: [string, string];
-  options?: { value: string; label: string }[];
-  selected?: string[];
-  onChange?: (next: string[]) => void;
-  /** A quiet way out of the menu to where these values are managed. */
-  footerHref?: string;
-  footerLabel?: string;
-}) {
-  const active = sort.key === sortKey;
-  const filtering = selected.length > 0;
-
-  return (
-    <th className={cn("px-2 py-2 font-medium", className)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={t("column_menu", { label })}
-            className={cn(
-              "flex w-full items-center gap-1 text-xs uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              active || filtering
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-            {filtering && (
-              <span className="rounded-full bg-foreground px-1 text-[10px] tabular-nums text-background">
-                {selected.length}
-              </span>
-            )}
-            {active ? (
-              sort.desc ? (
-                <ArrowDown className="size-3 shrink-0" aria-hidden />
-              ) : (
-                <ArrowUp className="size-3 shrink-0" aria-hidden />
-              )
-            ) : (
-              <ChevronsUpDown className="size-3 shrink-0 opacity-45" aria-hidden />
-            )}
-          </button>
-        </DropdownMenuTrigger>
-
-        <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuItem
-            className="gap-2 text-xs"
-            onSelect={() => setSort({ key: sortKey, desc: false })}
-          >
-            <ArrowUp className="size-3.5" aria-hidden />
-            {sortLabels[0]}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="gap-2 text-xs"
-            onSelect={() => setSort({ key: sortKey, desc: true })}
-          >
-            <ArrowDown className="size-3.5" aria-hidden />
-            {sortLabels[1]}
-          </DropdownMenuItem>
-
-          {options && options.length > 0 && onChange && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] font-normal uppercase tracking-wide text-muted-foreground">
-                {label}
-              </DropdownMenuLabel>
-              <div className="max-h-64 overflow-y-auto">
-                {options.map((o) => (
-                  <DropdownMenuCheckboxItem
-                    key={o.value}
-                    checked={selected.includes(o.value)}
-                    // Stays open: narrowing to three clients should not cost
-                    // three trips to the same header.
-                    onSelect={(e) => e.preventDefault()}
-                    onCheckedChange={(on) =>
-                      onChange(
-                        on
-                          ? [...selected, o.value]
-                          : selected.filter((x) => x !== o.value),
-                      )
-                    }
-                  >
-                    <span className="truncate">{o.label}</span>
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </div>
-              {filtering && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-xs"
-                    onSelect={() => onChange([])}
-                  >
-                    {t("filter_all")}
-                  </DropdownMenuItem>
-                </>
-              )}
-              {footerHref && footerLabel && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link
-                      href={footerHref}
-                      className="cursor-pointer gap-2 text-xs text-muted-foreground"
-                    >
-                      <Plus className="size-3" aria-hidden />
-                      {footerLabel}
-                    </Link>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </th>
-  );
-}
 
 function Row({
   task,
