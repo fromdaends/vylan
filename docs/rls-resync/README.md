@@ -85,6 +85,32 @@ deliberately kept RLS on the RANK: `users.role = 'owner'` (see 1290's header —
 re-sync re-asserts exactly that. If prod's body differs, the report prints
 `function REPLACED` with the old body's md5 (the audit dump has the full text).
 
+## Outcome — ran on prod 2026-08-04
+
+First run (15:01Z): **0 policies fixed, 0 extras dropped, 0 skipped — and all
+13 helper functions REPLACED (bodies differed)**. Second run (15:24Z): 0 fixed,
+0 functions changed, 109 already ok. Idempotency proven; **prod matches the
+repo exactly as of 2026-08-04T15:24Z.**
+
+So the drift live at fix time was in the **helper-function bodies, not the
+policy text**. All 96 policies already matched canon — including
+`engagements_all`, which contradicts the 0850-generation reading from the
+files-empty-diagnosis session. Either that reading was a misread (SQL-editor
+cell truncation is the suspect — the same reason `audit.sql` chunks its
+output), or the policies were spot-fixed during that morning's founder-run
+round and only the functions stayed stale. Treat "the policies were
+generations behind" as **unconfirmed**; "the checkers were stale" is what the
+report proved. Stale checkers produce the same symptoms policy drift would:
+every sight rule delegates its actual decision to these 13 functions.
+
+The audit-before dump was not captured, so the old function bodies are gone;
+their md5 prefixes survive in the first-run report screenshot (2026-08-04
+conversation).
+
+Standing rule: after any policy/function migration, verify `pg_policies` AND
+`pg_get_functiondef` on prod — the migration ledger proves nothing about
+what's live.
+
 ## Out of scope (deliberately)
 
 - **Table GRANTs** (161 grant/revoke statements across migrations) — not

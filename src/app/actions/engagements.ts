@@ -706,10 +706,11 @@ export async function restoreEngagementAction(formData: FormData) {
 
 export type DeleteForeverResult =
   | { ok: true; purged: true }
-  // Not deleted yet: the engagement still holds documents that were never
-  // filed to the firm's connected storage. The UI warns, then retries with
-  // force: true if the owner insists.
-  | { ok: true; purged: false; unfiledCount: number }
+  // Not deleted yet: the engagement holds live documents. Nothing is at risk —
+  // the purge re-homes them to the client's files — but the dialog says so and
+  // asks for an explicit confirm (force: true) before the engagement itself is
+  // erased for good.
+  | { ok: true; purged: false; fileCount: number }
   | { ok: false };
 
 /**
@@ -717,11 +718,13 @@ export type DeleteForeverResult =
  * window and purge NOW. Owner-only, and ONLY for an engagement that is already
  * soft-deleted — an active engagement can never be hard-deleted in one step.
  *
- * The founder's rule on when to ask first: if every client document was filed
- * to the firm's storage while the engagement was live, deleting is safe and
- * needs no question; if some never were, this returns unfiledCount instead of
- * deleting, and the UI shows a warning that must be explicitly confirmed
- * (force: true).
+ * Founder ruling (2026-08-04, after a real data loss): deleting an engagement
+ * forever must NOT delete the files it holds — purgeOneEngagement re-homes
+ * every live document to the client's files. So the first call no longer asks
+ * "would files be lost?" (they can't be); it counts the live files and, when
+ * there are any, returns fileCount so the dialog can say the engagement is
+ * gone for good but its files are kept and moved to the client. An engagement
+ * with no files purges on the first call, same as before.
  */
 export async function deleteEngagementForeverAction(input: {
   id: string;
@@ -746,39 +749,22 @@ export async function deleteEngagementForeverAction(input: {
   const service = getServiceRoleSupabase();
 
   if (!input.force) {
-    // Documents that would be lost for good: LIVE rows (a file the firm
-    // already binned itself doesn't warrant a warning) with no 'filed' ledger
-    // entry on the firm's storage. Client uploads and firm deliverables both
-    // count — both live only in Vylan until the filing engine has copied them.
-    let unfiled = 0;
-    for (const [table, source] of [
-      ["uploaded_files", "checklist"],
-      ["final_documents", "final"],
-    ] as const) {
-      const { data: rows, error } = await service
+    // Count the LIVE files the purge will re-home (client uploads + firm
+    // deliverables). None are at risk — they move to the client's files — but
+    // when there are any, the dialog says so before the engagement itself is
+    // erased. Whether a file was also filed to the firm's connected storage
+    // no longer matters here: nothing is lost either way.
+    let fileCount = 0;
+    for (const table of ["uploaded_files", "final_documents"] as const) {
+      const { count, error } = await service
         .from(table)
-        .select("id")
+        .select("id", { count: "exact", head: true })
         .eq("engagement_id", id)
         .is("deleted_at", null);
       if (error) return { ok: false };
-      const ids = ((rows ?? []) as { id: string }[]).map((r) => r.id);
-      if (ids.length === 0) continue;
-      const { data: filed, error: filedErr } = await service
-        .from("filed_documents")
-        .select("file_id")
-        .eq("firm_id", user.firm_id)
-        .eq("source", source)
-        .eq("status", "filed")
-        .in("file_id", ids);
-      // Pre-0900 (no filing schema) reads as "nothing filed" — the truth.
-      const filedIds = new Set(
-        (((filedErr ? [] : filed) ?? []) as { file_id: string }[]).map(
-          (r) => r.file_id,
-        ),
-      );
-      unfiled += ids.filter((i) => !filedIds.has(i)).length;
+      fileCount += count ?? 0;
     }
-    if (unfiled > 0) return { ok: true, purged: false, unfiledCount: unfiled };
+    if (fileCount > 0) return { ok: true, purged: false, fileCount };
   }
 
   try {
@@ -793,6 +779,7 @@ export async function deleteEngagementForeverAction(input: {
       {
         id: engagement.id,
         firm_id: engagement.firm_id,
+        client_id: engagement.client_id,
         title: engagement.title ?? null,
         deleted_at: engagement.deleted_at,
       },

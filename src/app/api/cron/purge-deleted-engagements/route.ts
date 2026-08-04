@@ -1,7 +1,10 @@
 // Vercel Cron handler — runs daily (see vercel.json). Permanently removes
 // engagements that have been soft-deleted for longer than the 30-day retention
-// window, including their files in storage. This is the ONLY caller of the
-// permanent delete; the UI's "delete" is always a recoverable soft-delete.
+// window — but NOT their files: live documents are re-homed to the client's
+// imported_documents first (founder ruling 2026-08-04), and only files the
+// firm had already binned lose their storage bytes. The UI's "delete" is
+// always a recoverable soft-delete; the owner's "Delete forever" shares
+// purgeOneEngagement with this cron.
 //
 // Auth model mirrors process-jobs:
 //   * Production: Vercel injects `Authorization: Bearer <CRON_SECRET>`.
@@ -51,6 +54,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ranAt: new Date().toISOString(),
     purgedCount: result.purged.length,
+    filesRehomed: result.filesRehomed,
     filesRemoved: result.filesRemoved,
     failedCount: result.failed.length,
   });

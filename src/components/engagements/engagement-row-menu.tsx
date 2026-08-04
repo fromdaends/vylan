@@ -121,9 +121,10 @@ export function useEngagementRowMenu(args: {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   // "Delete forever" dialog state. Non-null = open: "checking" while the
-  // server decides whether anything would be lost, a number when it found that
-  // many documents never filed to the firm's storage, "deleting" while the
-  // confirmed purge runs. The dialog opens SYNCHRONOUSLY from onSelect — the
+  // server counts the engagement's live files, a number when it found that
+  // many (they are KEPT — moved to the client's files — but the engagement
+  // itself has no undo, so the dialog asks), "deleting" while the confirmed
+  // purge runs. The dialog opens SYNCHRONOUSLY from onSelect — the
   // same beat as the soft-delete confirm above, which is the one
   // menu-into-dialog sequence this codebase knows survives Radix's focus
   // return (see document-actions-menu's onCloseAutoFocus note). Opening it
@@ -212,11 +213,11 @@ export function useEngagementRowMenu(args: {
   };
 
   // "Delete forever" — only offered on a row that is ALREADY in the bin, and
-  // it asks first only when there is something to lose. The server decides:
-  // if every document was filed to the firm's storage while the engagement was
-  // live (or it has none), the first call purges outright and the dialog just
-  // closes; if some never were, the call comes back with the count, the dialog
-  // becomes the warning, and only an explicit confirm retries with force.
+  // it asks first only when the engagement holds files. The server decides:
+  // no files means the first call purges outright and the dialog just closes;
+  // otherwise the call comes back with the count, the dialog explains that the
+  // files are kept (moved to the client's files) while the engagement itself
+  // is gone for good, and only an explicit confirm retries with force.
   const finishForever = (
     res: Awaited<ReturnType<typeof deleteEngagementForeverAction>>,
   ) => {
@@ -234,7 +235,7 @@ export function useEngagementRowMenu(args: {
       // have dismissed it while the check was in flight, and a dialog that
       // reopens itself after being closed is exactly the kind of ghost this
       // state machine exists to prevent.
-      setForever((prev) => (prev === "checking" ? res.unfiledCount : prev));
+      setForever((prev) => (prev === "checking" ? res.fileCount : prev));
     }
   };
 
@@ -431,8 +432,9 @@ export function useEngagementRowMenu(args: {
       </Dialog>
 
       {/* Delete forever. Opens in a "checking" beat, then either closes itself
-          (everything was filed — purged, no question asked) or becomes the
-          unfiled-documents warning — this delete has no undo. */}
+          (no files — purged, no question asked) or explains that the files are
+          kept and moved to the client's files while the engagement itself has
+          no undo. */}
       <Dialog open={forever != null} onOpenChange={(o) => !o && setForever(null)}>
         <DialogContent
           // The dialog opens from a menu item, and the menu's close beat —

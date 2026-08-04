@@ -319,9 +319,16 @@ export function IconRail({
           // treats /engagements as part of /work so the section stays lit across
           // both — correct one level up, wrong here, where it would match Tasks
           // first and highlight the wrong row on the engagements page.
+          // Actions FIRST, then rows: a panel whose destinations live in the
+          // button strip (Work) has no rows to match against, and one whose
+          // buttons are ?new=1 links (Create) never matches here at all.
           activeHref={
+            (item.panel.actions ?? []).find((a) =>
+              isPanelItemActive(pathname, a.href),
+            )?.href ??
             item.panel.items.find((i) => isPanelItemActive(pathname, i.href))
-              ?.href ?? null
+              ?.href ??
+            null
           }
           closeLabel={labels.closePanel}
           autoFocus={openedViaKeyboard}
