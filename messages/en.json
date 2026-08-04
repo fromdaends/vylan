@@ -2391,7 +2391,7 @@
     "forever_failed": "Something went wrong — nothing was deleted. Try again.",
     "views_label": "Engagement views",
     "view_active_label": "Active",
-    "view_active_title": "Active engagements",
+    "view_active_title": "Engagements",
     "view_active_empty": "No active engagements. Create one to get started.",
     "view_ready_label": "Ready to review",
     "view_ready_title": "Ready to review",

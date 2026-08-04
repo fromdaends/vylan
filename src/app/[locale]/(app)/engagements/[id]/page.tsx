@@ -172,16 +172,12 @@ import {
   parseStageHistory,
   stageEnteredAt,
 } from "@/lib/engagements/stage";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { StageStepper } from "@/components/engagements/stage-stepper";
 import { BackLink } from "@/components/ui/back-link";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
-import {
-  listEngagementAssignees,
-  resolveAssignees,
-} from "@/lib/db/engagement-assignees";
-import { EngagementAssigneesControl } from "@/components/engagements/engagement-assignees-control";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { listSubtasksByParent, listEngagementTasks } from "@/lib/db/engagement-tasks";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
@@ -543,17 +539,14 @@ export default async function EngagementDetailPage({
       ])
     : [[], []];
 
-  // WHO IS ON THIS JOB (1540). Unioned with assigned_user_id in one place, so
-  // a pre-1540 engagement — a primary and no rows — still reads as its single
-  // assignee rather than as nobody. Returns [] while the migration is
-  // unapplied, which resolves to exactly today's behaviour.
-  const extraAssigneeIds = (await listEngagementAssignees(id)).map(
-    (a) => a.userId,
-  );
-  const assigneeIds = resolveAssignees(
-    engagement.assigned_user_id,
-    extraAssigneeIds,
-  );
+  // WHO IS ON THIS JOB (1540) is NOT read here while the faces control is
+  // unwired — a query on every page load for something nothing renders. To
+  // bring it back, restore:
+  //   const assigneeIds = resolveAssignees(
+  //     engagement.assigned_user_id,
+  //     (await listEngagementAssignees(id)).map((a) => a.userId),
+  //   );
+  // and pass it to <EngagementAssigneesControl> in the details card below.
 
   // The FIRM's own steps (1340). Read for everybody who can open the page —
   // unlike the access control above, this is the work itself, not a permission
@@ -1457,23 +1450,39 @@ export default async function EngagementDetailPage({
           // by reading their name — and the app already draws exactly these
           // circles for presence and for the assignee control. The card was
           // the one place that printed a string instead.
-          <div className="flex flex-col gap-1.5">
-            {/* SEVERAL faces and a "+", not one name. Founder, twice: "Theres
-                no way still to add an assignee." The ring marks whoever the
-                worklist still calls accountable — removing "just a face" must
-                not silently move that. */}
-            <EngagementAssigneesControl
-              engagementId={engagement.id}
-              assigneeIds={assigneeIds}
-              primaryId={engagement.assigned_user_id ?? null}
-              members={activeMembers}
-              canEdit={teamEnabled}
+          <div className="flex items-center gap-2">
+            {/* ⚠️ THE FACES + "+" CONTROL IS UNWIRED, NOT DELETED (#1325).
+                On production its ADD silently failed while its REMOVE wrote
+                correctly — the combination that can LOSE an assignee, and it
+                did lose one during testing.
+
+                WHAT IS PROVEN GOOD and deliberately kept: engagement_assignees
+                (1540, applied), lib/db/engagement-assignees.ts (the union rule
+                + 6 tests) and the server action. The exact upsert the action
+                performs was run against PRODUCTION with the service role and
+                SUCCEEDED, and the table's foreign keys are fine — so the schema
+                and the write path are not the problem. The failure is in the
+                CLICK PATH: the popover trigger measures 0x0 on the deployed
+                page, so the handler is very likely never reached.
+
+                To re-wire: put <EngagementAssigneesControl> back here, and only
+                trust it once an add SURVIVES A RELOAD. Seeing the face appear
+                is NOT evidence — that is the optimistic preview, and it is
+                exactly what fooled me into calling this shipped. */}
+            <AvatarInitials
+              name={assignee ? userDisplayLabel(assignee) : "?"}
+              size={32}
             />
-            {client && (
-              <div className="truncate text-xs text-muted-foreground">
-                {client.display_name}
+            <div className="min-w-0 text-sm">
+              <div className="truncate font-medium text-foreground">
+                {assignee ? userDisplayLabel(assignee) : t("unassigned")}
               </div>
-            )}
+              {client && (
+                <div className="truncate text-xs text-muted-foreground">
+                  {client.display_name}
+                </div>
+              )}
+            </div>
           </div>
         }
         // Vylan has ONE signer — the client — and N documents for them to
