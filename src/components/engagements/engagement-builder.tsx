@@ -42,6 +42,7 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
+import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
 import {
   EngagementItemsEditor,
   type CatalogueService,
@@ -849,39 +850,6 @@ export function EngagementBuilder({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("section_template")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                role="radiogroup"
-                aria-label={t("section_template")}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
-              >
-                {orderedTemplates.map((tmpl) => (
-                  <SelectableTemplateCard
-                    key={tmpl.id}
-                    groupName="template"
-                    selected={templateId === tmpl.id}
-                    onSelect={() => pickTemplate(tmpl.id)}
-                    name={localizedTemplateName(tmpl, locale)}
-                    type={tmpl.type}
-                    itemCount={tmpl.items.length}
-                    requiredCount={tmpl.items.filter((it) => it.required).length}
-                    preview={tmpl.items
-                      .slice(0, 3)
-                      .map((it) =>
-                        locale === "fr"
-                          ? it.label_fr || it.label_en
-                          : it.label_en || it.label_fr,
-                      )}
-                    builtin={tmpl.firm_id == null}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader>
@@ -1047,6 +1015,54 @@ export function EngagementBuilder({
         </Card>
       )}
 
+      {/* The document-request template picker, MOVED HERE from step 1.
+          Founder: "why am I still being prompted to take a document collection
+          template at the beginning of an engagement? wouldn't it only be
+          prompted once I choose that I want to collect documents?"
+          
+          Right. It sat in Engagement details because it is a leftover from when
+          the engagement WAS its checklist — picking a template defined the
+          whole thing, so it belonged at the front. Now that Documents is its
+          own step, a picker for document requests belongs in it, and step 1 is
+          what Canopy's is: who it is for and what it is called. */}
+      {step === "documents" && (
+        <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{t("section_template")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div
+                  role="radiogroup"
+                  aria-label={t("section_template")}
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                >
+                  {orderedTemplates.map((tmpl) => (
+                    <SelectableTemplateCard
+                      key={tmpl.id}
+                      groupName="template"
+                      selected={templateId === tmpl.id}
+                      onSelect={() => pickTemplate(tmpl.id)}
+                      name={localizedTemplateName(tmpl, locale)}
+                      type={tmpl.type}
+                      itemCount={tmpl.items.length}
+                      requiredCount={tmpl.items.filter((it) => it.required).length}
+                      preview={tmpl.items
+                        .slice(0, 3)
+                        .map((it) =>
+                          locale === "fr"
+                            ? it.label_fr || it.label_en
+                            : it.label_en || it.label_fr,
+                        )}
+                      builtin={tmpl.firm_id == null}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+        </>
+      )}
+
       {/* STEP 3 — what you are asking the client for. This card used to be LAST on the page, below invoicing and reminders, which buried the one part of an engagement the client actually sees. */}
       {step === "documents" && (
         <>
@@ -1172,6 +1188,27 @@ export function EngagementBuilder({
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* The scope, priced and grouped by how often each line is billed —
+          Canopy's totals panel, and the thing that makes this step legible:
+          "what does this client owe, and how often" cannot be read off a flat
+          list of mixed frequencies.
+
+          REUSED, not rebuilt. Another session wrote this panel for the
+          engagement detail page and it does exactly this job; a second copy is
+          the drift CLAUDE.md's cohesion rule exists to stop, and it would be
+          worse than usual here because these numbers are what a client agrees
+          to pay. It is read-only in both places — the EDITOR is step 2. */}
+      {step === "billing" && serviceItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("details_services")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EngagementServicesPanel items={serviceItems} locale={locale} />
+          </CardContent>
+        </Card>
       )}
 
       {/* STEP 3 — money. Repeat and Invoice belong together: whether the job recurs and what it costs are one decision, and they were separated by the whole reminders section. */}
