@@ -1033,9 +1033,14 @@ export default async function ClientDetailPage({
         </Panel>
       )}
 
-      {tab === "overview" && recentFiles.length > 0 && (
+      {/* Renders EMPTY rather than disappearing. A panel that vanishes when it
+          has nothing in it makes the overview reflow into a different shape per
+          client, so you cannot learn where anything lives — and it hides the
+          "View all" link exactly when a new client most needs somewhere to put
+          a first file. Same reasoning as Tasks and Notes above. */}
+      {tab === "overview" && (
         <Panel
-          className="min-[880px]:col-start-2 min-[880px]:row-start-3 min-[1180px]:col-start-3 min-[1180px]:row-start-1"
+          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-3 min-[1180px]:col-start-3 min-[1180px]:row-start-1"
           title={t("recent_files")}
           action={
             <Link
@@ -1046,6 +1051,11 @@ export default async function ClientDetailPage({
             </Link>
           }
         >
+          {recentFiles.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("recent_files_empty")}
+            </p>
+          ) : (
           <ul className="divide-y divide-border/50">
             {recentFiles.map((file) => (
               <li key={file.id} className="flex items-center gap-3 py-2.5">
@@ -1062,20 +1072,30 @@ export default async function ClientDetailPage({
               </li>
             ))}
           </ul>
+          )}
         </Panel>
       )}
 
-      {tab === "overview" && canSeeMoney && clientPayments.length > 0 && (
+      {/* canSeeMoney stays — that is a PERMISSION, not an emptiness check, and
+          someone who may not see money must still not see this panel at all.
+          Only the "has rows" half is dropped, for the reason above. */}
+      {tab === "overview" && canSeeMoney && (
         <Panel
-          className="min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
+          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
           title={tEng("payments_history")}
-          flush
+          flush={clientPayments.length > 0}
         >
-          <PaymentsList
-            rows={clientPayments}
-            showClient={false}
-            currentUserId={me?.id}
-          />
+          {clientPayments.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {tEng("payments_history_empty")}
+            </p>
+          ) : (
+            <PaymentsList
+              rows={clientPayments}
+              showClient={false}
+              currentUserId={me?.id}
+            />
+          )}
         </Panel>
       )}
 
