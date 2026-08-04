@@ -110,11 +110,14 @@ export default async function ClientsPage({
   // titled "Clients" while showing somebody else's book with nothing saying so.
   // A teammate's clients are a question about the teammate, and they are
   // answered on their profile (/settings/team/<id>). Non-team firms stay "all".
-  const ownerFilter: string = teamEnabled
-    ? currentUserId
-      ? "mine"
-      : "all"
-    : "all";
+  //
+  // "mine" is the DEFAULT, not a fixed value: ?owner=all widens to the whole
+  // firm. This used to be hardcoded, which meant the URL param was declared,
+  // documented, and silently ignored — the toolbar's "Whole firm" did nothing,
+  // and every visit reported an active filter that could not be cleared.
+  const ownerDefault = teamEnabled && currentUserId ? "mine" : "all";
+  const ownerFilter: string =
+    ownerDefault === "mine" && sp.owner?.trim() === "all" ? "all" : ownerDefault;
 
   // Resolve each firm member's avatar once (small set — seat caps are 1–15)
   // so the table can render an owner badge without N per-row fetches.
@@ -263,6 +266,7 @@ export default async function ClientsPage({
         owners={owners}
         currentUserId={currentUserId}
         ownerFilter={ownerFilter}
+        ownerDefault={ownerDefault}
         locale={locale}
         type={type}
         includeArchived={includeArchived}
