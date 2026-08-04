@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
 // ROUTER must be the i18n one. usePathname (i18n) returns a locale-STRIPPED path
 // ("/engagements"), and feeding that to next/navigation's router navigates to the
@@ -10,38 +10,27 @@ import { Search, Users } from "lucide-react";
 // French accountant clicking a filter chip gets thrown back into English. The
 // i18n router re-applies the current locale prefix.
 import { useSearchParams } from "next/navigation";
-import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   WorklistTable,
   type WorklistRow,
 } from "@/components/dashboard/engagements-worklist";
-import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { daysUntilPurge } from "@/lib/engagements/lifecycle";
 import {
   ENGAGEMENT_VIEWS,
   viewLabelKey,
   type EngagementView,
 } from "@/lib/engagements/views";
-import type { EngagementStage } from "@/lib/engagements/stage";
 import {
   DIR_PARAM,
   SORT_PARAM,
   STAGE_PARAM,
-  countByStage,
   filterRowsByStage,
   parseStageFilter,
   parseStageSort,
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
-import { StageFilterSelect } from "./stage-filter-select";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 
@@ -78,16 +67,13 @@ export function EngagementsView({
   const tDash = useTranslations("Dashboard");
   const tStage = useTranslations("Stage");
   const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const [, startUrlTransition] = useTransition();
   const [query, setQuery] = useState("");
 
-  // Stage filter + stage sort live in the URL, not in component state, so a
-  // filtered view can be bookmarked and shared, and so it survives opening an
-  // engagement and coming back (the browser restores the query string). Only
-  // the Active view offers them — an engagement's stage is a property of live
-  // work, so filtering the Drafts or Cancelled lists by it would be noise.
+  // Read-only now. Nothing on this page WRITES ?stage= or ?sort= any more —
+  // both became column menus on the table — but a link shared before that still
+  // opens in the order and the slice it promised, instead of quietly showing
+  // something else.
   const stageFilteringOn = view === "active";
   const stageFilter = stageFilteringOn
     ? parseStageFilter(searchParams?.get(STAGE_PARAM))
@@ -99,79 +85,47 @@ export function EngagementsView({
     ? parseStageSort(searchParams?.get(SORT_PARAM), searchParams?.get(DIR_PARAM))
     : null;
 
-  // Write the query string. Mirrors the app's existing URL-filter pattern
-  // (clients-toolbar): replace, not push, so the Back button leaves the page
-  // rather than stepping back through every filter the accountant tried — and so
-  // the URL captured when they open an engagement is the filtered one.
-  function setParams(next: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    for (const [key, value] of Object.entries(next)) {
-      if (value === null || value === "") params.delete(key);
-      else params.set(key, value);
-    }
-    const qs = params.toString();
-    startUrlTransition(() => {
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    });
-  }
-
-  const selectStage = (stage: EngagementStage | null) =>
-    setParams({ [STAGE_PARAM]: stage });
-
-  // Scope filter — All firm / Mine, and deliberately nothing else.
+  // ⚠️ NO SCOPE FILTER ANY MORE, AND THE DEFAULT CHANGED WITH IT.
   //
-  // This used to offer every teammate as a third kind of option, reachable by
-  // ?assignee=<id> from the team page. It was a filter doing navigation's job:
-  // the page still said "Active engagements", nothing on it named whose work you
-  // were looking at, and the empty state read "No active engagements. Create one
-  // to get started." — telling an owner with 15 live jobs that they had none.
-  // The lens also died on any lifecycle tab (separate routes, no param), so
-  // clicking "Completed" from a teammate's lens silently showed you your own.
-  // A teammate's work is a question about the teammate, answered on their
-  // profile (/settings/team/<id>), which already carried the same rows.
+  // This page used to open on "My engagements" for anyone in a firm with a
+  // team, and the picker was the only way back to the whole list. With the
+  // picker gone that default would have been a filter nobody could see and
+  // nobody could clear — an owner would open the page and quietly be shown a
+  // fraction of their firm's work. So the list now starts as ALL of it, and
+  // narrowing to one person is the Assignee column's menu.
   //
-  // "All firm" survives because it is not a question about a person.
-  const [scope, setScope] = useState<string>(teamEnabled ? "mine" : "all");
-  const chooseScope = (s: string) => setScope(s);
+  // (The old picker's own history is worth keeping: it once offered every
+  // teammate as an option, reachable by ?assignee=<id>. That was a filter doing
+  // navigation's job — the page still said "Active engagements" and named
+  // nobody — and a teammate's work is a question about the teammate, answered
+  // on their profile.)
 
   const q = query.trim().toLowerCase();
 
-  // Everything EXCEPT the stage filter: search + the my/all scope. This is what
-  // the per-stage counts are computed from, so each count is exactly what
-  // choosing that stage would reveal — and picking one doesn't zero the others.
-  const beforeStageFilter = useMemo(() => {
-    let base =
+  // Search — the one thing above the table that a column menu cannot do, since
+  // it looks at the engagement name and the client name together.
+  const searched = useMemo(
+    () =>
       q !== ""
         ? rows.filter(
             (r) =>
               r.title.toLowerCase().includes(q) ||
               r.clientName.toLowerCase().includes(q),
           )
-        : rows;
-    // Resolve the scope to an assignee id: "all" -> no filter, "mine" -> me, any
-    // other value -> that teammate. selectAssignedTo handles any id.
-    const scopedUserId =
-      scope === "all" ? null : scope === "mine" ? currentUserId : scope;
-    if (teamEnabled && scopedUserId) {
-      base = selectAssignedTo(base, scopedUserId);
-    }
-    return base;
-  }, [rows, q, scope, currentUserId, teamEnabled]);
-
-  const stageCounts = useMemo(
-    () => countByStage(beforeStageFilter),
-    [beforeStageFilter],
+        : rows,
+    [rows, q],
   );
 
   const visible = useMemo(() => {
-    const filtered = filterRowsByStage(beforeStageFilter, stageFilter);
-    // Stage sort when asked for, otherwise the table's long-standing default:
-    // newest first. sortRowsByStage breaks its own ties by recency too, so the
-    // two orders agree inside a stage instead of scrambling.
+    // A ?stage= link from before the column menus still opens filtered, so an
+    // old bookmark is not silently ignored. Nothing writes the param now.
+    const filtered = filterRowsByStage(searched, stageFilter);
+    // Newest first, which is where every column menu starts from. Sorting is
+    // the table's own now.
     return stageSort
       ? sortRowsByStage(filtered, stageSort)
       : [...filtered].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-  }, [beforeStageFilter, stageFilter, stageSort]);
+  }, [searched, stageFilter, stageSort]);
 
   const badgeFor = (v: EngagementView): number | null => {
     if (v === "ready" && badges.ready > 0) return badges.ready;
@@ -239,36 +193,26 @@ export function EngagementsView({
         </p>
       )}
 
+      {/* ⚠️ THE TWO PICKERS THAT USED TO SIT HERE ARE GONE — the founder, of the
+          row above the table: "get rid of these top things for sorting."
+
+          They were a "My engagements / All firm" select and an "All stages"
+          select, and both now exist as the Assignee and Status column menus:
+          same two questions, asked on the column that answers them, instead of
+          a bar of controls sitting above a table that could not sort itself.
+          Leaving both would have been two ways to filter one list, disagreeing
+          the moment somebody used them together.
+
+          Search stays. It is not a filter on one column — it looks across the
+          engagement name and the client name at once, which no column menu
+          does. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* The pickers travel together, so the toolbar stays one line instead of
-            spending a whole row on filters. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {teamEnabled && (
-            <Select value={scope} onValueChange={chooseScope}>
-              <SelectTrigger
-                size="sm"
-                className="w-[13rem] self-start"
-                aria-label={t("scope_label")}
-              >
-                <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder={t("scope_label")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("scope_all")}</SelectItem>
-                <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          {/* Stage filter — Active only. An engagement's stage is a property of
-              live work, so filtering Drafts or Cancelled by it would be noise. */}
-          {stageFilteringOn && (
-            <StageFilterSelect
-              counts={stageCounts}
-              selected={stageFilter}
-              onSelect={selectStage}
-            />
-          )}
-        </div>
+        {/* "64 engagements", as Canopy puts it directly above the table. Small,
+            quiet, and the one number that tells you whether what you are
+            looking at is the whole list or the tail of a search. */}
+        <p className="text-sm text-muted-foreground tabular-nums">
+          {t("count_engagements", { count: visible.length })}
+        </p>
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

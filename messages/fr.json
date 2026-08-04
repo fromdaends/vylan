@@ -2637,7 +2637,8 @@
     "wl_service_t1": "Impôt des particuliers (T1)",
     "wl_service_t2": "Impôt des sociétés (T2)",
     "wl_service_bookkeeping": "Tenue de livres",
-    "wl_service_custom": "Personnalisé"
+    "wl_service_custom": "Personnalisé",
+    "count_engagements": "{count, plural, =0 {Aucun mandat} one {# mandat} other {# mandats}}"
   },
   "Attention": {
     "metric_active": "Actifs",

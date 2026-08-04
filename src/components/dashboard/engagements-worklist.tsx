@@ -695,13 +695,13 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
             />
-            {/* CLIENT, and the divider before it — the same seam the Tasks
-                table has, where the row stops describing the work and starts
-                saying whose it is. Canopy puts one in the same place. */}
+            {/* Canopy rules EVERY column, not just the seam before Client —
+                the grid is what makes a wide row scannable, because the eye
+                tracks a line rather than a gap. */}
             <ColumnMenu
               label={t("wl_col_client")}
               t={tEng}
-              className="hidden border-l border-border px-4 lg:table-cell"
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
               sortKey="client"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -718,7 +718,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_service")}
               t={tEng}
-              className="hidden px-4 lg:table-cell"
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
               sortKey="service"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -737,7 +737,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_items")}
               t={tEng}
-              className="hidden px-4 md:table-cell"
+              className="hidden border-l border-border/60 px-4 md:table-cell"
               sortKey="items"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -748,7 +748,7 @@ export function WorklistTable({
               <ColumnMenu
                 label={t("wl_col_assigned")}
                 t={tEng}
-                className="hidden px-4 lg:table-cell"
+                className="hidden border-l border-border/60 px-4 lg:table-cell"
                 sortKey="assignee"
                 sort={sort ?? UNSORTED}
                 setSort={setSort}
@@ -768,7 +768,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_due")}
               t={tEng}
-              className="hidden px-4 sm:table-cell"
+              className="hidden border-l border-border/60 px-4 sm:table-cell"
               sortKey="due"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -785,7 +785,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_started")}
               t={tEng}
-              className="hidden px-4 xl:table-cell"
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
               sortKey="started"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -794,7 +794,7 @@ export function WorklistTable({
             <ColumnMenu
               label={t("wl_col_status")}
               t={tEng}
-              className="px-4"
+              className="border-l border-border/60 px-4"
               sortKey="status"
               sort={sort ?? UNSORTED}
               setSort={setSort}
@@ -1047,7 +1047,10 @@ function WorklistRowView({
               <div className="flex items-center gap-1.5">
                 <Link
                   href={`/engagements/${row.id}`}
-                  className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  // Canopy renders both name columns as links, in blue. Ours
+                  // were links already but painted like plain text, so the one
+                  // thing on the row you are meant to click did not look it.
+                  className="font-medium text-accent hover:underline focus-visible:underline focus-visible:outline-none"
                 >
                   {row.title}
                 </Link>
@@ -1118,11 +1121,11 @@ function WorklistRowView({
                 because "whose is this" is a question you answer by GOING there.
                 The row's own click handler bails on any <a>, so this does not
                 fight it. */}
-            <TableCell className="hidden border-l border-border px-4 py-3 align-top text-sm lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
               {row.clientId ? (
                 <Link
                   href={`/clients/${row.clientId}`}
-                  className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  className="text-accent hover:underline focus-visible:underline focus-visible:outline-none"
                 >
                   {row.clientName}
                 </Link>
@@ -1133,11 +1136,11 @@ function WorklistRowView({
 
             {/* SERVICE ITEMS — what was sold. Quiet by design: it repeats down
                 the column, so it must not compete with the engagement's name. */}
-            <TableCell className="hidden px-4 py-3 align-top text-sm text-muted-foreground lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
               {row.type ? serviceLabel(row.type) : "—"}
             </TableCell>
 
-            <TableCell className="hidden px-4 py-3 align-top md:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top md:table-cell">
               {!showProgress ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : (
@@ -1175,7 +1178,7 @@ function WorklistRowView({
             </TableCell>
 
             {teamEnabled && (
-              <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
+              <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
                 {/* A person is a place. This name is where you actually think
                     "what else is she on?", so it has to be the way there —
                     until now nobody in the app was clickable, and the only
@@ -1191,20 +1194,26 @@ function WorklistRowView({
                 ) : row.assigneeName ? (
                   <span className="text-foreground">{row.assigneeName}</span>
                 ) : (
-                  <span className="italic text-muted-foreground">
-                    {unassignedText}
+                  // An em dash, as Canopy does — "Unassigned" in a column of
+                  // names reads as somebody's name for the length of a glance.
+                  //
+                  // The word stays for screen readers: a lone dash announced
+                  // aloud is not "nobody", it is nothing at all.
+                  <span className="text-muted-foreground">
+                    <span className="sr-only">{unassignedText}</span>
+                    <span aria-hidden>—</span>
                   </span>
                 )}
               </TableCell>
             )}
 
-            <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top sm:table-cell">
               <div className={cn("text-sm tabular-nums", dueTone)}>
                 {formatDate(row.dueDate, locale, "medium")}
               </div>
             </TableCell>
 
-            <TableCell className="hidden px-4 py-3 align-top xl:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top lg:table-cell">
               <div className="text-sm tabular-nums text-muted-foreground">
                 {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
               </div>
@@ -1224,7 +1233,7 @@ function WorklistRowView({
                 Everything else (draft / complete / cancelled, or any row before
                 migration 0690 lands) keeps the status pill: those have no
                 workflow position to show. */}
-            <TableCell className="px-4 py-3 align-top">
+            <TableCell className="border-l border-border/60 px-4 py-3 align-top">
               {row.stage ? (
                 <StageChip stage={row.stage} />
               ) : (

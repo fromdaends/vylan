@@ -2637,7 +2637,8 @@
     "wl_service_t1": "Personal tax (T1)",
     "wl_service_t2": "Corporate tax (T2)",
     "wl_service_bookkeeping": "Bookkeeping",
-    "wl_service_custom": "Custom"
+    "wl_service_custom": "Custom",
+    "count_engagements": "{count, plural, =0 {No engagements} one {# engagement} other {# engagements}}"
   },
   "Attention": {
     "metric_active": "Active",

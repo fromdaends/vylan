@@ -19,7 +19,7 @@
 // Omitting `options` gives a sort-only menu, which is right for a date: there
 // is nothing to tick in a column of a hundred distinct days.
 
-import { ArrowDown, ArrowUp, ChevronsUpDown, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Plus } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
 import {
@@ -80,17 +80,22 @@ export function ColumnMenu({
   const filtering = selected.length > 0;
 
   return (
-    <th className={cn("px-2 py-2 font-medium", className)}>
+    <th className={cn("px-2 py-2.5 font-medium", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             aria-label={t("column_menu", { label })}
+            // Canopy's header treatment, which the founder asked for by name:
+            // sentence case at reading size in the normal text colour, with a
+            // caret. The uppercase micro-label this replaced read as a table
+            // caption — something you skim past — when it is in fact the
+            // control that sorts and filters the column.
             className={cn(
-              "flex w-full items-center gap-1 text-xs uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "flex w-full items-center gap-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active || filtering
                 ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+                : "text-foreground/80 hover:text-foreground",
             )}
           >
             {label}
@@ -106,7 +111,9 @@ export function ColumnMenu({
                 <ArrowUp className="size-3 shrink-0" aria-hidden />
               )
             ) : (
-              <ChevronsUpDown className="size-3 shrink-0 opacity-45" aria-hidden />
+              // A caret, like Canopy's: it says "there is a menu here"
+              // without claiming a sort is applied when none is.
+              <ChevronDown className="size-3.5 shrink-0 opacity-50" aria-hidden />
             )}
           </button>
         </DropdownMenuTrigger>
