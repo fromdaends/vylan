@@ -54,7 +54,7 @@
 // keyed by engagement_id and cannot exist without a job. Offering them there
 // would be offering three doors into a room that has not been built.
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -89,27 +89,52 @@ const KINDS: { kind: Kind; icon: typeof Inbox; once: boolean }[] = [
   { kind: "task", icon: CheckSquare, once: false },
 ];
 
-type AddTaskDialogProps =
-  | {
-      /** On a job. The default, and what every existing caller passes. */
-      mode?: "job";
-      clientId: string;
-      engagementId: string;
-      /** Built-in kinds this job already has, so they are offered disabled. */
-      existingKinds: string[];
-    }
-  | {
-      /** On the firm-wide Tasks list, where the task belongs to a client only. */
-      mode: "firm";
-      clients: ComboboxClient[];
-    };
+type SharedDialogProps = {
+  /**
+   * Replaces the default "+ Add task" button as the popover's anchor — the
+   * dashboard's quick-add row opens this same popover from its own footer,
+   * rather than growing a second add-task UI.
+   */
+  trigger?: ReactNode;
+  /** Seeds the name field on open — what the quick-add row already typed. */
+  initialTitle?: string;
+  /** Controlled-open pair, for a caller whose trigger lives outside. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Called after a task is actually created — the quick-add clears itself. */
+  onCreated?: () => void;
+};
+
+type AddTaskDialogProps = SharedDialogProps &
+  (
+    | {
+        /** On a job. The default, and what every existing caller passes. */
+        mode?: "job";
+        clientId: string;
+        engagementId: string;
+        /** Built-in kinds this job already has, so they are offered disabled. */
+        existingKinds: string[];
+      }
+    | {
+        /** On the firm-wide Tasks list, where the task belongs to a client only. */
+        mode: "firm";
+        clients: ComboboxClient[];
+      }
+  );
 
 export function AddTaskDialog(props: AddTaskDialogProps) {
   const firmWide = props.mode === "firm";
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  // Controlled when the caller owns the trigger (the dashboard quick-add),
+  // self-managed everywhere else.
+  const open = props.open ?? openSelf;
+  const setOpen = (o: boolean) => {
+    setOpenSelf(o);
+    props.onOpenChange?.(o);
+  };
   // Null while choosing a kind; set once chosen, which is when the name field
   // appears. Two steps, not one form — the kind changes what the name means.
   const [kind, setKind] = useState<Kind | null>(null);
@@ -118,6 +143,14 @@ export function AddTaskDialog(props: AddTaskDialogProps) {
   // Firm-wide only: which client this is for. There is no sensible default —
   // guessing one is how a task ends up filed against the wrong person.
   const [clientId, setClientId] = useState<string | null>(null);
+  // Firm-wide only, optional: when it is due (design 2a's quick-add).
+  const [dueDate, setDueDate] = useState("");
+  // Tracks open→true transitions so initialTitle re-seeds on every open.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (open && props.initialTitle !== undefined && seededFor !== props.initialTitle) {
+    setTitle(props.initialTitle);
+    setSeededFor(props.initialTitle);
+  }
 
   const label = (k: Kind) =>
     k === "document_collection"
@@ -141,6 +174,8 @@ export function AddTaskDialog(props: AddTaskDialogProps) {
     setKind(null);
     setTitle("");
     setClientId(null);
+    setDueDate("");
+    setSeededFor(null);
   }
 
   async function create() {
@@ -158,10 +193,12 @@ export function AddTaskDialog(props: AddTaskDialogProps) {
         engagementId: firmWide ? null : props.engagementId,
         title: title.trim(),
         kind: forKind,
+        dueDate: firmWide && dueDate ? dueDate : null,
       });
       if (res.ok) {
         setOpen(false);
         reset();
+        props.onCreated?.();
         startTransition(() => router.refresh());
       } else {
         toast.error(
@@ -207,10 +244,12 @@ export function AddTaskDialog(props: AddTaskDialogProps) {
       }}
     >
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="secondary">
-          <Plus className="size-4" aria-hidden />
-          {t("add_task")}
-        </Button>
+        {props.trigger ?? (
+          <Button type="button" size="sm" variant="secondary">
+            <Plus className="size-4" aria-hidden />
+            {t("add_task")}
+          </Button>
+        )}
       </PopoverTrigger>
 
       <PopoverContent align="end" sideOffset={6} className="w-[320px] p-3">
@@ -254,6 +293,19 @@ export function AddTaskDialog(props: AddTaskDialogProps) {
               onChange={setClientId}
             />
             {nameField}
+            {/* Optional. A quick-add that DEMANDED a date would train people
+                to type junk dates; one that hid it would send every task to
+                "Later". Labeled so the emptiness reads as a choice. */}
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="shrink-0">{t("add_task_due_label")}</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                aria-label={t("add_task_due_label")}
+                className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
             <Button
               type="button"
               size="sm"

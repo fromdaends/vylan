@@ -31,11 +31,9 @@ export function DashboardHeader({
 
   return (
     <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-      <DashboardGreeting
-        firstName={firstName}
-        subtitle={subtitle}
-        showLocalDate
-      />
+      {/* No date here anymore — it moved into the agenda card (design 2a),
+          where "what day is it" sits beside "what is my day". */}
+      <DashboardGreeting firstName={firstName} subtitle={subtitle} />
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button asChild variant="outline">

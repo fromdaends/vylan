@@ -86,7 +86,9 @@ export function DashboardGreeting({
   const headingClass =
     variant === "hero"
       ? "text-4xl sm:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-foreground leading-[1.05]"
-      : "text-3xl sm:text-4xl font-semibold tracking-tight text-foreground";
+      : // The dashboard header's scale, per the approved 2a design: 34px,
+        // tight leading, -0.025em.
+        "text-[34px] font-semibold tracking-[-0.025em] text-foreground leading-[1.1]";
   const subtitleClass =
     variant === "hero"
       ? "text-base text-muted-foreground"

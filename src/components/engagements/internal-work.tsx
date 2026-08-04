@@ -49,23 +49,22 @@ import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
-  Check,
   ChevronRight,
   FileSignature,
   FolderCheck,
   Inbox,
-  Minus,
   Trash2,
-  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  DueIndicator,
+  NEXT_STATUS as NEXT,
+  TaskAssigneeMenu,
+  TaskStatusCheckbox,
+  TaskWhoFor,
+  type Person,
+  type TaskStatus,
+} from "@/components/work/task-bits";
 import {
   updateTaskAction,
   deleteTaskAction,
@@ -73,7 +72,6 @@ import {
   type TaskActionResult,
 } from "@/app/actions/engagement-tasks";
 
-type TaskStatus = "todo" | "doing" | "done";
 export type WorkRow = {
   id: string;
   title: string;
@@ -82,20 +80,13 @@ export type WorkRow = {
   assigneeIds: string[];
   clientId: string;
   engagementId: string | null;
+  /** YYYY-MM-DD, or null for "whenever". Drawn by DueIndicator (design 2a). */
+  dueDate?: string | null;
   /** Only supplied on the firm-wide list. */
   clientName?: string | null;
   engagementTitle?: string | null;
   /** "2 of 3 done" for a kind that owns a collection. Job page only. */
   meta?: string;
-};
-type Person = { id: string; name: string };
-
-// todo → doing → done → todo. One click moves you along; three bring you back,
-// which is the whole reason it is a cycle and not a toggle.
-const NEXT: Record<TaskStatus, TaskStatus> = {
-  todo: "doing",
-  doing: "done",
-  done: "todo",
 };
 
 const KIND_ICON: Record<string, typeof Inbox> = {
@@ -114,6 +105,7 @@ export function InternalWork({
   canEdit,
   variant = "job",
   onOpen,
+  today,
 }: {
   tasks: WorkRow[];
   members: Person[];
@@ -126,6 +118,9 @@ export function InternalWork({
    * teleporting into one from a firm list would strand you there.
    */
   onOpen?: (taskId: string) => void;
+  /** Today (YYYY-MM-DD) in the FIRM's timezone, for the due labels. Optional:
+   *  without it DueIndicator falls back to the viewer's clock. */
+  today?: string;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -139,7 +134,6 @@ export function InternalWork({
       : state.map((r) => (r.id === p.id ? { ...r, ...p } : r)),
   );
 
-  const nameById = new Map(members.map((m) => [m.id, m.name]));
   const firmWide = variant === "firm";
 
   function run(p: Patch, call: () => Promise<TaskActionResult>) {
@@ -183,19 +177,16 @@ export function InternalWork({
   return (
     <ul className="divide-y divide-border/50">
       {rows.map((task) => {
-        const assignees = task.assigneeIds
-          .map((id) => ({ id, name: nameById.get(id) }))
-          .filter((a): a is Person => Boolean(a.name));
         const Icon = KIND_ICON[task.kind];
         const label = kindLabel(task.kind);
         const openable = Boolean(onOpen && Icon);
 
         return (
           <li key={task.id} className="group flex items-center gap-3 py-2.5">
-            <button
-              type="button"
+            <TaskStatusCheckbox
+              status={task.status}
               disabled={!canEdit}
-              onClick={() =>
+              onCycle={() =>
                 run({ id: task.id, status: NEXT[task.status] }, () =>
                   updateTaskAction({
                     taskId: task.id,
@@ -204,19 +195,8 @@ export function InternalWork({
                   }),
                 )
               }
-              aria-label={t("work_toggle", { title: task.title })}
-              className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-50",
-                task.status === "done"
-                  ? "border-foreground bg-foreground text-background"
-                  : task.status === "doing"
-                    ? "border-foreground/60 text-foreground/70"
-                    : "border-border hover:border-foreground/50",
-              )}
-            >
-              {task.status === "done" && <Check className="size-3.5" aria-hidden />}
-              {task.status === "doing" && <Minus className="size-3.5" aria-hidden />}
-            </button>
+              ariaLabel={t("work_toggle", { title: task.title })}
+            />
 
             {/* The kind's mark, for the kinds that are more than a line of
                 text. A plain task has none, which is itself the signal. */}
@@ -235,88 +215,35 @@ export function InternalWork({
               t={t}
             />
 
-            {canEdit ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {assignees.length > 0 ? (
-                      <>
-                        {/* Faces, not names: two people on a task is the
-                            ordinary case and two full names do not fit. */}
-                        {assignees.slice(0, 3).map((a) => (
-                          <AvatarInitials key={a.id} name={a.name} size={18} />
-                        ))}
-                        {assignees.length > 3 && (
-                          <span className="tabular-nums">
-                            +{assignees.length - 3}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="size-3.5" aria-hidden />
-                        {t("work_unassigned")}
-                      </>
-                    )}
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {members.map((m) => {
-                    const on = task.assigneeIds.includes(m.id);
-                    return (
-                      <DropdownMenuItem
-                        key={m.id}
-                        onSelect={(e) => {
-                          // Keep the menu open: putting two people on a task
-                          // should not cost two trips to the same button.
-                          e.preventDefault();
-                          run(
-                            {
-                              id: task.id,
-                              assigneeIds: on
-                                ? task.assigneeIds.filter((x) => x !== m.id)
-                                : [...task.assigneeIds, m.id],
-                            },
-                            () =>
-                              setTaskAssigneeAction({
-                                taskId: task.id,
-                                userId: m.id,
-                                on: !on,
-                                engagementId: task.engagementId,
-                              }),
-                          );
-                        }}
-                        className="gap-2"
-                      >
-                        <span
-                          className={cn(
-                            "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
-                            on
-                              ? "border-foreground bg-foreground text-background"
-                              : "border-border",
-                          )}
-                        >
-                          {on && <Check className="size-3" aria-hidden />}
-                        </span>
-                        <AvatarInitials name={m.name} size={18} />
-                        {m.name}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              assignees.length > 0 && (
-                <span className="flex shrink-0 items-center gap-1">
-                  {assignees.slice(0, 3).map((a) => (
-                    <AvatarInitials key={a.id} name={a.name} size={18} />
-                  ))}
-                </span>
-              )
-            )}
+            <DueIndicator
+              dueDate={task.dueDate}
+              status={task.status}
+              today={today}
+            />
+
+            <TaskAssigneeMenu
+              assigneeIds={task.assigneeIds}
+              members={members}
+              canEdit={canEdit}
+              unassignedLabel={t("work_unassigned")}
+              onToggle={(userId, on) =>
+                run(
+                  {
+                    id: task.id,
+                    assigneeIds: on
+                      ? [...task.assigneeIds, userId]
+                      : task.assigneeIds.filter((x) => x !== userId),
+                  },
+                  () =>
+                    setTaskAssigneeAction({
+                      taskId: task.id,
+                      userId,
+                      on,
+                      engagementId: task.engagementId,
+                    }),
+                )
+              }
+            />
 
             {canEdit && (
               <button
@@ -418,25 +345,13 @@ function TaskName({
           same answer, and repeating it is noise. Rendered outside `body` so
           the links are never nested inside the open-the-screen button. */}
       {firmWide && (
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          <Link
-            href={`/clients/${task.clientId}`}
-            className="hover:text-foreground hover:underline"
-          >
-            {task.clientName ?? "—"}
-          </Link>
-          {task.engagementId && task.engagementTitle && (
-            <>
-              {" · "}
-              <Link
-                href={`/engagements/${task.engagementId}`}
-                className="hover:text-foreground hover:underline"
-              >
-                {task.engagementTitle}
-              </Link>
-            </>
-          )}
-        </span>
+        <TaskWhoFor
+          clientId={task.clientId}
+          clientName={task.clientName}
+          engagementId={task.engagementId}
+          engagementTitle={task.engagementTitle}
+          className="mt-0.5"
+        />
       )}
     </span>
   );

@@ -28,16 +28,22 @@ import {
 import { revalidateAllLocales } from "@/lib/revalidate";
 
 /**
- * Refresh both places a task can be read from.
+ * Refresh every place a task can be read from.
  *
  * The Work list ALWAYS, because that is the point of the feature — a task
- * changed on a job must not leave the firm-wide list stale. The job's own page
- * only when there is a job; a client-only task has no second home.
+ * changed on a job must not leave the firm-wide list stale. The Overview too,
+ * since the dashboard's stats strip and grouped Tasks card (design 2a) read
+ * the same list. The job's own page only when there is a job; a client-only
+ * task has no second home.
  */
 function revalidateWork(engagementId?: string | null) {
   revalidateAllLocales("/work");
+  revalidateAllLocales("/dashboard");
   if (engagementId) revalidateAllLocales(`/engagements/${engagementId}`);
 }
+
+// due_date is a plain calendar date; anything fancier is the client's bug.
+const DUE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export type TaskActionResult = {
   ok: boolean;
@@ -80,11 +86,17 @@ export async function addTaskAction(input: {
    *  by the database (1370), so a duplicate comes back as "failed" rather than
    *  silently making a second row that shows the same documents. */
   kind?: TaskKind;
+  /** Optional YYYY-MM-DD — the quick-add's "and when". */
+  dueDate?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
   const title = cleanTitle(input.title);
   if (!title) return { ok: false, error: "bad_title" };
+  const dueDate =
+    typeof input.dueDate === "string" && DUE_DATE_RE.test(input.dueDate)
+      ? input.dueDate
+      : null;
 
   try {
     // Appended. Read the list first rather than keeping a counter: two people
@@ -100,6 +112,7 @@ export async function addTaskAction(input: {
       firmId: g.firm.id,
       title,
       kind: input.kind ?? "task",
+      dueDate,
       createdBy: g.user.id,
       orderIndex: existing.length,
     });

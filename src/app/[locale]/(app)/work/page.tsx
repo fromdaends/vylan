@@ -24,6 +24,12 @@ import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users"
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listClients } from "@/lib/db/clients";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import {
+  matchesDueFilter,
+  taskStats,
+  toDueFilter,
+  todayInTimeZone,
+} from "@/lib/tasks/dates";
 import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
 import { InternalWork } from "@/components/engagements/internal-work";
 import { WorkFilters, type WorkScope } from "@/components/work/work-filters";
@@ -33,7 +39,7 @@ export default async function WorkPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ scope?: string; open?: string }>;
+  searchParams: Promise<{ scope?: string; open?: string; due?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -56,14 +62,21 @@ export default async function WorkPage({
     listClients(),
   ]);
 
-  // Filters are applied HERE rather than in the query, because the two of them
-  // are cheap set operations over a list the page already has and running them
+  // Filters are applied HERE rather than in the query, because they are cheap
+  // set operations over a list the page already has and running them
   // server-side would cost a round trip per click.
+  //
+  // "Today" is the FIRM's today — the same anchor the dashboard's strip counts
+  // with, which is what lets a strip cell land here on exactly its own rows.
+  const today = todayInTimeZone(firm.timezone ?? "America/Toronto");
   const scope: WorkScope = sp.scope === "mine" ? "mine" : "all";
   const openOnly = sp.open !== "0";
+  const due = toDueFilter(sp.due);
   const shown = tasks
     .filter((t) => (scope === "mine" ? t.assigneeIds.includes(user.id) : true))
-    .filter((t) => (openOnly ? t.status !== "done" : true));
+    .filter((t) => (openOnly ? t.status !== "done" : true))
+    .filter((t) => (due ? matchesDueFilter(t, due, today) : true));
+  const stats = taskStats(tasks, today);
 
   const t = await getTranslations("Engagements");
 
@@ -95,11 +108,15 @@ export default async function WorkPage({
       <WorkFilters
         scope={scope}
         openOnly={openOnly}
+        due={due}
         counts={{
-          all: tasks.filter((x) => x.status !== "done").length,
+          all: stats.open,
           mine: tasks.filter(
             (x) => x.status !== "done" && x.assigneeIds.includes(user.id),
           ).length,
+          overdue: stats.overdue,
+          today: stats.dueToday,
+          week: stats.dueThisWeek,
         }}
       />
 
@@ -110,6 +127,7 @@ export default async function WorkPage({
           .filter((m) => !m.deactivated_at)
           .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
         canEdit
+        today={today}
       />
     </div>
   );
