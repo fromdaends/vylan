@@ -2802,7 +2802,12 @@
     "placeholder_taxyear": "Année d’imposition",
     "placeholder_currentyear": "Année en cours",
     "placeholder_currentmonth": "Mois en cours",
-    "placeholder_firmname": "Votre cabinet"
+    "placeholder_firmname": "Votre cabinet",
+    "assignee_add": "Ajouter quelqu'un à ce mandat",
+    "assignee_primary": "{name} — responsable de ce mandat",
+    "assignee_nobody": "Aucun coéquipier à assigner pour l'instant.",
+    "assignee_needs_migration": "Les assignations multiples nécessitent une mise à jour de la base de données.",
+    "assignee_failed": "Impossible de modifier qui travaille sur ce mandat. Réessayez."
   },
   "Attention": {
     "metric_active": "Actifs",

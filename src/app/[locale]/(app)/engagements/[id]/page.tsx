@@ -32,7 +32,6 @@ import { formatDate, formatCurrency } from "@/lib/format";
 import { listEngagementItems } from "@/lib/db/engagements";
 import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
 import { EngagementClientViewPanel } from "@/components/engagements/engagement-client-view-panel";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
 import { StageChip } from "@/components/engagements/stage-chip";
 import { engagementStatusVariant } from "@/lib/engagements/status-pill";
@@ -178,6 +177,11 @@ import { BackLink } from "@/components/ui/back-link";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
+import {
+  listEngagementAssignees,
+  resolveAssignees,
+} from "@/lib/db/engagement-assignees";
+import { EngagementAssigneesControl } from "@/components/engagements/engagement-assignees-control";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { listSubtasksByParent, listEngagementTasks } from "@/lib/db/engagement-tasks";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
@@ -538,6 +542,18 @@ export default async function EngagementDetailPage({
         listClientMembers(engagement.client_id),
       ])
     : [[], []];
+
+  // WHO IS ON THIS JOB (1540). Unioned with assigned_user_id in one place, so
+  // a pre-1540 engagement — a primary and no rows — still reads as its single
+  // assignee rather than as nobody. Returns [] while the migration is
+  // unapplied, which resolves to exactly today's behaviour.
+  const extraAssigneeIds = (await listEngagementAssignees(id)).map(
+    (a) => a.userId,
+  );
+  const assigneeIds = resolveAssignees(
+    engagement.assigned_user_id,
+    extraAssigneeIds,
+  );
 
   // The FIRM's own steps (1340). Read for everybody who can open the page —
   // unlike the access control above, this is the work itself, not a permission
@@ -1441,21 +1457,23 @@ export default async function EngagementDetailPage({
           // by reading their name — and the app already draws exactly these
           // circles for presence and for the assignee control. The card was
           // the one place that printed a string instead.
-          <div className="flex items-center gap-2">
-            <AvatarInitials
-              name={assignee ? userDisplayLabel(assignee) : "?"}
-              size={32}
+          <div className="flex flex-col gap-1.5">
+            {/* SEVERAL faces and a "+", not one name. Founder, twice: "Theres
+                no way still to add an assignee." The ring marks whoever the
+                worklist still calls accountable — removing "just a face" must
+                not silently move that. */}
+            <EngagementAssigneesControl
+              engagementId={engagement.id}
+              assigneeIds={assigneeIds}
+              primaryId={engagement.assigned_user_id ?? null}
+              members={activeMembers}
+              canEdit={teamEnabled}
             />
-            <div className="min-w-0 text-sm">
-              <div className="truncate font-medium text-foreground">
-                {assignee ? userDisplayLabel(assignee) : t("unassigned")}
+            {client && (
+              <div className="truncate text-xs text-muted-foreground">
+                {client.display_name}
               </div>
-              {client && (
-                <div className="truncate text-xs text-muted-foreground">
-                  {client.display_name}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         }
         // Vylan has ONE signer — the client — and N documents for them to

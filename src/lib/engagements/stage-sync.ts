@@ -37,6 +37,17 @@ import {
   type StageFacts,
   type StageHistoryEntry,
 } from "./stage";
+import {
+  parseStageGates,
+  parseWorkflowSnapshot,
+  type WorkflowSnapshot,
+} from "@/lib/workflow/definition";
+import {
+  resolveWorkflowStage,
+  type WorkflowFacts,
+} from "@/lib/workflow/resolve";
+import { runWorkflowStageEffects } from "@/lib/workflow/effects";
+import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 
 // PostgREST: PGRST205 = table not in schema cache, PGRST204 = column missing;
 // 42P01 / 42703 are the Postgres equivalents. Matched on CODE only — never on
@@ -57,6 +68,7 @@ function isMissingSchema(err: { code?: string | null } | null): boolean {
 type StageEngagementRow = {
   id: string;
   firm_id: string;
+  client_id: string;
   status: "draft" | "sent" | "in_progress" | "complete" | "cancelled";
   stage?: EngagementStage | null;
   stage_history?: unknown;
@@ -65,18 +77,39 @@ type StageEngagementRow = {
   invoice_auto_mode?: "off" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   completed_at?: string | null;
+  // Workflow snapshot + confirm gates (migration 1510). Absent pre-1510 —
+  // the middle select tier below — which reads as "no workflow": legacy path.
+  workflow?: unknown;
+  stage_gates?: unknown;
 };
 
+// Three select tiers, widest first, falling through on missing-schema errors —
+// the same shape quickbooks-suggestions uses across its migration windows.
+const WORKFLOW_COLUMNS =
+  "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at, workflow, stage_gates";
 const FULL_COLUMNS =
-  "id, firm_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at";
-// Pre-0690 fallback: everything except this migration's four columns.
+  "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at";
+// Pre-0690 fallback: everything except the stage columns.
 const BASE_COLUMNS =
-  "id, firm_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables";
+  "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables";
 
 async function loadEngagementRow(
   sb: SupabaseClient,
   engagementId: string,
 ): Promise<{ row: StageEngagementRow; hasStageColumns: boolean } | null> {
+  const { data: wide, error: wideErr } = await sb
+    .from("engagements")
+    .select(WORKFLOW_COLUMNS)
+    .eq("id", engagementId)
+    .maybeSingle();
+  if (!wideErr && wide) {
+    return { row: wide as StageEngagementRow, hasStageColumns: true };
+  }
+  if (wideErr && !isMissingSchema(wideErr)) {
+    console.error("[stage-sync] load engagement failed:", wideErr);
+    return null;
+  }
+  // Pre-1510: no workflow columns. Everything else works as before.
   const { data, error } = await sb
     .from("engagements")
     .select(FULL_COLUMNS)
@@ -100,11 +133,18 @@ async function loadEngagementRow(
   return { row: base as StageEngagementRow, hasStageColumns: false };
 }
 
-// Gather everything resolveStage needs, in four small parallel queries.
+// Gather everything resolveStage needs, in four small parallel queries. Also
+// hands back the raw rows so the workflow-facts builder can derive its extra
+// signals without re-querying.
 async function loadStageFacts(
   sb: SupabaseClient,
   row: StageEngagementRow,
-): Promise<StageFacts> {
+): Promise<{
+  facts: StageFacts;
+  items: StageChecklistItem[];
+  sigs: { status: string }[];
+  invoice: { status: string } | null;
+}> {
   const engagementId = row.id;
 
   const [itemsRes, sigRes, payRes, docRes] = await Promise.all([
@@ -170,7 +210,7 @@ async function loadStageFacts(
 
   const hasSignatureItems = items.some((i) => i.kind === "signature");
 
-  return {
+  const facts: StageFacts = {
     status: row.status,
     ...checklistFacts(items),
     hasSignatureItems,
@@ -189,6 +229,69 @@ async function loadStageFacts(
     hasFinalDocuments,
     finalDocumentsReleased: hasFinalDocuments && !locked,
     preparationStarted: row.preparation_started_at != null,
+  };
+  return { facts, items, sigs, invoice };
+}
+
+// The workflow walk's extra signals, on top of the legacy facts. Two more
+// small reads (workflow tasks + the materialization ledger), both tolerating
+// an unapplied 1510 as "none", which is the truth for that environment.
+async function loadWorkflowFacts(
+  sb: SupabaseClient,
+  row: StageEngagementRow,
+  base: StageFacts,
+  raws: {
+    items: StageChecklistItem[];
+    sigs: { status: string }[];
+    invoice: { status: string } | null;
+  },
+): Promise<WorkflowFacts> {
+  const [tasksRes, ledgerRes] = await Promise.all([
+    sb
+      .from("engagement_tasks")
+      .select("workflow_stage, status")
+      .eq("engagement_id", row.id)
+      .not("workflow_stage", "is", null),
+    sb
+      .from("workflow_stage_events")
+      .select("stage")
+      .eq("engagement_id", row.id)
+      .eq("action", "materialize_tasks"),
+  ]);
+
+  const stageTasksOpen: Partial<Record<EngagementStage, number>> = {};
+  for (const t of (tasksRes.data ?? []) as {
+    workflow_stage: string;
+    status: string;
+  }[]) {
+    const s = t.workflow_stage as EngagementStage;
+    if (t.status !== "done") {
+      stageTasksOpen[s] = (stageTasksOpen[s] ?? 0) + 1;
+    }
+  }
+  const stageTasksMaterialized: Partial<Record<EngagementStage, boolean>> = {};
+  for (const e of (ledgerRes.data ?? []) as { stage: string }[]) {
+    stageTasksMaterialized[e.stage as EngagementStage] = true;
+  }
+
+  // A request that is pending (a draft being placed), canceled, or errored
+  // never went out; anything else (sent / viewed / completed / declined /
+  // expired) did — which is what signature_request_sent asks about.
+  const NOT_SENT = new Set(["pending", "canceled", "error"]);
+
+  return {
+    ...base,
+    gates: parseStageGates(row.stage_gates),
+    signatureEverSent: raws.sigs.some((s) => !NOT_SENT.has(s.status)),
+    completedSignatureCount: raws.sigs.filter((s) => s.status === "completed")
+      .length,
+    signatureItemsUnsettled: raws.items.filter(
+      (i) =>
+        i.kind === "signature" && i.status !== "approved" && i.status !== "na",
+    ).length,
+    invoicePaid: raws.invoice?.status === "paid",
+    stageTasksOpen,
+    stageTasksMaterialized,
   };
 }
 
@@ -303,7 +406,7 @@ async function completeLifecycle(
 export async function syncEngagementStage(
   sb: SupabaseClient,
   engagementId: string,
-  opts: { triggeredBy?: "auto" | string } = {},
+  opts: { triggeredBy?: "auto" | string; _depth?: number } = {},
 ): Promise<EngagementStage | null> {
   try {
     const loaded = await loadEngagementRow(sb, engagementId);
@@ -311,8 +414,26 @@ export async function syncEngagementStage(
     const { row, hasStageColumns } = loaded;
     if (!hasStageColumns) return null; // pre-0690: inert
 
-    const facts = await loadStageFacts(sb, row);
-    const next = resolveStage(facts);
+    const { facts, items, sigs, invoice } = await loadStageFacts(sb, row);
+
+    // Workflow engagements (1510) resolve by their own snapshot's walk; the
+    // firm switch is a kill-switch back to legacy behaviour mid-flight.
+    // Everything without a snapshot — every engagement that predates the
+    // feature — takes the legacy resolver, byte-identical to before.
+    let wf: WorkflowSnapshot | null =
+      row.workflow != null ? parseWorkflowSnapshot(row.workflow) : null;
+    if (
+      wf &&
+      !(await isWorkflowsEnabledForFirm(getServiceRoleSupabase(), row.firm_id))
+    ) {
+      wf = null;
+    }
+    const next = wf
+      ? resolveWorkflowStage(
+          wf,
+          await loadWorkflowFacts(sb, row, facts, { items, sigs, invoice }),
+        )
+      : resolveStage(facts);
 
     // Unchanged: nothing to write, no history noise. This is the common case —
     // most events (a second upload on a five-item checklist) don't move a stage.
@@ -324,10 +445,90 @@ export async function syncEngagementStage(
     if (next === "completed" && row.status !== "complete") {
       await completeLifecycle(sb, row);
     }
+
+    // Fire the workflow's entry effects for the stage(s) just reached, then
+    // settle once more if an effect changed the facts — send_invoice can
+    // itself satisfy invoice_sent, and waiting for the next outside event
+    // would leave the engagement parked one stage early. Depth-capped so a
+    // misconfigured flow can never loop.
+    if (wf && next != null) {
+      const fx = await runWorkflowStageEffects({
+        engagementId,
+        firmId: row.firm_id,
+        clientId: row.client_id,
+        prev: row.stage ?? null,
+        next,
+        wf,
+      });
+      const depth = opts._depth ?? 0;
+      if (fx.factsChanged && depth < 2) {
+        const settled = await syncEngagementStage(sb, engagementId, {
+          ...opts,
+          _depth: depth + 1,
+        });
+        return settled ?? next;
+      }
+    }
     return next;
   } catch (e) {
     console.error("[stage-sync] sync failed:", e);
     return null;
+  }
+}
+
+/**
+ * Approve a confirm-gated transition: latch the stage's gate against the
+ * approving user, then re-resolve. The workflow twin of startPreparation —
+ * and like that latch it is deliberately sticky: a stage that regresses on
+ * facts and recovers does not re-ask for an approval already given.
+ *
+ * Returns false when there was nothing to latch (no workflow, draft/cancelled,
+ * or the write didn't land) so the caller can tell the user.
+ */
+export async function latchWorkflowGate(
+  sb: SupabaseClient,
+  engagementId: string,
+  stage: EngagementStage,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const loaded = await loadEngagementRow(sb, engagementId);
+    if (!loaded) return false;
+    const { row } = loaded;
+    if (row.status === "draft" || row.status === "cancelled") return false;
+    const wf = row.workflow != null ? parseWorkflowSnapshot(row.workflow) : null;
+    if (!wf) return false;
+
+    const gates = parseStageGates(row.stage_gates);
+    if (gates[stage]) {
+      // Already approved — idempotent; just make sure the stage caught up.
+      await syncEngagementStage(sb, engagementId, { triggeredBy: userId });
+      return true;
+    }
+    const { error } = await sb
+      .from("engagements")
+      .update({
+        stage_gates: {
+          ...gates,
+          [stage]: { by: userId, at: new Date().toISOString() },
+        },
+      })
+      .eq("id", engagementId);
+    if (error) {
+      if (!isMissingSchema(error)) {
+        console.error("[stage-sync] gate latch failed:", error);
+      }
+      return false;
+    }
+    await logServiceRoleActivity(row.firm_id, row.id, "workflow_gate_approved", {
+      stage,
+      by: userId,
+    });
+    await syncEngagementStage(sb, engagementId, { triggeredBy: userId });
+    return true;
+  } catch (e) {
+    console.error("[stage-sync] gate latch failed:", e);
+    return false;
   }
 }
 

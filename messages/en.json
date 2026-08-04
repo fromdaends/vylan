@@ -2802,7 +2802,12 @@
     "placeholder_taxyear": "Tax year",
     "placeholder_currentyear": "This year",
     "placeholder_currentmonth": "This month",
-    "placeholder_firmname": "Your firm"
+    "placeholder_firmname": "Your firm",
+    "assignee_add": "Add someone to this job",
+    "assignee_primary": "{name} — owns this job",
+    "assignee_nobody": "No teammates to assign yet.",
+    "assignee_needs_migration": "Multiple assignees need a database update before this saves.",
+    "assignee_failed": "Could not change who is on this job. Try again."
   },
   "Attention": {
     "metric_active": "Active",
