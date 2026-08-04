@@ -61,7 +61,7 @@ export function InlineCommentThread({
   const [initial, setInitial] = useState<FileComment[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  // True when the rows came from the pre-1510 client_notes table. Mentions are
+  // True when the rows came from the pre-1520 client_notes table. Mentions are
   // hidden in that state rather than silently dropped — offering a control that
   // cannot work is worse than not offering it.
   const [legacy, setLegacy] = useState(false);

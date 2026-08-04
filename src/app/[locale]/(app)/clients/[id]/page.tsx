@@ -18,8 +18,6 @@ import { selectView, viewLabelKey } from "@/lib/engagements/views";
 import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
 import { FilterLinks } from "@/components/ui/filter-links";
 import { deriveEngagementStatus } from "@/lib/attention";
-import {
-} from "@/lib/engagements/status-pill";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
@@ -76,6 +74,7 @@ import { ProfileTabs } from "@/components/ui/profile-tabs";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { getBrandingImageUrl } from "@/lib/storage";
 import { can } from "@/lib/auth/capabilities";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
@@ -153,6 +152,11 @@ export default async function ClientDetailPage({
 
   const client = await getClient(id);
   if (!client) notFound();
+
+  // The client's picture (1530). Stored as a PATH and signed on read — never
+  // throws (getBrandingImageUrl is fail-soft by contract), so a stale or
+  // unsignable path degrades to initials rather than 500ing the profile.
+  const clientAvatarUrl = await getBrandingImageUrl(client.avatar_path ?? null);
 
   // ── The middle privacy level (migration 1280) ────────────────────────────
   //
@@ -719,6 +723,20 @@ export default async function ClientDetailPage({
     // Spouse / Dependents / Linked contacts / Tags cards. Vylan has no data
     // behind any of those, and an empty card is worse than no card.
     <div className="w-full space-y-6 px-6 pt-7 pb-18 lg:px-11">
+      {/* THE BACK LINK BELONGS TO THE HEADER, so it is grouped with it rather
+          than being a sibling in the page's space-y-6 rhythm.
+
+          It used to be a plain sibling, which put 24px between it and the name
+          — plus the link's own py-1 — so the identity block sat in about 32px
+          of dead air while pressing against the tabs below it. The founder:
+          "the client name and profile are drooped down... should be a little
+          higher no?" They were reading the gap, and the gap was the bug: 6 is
+          the spacing between the page's SECTIONS, and "back" is not a section.
+          It is the label on the thing underneath it, so it gets label spacing.
+
+          Grouped this way the rhythm still works — the group as a whole keeps
+          its 24px from whatever follows. */}
+      <div className="space-y-2">
       {/* One way back, stated plainly. A two-crumb breadcrumb ("Clients /
           Zachary Thresh") spends a line telling you the name you can already
           read at 26px directly underneath it. */}
@@ -730,7 +748,15 @@ export default async function ClientDetailPage({
       <header>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <AvatarInitials name={client.display_name} size={52} />
+          {/* The picture if there is one (1530), initials if not — the circle
+              was previously always initials, which the founder called "a
+              redudant circle". AvatarInitials already handled both; nothing had
+              ever given it a src for a CLIENT. */}
+          <AvatarInitials
+            src={clientAvatarUrl ?? undefined}
+            name={client.display_name}
+            size={52}
+          />
           <div className="min-w-0">
           {/* The client's name IS the menu — the same NameMenu the firm page
               uses, because the founder asked for "the exact same thing". It
@@ -740,6 +766,7 @@ export default async function ClientDetailPage({
           <div className="flex items-center gap-1">
             <ClientNameMenu
               client={client}
+              avatarUrl={clientAvatarUrl}
               locale={locale}
               canManage={canManageClients}
               isOwner={isOwner}
@@ -821,6 +848,7 @@ export default async function ClientDetailPage({
         ]}
       />
       </header>
+      </div>
 
       {/* Two columns on the OVERVIEW only. Every other tab is ONE full-width
           column.

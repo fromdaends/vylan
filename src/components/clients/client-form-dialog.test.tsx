@@ -72,6 +72,7 @@ const CLIENT: Client = {
   industry: null,
   is_private: false,
   portal_pin_enabled: false,
+  avatar_path: null,
 };
 
 function openEditor(client: Client = CLIENT) {

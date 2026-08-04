@@ -8,7 +8,7 @@ import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { AvatarPicker } from "@/components/ui/avatar-picker";
 import {
   updateAvatarAction,
   removeAvatarAction,
@@ -90,87 +90,36 @@ function AvatarSection({
   t: (k: string) => string;
   tc: (k: string) => string;
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(avatarUrl);
-
-  function onPick() {
-    inputRef.current?.click();
-  }
-
-  function onChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-    const fd = new FormData();
-    fd.append("file", file);
-    startTransition(async () => {
-      const res = (await updateAvatarAction(fd)) as ProfileActionResult;
-      if (!res.ok) {
-        setError(t(`errors.${res.error}`) || tc("loading"));
-        return;
-      }
-      if (res.signedUrl) setPreview(res.signedUrl);
-    });
-  }
-
-  function onRemove() {
-    setError(null);
-    startTransition(async () => {
-      const res = await removeAvatarAction();
-      if (!res.ok) {
-        setError(t(`errors.${res.error}`) || tc("loading"));
-        return;
-      }
-      setPreview(null);
-    });
-  }
-
+  // The picker itself now lives in components/ui/avatar-picker, shared with the
+  // CLIENT edit form. This section keeps the heading, the hint and the wiring to
+  // THIS page's actions — the parts that are genuinely about your own profile.
   return (
     <section>
       <h2 className="text-sm font-semibold">{t("section_picture")}</h2>
       <p className="text-xs text-muted-foreground mt-1">
         {t("section_picture_hint")}
       </p>
-      <div className="mt-4 flex items-center gap-4">
-        <AvatarInitials
-          src={preview ?? undefined}
-          name={displayLabel}
-          size={64}
-          color={firmBrandColor}
-        />
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onPick}
-            disabled={pending}
-          >
-            {pending ? t("uploading") : t("change_picture")}
-          </Button>
-          {preview && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onRemove}
-              disabled={pending}
-            >
-              {t("remove_picture")}
-            </Button>
-          )}
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-          className="hidden"
-          onChange={onChange}
-        />
-      </div>
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+      <AvatarPicker
+        className="mt-4"
+        currentUrl={avatarUrl}
+        name={displayLabel}
+        size={64}
+        color={firmBrandColor}
+        onUpload={async (fd) => {
+          const res = (await updateAvatarAction(fd)) as ProfileActionResult;
+          return { ok: res.ok, signedUrl: res.ok ? res.signedUrl : null };
+        }}
+        onRemove={async () => {
+          const res = await removeAvatarAction();
+          return { ok: res.ok };
+        }}
+        labels={{
+          change: t("change_picture"),
+          uploading: t("uploading"),
+          remove: t("remove_picture"),
+          error: (code) => t(`errors.${code}`) || tc("loading"),
+        }}
+      />
     </section>
   );
 }

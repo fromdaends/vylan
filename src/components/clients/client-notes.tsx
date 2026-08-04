@@ -18,7 +18,7 @@ import { InlineCommentThread } from "@/components/engagements/inline-comment-thr
 //
 // WHAT SURVIVED THE SWAP, deliberately:
 //   * Every existing note. The thread reads file_comments and falls back to
-//     client_notes while 1510 is unapplied, so notes written before this never
+//     client_notes while 1520 is unapplied, so notes written before this never
 //     disappear — and the migration copies them across when it lands.
 //   * No edit path. A note records what somebody said at a moment; a correction
 //     is a new note and only its author can remove it. That was true of

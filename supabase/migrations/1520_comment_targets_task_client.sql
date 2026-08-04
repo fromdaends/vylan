@@ -32,9 +32,20 @@
 -- detects 42703/PGRST204 and the client-notes reader falls back, so this ships
 -- with the code and applies on its own schedule (dev uses remote Supabase).
 --
--- Migration number: highest on main is 1500 and the duplicate check
+-- Migration number: RENUMBERED FROM 1510. 1500 was the highest when this was
+-- written and the duplicate check was clean at that moment — but #1312 merged
+-- its own 1510_engagement_details.sql mid-branch and landed first, so this
+-- became the second file of a duplicate pair. That is the exact failure this
+-- repo spent months on: Supabase's ledger keys on the VERSION, so the second
+-- file of a pair can never be tracked and a from-scratch replay cannot apply
+-- both. Re-running the duplicate check after every pull (not just at creation)
+-- is what caught it. Replaying this at its new number is harmless because
+-- every statement below is idempotent — which is exactly why it was written
+-- that way.
+--
+-- Original note: highest on main is 1500 and the duplicate check
 -- (ls supabase/migrations | sed 's/_.*//' | sort | uniq -d) printed nothing,
--- so 1510 is the next free one.
+-- so 1520 is the next free one.
 
 -- ── 1. The two new targets ────────────────────────────────────────────────
 alter table file_comments
@@ -162,9 +173,9 @@ where not exists (
 );
 
 comment on column file_comments.engagement_task_id is
-  'The task this comment is on (1510). Null for every other target.';
+  'The task this comment is on (1520). Null for every other target.';
 comment on column file_comments.client_id is
-  'The client this comment is on (1510) — the successor to client_notes. Null for every other target. Carries the private-client RLS cascade.';
+  'The client this comment is on (1520) — the successor to client_notes. Null for every other target. Carries the private-client RLS cascade.';
 
 -- Verify after applying:
 --   select

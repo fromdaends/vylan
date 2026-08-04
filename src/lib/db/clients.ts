@@ -51,6 +51,11 @@ export type Client = {
   province: string | null;
   timezone: string | null;
   industry: string | null;
+  // The client's picture (migration 1530) — a STORAGE PATH, not a URL, minted
+  // into a signed URL on read by getBrandingImageUrl. Null (or undefined before
+  // 1530 is applied) means fall back to coloured initials, which is exactly what
+  // AvatarInitials does with no `src`. Read it as `client.avatar_path ?? null`.
+  avatar_path: string | null;
   // "Private to me" (migration 0810). When true, this client and everything
   // under it is hidden from STAFF and visible only to OWNERS — enforced in RLS,
   // not here. Possibly undefined at runtime until 0810 is applied to the remote
@@ -191,6 +196,9 @@ export type ClientInput = {
   province?: string | null;
   timezone?: string | null;
   industry?: string | null;
+  // Set only by updateClientAvatarAction (1530), never by the client form's
+  // zod schema — a picture arrives as an uploaded FILE, not a text field.
+  avatar_path?: string | null;
 };
 
 export async function createClient(input: ClientInput): Promise<Client> {
@@ -323,12 +331,15 @@ export async function updateClient(
     .select("*")
     .single();
   // If 0220 isn't applied yet, an edit including the profile fields fails on
-  // the unknown column — retry without them so editing still works.
+  // the unknown column — retry without them so editing still works. Same for
+  // avatar_path before 1530: losing the whole edit over a picture column would
+  // be far worse than losing the picture.
   if (error && isMissingColumn(error)) {
     const safe = { ...patch };
     delete safe.province;
     delete safe.timezone;
     delete safe.industry;
+    delete safe.avatar_path;
     ({ data, error } = await supabase
       .from("clients")
       .update(safe)

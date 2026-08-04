@@ -20,7 +20,7 @@ import {
   processImageUpload,
 } from "@/lib/images";
 
-const KindSchema = z.enum(["firm_logo", "user_avatar"]);
+const KindSchema = z.enum(["firm_logo", "user_avatar", "client_avatar"]);
 
 export type BrandingUploadResult =
   | { ok: true; signedUrl: string; path: string }
@@ -55,9 +55,18 @@ export type BrandingUploadResult =
 export async function uploadBrandingImage(
   formData: FormData,
   kind: BrandingKind,
+  // Only read for `client_avatar`, and it comes from the trusted CALL SITE the
+  // same way `kind` does — never from the form. The caller is responsible for
+  // having already checked that this client belongs to the caller's firm; the
+  // path is firm-prefixed regardless, so a wrong id cannot escape the bucket's
+  // RLS scope even if one slipped through.
+  opts?: { clientId?: string },
 ): Promise<BrandingUploadResult> {
   const parsedKind = KindSchema.safeParse(kind);
   if (!parsedKind.success) return { ok: false, error: "bad_kind" };
+  if (parsedKind.data === "client_avatar" && !opts?.clientId) {
+    return { ok: false, error: "bad_kind" };
+  }
 
   const supabase = await getServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
@@ -99,6 +108,8 @@ export async function uploadBrandingImage(
     firmId: firm.id,
     kind: parsedKind.data,
     userId: parsedKind.data === "user_avatar" ? user.id : undefined,
+    clientId:
+      parsedKind.data === "client_avatar" ? opts?.clientId : undefined,
     uuid: nanoid(12),
     ext: "jpg",
   });
