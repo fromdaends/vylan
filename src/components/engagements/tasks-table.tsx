@@ -144,6 +144,11 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
 };
 const STATUS_RANK: Record<TaskStatus, number> = { todo: 0, doing: 1, done: 2 };
 
+// How long a finished row keeps its place, and how long the undo is offered.
+// ONE constant on purpose: an undo that outlives the row it refers to points at
+// nothing, and a row that outlives the undo is just a stale list.
+const DONE_LINGER_MS = 5000;
+
 // Used only when a firm has no statuses of its own — the same three colours the
 // seed in 1420 gives every firm, so the fallback looks like the real thing.
 const BUCKET_FALLBACK_COLOR: Record<TaskStatus, string> = {
@@ -219,6 +224,10 @@ export function TasksTable({
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Tasks ticked off in the last few seconds. They keep their place in the list
+  // while the check is visible, so finishing something is a moment you can SEE
+  // rather than a row vanishing out from under the cursor.
+  const [justDone, setJustDone] = useState<string[]>([]);
 
   const firmWide = variant === "firm";
   const nameById = useMemo(
@@ -248,6 +257,61 @@ export function TasksTable({
   // for why the ternary chain that used to live here had to go.
   const kindLabel = (kind: string) => t(taskKindLabelKey(kind) as "kind_task");
 
+  /**
+   * Tick a task off — or put it back.
+   *
+   * The founder: "it's too fast, and there's no actual check mark. It just
+   * disappears instantly... there should be a little pop up from the bottom
+   * that says undo."
+   *
+   * So three things happen instead of one. The box shows a CHECK. The row HOLDS
+   * its place for a few seconds even though it no longer belongs in this view,
+   * so the check is something you see rather than infer. And a toast offers
+   * UNDO for as long as the row is still there — the two are deliberately the
+   * same length, so the offer never outlives the thing it refers to.
+   */
+  function setDone(task: TaskRow, done: boolean) {
+    const next = done ? doneStatus : todoStatus;
+    const previous = statusOf(task);
+    if (!next) return;
+
+    const write = (target: FirmStatus) =>
+      run({ id: task.id, status: target.bucket, statusId: target.id }, () =>
+        updateTaskAction({
+          taskId: task.id,
+          engagementId: task.engagementId,
+          statusId: target.id.startsWith("bucket:") ? null : target.id,
+          status: target.id.startsWith("bucket:") ? target.bucket : undefined,
+        }),
+      );
+
+    write(next);
+    if (!done) {
+      // Un-ticking needs no ceremony: the row is coming back into view, which
+      // is its own confirmation.
+      setJustDone((ids) => ids.filter((id) => id !== task.id));
+      return;
+    }
+
+    setJustDone((ids) => [...ids, task.id]);
+    window.setTimeout(
+      () => setJustDone((ids) => ids.filter((id) => id !== task.id)),
+      DONE_LINGER_MS,
+    );
+    toast.success(t("task_done_toast", { title: task.title }), {
+      duration: DONE_LINGER_MS,
+      action: {
+        label: t("undo"),
+        onClick: () => {
+          setJustDone((ids) => ids.filter((id) => id !== task.id));
+          // Back to where it WAS, not to a generic "to do" — a task that was
+          // "Needs review" must not come back as untouched.
+          write(previous);
+        },
+      },
+    });
+  }
+
   // The label and colour a row wears. Falls back to the built-in three when the
   // firm has none — before 1420 is applied, and for a task whose status was
   // deleted out from under it. A row must never render blank.
@@ -271,16 +335,19 @@ export function TasksTable({
           bucket: b,
         }));
 
-  const inView = (r: TaskRow, v: TaskView) =>
-    v === "all"
-      ? true
-      : v === "done"
-        ? r.status === "done"
-        : v === "unassigned"
-          ? r.status !== "done" && r.assigneeIds.length === 0
-          : v === "mine"
-            ? r.status !== "done" && r.assigneeIds.includes(currentUserId)
-            : r.status !== "done";
+  function inView(r: TaskRow, v: TaskView): boolean {
+    // A task you just finished stays put until the check has been seen.
+    // Without this the row disappears on the same frame as the click, which
+    // reads as "something happened, no idea what" — and leaves nothing to undo
+    // from.
+    if (justDone.includes(r.id)) return true;
+    if (v === "all") return true;
+    if (v === "done") return r.status === "done";
+    if (r.status === "done") return false;
+    if (v === "unassigned") return r.assigneeIds.length === 0;
+    if (v === "mine") return r.assigneeIds.includes(currentUserId);
+    return true;
+  }
 
   const counts = useMemo(
     () =>
@@ -344,6 +411,10 @@ export function TasksTable({
     [rows],
   );
 
+
+  // Where the tick-box sends a task, decided by the firm's own order.
+  const doneStatus = statusOptions.find((x) => x.bucket === "done");
+  const todoStatus = statusOptions.find((x) => x.bucket === "todo");
 
   const clientOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -530,6 +601,7 @@ export function TasksTable({
                   kindLabel={kindLabel}
                   t={t}
                   onOpenDetail={() => setDetailId(task.id)}
+                  onSetDone={(done) => setDone(task, done)}
                   onOpenScreen={onOpen}
                   run={run}
                 />
@@ -767,6 +839,7 @@ function Row({
   kindLabel,
   t,
   onOpenDetail,
+  onSetDone,
   onOpenScreen,
   run,
 }: {
@@ -781,6 +854,8 @@ function Row({
   kindLabel: (kind: string) => string;
   t: ReturnType<typeof useTranslations<"Engagements">>;
   onOpenDetail: () => void;
+  /** Tick it off, or put it back. The table owns the pause and the undo. */
+  onSetDone: (done: boolean) => void;
   onOpenScreen?: (taskId: string) => void;
   run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
 }) {
@@ -790,10 +865,6 @@ function Row({
   // Only a kind with a real screen is clickable through.
   const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
   const isDone = status.bucket === "done";
-  // The firm's FIRST done and first todo — where the box sends a task. Its own
-  // order decides, so a firm that put "Filed" above "Delivered" gets Filed.
-  const doneStatus = statusOptions.find((s) => s.bucket === "done");
-  const todoStatus = statusOptions.find((s) => s.bucket === "todo");
   const overdue =
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
@@ -823,21 +894,10 @@ function Row({
             be clicked through — but it was never a replacement for this. */}
         <button
           type="button"
-          disabled={!canEdit || !doneStatus || !todoStatus}
+          disabled={!canEdit}
           onClick={(e) => {
             e.stopPropagation();
-            const next = isDone ? todoStatus : doneStatus;
-            if (!next) return;
-            run(
-              { id: task.id, status: next.bucket, statusId: next.id },
-              () =>
-                updateTaskAction({
-                  taskId: task.id,
-                  engagementId: task.engagementId,
-                  statusId: next.id.startsWith("bucket:") ? null : next.id,
-                  status: next.id.startsWith("bucket:") ? next.bucket : undefined,
-                }),
-            );
+            onSetDone(!isDone);
           }}
           aria-label={t("task_mark_done", { title: task.title })}
           aria-pressed={isDone}
