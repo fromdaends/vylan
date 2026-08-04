@@ -66,15 +66,26 @@ describe("RouteProgress", () => {
     render(<RouteProgress />);
     clickLink("/clients");
     expect(bar()).not.toBeNull();
-    // The creep, not a jump: it starts from nothing and eases toward 90%.
     expect(inner()?.className).toContain("animate-[route-progress");
   });
 
-  it("holds at 90% rather than claiming a percentage it cannot know", () => {
+  // A filling bar has to claim a POSITION, and nothing can know how far along a
+  // server render is. A segment that simply travels asserts nothing.
+  it("is a travelling segment, not a bar that fills", () => {
     render(<RouteProgress />);
     clickLink("/clients");
-    expect(inner()?.className).toContain("w-[90%]");
-    expect(inner()?.className).not.toContain("w-full");
+    const cls = inner()?.className ?? "";
+    expect(cls).toContain("w-2/5");
+    expect(cls).toContain("infinite");
+    // Soft ends, so nothing has a hard edge to catch the eye.
+    expect(cls).toContain("bg-gradient-to-r");
+
+    // Reduced motion keeps the line and drops the travel — the only place a
+    // full width belongs, and the reason the check above is positive rather
+    // than a blanket "no w-full".
+    expect(cls).toContain("motion-reduce:w-full");
+    expect(cls).toContain("motion-reduce:animate-none");
+    expect(cls).not.toMatch(/(^|\s)w-full(\s|$)/);
   });
 
   // Every one of these would leave a bar creeping over a page that is not
@@ -98,13 +109,13 @@ describe("RouteProgress", () => {
 
     arriveAt("/clients", rerender);
     // The floor: a prefetched page arrives in a few frames, and the bar must
-    // still be visible when it does.
-    expect(inner()?.className).toContain("w-[90%]");
+    // still be sweeping when it does.
+    expect(inner()?.className).toContain("infinite");
     act(() => void vi.advanceTimersByTime(400));
     rerender(<RouteProgress />);
-    // NOW it finishes — full width and fading, the snap people read as "done".
-    expect(inner()?.className).toContain("w-full");
+    // NOW it goes — a fade, not a snap to full. There is nothing to fill.
     expect(inner()?.className).toContain("opacity-0");
+    expect(inner()?.className).not.toContain("infinite");
 
     act(() => void vi.advanceTimersByTime(500));
     rerender(<RouteProgress />);
@@ -120,7 +131,7 @@ describe("RouteProgress", () => {
     arriveAt("/dashboard?due=overdue", rerender);
     act(() => void vi.advanceTimersByTime(400));
     rerender(<RouteProgress />);
-    expect(inner()?.className).toContain("w-full");
+    expect(inner()?.className).toContain("opacity-0");
   });
 
   // ⚠️ The one that keeps a bug from becoming permanent furniture. A
@@ -162,13 +173,13 @@ describe("RouteProgress", () => {
     act(() => void vi.advanceTimersByTime(30));
     arriveAt("/clients", rerender);
 
-    // Still creeping, not finishing.
-    expect(inner()?.className).toContain("w-[90%]");
+    // Still sweeping, not finishing.
+    expect(inner()?.className).toContain("infinite");
     expect(inner()?.className).not.toContain("opacity-0");
 
     act(() => void vi.advanceTimersByTime(400));
     rerender(<RouteProgress />);
-    expect(inner()?.className).toContain("w-full");
+    expect(inner()?.className).toContain("opacity-0");
   });
 
   it("does NOT add the floor on top of a slow page", () => {
@@ -178,6 +189,6 @@ describe("RouteProgress", () => {
     clickLink("/clients");
     act(() => void vi.advanceTimersByTime(1500));
     arriveAt("/clients", rerender);
-    expect(inner()?.className).toContain("w-full");
+    expect(inner()?.className).toContain("opacity-0");
   });
 });

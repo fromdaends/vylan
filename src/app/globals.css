@@ -1252,13 +1252,21 @@
    hover colour by the same amount, so every row below the first would feel
    broken to the mouse for a tenth of a second. Applied under motion-safe only,
    and the rows are simply present without it. */
-/* The page-loading hairline. Eases toward 90% and stops: nothing knows how long
-   a server render will take, so a bar claiming a real percentage would be
-   lying, while one that keeps moving without arriving says the true thing.
-   Only the new page actually arriving takes it to 100%. */
+/* The page-loading hairline — a SEGMENT that crosses, not a bar that fills.
+   Founder: "make the line more subtle more smooth and the line crosses from
+   left to right."
+
+   A filling bar has to claim a position, and nothing can know how far along a
+   server render is; a segment that simply travels says "working" without
+   asserting anything false, and it loops for as long as the wait lasts. It is
+   also the quieter of the two — most of the line is empty at any moment.
+
+   Transform, never `left`: a transform is composited, so this cannot cost a
+   layout on a page that is already busy rendering. The ends fade out via the
+   gradient in the class, so nothing has a hard edge to catch the eye. */
 @keyframes route-progress {
-  from { width: 0%; }
-  to   { width: 90%; }
+  from { transform: translateX(-110%); }
+  to   { transform: translateX(260%); }
 }
 
 @keyframes rail-flyout-item-in {

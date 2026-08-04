@@ -12,16 +12,20 @@
 // like nothing happened. People click again, which queues a second navigation
 // and makes it slower.
 //
-// ── WHY IT CREEPS AND NEVER ARRIVES ────────────────────────────────────────
+// ── A SEGMENT THAT CROSSES, NOT A BAR THAT FILLS ───────────────────────────
 //
-// The bar eases toward 90% over ten seconds and stops. Nothing knows how long
-// a server render will take, so a bar that claimed a real percentage would be
-// lying; one that keeps moving without arriving says the true thing — "still
-// working" — and the eased curve means it slows as it goes, which reads as
-// effort rather than as a stall.
+// Founder: "make the line more subtle more smooth and the line crosses from
+// left to right."
 //
-// It only jumps to 100% when the new page is actually here, and that final
-// snap is the part people feel as "done".
+// The first version filled from the left toward 90%. A filling bar has to claim
+// a POSITION, and nothing can know how far along a server render is — so it was
+// asserting something it could not know, and it needed a fake ceiling to avoid
+// lying outright. A short segment that simply travels says "working" without
+// asserting anything, loops for as long as the wait lasts, and is quieter:
+// most of the line is empty at any given moment.
+//
+// It does not snap to full at the end either. There is nothing to fill; it just
+// stops being there.
 //
 // ⚠️ AND IT STAYS UP FOR AT LEAST 400ms. Next prefetches every <Link> in view,
 // so most navigations here land in under 50ms; without a floor the bar mounts
@@ -62,8 +66,8 @@ import { cn } from "@/lib/cn";
 // The creep (10s to 90%) and the finish (180ms + a 250ms fade) live in the
 // classes below, next to the thing they describe. Only the two the JS needs are
 // constants.
-/** How long the finish takes, start to invisible — when to unmount. */
-const FINISH_TOTAL_MS = 430;
+/** The fade at the end, after which it unmounts. */
+const FINISH_TOTAL_MS = 320;
 /** Nothing may leave the bar running longer than this. */
 const MAX_MS = 20000;
 /**
@@ -185,22 +189,26 @@ export function RouteProgress() {
       // Not a live region and not announced: a screen reader already gets the
       // new page. This is for the eyes that are watching an unchanged screen.
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-0.5"
+      // overflow-hidden clips the segment at both edges, so it enters and
+      // leaves cleanly instead of widening the page.
+      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-0.5 overflow-hidden"
     >
       <div
         className={cn(
-          "h-full bg-accent",
+          // A SEGMENT, two fifths of the width, with both ends faded out by the
+          // gradient — no hard edge anywhere, which is most of what makes it
+          // read as smooth rather than as a moving block.
+          "h-full w-2/5 bg-gradient-to-r from-transparent via-accent to-transparent",
           state === "done"
-            ? // The snap to full, then a fade. Two durations on one transition,
-              // the opacity delayed until the width has arrived, so it reads as
-              // "finished, then gone" rather than both at once.
-              "w-full opacity-0 transition-[width,opacity] [transition-delay:0ms,180ms] [transition-duration:180ms,250ms]"
-            : // A KEYFRAME, not a transition: an element that has just mounted
-              // has nothing to transition FROM, and the two-frame dance to give
-              // it one is exactly the fragility that made the rail flyout snap.
-              // motion-reduce holds it at a third and still: the bar is the only
-              // signal anything is happening, so it stays — the MOVEMENT goes.
-              "w-[90%] animate-[route-progress_10s_cubic-bezier(0.1,0.85,0.25,1)_forwards] motion-reduce:w-1/3 motion-reduce:animate-none",
+            ? // It does not snap to full — there is nothing to fill. It simply
+              // stops being there, which is the quiet version of "done".
+              "opacity-0 transition-opacity duration-300"
+            : // Loops for as long as the wait lasts. ease-in-out so it arrives
+              // and leaves softly instead of tearing across at a constant clip.
+              "opacity-70 animate-[route-progress_1.6s_cubic-bezier(0.4,0,0.2,1)_infinite] " +
+              // Reduced motion: no travel. A still, very faint full-width line
+              // that says something is happening without moving.
+              "motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-40",
         )}
       />
     </div>
