@@ -110,12 +110,26 @@ export function EngagementModalShell({
           // a bare blur on a near-black page is invisible. The wash does that
           // work; the blur softens whatever colour is underneath.
           "fixed inset-0 z-40 overflow-y-auto bg-background/70 backdrop-blur-sm sm:left-[var(--rail-width)]",
+        // CENTRED, both axes — founder: "the engagement box is lopsided BRO...
+        // it should be center screen". It was top-aligned with the page's
+        // padding, which on the short opening question left most of the screen
+        // empty underneath and read as a panel that had slipped upward.
+        //
+        // Only when it FITS. `min-h-full` plus auto margins centres a short
+        // dialog and top-aligns a tall one, where centring would push the head
+        // of the form off the top of the screen with no way to scroll back to
+        // it — the classic centred-modal bug.
+        overlay && "flex flex-col",
       )}
     >
       <div
         className={cn(
           "mx-auto flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
           compact ? "max-w-2xl" : "max-w-[1400px]",
+          // `my-auto` is what does the centring inside the flex column above.
+          // Without a flex parent it is inert, so this is safe on the full-page
+          // fallback too.
+          "my-auto",
           // LIGHTER than the page, not merely bordered. Measured on the live
           // site, the app background is pure black and `bg-card` is oklch 0.14
           // — near enough identical that the sheet read as another region of
