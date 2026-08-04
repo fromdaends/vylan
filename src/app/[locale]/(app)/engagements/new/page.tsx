@@ -12,12 +12,27 @@ import { can } from "@/lib/auth/capabilities";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
 
-export default async function NewEngagementPage({
+/**
+ * The new-engagement screen, rendered by BOTH entry points:
+ *
+ *   - as an OVERLAY over whatever page you were on, via the @modal
+ *     intercepting route — the normal case, and what the founder asked for:
+ *     "a box that appears overlapping over the UI that already exists".
+ *   - as a full page, on a direct load, a refresh, or a shared link, where
+ *     there is no page behind to overlay.
+ *
+ * One implementation, two frames. A second copy of this would be the exact
+ * drift CLAUDE.md's cohesion rule exists to prevent, and this one loads seven
+ * things and threads a dozen props.
+ */
+export async function NewEngagementScreen({
   params,
   searchParams,
+  overlay = false,
 }: {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ client?: string; template?: string }>;
+  overlay?: boolean;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -77,8 +92,8 @@ export default async function NewEngagementPage({
     // No page header or breadcrumb any more: the shell draws its own title bar
     // with the actions in it, the way Canopy's modal does. A page heading above
     // a modal-looking card would name the same thing twice.
-    <>
-      <EngagementBuilder
+    <EngagementBuilder
+        overlay={overlay}
         clients={clients.map((c) => ({
           id: c.id,
           display_name: c.display_name,
@@ -99,6 +114,15 @@ export default async function NewEngagementPage({
         canManageReminderDefaults={can(user, "firm.settings")}
         authorizedContacts={authorizedContacts}
       />
-    </>
   );
+}
+
+// Direct load, refresh, or a shared link: there is no page behind to overlay,
+// so this renders full-screen. The @modal intercepting route handles every
+// in-app navigation and renders the SAME screen as an overlay.
+export default async function NewEngagementPage(props: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ client?: string; template?: string }>;
+}) {
+  return <NewEngagementScreen {...props} />;
 }

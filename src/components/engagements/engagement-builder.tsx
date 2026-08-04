@@ -149,6 +149,7 @@ export function EngagementBuilder({
   servicePrices = {},
   services = [],
   engagementTemplates = [],
+  overlay = false,
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -178,6 +179,8 @@ export function EngagementBuilder({
   servicePrices?: Record<string, number>;
   /** The firm's service catalogue (migration 1480). Empty until it is applied. */
   services?: CatalogueService[];
+  /** Render as an overlay over the page behind, rather than as a full page. */
+  overlay?: boolean;
   /** Saved whole-engagement templates (migration 1500). */
   engagementTemplates?: {
     id: string;
@@ -694,6 +697,7 @@ export function EngagementBuilder({
       <EngagementModalShell
         title={t("new_title")}
         closeHref="/engagements"
+        overlay={overlay}
         compact
         labels={{
           close: tc("cancel"),
@@ -723,6 +727,7 @@ export function EngagementBuilder({
     <EngagementModalShell
       title={t("new_title")}
       closeHref="/engagements"
+      overlay={overlay}
       busy={pending}
       onSaveDraft={() => submit(false)}
       onSaveAndSend={() => submit(true)}

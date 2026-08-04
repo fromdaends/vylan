@@ -18,9 +18,16 @@ import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
   children,
+  modal,
   params,
 }: {
   children: React.ReactNode;
+  /**
+   * The @modal parallel slot. Holds the create-engagement overlay when an
+   * in-app navigation intercepted it, and null otherwise — so the page beneath
+   * stays mounted and can be blurred rather than replaced.
+   */
+  modal: React.ReactNode;
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
@@ -170,6 +177,7 @@ export default async function AppLayout({
       }}
     >
       {children}
+      {modal}
       <ChatLauncher
         locale={locale === "fr" ? "fr" : "en"}
         userId={dbUser.id}
