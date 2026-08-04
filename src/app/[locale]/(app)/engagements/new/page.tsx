@@ -1,4 +1,4 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
 import { listLiveRelationshipsForFirm } from "@/lib/db/relationships";
 import type { ScopeWarningContact } from "@/lib/relationships/validate";
@@ -91,8 +91,6 @@ export default async function NewEngagementPage({
       scopes: r.scopes ?? [],
     });
   }
-
-  const t = await getTranslations("Engagements");
 
   return (
     // FULL WIDTH, like Clients and Work. It was max-w-3xl — 768px — which was
