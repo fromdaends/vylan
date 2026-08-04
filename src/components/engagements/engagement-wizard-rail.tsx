@@ -43,7 +43,7 @@ export function EngagementWizardRail<K extends string>({
   return (
     <nav
       aria-label={label}
-      className="rounded-xl border border-border/60 bg-card p-2"
+      className="rounded-xl border border-border/60 bg-card p-3"
     >
       <ol className="flex flex-col gap-0.5">
         {steps.map((s) => {
@@ -55,7 +55,7 @@ export function EngagementWizardRail<K extends string>({
                 onClick={() => onSelect(s.key)}
                 aria-current={active ? "step" : undefined}
                 className={cn(
-                  "group relative flex w-full items-center gap-2 rounded-lg py-2 pl-3 pr-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group relative flex w-full items-center gap-3 rounded-lg py-2.5 pl-3 pr-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active
                     ? "font-medium text-accent"
                     : "text-foreground hover:bg-muted",
