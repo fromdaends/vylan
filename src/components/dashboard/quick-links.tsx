@@ -70,7 +70,10 @@ export function QuickLinks({ links }: { links: FirmLink[] }) {
   }
 
   return (
-    <div className="px-1">
+    // Card chrome to match the agenda card above it — the founder's call
+    // (2026-08-03), overriding the mock's bare hairline list: two boxed cards
+    // stack cleaner than a box over a naked list.
+    <div className="rounded-xl border border-border bg-card p-5 shadow-card">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
           {t("quicklinks_title")}

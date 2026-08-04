@@ -162,10 +162,20 @@ export function TasksOverviewCard({
     key: keyof TaskGroups<DashboardTask>,
     label: string,
     headerClass: string,
-    opts?: { hideToday?: boolean; showEmpty?: boolean },
+    opts?: {
+      hideToday?: boolean;
+      showEmpty?: boolean;
+      /** Rows shown before the "+ n more" link. Overdue and Today are never
+       *  capped — hiding urgent work to save pixels is how it gets missed. */
+      max?: number;
+      moreHref?: string;
+    },
   ) => {
     const list = groups[key];
     if (list.length === 0) return null;
+    const max = opts?.max ?? Infinity;
+    const visible = list.slice(0, max);
+    const hidden = list.length - visible.length;
     return (
       <div key={key}>
         <p
@@ -177,7 +187,7 @@ export function TasksOverviewCard({
           {label}
         </p>
         <div className="mt-1">
-          {list.map((task, i) => (
+          {visible.map((task, i) => (
             <div
               key={task.id}
               className={cn(
@@ -216,39 +226,55 @@ export function TasksOverviewCard({
                   className="mt-px"
                 />
               </span>
-              <DueIndicator
-                dueDate={task.dueDate}
-                status={task.status}
-                today={today}
-                hideToday={opts?.hideToday}
-                showEmpty={opts?.showEmpty}
-              />
-              <TaskAssigneeMenu
-                assigneeIds={task.assigneeIds}
-                members={members}
-                canEdit
-                avatarSize={22}
-                unassignedLabel={tWork("work_unassigned")}
-                onToggle={(userId, on) =>
-                  run(
-                    {
-                      id: task.id,
-                      assigneeIds: on
-                        ? [...task.assigneeIds, userId]
-                        : task.assigneeIds.filter((x) => x !== userId),
-                    },
-                    () =>
-                      setTaskAssigneeAction({
-                        taskId: task.id,
-                        userId,
-                        on,
-                        engagementId: task.engagementId,
-                      }),
-                  )
-                }
-              />
+              {/* FIXED right columns — due then assignee — so the values line
+                  up down the card instead of floating ragged after each
+                  title. The client profile's status column set the precedent:
+                  a mixed list stays scannable when its columns hold still. */}
+              <span className="flex w-[120px] flex-none items-center justify-end text-right">
+                <DueIndicator
+                  dueDate={task.dueDate}
+                  status={task.status}
+                  today={today}
+                  hideToday={opts?.hideToday}
+                  showEmpty={opts?.showEmpty}
+                />
+              </span>
+              <span className="flex w-[110px] flex-none items-center justify-end">
+                <TaskAssigneeMenu
+                  assigneeIds={task.assigneeIds}
+                  members={members}
+                  canEdit
+                  avatarSize={22}
+                  unassignedLabel={tWork("work_unassigned")}
+                  onToggle={(userId, on) =>
+                    run(
+                      {
+                        id: task.id,
+                        assigneeIds: on
+                          ? [...task.assigneeIds, userId]
+                          : task.assigneeIds.filter((x) => x !== userId),
+                      },
+                      () =>
+                        setTaskAssigneeAction({
+                          taskId: task.id,
+                          userId,
+                          on,
+                          engagementId: task.engagementId,
+                        }),
+                    )
+                  }
+                />
+              </span>
             </div>
           ))}
+          {hidden > 0 && opts?.moreHref && (
+            <Link
+              href={opts.moreHref}
+              className="block border-t border-border/50 py-2 pl-8 text-xs text-muted-foreground transition-colors hover:text-accent"
+            >
+              {t("tasks_more", { count: hidden })}
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -324,35 +350,41 @@ export function TasksOverviewCard({
                   className="mt-px"
                 />
               </span>
-              <TaskAssigneeMenu
-                assigneeIds={task.assigneeIds}
-                members={members}
-                canEdit
-                avatarSize={22}
-                unassignedLabel={tWork("work_unassigned")}
-                onToggle={(userId, on) =>
-                  run(
-                    {
-                      id: task.id,
-                      assigneeIds: on
-                        ? [...task.assigneeIds, userId]
-                        : task.assigneeIds.filter((x) => x !== userId),
-                    },
-                    () =>
-                      setTaskAssigneeAction({
-                        taskId: task.id,
-                        userId,
-                        on,
-                        engagementId: task.engagementId,
-                      }),
-                  )
-                }
-              />
+              <span className="flex w-[110px] flex-none items-center justify-end">
+                <TaskAssigneeMenu
+                  assigneeIds={task.assigneeIds}
+                  members={members}
+                  canEdit
+                  avatarSize={22}
+                  unassignedLabel={tWork("work_unassigned")}
+                  onToggle={(userId, on) =>
+                    run(
+                      {
+                        id: task.id,
+                        assigneeIds: on
+                          ? [...task.assigneeIds, userId]
+                          : task.assigneeIds.filter((x) => x !== userId),
+                      },
+                      () =>
+                        setTaskAssigneeAction({
+                          taskId: task.id,
+                          userId,
+                          on,
+                          engagementId: task.engagementId,
+                        }),
+                    )
+                  }
+                />
+              </span>
             </div>
           ))}
         </div>
       ) : (
         <>
+          {/* Overdue and Today are never capped — that IS the page. The
+              calmer groups cap with a "+ n more" so twenty later-tasks or a
+              productive afternoon can't bury the urgent ones (founder's call,
+              2026-08-03: "way too many tasks displayed at a time"). */}
           {group("overdue", t("tasks_group_overdue"), "text-destructive")}
           {group(
             "today",
@@ -360,11 +392,19 @@ export function TasksOverviewCard({
             "text-accent",
             { hideToday: true },
           )}
-          {group("week", t("tasks_group_week"), "text-muted-foreground")}
+          {group("week", t("tasks_group_week"), "text-muted-foreground", {
+            max: 5,
+            moreHref: "/work?due=week",
+          })}
           {group("later", t("tasks_group_later"), "text-muted-foreground", {
             showEmpty: true,
+            max: 5,
+            moreHref: "/work",
           })}
-          {group("doneToday", t("tasks_group_done_today"), "text-success")}
+          {group("doneToday", t("tasks_group_done_today"), "text-success", {
+            max: 3,
+            moreHref: "/work?open=0",
+          })}
         </>
       )}
 
