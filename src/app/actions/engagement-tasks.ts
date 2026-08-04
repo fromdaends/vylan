@@ -13,7 +13,11 @@
 // export typechecks, lints, passes every test, and then fails the production
 // build naming something unrelated.
 
-import { getCurrentUser } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listActiveFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import {
   createEngagementTask,
@@ -26,6 +30,7 @@ import {
   type TaskKind,
   type TaskPriority,
 } from "@/lib/db/engagement-tasks";
+import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
 /**
@@ -75,6 +80,55 @@ function handle(err: unknown, what: string): TaskActionResult {
   }
   console.error(`[engagement-tasks] ${what} failed:`, err);
   return { ok: false, error: "failed" };
+}
+
+/**
+ * Everything the engagements list needs to open one job's task panel.
+ *
+ * Founder, on Canopy: "canopy has the feature to allow you to click on the
+ * tasks like ex: 3/4 and it brings up a screen of all those tasks for that
+ * specific engagement."
+ *
+ * ⚠️ LOADED ON DEMAND, NOT WITH THE LIST. A hundred-row engagements list would
+ * otherwise fetch a hundred task sets, plus the roster and the statuses, to
+ * draw a number you already have — for a panel that opens on maybe one row.
+ *
+ * Returns the roster and the firm's statuses ALONGSIDE the tasks so the panel
+ * draws the same table the Tasks page and the engagement page draw, rather than
+ * a read-only lookalike. One round trip, because three would show the panel
+ * assembling itself in front of the user.
+ */
+export async function loadEngagementTasksPanelAction(engagementId: string): Promise<{
+  ok: boolean;
+  tasks: Awaited<ReturnType<typeof listEngagementTasks>>;
+  members: { id: string; name: string }[];
+  statuses: Awaited<ReturnType<typeof listTaskStatuses>>;
+  currentUserId: string;
+}> {
+  const empty = {
+    ok: false,
+    tasks: [],
+    members: [],
+    statuses: [],
+    currentUserId: "",
+  };
+  const user = await getCurrentUser();
+  if (!user) return empty;
+  // No firm check beyond this: RLS decides which engagement's tasks come back,
+  // the same boundary every other reader in this file trusts. An id from
+  // another firm returns nothing rather than erroring.
+  const [tasks, members, statuses] = await Promise.all([
+    listEngagementTasks(engagementId),
+    listActiveFirmUsers(),
+    listTaskStatuses(),
+  ]);
+  return {
+    ok: true,
+    tasks,
+    members: members.map((m) => ({ id: m.id, name: userDisplayLabel(m) })),
+    statuses,
+    currentUserId: user.id,
+  };
 }
 
 export async function addTaskAction(input: {

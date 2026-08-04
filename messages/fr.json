@@ -2701,7 +2701,14 @@
     "services_save": "Enregistrer",
     "services_cancel": "Annuler",
     "services_failed": "Impossible d’enregistrer. Réessayez.",
-    "services_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des services."
+    "services_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des services.",
+    "view_all_label": "Tous les mandats",
+    "view_all_title": "Tous les mandats",
+    "view_all_empty": "Aucun mandat pour l'instant. Créez-en un pour commencer.",
+    "views_more": "Autres vues",
+    "tasks_panel_failed": "Impossible de charger ces tâches.",
+    "tasks_panel_open_engagement": "Ouvrir le mandat à la place",
+    "tasks_panel_loading": "Chargement des tâches"
   },
   "Attention": {
     "metric_active": "Actifs",

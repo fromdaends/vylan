@@ -646,6 +646,23 @@ describe("every column header sorts and filters, on every list", () => {
     expect(q.getByText(en.Engagements.wl_service_t1)).toBeInTheDocument();
   });
 
+  // Founder, on Canopy: "click on the tasks like ex: 3/4 and it brings up a
+  // screen of all those tasks for that specific engagement."
+  it("the task count is a control, not just a number", () => {
+    const q = renderTable();
+    const counts = q.getAllByRole("button", { name: "1/2" });
+    expect(counts.length).toBeGreaterThan(0);
+    expect(counts[0]).not.toBeDisabled();
+  });
+
+  it("opens the panel on the row that was clicked", async () => {
+    const q = renderTable();
+    fireEvent.click(q.getAllByRole("button", { name: "1/2" })[0]);
+    // The dialog is titled with that engagement, so the wrong row is visible
+    // immediately rather than after someone acts on the wrong job's tasks.
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Alpha");
+  });
+
   it("shows the service and the task count, in Canopy's words", () => {
     const q = renderTable();
     // Service items = what was sold; engagement items = the tasks inside it.

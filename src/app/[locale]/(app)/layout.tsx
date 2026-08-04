@@ -148,6 +148,7 @@ export default async function AppLayout({
         vylanHub: t("nav_vylan"),
         engagementViews: {
           active: tEng("view_active_label"),
+          all: tEng("view_all_label"),
           ready: tEng("view_ready_label"),
           drafts: tEng("view_drafts_label"),
           completed: tEng("view_completed_label"),

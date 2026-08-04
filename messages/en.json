@@ -2701,7 +2701,14 @@
     "services_save": "Save",
     "services_cancel": "Cancel",
     "services_failed": "Couldn't save that. Try again.",
-    "services_needs_migration": "Your database needs a quick update before services can be saved."
+    "services_needs_migration": "Your database needs a quick update before services can be saved.",
+    "view_all_label": "All engagements",
+    "view_all_title": "All engagements",
+    "view_all_empty": "No engagements yet. Create one to get started.",
+    "views_more": "More views",
+    "tasks_panel_failed": "Couldn't load these tasks.",
+    "tasks_panel_open_engagement": "Open the engagement instead",
+    "tasks_panel_loading": "Loading tasks"
   },
   "Attention": {
     "metric_active": "Active",

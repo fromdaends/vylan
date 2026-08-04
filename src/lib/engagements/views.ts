@@ -15,20 +15,44 @@ import type { EngagementScope } from "@/lib/db/engagements";
 // is still findable through the command palette — it just has no tab of its own.
 export type EngagementView =
   | "active"
+  | "all"
   | "ready"
   | "drafts"
   | "completed"
   | "archived"
   | "deleted";
 
+/** Every view that has a route. NOT what the tab strip shows — see TAB_VIEWS. */
 export const ENGAGEMENT_VIEWS: EngagementView[] = [
   "active",
+  "all",
   "ready",
   "drafts",
   "completed",
   "archived",
   "deleted",
 ];
+
+/**
+ * The three that get a TAB. Founder: "The only top tab things should be:
+ * Active, Drafts, All engagements."
+ *
+ * ⚠️ THE OTHER FOUR STILL EXIST — routes, links and the command palette all
+ * keep working, and Ready to review / Archived / Recently deleted moved to the
+ * "..." menu beside New engagement (which is where Canopy keeps its overflow
+ * too). Deleting the tabs without rehoming them would have made Recently
+ * Deleted unreachable, and that is a 30-day recovery window with a purge cron
+ * on the other side of it.
+ *
+ * Completed needs no home of its own: All engagements contains it.
+ */
+export const TAB_VIEWS: EngagementView[] = ["active", "drafts", "all"];
+
+/**
+ * The overflow menu, in the order it reads. Ready to review is a slice of live
+ * work, Archived and Recently deleted are the two shelves.
+ */
+export const MENU_VIEWS: EngagementView[] = ["ready", "archived", "deleted"];
 
 // Which DB lifecycle scope a view needs loaded. Most views read the "active"
 // set (not archived, not deleted); Archived and Recently Deleted read their
@@ -37,6 +61,11 @@ export const ENGAGEMENT_VIEWS: EngagementView[] = [
 export function scopeForView(view: EngagementView): EngagementScope {
   if (view === "archived") return "archived";
   if (view === "deleted") return "deleted";
+  // "all" is every engagement that is neither archived nor deleted — the same
+  // scope the working list loads, without the status slice on top. It is NOT
+  // "everything in the database": a deleted engagement is on its way out and an
+  // archived one was deliberately put away, so neither belongs in the list you
+  // scan every morning. Canopy draws the same line.
   return "active";
 }
 
@@ -64,6 +93,7 @@ export function viewEmptyKey(view: EngagementView): string {
 // Filters a scope-loaded row set down to a single view. The rows passed in must
 // already be at scopeForView(view) — this applies the status slice on top.
 //   active    → in-flight: draft / sent / in_progress (working list)
+//   all       → every non-archived, non-deleted row, any status
 //   ready     → readyToReview (all required docs in, awaiting review)
 //   drafts    → draft only
 //   completed → complete
@@ -81,6 +111,11 @@ export function selectView(
           r.status === "sent" ||
           r.status === "in_progress",
       );
+    case "all":
+      // No status slice — completed and cancelled work included. This is what
+      // replaced the Completed tab: one list you can sort and filter with the
+      // column menus, rather than a tab per lifecycle state.
+      return rows;
     case "ready":
       return rows.filter((r) => r.readyToReview);
     case "drafts":
