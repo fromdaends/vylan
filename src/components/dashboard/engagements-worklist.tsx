@@ -367,6 +367,7 @@ export function WorklistTable({
   firmId,
   presenceRoster,
   bulkAssignMembers,
+  countLabel,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -412,6 +413,15 @@ export function WorklistTable({
   // the main engagements list — and there is no checkbox column at all, so the
   // Overview, the Inbox and the teammate profile are untouched.
   bulkAssignMembers?: { id: string; name: string }[];
+  /**
+   * "10 engagements", drawn directly above the header row as Canopy does.
+   *
+   * ⚠️ IT LIVES HERE, not on the page around the table. The page can only count
+   * what it handed over, and the column menus filter INSIDE this component — so
+   * a count rendered out there sat at 10 while the table showed 3, which is
+   * worse than no count at all. Whoever does the filtering owns the number.
+   */
+  countLabel?: (count: number) => string;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -651,6 +661,11 @@ export function WorklistTable({
 
   return (
     <div className="border-t border-border">
+      {countLabel && (
+        <p className="px-4 py-2.5 text-sm tabular-nums text-muted-foreground">
+          {countLabel(visibleRows.length)}
+        </p>
+      )}
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

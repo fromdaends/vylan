@@ -585,6 +585,23 @@ describe("every column header sorts and filters, on every list", () => {
     expect(q.getByText(en.Engagements.tasks_none_match)).toBeInTheDocument();
   });
 
+  // ⚠️ FOUND BY CLICKING IT ON THE LIVE SITE, not by a test: the count used to
+  // be rendered by the page AROUND the table, which can only count what it
+  // handed over. Tick one value in a column menu and it still read "10
+  // engagements" above three rows.
+  it("counts what is on screen after a filter, not what was handed in", async () => {
+    const q = renderTable({ countLabel: (n: number) => `${n} engagements` });
+    expect(q.getByText("2 engagements")).toBeInTheDocument();
+
+    openHeader(q, en.Dashboard.wl_col_client);
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Acme Ltd" }),
+    );
+    closeMenu();
+
+    expect(q.getByText("1 engagements")).toBeInTheDocument();
+  });
+
   it("shows the service and the task count, in Canopy's words", () => {
     const q = renderTable();
     // Service items = what was sold; engagement items = the tasks inside it.
