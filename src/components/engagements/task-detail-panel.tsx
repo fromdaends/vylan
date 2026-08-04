@@ -51,6 +51,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { SubtaskList } from "@/components/engagements/subtask-list";
+import { noteLinks } from "@/lib/tasks/note-links";
 
 type TaskStatus = "todo" | "doing" | "done";
 type TaskPriority = "none" | "low" | "medium" | "high";
@@ -179,6 +180,9 @@ function DetailBody({
 
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
+  // Read from the DRAFT, so a link becomes clickable as soon as it is pasted
+  // rather than only after the note has been saved.
+  const links = noteLinks(notes);
 
   const label = kindLabel(task.kind);
   const assignees = task.assigneeIds
@@ -390,6 +394,33 @@ function DetailBody({
                   }}
                   placeholder={t("task_notes_placeholder")}
                 />
+                {/* THE DOORWAY. An ordinary task performs nothing — in Canopy
+                    and Karbon too, where it is a checkbox somebody ticks after
+                    doing the work in a different program. Karbon's own docs
+                    bridge that with "hyperlinks... to jump from Karbon to other
+                    applications", and this is the same move: the note says what
+                    to do, and carries the way to wherever it is actually done.
+                    Listed beneath rather than linkified in place, so the note
+                    stays a plain field you can select, edit and paste into. */}
+                {links.length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5 pt-0.5">
+                    {links.map((link) => (
+                      <li key={link.href}>
+                        <a
+                          href={link.href}
+                          target="_blank"
+                          // noreferrer as well as noopener: the target should
+                          // not learn which client's task it was opened from.
+                          rel="noopener noreferrer"
+                          className="flex max-w-full items-center gap-1 rounded-md border border-border/70 px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-border hover:text-accent"
+                        >
+                          <ExternalLink className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">{link.label}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Field>
             </div>
           </>
