@@ -10,7 +10,6 @@ import { Search } from "lucide-react";
 // French accountant clicking a filter chip gets thrown back into English. The
 // i18n router re-applies the current locale prefix.
 import { useSearchParams } from "next/navigation";
-import { Link, usePathname } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
 import {
   WorklistTable,
@@ -31,7 +30,7 @@ import {
   parseStageSort,
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
-import { cn } from "@/lib/cn";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import type { AppLocale } from "@/lib/format";
 
 // One All-Engagements sub-page. The server has already loaded + filtered the
@@ -66,7 +65,6 @@ export function EngagementsView({
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
   const tStage = useTranslations("Stage");
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
 
@@ -135,54 +133,56 @@ export function EngagementsView({
 
   // The pills mirror the sidebar accordion (active sub-page highlighted) and
   // are the only way to switch views on mobile, where the sidebar is a bottom
-  // tab bar. usePathname is locale-stripped by the i18n nav helper.
+  // tab bar. Which one is current comes from the `view` prop — each sub-page is
+  // its own route and already knows which it is, so matching the pathname a
+  // second time was one more thing to keep in step.
   const hrefFor = (v: EngagementView) =>
     v === "active" ? "/engagements" : `/engagements/${v}`;
-  const isActive = (v: EngagementView) =>
-    v === "active"
-      ? pathname === "/engagements"
-      : pathname === `/engagements/${v}`;
 
   return (
     <div className="space-y-5">
-      <div
-        role="tablist"
-        aria-label={t("views_label")}
-        className="flex flex-wrap items-center gap-1.5"
-      >
-        {ENGAGEMENT_VIEWS.map((v) => {
-          const active = isActive(v);
-          const count = badgeFor(v);
-          return (
-            <Link
-              key={v}
-              href={hrefFor(v)}
-              role="tab"
-              aria-selected={active}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-              )}
-            >
-              {t(viewLabelKey(v))}
-              {count != null && (
-                <span
-                  className={cn(
-                    "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums",
-                    v === "deleted"
-                      ? "bg-destructive/15 text-destructive"
-                      : "bg-accent/15 text-accent",
-                  )}
-                >
-                  {count}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+      {/* ⚠️ THE PILLS ARE GONE, THE VIEWS ARE NOT. The founder: "remove the top
+          header sorter buttons... it doesnt align with canopys design and
+          neither the task view page."
+
+          What did not align was the TREATMENT — a filled pill around the active
+          view and coloured badge chips around the counts, which made a row of
+          tabs read as a strip of buttons. Both references they named have this
+          exact row; Canopy's is "Active | All Engagements | Awaiting Acceptance
+          | Drafts". Deleting the views would also have stranded Drafts,
+          Completed, Archived and Recently deleted — four routes with no other
+          way in now the rail flyout is two buttons (#1260).
+
+          Search rides the same row rather than sitting on its own. Since the
+          two filter pickers came out, it was alone on a line with an empty half
+          beside it — a band of nothing between the tabs and the table. */}
+      <div className="flex flex-col gap-3 border-b border-border sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <ViewTabs
+          className="flex-1 border-b-0"
+          ariaLabel={t("views_label")}
+          activeKey={view}
+          tabs={ENGAGEMENT_VIEWS.map((v) => ({
+            key: v,
+            label: t(viewLabelKey(v)),
+            href: hrefFor(v),
+            count: badgeFor(v),
+            // Recently deleted counts DOWN to a purge, so its number is a
+            // warning rather than a total. It keeps the destructive colour on
+            // the digits alone — the chip around them is what came out.
+            tone: v === "deleted" ? ("destructive" as const) : undefined,
+          }))}
+        />
+        <div className="relative pb-2 sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-[calc(50%-0.25rem)] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={tDash("wl_search_placeholder")}
+            aria-label={tDash("wl_search_placeholder")}
+            className="h-9 pl-9"
+          />
+        </div>
       </div>
 
       {/* Recently Deleted: surface the 30-day recovery policy up front so a
@@ -200,28 +200,11 @@ export function EngagementsView({
           select, and both now exist as the Assignee and Status column menus:
           same two questions, asked on the column that answers them, instead of
           a bar of controls sitting above a table that could not sort itself.
-          Leaving both would have been two ways to filter one list, disagreeing
-          the moment somebody used them together.
 
-          Search stays. It is not a filter on one column — it looks across the
-          engagement name and the client name at once, which no column menu
-          does. */}
-      {/* The count moved INTO the table (countLabel below). It has to be
-          counted after the column menus have filtered, and only the table knows
-          that — out here it sat at 10 while the table showed 3. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <div className="relative sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={tDash("wl_search_placeholder")}
-            aria-label={tDash("wl_search_placeholder")}
-            className="h-9 pl-9"
-          />
-        </div>
-      </div>
+          The search that stayed moved UP onto the tab row — alone down here it
+          left a band of empty page between the tabs and the table. The count
+          moved INTO the table (countLabel below), because it has to be counted
+          after the column menus have filtered and only the table knows that. */}
 
       <WorklistTable
         rows={visible}
