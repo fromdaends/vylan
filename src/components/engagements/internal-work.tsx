@@ -192,7 +192,12 @@ export function InternalWork({
       )}
 
       {tasks.length === 0 && (
-        <p className="py-6 text-sm text-muted-foreground">{t("work_empty")}</p>
+        <p className="py-6 text-sm text-muted-foreground">
+          {/* "Nothing planned on your side yet" is written for a job, where the
+              other side is the client. On the firm-wide list there is no other
+              side — it is the whole firm — so the sentence had to be its own. */}
+          {t(firmWide ? "work_empty_firm" : "work_empty")}
+        </p>
       )}
 
       <ul className="divide-y divide-border/50">

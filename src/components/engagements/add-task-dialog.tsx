@@ -19,6 +19,15 @@
 // one above it. The database enforces this (1370); the dialog just stops
 // offering the kinds you already have, because a menu option that always
 // errors is worse than no option.
+//
+// TWO PLACES, ONE COMPONENT, a `mode` prop between them — the shape
+// client-team-editor.tsx set as this repo's precedent. On a JOB the client and
+// the engagement are both already known and the question is which kind. On the
+// firm-wide Work list neither is known, so the question is which CLIENT — and
+// there is no kind question at all, because document collections, signatures
+// and deliverables all point at collections keyed by engagement_id and
+// therefore cannot exist without a job. Offering them there would be offering
+// three doors into a room that has not been built.
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
@@ -34,6 +43,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  ClientCombobox,
+  type ComboboxClient,
+} from "@/components/clients/client-combobox";
 import { addTaskAction } from "@/app/actions/engagement-tasks";
 
 type Kind = "document_collection" | "signatures" | "deliverables" | "task";
@@ -45,15 +58,23 @@ const KINDS: { kind: Kind; icon: typeof Inbox; once: boolean }[] = [
   { kind: "task", icon: CheckSquare, once: false },
 ];
 
-export function AddTaskDialog({
-  clientId,
-  engagementId,
-  existingKinds,
-}: {
-  clientId: string;
-  engagementId: string;
-  existingKinds: string[];
-}) {
+type AddTaskDialogProps =
+  | {
+      /** On a job. The default, and what every existing caller passes. */
+      mode?: "job";
+      clientId: string;
+      engagementId: string;
+      /** Built-in kinds this job already has, so they stop being offered. */
+      existingKinds: string[];
+    }
+  | {
+      /** On the firm-wide Work list, where the task belongs to a client only. */
+      mode: "firm";
+      clients: ComboboxClient[];
+    };
+
+export function AddTaskDialog(props: AddTaskDialogProps) {
+  const firmWide = props.mode === "firm";
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -63,6 +84,9 @@ export function AddTaskDialog({
   const [kind, setKind] = useState<Kind | null>(null);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  // Firm-wide only: which client this is for. There is no sensible default —
+  // guessing one is how a task ends up filed against the wrong person.
+  const [clientId, setClientId] = useState<string | null>(null);
 
   const label = (k: Kind) =>
     k === "document_collection"
@@ -85,6 +109,7 @@ export function AddTaskDialog({
   function reset() {
     setKind(null);
     setTitle("");
+    setClientId(null);
   }
 
   function choose(k: Kind) {
@@ -95,14 +120,20 @@ export function AddTaskDialog({
   }
 
   async function create() {
-    if (!kind || !title.trim() || busy) return;
+    const forClient = firmWide ? clientId : props.clientId;
+    // On a job the kind has been chosen by now; on the firm list it can only
+    // ever be the plain one.
+    const forKind: Kind | null = firmWide ? "task" : kind;
+    if (!forClient || !forKind || !title.trim() || busy) return;
     setBusy(true);
     try {
       const res = await addTaskAction({
-        clientId,
-        engagementId,
+        clientId: forClient,
+        // Explicitly null rather than omitted: this task belongs to the client
+        // and to no job, which is the whole point of the firm-wide list.
+        engagementId: firmWide ? null : props.engagementId,
         title: title.trim(),
-        kind,
+        kind: forKind,
       });
       if (res.ok) {
         setOpen(false);
@@ -123,7 +154,8 @@ export function AddTaskDialog({
   }
 
   const available = KINDS.filter(
-    (k) => !k.once || !existingKinds.includes(k.kind),
+    (k) =>
+      !k.once || (props.mode !== "firm" && !props.existingKinds.includes(k.kind)),
   );
 
   return (
@@ -151,14 +183,54 @@ export function AddTaskDialog({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {kind ? t("add_task_name") : t("add_task_kind")}
+              {firmWide
+                ? t("add_task_for_client")
+                : kind
+                  ? t("add_task_name")
+                  : t("add_task_kind")}
             </DialogTitle>
             <DialogDescription>
-              {kind ? hint(kind) : t("add_task_kind_hint")}
+              {firmWide
+                ? t("add_task_for_client_hint")
+                : kind
+                  ? hint(kind)
+                  : t("add_task_kind_hint")}
             </DialogDescription>
           </DialogHeader>
 
-          {!kind ? (
+          {firmWide ? (
+            // One step, not two. Without a job there is no kind to choose, so a
+            // "what kind?" screen offering exactly one answer would be a click
+            // that asks nothing.
+            <div className="flex flex-col gap-3">
+              <ClientCombobox
+                clients={props.mode === "firm" ? props.clients : []}
+                value={clientId}
+                onChange={setClientId}
+              />
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    create();
+                  }
+                }}
+                placeholder={t("work_add_placeholder")}
+                aria-label={t("add_task_name")}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={create}
+                  disabled={!clientId || !title.trim() || busy}
+                >
+                  {t("add_task")}
+                </Button>
+              </div>
+            </div>
+          ) : !kind ? (
             <div className="flex flex-col gap-1">
               {available.map(({ kind: k, icon: Icon }) => (
                 <button
