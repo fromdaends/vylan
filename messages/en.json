@@ -2942,7 +2942,7 @@
       "update_failed": "Couldn't save the template. Please try again."
     },
     "title": "Templates",
-    "subtitle": "Two kinds of template: what you sell, and what you ask clients to send you.",
+    "subtitle": "Set something up once and reuse it: a whole engagement, the steps a job takes, what you ask clients to send, and what you sell.",
     "documents_count": "{count, plural, one {# document} other {# documents}}",
     "required_count": "{count} required",
     "includes": "Includes",

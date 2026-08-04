@@ -2942,7 +2942,7 @@
       "update_failed": "Impossible d'enregistrer le modèle. Veuillez réessayer."
     },
     "title": "Modèles",
-    "subtitle": "Deux types de modèles : ce que vous vendez, et ce que vous demandez aux clients.",
+    "subtitle": "Configurez une fois et réutilisez : un mandat complet, les étapes d'un travail, ce que vous demandez aux clients, et ce que vous vendez.",
     "documents_count": "{count, plural, one {# document} other {# documents}}",
     "required_count": "{count} requis",
     "includes": "Comprend",
