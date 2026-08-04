@@ -2772,7 +2772,8 @@
     "save_template_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des modèles.",
     "task_progress_label": "Progression",
     "access_menu": "Donner accès à ce mandat seulement",
-    "access_dialog_title": "Qui peut voir ce mandat"
+    "access_dialog_title": "Qui peut voir ce mandat",
+    "details_recurring": "Mandat récurrent"
   },
   "Attention": {
     "metric_active": "Actifs",

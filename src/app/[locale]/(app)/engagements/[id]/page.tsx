@@ -32,6 +32,7 @@ import { formatDate, formatCurrency } from "@/lib/format";
 import { listEngagementItems } from "@/lib/db/engagements";
 import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
 import { EngagementClientViewPanel } from "@/components/engagements/engagement-client-view-panel";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
 import { StageChip } from "@/components/engagements/stage-chip";
 import { engagementStatusVariant } from "@/lib/engagements/status-pill";
@@ -1397,15 +1398,27 @@ export default async function EngagementDetailPage({
       <EngagementDetailsCard
         locale={locale}
         people={
-          <div className="text-sm">
-            <div className="font-medium text-foreground">
-              {assignee ? userDisplayLabel(assignee) : t("unassigned")}
-            </div>
-            {client && (
-              <div className="mt-0.5 text-muted-foreground">
-                {client.display_name}
+          // ⚠️ AVATARS, NOT TWO LINES OF TEXT. Founder: "Theres not even a
+          // profile picture circle view." Canopy's card leads with round faces
+          // because "who is on this" is answered by recognising a person, not
+          // by reading their name — and the app already draws exactly these
+          // circles for presence and for the assignee control. The card was
+          // the one place that printed a string instead.
+          <div className="flex items-center gap-2">
+            <AvatarInitials
+              name={assignee ? userDisplayLabel(assignee) : "?"}
+              size={32}
+            />
+            <div className="min-w-0 text-sm">
+              <div className="truncate font-medium text-foreground">
+                {assignee ? userDisplayLabel(assignee) : t("unassigned")}
               </div>
-            )}
+              {client && (
+                <div className="truncate text-xs text-muted-foreground">
+                  {client.display_name}
+                </div>
+              )}
+            </div>
           </div>
         }
         // Vylan has ONE signer — the client — and N documents for them to
@@ -1433,6 +1446,12 @@ export default async function EngagementDetailPage({
         // The engagement's priced line names — Canopy's Services column. Loaded
         // here rather than by the card so the card stays a pure presenter.
         services={engagementItems.map((i) => i.name).filter(Boolean)}
+        // Canopy's "12 month agreement". Vylan knows this only when the job
+        // is part of a recurring series — a one-off has no term, and inventing
+        // one would put a promise on the card that nobody made.
+        agreementNote={
+          repeatSeries ? t("details_recurring") : null
+        }
         statusChip={
           engagement.stage ? (
             <StageChip stage={engagement.stage} />
