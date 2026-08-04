@@ -5,6 +5,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getEngagement } from "@/lib/db/engagements";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
+  latchWorkflowGate,
   setEngagementStageManually,
   startPreparation,
 } from "@/lib/engagements/stage-sync";
@@ -99,6 +100,33 @@ export async function startPreparationAction(
   const ok = await startPreparation(
     await getServerSupabase(),
     ctx.id,
+    ctx.userId,
+  );
+  if (!ok) return { error: "save_failed" };
+
+  revalidateStagePaths(ctx.id);
+  return { ok: true };
+}
+
+/**
+ * Approve a workflow confirm-gate (1510) — the human tap that lets a
+ * confirm-mode transition pass, and the only way a `manual` advance condition
+ * ever fires. The third and last person-driven stage action; recorded in
+ * stage_gates against the approver and sticky thereafter.
+ */
+export async function approveWorkflowGateAction(
+  formData: FormData,
+): Promise<StageActionState> {
+  const stage = formData.get("stage");
+  if (!isEngagementStage(stage)) return { error: "invalid" };
+
+  const ctx = await authorize(formData.get("engagement_id"));
+  if (!ctx) return { error: "not_found" };
+
+  const ok = await latchWorkflowGate(
+    await getServerSupabase(),
+    ctx.id,
+    stage,
     ctx.userId,
   );
   if (!ok) return { error: "save_failed" };

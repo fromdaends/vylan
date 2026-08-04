@@ -43,7 +43,18 @@ import {
   type StoredInvoiceAttachment,
 } from "@/lib/invoices/attachment";
 import { getFirmLimits } from "@/lib/plan-limits";
-import type { TemplateItem, DocType } from "@/lib/db/templates";
+import {
+  getTemplate,
+  type TemplateItem,
+  type DocType,
+} from "@/lib/db/templates";
+import {
+  buildWorkflowSnapshot,
+  familyDefaultWorkflow,
+  parseWorkflowDefinition,
+  type WorkflowSnapshot,
+} from "@/lib/workflow/definition";
+import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
@@ -278,6 +289,9 @@ export async function createEngagementAction(
     assigned_user_id?: string | null;
     start_date?: string | null;
     intro_message?: string | null;
+    // Which document template the builder started from (1510) — the source of
+    // the engagement's workflow copy. Absent/null = family default by type.
+    template_id?: string | null;
     items: TemplateItem[];
     send: boolean;
     locale: "fr" | "en";
@@ -331,6 +345,51 @@ export async function createEngagementAction(
     if (!validation.ok) {
       return { error: `invoice_${validation.error}` };
     }
+  }
+
+  // Workflow snapshot (1510) — only when the firm's switch is on. The
+  // definition comes from the picked template's own copy (family default when
+  // it has none), and the assignee RULES freeze to real user ids here, at
+  // instantiation, per the spec. Fail-soft top to bottom: any hiccup creates
+  // the engagement without automation rather than not creating it.
+  let workflowSnapshot: WorkflowSnapshot | null = null;
+  try {
+    const creator = await getCurrentUser();
+    if (creator?.firm_id) {
+      const sbFlags = await getServerSupabase();
+      if (await isWorkflowsEnabledForFirm(sbFlags, creator.firm_id)) {
+        let def = familyDefaultWorkflow(parsed.data.type);
+        let automationId: string | null = null;
+        const templateId = payload.template_id;
+        if (
+          typeof templateId === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            templateId,
+          )
+        ) {
+          const tpl = await getTemplate(templateId);
+          const tplDef = tpl ? parseWorkflowDefinition(tpl.workflow) : null;
+          if (tplDef) {
+            def = tplDef;
+            automationId = tpl?.automation_id ?? null;
+          }
+        }
+        const members = await listActiveFirmUsers();
+        workflowSnapshot = buildWorkflowSnapshot(
+          def,
+          {
+            ownerId: members.find((m) => m.role === "owner")?.id ?? null,
+            staffId: assignedUserId ?? creator.id,
+            activeMemberIds: new Set(members.map((m) => m.id)),
+            fallbackId: creator.id,
+          },
+          automationId,
+        );
+      }
+    }
+  } catch (e) {
+    console.error("[engagements] workflow snapshot build failed:", e);
+    workflowSnapshot = null;
   }
 
   // Plan limit check — only blocks the *initial send*, not the draft.
@@ -389,6 +448,7 @@ export async function createEngagementAction(
       service_items: parsed.data.service_items,
       reminder_settings: parsed.data.reminder_settings,
       assigned_user_id: assignedUserId,
+      workflow: workflowSnapshot ?? undefined,
       items,
     };
     const created = await createEngagementWithItems(input);

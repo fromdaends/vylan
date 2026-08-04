@@ -58,7 +58,13 @@ export type InvoiceSendResult =
 // fresh number, pay-link email, activity, stage sync.
 export async function sendEngagementInvoice(
   engagementId: string,
-  opts: { atSpawn?: boolean } = {},
+  opts: {
+    atSpawn?: boolean;
+    // Workflow stage entry (1510): the engagement is live, not complete —
+    // same status rule as at-spawn. The existing "never bill twice" guard
+    // below is what makes workflow + invoice_auto_mode overlap safe.
+    atStage?: boolean;
+  } = {},
 ): Promise<InvoiceSendResult> {
   const sb = getServiceRoleSupabase();
 
@@ -92,9 +98,10 @@ export async function sendEngagementInvoice(
   // (the accountant may have reopened it in the meantime). At-spawn invoicing
   // (recurring series) instead requires a LIVE occurrence — never a cancelled
   // or already-completed one.
-  const statusOk = opts.atSpawn
-    ? engagement.status === "sent" || engagement.status === "in_progress"
-    : engagement.status === "complete";
+  const statusOk =
+    opts.atSpawn || opts.atStage
+      ? engagement.status === "sent" || engagement.status === "in_progress"
+      : engagement.status === "complete";
   if (!statusOk) {
     return { ok: false, reason: "not_complete" };
   }
@@ -162,9 +169,10 @@ export async function sendEngagementInvoice(
     .select("status")
     .eq("id", engagement.id)
     .maybeSingle();
-  const freshOk = opts.atSpawn
-    ? fresh?.status === "sent" || fresh?.status === "in_progress"
-    : fresh?.status === "complete";
+  const freshOk =
+    opts.atSpawn || opts.atStage
+      ? fresh?.status === "sent" || fresh?.status === "in_progress"
+      : fresh?.status === "complete";
   if (!freshOk) {
     return { ok: false, reason: "not_complete" };
   }

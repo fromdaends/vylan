@@ -40,6 +40,13 @@ import { occurrenceTitle } from "./naming";
 import { parseInvoiceSnapshot } from "./invoice-snapshot";
 import { resolveSeriesAssignee } from "./assignee";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
+import {
+  buildWorkflowSnapshot,
+  familyDefaultWorkflow,
+  parseWorkflowSnapshot,
+  type WorkflowDefinition,
+} from "@/lib/workflow/definition";
+import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 
 // How many due series one cron run will process. Hourly cadence means a
 // backlog larger than this simply drains over the next runs.
@@ -337,6 +344,68 @@ async function spawnOccurrence(
   // removed between two cycles stops receiving work on the very next one.
   const assignedUserId = await resolveSpawnAssignee(sb, series);
 
+  // Workflow snapshot (1510): each occurrence runs the same flow as the
+  // engagement the series was made from — re-frozen per spawn so the entry
+  // ledger starts empty for the new period — falling back to the family
+  // default when the source predates workflows. Flag-gated and fail-soft: a
+  // firm with the switch off (or a pre-1510 database, where the flag read
+  // itself returns false) spawns exactly as before, and any error here costs
+  // the automation, never the occurrence.
+  let workflowCol: Record<string, unknown> = {};
+  try {
+    if (await isWorkflowsEnabledForFirm(sb, series.firm_id)) {
+      let def: WorkflowDefinition | null = null;
+      let automationId: string | null = null;
+      if (series.source_engagement_id) {
+        const { data: src } = await sb
+          .from("engagements")
+          .select("workflow")
+          .eq("id", series.source_engagement_id)
+          .maybeSingle();
+        const snap = src
+          ? parseWorkflowSnapshot((src as { workflow?: unknown }).workflow)
+          : null;
+        if (snap) {
+          def = snap;
+          automationId = snap.automation_id ?? null;
+        }
+      }
+      const [{ data: ownerRow }, { data: memberRows }] = await Promise.all([
+        sb
+          .from("users")
+          .select("id")
+          .eq("firm_id", series.firm_id)
+          .eq("role", "owner")
+          .is("deactivated_at", null)
+          .limit(1)
+          .maybeSingle(),
+        sb
+          .from("users")
+          .select("id")
+          .eq("firm_id", series.firm_id)
+          .is("deactivated_at", null),
+      ]);
+      const ownerId = (ownerRow as { id: string } | null)?.id ?? null;
+      workflowCol = {
+        workflow: buildWorkflowSnapshot(
+          def ?? familyDefaultWorkflow(series.type),
+          {
+            ownerId,
+            staffId: assignedUserId,
+            activeMemberIds: new Set(
+              ((memberRows ?? []) as { id: string }[]).map((r) => r.id),
+            ),
+            fallbackId: assignedUserId ?? ownerId,
+          },
+          automationId,
+        ),
+      };
+    }
+  } catch (e) {
+    console.error("[recurring] workflow snapshot failed:", e);
+    workflowCol = {};
+  }
+
   const { data: engagement, error: engErr } = await sb
     .from("engagements")
     .insert({
@@ -359,6 +428,7 @@ async function spawnOccurrence(
       // See resolveSpawnAssignee / assignee.ts.
       assigned_user_id: assignedUserId,
       ...(assignedUserId ? { assigned_at: nowIso } : {}),
+      ...workflowCol,
     })
     .select("id")
     .single();
