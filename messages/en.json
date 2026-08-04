@@ -2638,7 +2638,14 @@
     "wl_service_t2": "Corporate tax (T2)",
     "wl_service_bookkeeping": "Bookkeeping",
     "wl_service_custom": "Custom",
-    "count_engagements": "{count, plural, =0 {No engagements} one {# engagement} other {# engagements}}"
+    "count_engagements": "{count, plural, =0 {No engagements} one {# engagement} other {# engagements}}",
+    "wizard_nav_label": "Engagement steps",
+    "wizard_step_details": "Engagement details",
+    "wizard_step_documents": "Documents",
+    "wizard_step_billing": "Billing and payment",
+    "wizard_step_reminders": "Reminders",
+    "wizard_back": "Back",
+    "wizard_next": "Next"
   },
   "Attention": {
     "metric_active": "Active",

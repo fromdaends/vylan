@@ -2638,7 +2638,14 @@
     "wl_service_t2": "Impôt des sociétés (T2)",
     "wl_service_bookkeeping": "Tenue de livres",
     "wl_service_custom": "Personnalisé",
-    "count_engagements": "{count, plural, =0 {Aucun mandat} one {# mandat} other {# mandats}}"
+    "count_engagements": "{count, plural, =0 {Aucun mandat} one {# mandat} other {# mandats}}",
+    "wizard_nav_label": "Étapes du mandat",
+    "wizard_step_details": "Détails du mandat",
+    "wizard_step_documents": "Documents",
+    "wizard_step_billing": "Facturation et paiement",
+    "wizard_step_reminders": "Rappels",
+    "wizard_back": "Retour",
+    "wizard_next": "Suivant"
   },
   "Attention": {
     "metric_active": "Actifs",
