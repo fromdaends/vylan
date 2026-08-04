@@ -1,10 +1,10 @@
-// Calendar connections — reading and writing one person's Google link (1450).
+// Calendar connections — reading and writing one person's Google link (1460).
 //
 // The storage_connections module (lib/db/filing.ts) is the shape this follows,
 // with ONE substituted key: filing is scoped by firm_id, calendar by USER_ID.
-// A calendar is personal; see the note at the top of migration 1450.
+// A calendar is personal; see the note at the top of migration 1460.
 //
-// READS DEGRADE, WRITES REFUSE — the house pattern. Before 1450 there is no
+// READS DEGRADE, WRITES REFUSE — the house pattern. Before 1460 there is no
 // table: getMyCalendarConnection() answers null, which renders the card's
 // "connect your calendar" state, which is the truth.
 //
@@ -52,7 +52,7 @@ function isCalendarSchemaMissing(
  * The signed-in person's own connection, or null.
  *
  * Deliberately reads through the SESSION client rather than the service role:
- * RLS on 1450 scopes the row to auth.uid(), so "your own" is enforced by the
+ * RLS on 1460 scopes the row to auth.uid(), so "your own" is enforced by the
  * database rather than by remembering to add a filter here.
  *
  * Returns 'error' rows too — the card needs to say "reconnect", which is a

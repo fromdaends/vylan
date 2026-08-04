@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 //
 // Takes no user id — whose calendar is never a parameter, it is whoever is
 // holding the session. The provider reads the caller's own connection and RLS
-// (1450) scopes the row to them, so there is no id to tamper with.
+// (1460) scopes the row to them, so there is no id to tamper with.
 export async function GET(request: Request) {
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
