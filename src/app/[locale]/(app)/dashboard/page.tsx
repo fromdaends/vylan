@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
@@ -16,6 +17,7 @@ import { taskStats, todayInTimeZone } from "@/lib/tasks/dates";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { TaskStatsStrip } from "@/components/dashboard/task-stats-strip";
 import { AgendaCard } from "@/components/dashboard/agenda-card";
+import { CalendarReturnToast } from "@/components/dashboard/calendar-return-toast";
 import { QuickLinks } from "@/components/dashboard/quick-links";
 import { TasksOverviewCard } from "@/components/dashboard/tasks-overview-card";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -96,7 +98,12 @@ export default async function DashboardPage({
   const timeZone = firm?.timezone ?? "America/Toronto";
   const today = todayInTimeZone(timeZone);
   const stats = taskStats(tasks, today);
-  const events = connection ? await calendar.listEventsForDay(today) : [];
+  // Only ask Google when there is a live connection to ask with — an errored
+  // one needs a reconnect, not a doomed request on every dashboard render.
+  const events =
+    connection && !connection.needsReconnect
+      ? await calendar.listEventsForDay(today, timeZone)
+      : [];
 
   // First name only — prefer the explicit display_name, fall back to the
   // account name; ignore the email local-part so an unnamed user gets the
@@ -120,6 +127,12 @@ export default async function DashboardPage({
 
   return (
     <div className="flex flex-col gap-7">
+      {/* Announces the outcome of a calendar connect, once, then cleans the
+          URL. Renders nothing otherwise. */}
+      <Suspense fallback={null}>
+        <CalendarReturnToast />
+      </Suspense>
+
       {/* Greeting subtitle is the firm name ONLY — the date moved into the
           agenda card, where it is a working surface rather than decoration. */}
       <DashboardHeader
@@ -150,6 +163,7 @@ export default async function DashboardPage({
             initialDay={today}
             connection={connection}
             events={events}
+            isConfigured={calendar.isConfigured()}
           />
           <QuickLinks links={links} />
         </div>
