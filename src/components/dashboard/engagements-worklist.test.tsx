@@ -72,6 +72,10 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id" | "title">): Wo
   return {
     clientName: "Client",
     clientId: "client-1",
+    // Progress counts TASKS now. A fixture with one done of two keeps the
+    // existing bar assertions meaningful instead of every row reading empty.
+    tasksDone: 1,
+    tasksTotal: 2,
     status: "in_progress",
     derivedStatus,
     dueDate: null,
@@ -523,4 +527,27 @@ describe("the assignee is the way to the person", () => {
     expect(q.queryByRole("link", { name: "Ghost" })).toBeNull();
     expect(q.getByText("Ghost")).toBeInTheDocument();
   });
+});
+
+// Founder: "the completion rate slash progress of an engagement shall no longer
+// be tracked based off the amount of documents have been received. It should be
+// tracked based off the amount of tasks that are finished."
+describe("the progress bar counts tasks", () => {
+  it("fills to the share of tasks DONE, with the dim segment for those under way", () => {
+    const q = renderWorklist([
+      row({ id: "e1", title: "Half done", approvedPct: 0.5, awaitingPct: 0.25, tasksDone: 2, tasksTotal: 4 }),
+    ]);
+    const bar = q.getAllByRole("progressbar")[0];
+    expect(bar.getAttribute("aria-valuenow")).toBe("50");
+  });
+
+  it("shows nothing at all for a job with no tasks yet", () => {
+    // A 0% bar would say "started and got nowhere" about work nobody has
+    // planned. An em-dash says the honest thing: there is nothing to measure.
+    const q = renderWorklist([
+      row({ id: "e2", title: "Nothing planned", approvedPct: 0, awaitingPct: 0, tasksDone: 0, tasksTotal: 0 }),
+    ]);
+    expect(q.queryAllByRole("progressbar")).toHaveLength(0);
+  });
+
 });

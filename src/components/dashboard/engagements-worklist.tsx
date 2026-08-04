@@ -108,11 +108,21 @@ export type WorklistRow = {
   assigneeUserId: string | null;
   assigneeName: string | null;
   // Two-tone display progress (0..1 each, only meaningful for live
-  // engagements): approvedPct = required items the accountant APPROVED (the
+  // TASKS, not documents, since the founder moved progress onto the firm's own
+  // work. The field names are unchanged so every caller and test keeps
+  // compiling; what they MEAN is now: approvedPct = the share of this job's
+  // tasks that are DONE, awaitingPct = the share under way. Renaming them is a
+  // separate, mechanical change and not worth folding into a behaviour one.
+  //
+  // Historical note, still true of attention.ts: approvedPct = required items the accountant APPROVED (the
   // % shown + the solid fill); awaitingPct = required items submitted and
   // awaiting a decision (the dimmer second segment). See lib/attention.
   approvedPct: number;
   awaitingPct: number;
+  /** Raw counts behind the bar, so a tooltip can say "3 of 7 tasks done"
+   *  rather than only a percentage. */
+  tasksDone: number;
+  tasksTotal: number;
   itemsDone: number;
   itemsTotal: number;
   attentionScore: number;
@@ -702,7 +712,11 @@ function WorklistRowView({
   // Drafts haven't been sent and cancelled work is moot — neither has a
   // meaningful progress bar (and an unfetched-items draft would otherwise
   // read as 100%).
-  const showProgress = row.status !== "draft" && row.status !== "cancelled";
+  // A job with no tasks yet has nothing to measure. It reads "—" rather than a
+  // 0% bar, which would say "started and got nowhere" about work nobody has
+  // planned. Drafts and cancelled work stay out for the same reason.
+  const showProgress =
+    row.status !== "draft" && row.status !== "cancelled" && row.tasksTotal > 0;
   const dueTone = overdueText
     ? "text-destructive"
     : dueSoonText

@@ -17,6 +17,10 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id">): WorklistRow 
     title: `Engagement ${over.id}`,
     clientName: "Client",
     clientId: "client-1",
+    // Progress counts TASKS now. A fixture with one done of two keeps the
+    // existing bar assertions meaningful instead of every row reading empty.
+    tasksDone: 1,
+    tasksTotal: 2,
     status: "in_progress",
     derivedStatus,
     dueDate: null,

@@ -6,6 +6,7 @@ import {
 } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { countTasksByEngagement } from "@/lib/db/engagement-tasks";
 import { getLatestPaymentStatusByEngagementIds } from "@/lib/db/payment-requests";
 import {
   computeAttention,
@@ -158,10 +159,21 @@ export const loadEngagementWorklist = cache(
     // in ONE query alongside clients + users (no N+1). loadEngagementSignals is
     // React.cache'd, so this is usually free on repeat.
     const signals = await loadEngagementSignals(scope);
-    const [clients, firmUsers, paymentByEng] = await Promise.all([
+    const [clients, firmUsers, paymentByEng, tasksByEng] = await Promise.all([
       listClients({ includeArchived: false }),
       listFirmUsers(),
       getLatestPaymentStatusByEngagementIds(signals.map((s) => s.engagement.id)),
+      // PROGRESS COMES FROM TASKS NOW. Founder: "the completion rate slash
+      // progress of an engagement shall no longer be tracked based off the
+      // amount of documents have been received. It should be tracked based off
+      // the amount of tasks that are finished."
+      //
+      // Which is right, and it follows from the model change: an engagement is
+      // the whole contract, and collecting documents is ONE task inside it. A
+      // bar counting approved documents said a job was finished when its
+      // paperwork was in — with the return not yet prepared, reviewed, signed
+      // or delivered.
+      countTasksByEngagement(),
     ]);
 
     const clientsById = new Map(clients.map((c) => [c.id, c]));
@@ -170,6 +182,20 @@ export const loadEngagementWorklist = cache(
     );
 
     return signals.map(({ engagement: e, attention: a, action, recencyAt }) => {
+      // Solid = finished, dim = under way. The same two-tone bar, now reading
+      // the firm's own work instead of the client's uploads.
+      //
+      // ⚠️ attention.ts is UNTOUCHED on purpose. Its completionPct still counts
+      // documents, because it drives the chase triggers — due-soon, gone-quiet —
+      // and those are about what the CLIENT still owes. Only the DISPLAY bar
+      // moves to tasks.
+      const taskCounts = tasksByEng.get(e.id);
+      const donePct = taskCounts?.total
+        ? taskCounts.done / taskCounts.total
+        : 0;
+      const doingPct = taskCounts?.total
+        ? taskCounts.doing / taskCounts.total
+        : 0;
       return {
         id: e.id,
         title: e.title,
@@ -187,8 +213,10 @@ export const loadEngagementWorklist = cache(
         assigneeName: e.assigned_user_id
           ? (userLabelById.get(e.assigned_user_id) ?? null)
           : null,
-        approvedPct: a.approvedPct,
-        awaitingPct: a.awaitingPct,
+        approvedPct: donePct,
+        awaitingPct: doingPct,
+        tasksDone: taskCounts?.done ?? 0,
+        tasksTotal: taskCounts?.total ?? 0,
         itemsDone: a.itemsDone,
         itemsTotal: a.itemsTotal,
         attentionScore: attentionScore(a),
