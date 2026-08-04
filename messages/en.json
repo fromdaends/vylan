@@ -2773,7 +2773,13 @@
     "task_progress_label": "Progress",
     "access_menu": "Let someone see just this job",
     "access_dialog_title": "Who can see this job",
-    "details_recurring": "Recurring agreement"
+    "details_recurring": "Recurring agreement",
+    "agr_draft": "Draft",
+    "agr_sent": "Sent",
+    "agr_accepted": "Accepted",
+    "agr_active": "Active",
+    "agr_complete": "Complete",
+    "agr_cancelled": "Cancelled"
   },
   "Attention": {
     "metric_active": "Active",

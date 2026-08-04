@@ -2773,7 +2773,13 @@
     "task_progress_label": "Progression",
     "access_menu": "Donner accès à ce mandat seulement",
     "access_dialog_title": "Qui peut voir ce mandat",
-    "details_recurring": "Mandat récurrent"
+    "details_recurring": "Mandat récurrent",
+    "agr_draft": "Brouillon",
+    "agr_sent": "Envoyé",
+    "agr_accepted": "Accepté",
+    "agr_active": "En cours",
+    "agr_complete": "Terminé",
+    "agr_cancelled": "Annulé"
   },
   "Attention": {
     "metric_active": "Actifs",

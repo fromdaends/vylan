@@ -350,8 +350,16 @@ describe("EngagementsWorklist", () => {
 
 // The Status column's whole job changed: a live engagement now reads its
 // workflow STAGE instead of the generic "In progress" every live row shared.
-describe("status column — workflow stage", () => {
-  const stageRow = (over: Partial<WorklistRow> = {}) =>
+describe("status column — the AGREEMENT, not the workflow", () => {
+  // Replaces the workflow-stage pill. The founder's diagnosis: "an engagement
+  // might have six tasks going on simultaneously, and it's hard to put a
+  // specific word on what's going on."
+  //
+  // The stage cascade answered "how far along is this?", which has no honest
+  // answer once an engagement holds parallel work — one signature task made the
+  // WHOLE row read "Awaiting signature" while four others were mid-preparation.
+  // These words describe the DEAL, which stays true however much is in flight.
+  const agrRow = (over: Partial<WorklistRow> = {}) =>
     row({ id: "s1", title: "Stage Row", ...over });
 
   function statusCellOf(q: ReturnType<typeof renderWorklist>) {
@@ -361,85 +369,63 @@ describe("status column — workflow stage", () => {
     return tr.querySelector('[data-column="status"]') as HTMLElement;
   }
 
-  it("shows the stage chip instead of the In progress pill", () => {
-    const q = renderWorklist([stageRow({ stage: "in_preparation" })]);
-    const cell = statusCellOf(q);
-    expect(cell).toHaveTextContent(en.Stage.stage_in_preparation);
-    expect(cell).not.toHaveTextContent(en.Status.in_progress);
-  });
-
-  it("the stage supersedes the green Ready to review pill too", () => {
-    // Both would otherwise apply to this row. If the ready pill won, the stage
-    // system would be invisible on nearly every row whose stage is in_review —
-    // so the stage has to take the column outright.
+  it("reads Draft before it has been sent", () => {
     const q = renderWorklist([
-      stageRow({ stage: "in_review", readyToReview: true }),
+      agrRow({ status: "draft", derivedStatus: "draft" }),
     ]);
-    const cell = statusCellOf(q);
-    expect(cell).toHaveTextContent(en.Stage.stage_in_review);
-    expect(cell).not.toHaveTextContent(en.Status.ready_to_review);
+    expect(statusCellOf(q)).toHaveTextContent(en.Engagements.agr_draft);
   });
 
-  it("falls back to the status pill when there is no stage (draft)", () => {
+  it("reads Sent once the client has it and has done nothing", () => {
     const q = renderWorklist([
-      stageRow({ status: "draft", derivedStatus: "draft", stage: null }),
-    ]);
-    expect(statusCellOf(q)).toHaveTextContent(en.Status.draft);
-  });
-
-  it("falls back to the status pill when the stage column is absent (pre-migration)", () => {
-    // stage undefined = migration 0690 not applied in this environment. The
-    // table must read exactly as it did before the feature existed.
-    const q = renderWorklist([stageRow({})]);
-    expect(statusCellOf(q)).toHaveTextContent(en.Status.in_progress);
-  });
-
-  it("renders each stage with its own label", () => {
-    const stages = [
-      ["collecting", en.Stage.stage_collecting],
-      ["in_review", en.Stage.stage_in_review],
-      ["in_preparation", en.Stage.stage_in_preparation],
-      ["awaiting_signature", en.Stage.stage_awaiting_signature],
-      ["awaiting_payment", en.Stage.stage_awaiting_payment],
-      ["completed", en.Stage.stage_completed],
-    ] as const;
-    for (const [stage, label] of stages) {
-      const q = renderWorklist([
-        stageRow({ stage, status: "in_progress", derivedStatus: "in_progress" }),
-      ]);
-      expect(statusCellOf(q)).toHaveTextContent(label);
-      cleanup();
-    }
-  });
-
-  // Radix opens its menu on pointer-down, not click (matches the archive test).
-  function openRowMenu(q: ReturnType<typeof renderWorklist>) {
-    const tr = q.getByRole("link", { name: /Stage Row/i }).closest("tr")!;
-    fireEvent.pointerDown(
-      within(tr as HTMLElement).getByRole("button", {
-        name: en.Engagements.menu_actions,
+      agrRow({
+        status: "sent",
+        derivedStatus: "sent",
+        startedAt: "2026-08-01T00:00:00Z",
+        daysSinceClientActivity: null,
       }),
-      { button: 0, ctrlKey: false },
-    );
-  }
-
-  it("offers the stage picker in the row menu", async () => {
-    const q = renderWorklist([stageRow({ stage: "in_review" })]);
-    openRowMenu(q);
-    // Portaled to the body, so query globally.
-    expect(
-      await screen.findByRole("menuitem", { name: en.Stage.change }),
-    ).toBeInTheDocument();
+    ]);
+    expect(statusCellOf(q)).toHaveTextContent(en.Engagements.agr_sent);
   });
 
-  it("shows no stage picker on a row with no stage", async () => {
-    const q = renderWorklist([stageRow({ stage: null })]);
-    openRowMenu(q);
-    // Archive proves the menu opened; the stage item is simply absent.
-    await screen.findByRole("menuitem", { name: en.Engagements.menu_archive });
-    expect(
-      screen.queryByRole("menuitem", { name: en.Stage.change }),
-    ).not.toBeInTheDocument();
+  it("reads Active the moment the client has done anything", () => {
+    const q = renderWorklist([
+      agrRow({
+        status: "sent",
+        derivedStatus: "sent",
+        startedAt: "2026-08-01T00:00:00Z",
+        daysSinceClientActivity: 3,
+      }),
+    ]);
+    expect(statusCellOf(q)).toHaveTextContent(en.Engagements.agr_active);
+  });
+
+  // No "complete" case here on purpose: this list filters completed engagements
+  // out, so the row never renders and the assertion would be testing the filter
+  // rather than the chip. resolveAgreementStatus covers it directly.
+
+  it("NEVER shows a workflow stage, whatever the row carries", () => {
+    // The point of the change. A row still carrying stage=awaiting_signature
+    // must not surface it here: that is one task's business, not the deal's.
+    const q = renderWorklist([
+      agrRow({
+        status: "in_progress",
+        derivedStatus: "in_progress",
+        stage: "awaiting_signature",
+        startedAt: "2026-08-01T00:00:00Z",
+      }),
+    ]);
+    const cell = statusCellOf(q);
+    expect(cell).not.toHaveTextContent(en.Stage.stage_awaiting_signature);
+    expect(cell).toHaveTextContent(en.Engagements.agr_active);
+  });
+
+  it("has no empty state — every row resolves to a word", () => {
+    // The old chip only rendered when a stage had resolved and fell back to a
+    // raw status pill otherwise, so the column could disagree with itself row
+    // to row. The agreement status is derivable for every row.
+    const q = renderWorklist([agrRow({})]);
+    expect(statusCellOf(q).textContent?.trim()).not.toBe("");
   });
 });
 

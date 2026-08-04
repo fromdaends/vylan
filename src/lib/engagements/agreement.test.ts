@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  agreementStatusForRow,
   isClosed,
   resolveAgreementStatus,
   workSummary,
@@ -131,5 +132,34 @@ describe("isClosed", () => {
     for (const s of ["draft", "sent", "accepted", "active"] as const) {
       expect(isClosed(s)).toBe(false);
     }
+  });
+});
+
+describe("agreementStatusForRow", () => {
+  const row = (over: Partial<Parameters<typeof agreementStatusForRow>[0]> = {}) => ({
+    status: "sent" as const,
+    startedAt: "2026-08-01T00:00:00Z",
+    daysSinceClientActivity: null,
+    ...over,
+  });
+
+  it("reads a draft as draft even though startedAt falls back to created_at", () => {
+    // startedAt is `sent_at ?? created_at`, so a never-sent draft still has a
+    // date in it. The status gate has to come first or every draft reads sent.
+    expect(agreementStatusForRow(row({ status: "draft" }))).toBe("draft");
+  });
+
+  it("treats any client activity as engagement", () => {
+    expect(agreementStatusForRow(row({ daysSinceClientActivity: 0 }))).toBe("active");
+    expect(agreementStatusForRow(row({ daysSinceClientActivity: 12 }))).toBe("active");
+  });
+
+  it("reads silence as still just sent", () => {
+    expect(agreementStatusForRow(row())).toBe("sent");
+  });
+
+  it("passes through complete and cancelled", () => {
+    expect(agreementStatusForRow(row({ status: "complete" }))).toBe("complete");
+    expect(agreementStatusForRow(row({ status: "cancelled" }))).toBe("cancelled");
   });
 });

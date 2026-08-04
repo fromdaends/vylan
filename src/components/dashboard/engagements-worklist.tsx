@@ -87,7 +87,8 @@ import {
   READY_PILL_CLASS,
 } from "@/lib/engagements/status-pill";
 import type { EngagementStage } from "@/lib/engagements/stage";
-import { StageChip } from "@/components/engagements/stage-chip";
+import { AgreementChip } from "@/components/engagements/agreement-chip";
+import { agreementStatusForRow } from "@/lib/engagements/agreement";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 
 export type EngagementStatus =
@@ -1383,19 +1384,18 @@ function WorklistRowView({
               data-column="status"
               className="border-l border-border/60 px-4 py-3 align-top"
             >
-              {row.stage ? (
-                <StageChip stage={row.stage} />
-              ) : (
-                <Badge
-                  variant={engagementStatusVariant(row.derivedStatus)}
-                  className={cn(
-                    "font-normal",
-                    row.derivedStatus === "ready_to_review" && READY_PILL_CLASS,
-                  )}
-                >
-                  {statusLabel}
-                </Badge>
-              )}
+              {/* The AGREEMENT, not the workflow. The stage pill answered a
+                  question the engagement can no longer answer once it holds six
+                  parallel things — one signature task made the whole row read
+                  "Awaiting signature" while four others were in flight. The
+                  WORK is the Tasks column beside this, which already reads
+                  "1/2".
+
+                  No fallback branch any more. The old chip only rendered when a
+                  stage had been resolved and dropped to a raw status pill
+                  otherwise; the agreement status is derivable for every row, so
+                  the column can no longer be empty or inconsistent. */}
+              <AgreementChip status={agreementStatusForRow(row)} />
             </TableCell>
 
             {/* Opt-in reassign menu (the teammate profile passes the teammates
