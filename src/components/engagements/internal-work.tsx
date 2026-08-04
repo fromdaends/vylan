@@ -1,35 +1,65 @@
 "use client";
 
-// The firm's own work — ONE list, used in two places.
+// THE task list. One component, both screens, every kind of task.
 //
-// On a job it shows that job's steps, drawn as "our side of the wall". On /work
-// it shows every task in the firm and adds a line saying who each one is for.
-// Same component, one prop apart, because two copies of a task list is exactly
-// how two screens start disagreeing about what "done" looks like.
+// It used to be one of two lists on a job: the kinds with screens (document
+// collection, signatures, deliverables) were drawn by engagement-tabs.tsx, and
+// the plain ones sat underneath in a dashed box of their own. The founder, on
+// seeing that live: "remove the whole nothing planned on your side box on an
+// assignment. It should come purely from the add task" and "the task view for a
+// specific engagement when you click on a engagement is too barebones and
+// doesnt match with the actual tasks screen."
 //
-// ── WHY IT IS DRAWN APART FROM THE REST OF A JOB ────────────────────────────
+// Both are the same bug. A task is a task; splitting them by kind put one
+// screen's worth of work in two boxes with two different row designs, two empty
+// states and two ways to add. Now there is one list, and a row that HAS a
+// screen simply says so with a chevron.
 //
-// The job page's other three tabs are all about documents moving between the
-// firm and the client. This is the only thing on that page the client never
-// sees, and if it read like a fourth checklist people would treat it as one —
-// the separation would hold in the database and collapse in practice, which is
-// the worse failure because nobody notices.
+// ── THE DASHED "OUR SIDE OF THE WALL" PANEL IS GONE ────────────────────────
 //
-// So on a job: a dashed border where everything else is solid, a muted inset
-// panel, and one line saying in words that the client cannot see it. Three ways
-// of saying the same thing, because people read shape before text.
+// It was right when this list held only internal steps and sat beside three
+// client-facing tabs. It is wrong now: the list holds the document collection
+// too, which is the most client-facing thing on the page, so a border saying
+// "the client never sees this" would have been false. The wall still exists
+// where it always did — in the database and in the portal's route tree, which
+// has no path to engagement_tasks and a test that fails if one appears.
+//
+// ── EVERY TASK HAS A NAME ──────────────────────────────────────────────────
+//
+// The founder: "every task should have an ctual name not just a broad
+// tagline". So the big text is whatever the user typed, and the KIND is a
+// small tag beside it. "Document collection" was never a name — it is a
+// category, and twenty-eight rows of it told you nothing about any of them.
 //
 // STATUS IS A CLICK, NOT A MENU. Three states cycle on the box — empty, half,
 // done. A dropdown for three values is a dropdown nobody opens.
+//
+// ── EVERYTHING IS OPTIMISTIC ───────────────────────────────────────────────
+//
+// The founder: "assigning someone a task takes so long super laggy". It was:
+// every tick and every name went to the server, waited, then re-rendered the
+// WHOLE page before the checkbox moved. On a job page that is a lot of work to
+// redraw a 16px box. The change now lands on screen immediately and the server
+// catches up behind it — useOptimistic holds the new value until the refresh
+// it triggered has actually returned, so there is no flash back to the old one
+// in between. If the write fails the value snaps back on its own and says so.
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { Check, EyeOff, Minus, Plus, Trash2, UserPlus } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  FileSignature,
+  FolderCheck,
+  Inbox,
+  Minus,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
+import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,7 +67,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  addTaskAction,
   updateTaskAction,
   deleteTaskAction,
   setTaskAssigneeAction,
@@ -48,6 +77,7 @@ type TaskStatus = "todo" | "doing" | "done";
 export type WorkRow = {
   id: string;
   title: string;
+  kind: string;
   status: TaskStatus;
   assigneeIds: string[];
   clientId: string;
@@ -55,6 +85,8 @@ export type WorkRow = {
   /** Only supplied on the firm-wide list. */
   clientName?: string | null;
   engagementTitle?: string | null;
+  /** "2 of 3 done" for a kind that owns a collection. Job page only. */
+  meta?: string;
 };
 type Person = { id: string; name: string };
 
@@ -66,318 +98,346 @@ const NEXT: Record<TaskStatus, TaskStatus> = {
   done: "todo",
 };
 
+const KIND_ICON: Record<string, typeof Inbox> = {
+  document_collection: Inbox,
+  signatures: FileSignature,
+  deliverables: FolderCheck,
+};
+
+type Patch =
+  | { id: string; remove: true }
+  | { id: string; remove?: false; status?: TaskStatus; assigneeIds?: string[] };
+
 export function InternalWork({
   tasks,
   members,
   canEdit,
-  clientId,
-  engagementId = null,
   variant = "job",
+  onOpen,
 }: {
   tasks: WorkRow[];
   members: Person[];
   canEdit: boolean;
-  /** Which client a NEW task is for. Absent on the firm-wide list, where the
-   *  quick-add is not offered — a task needs a client and that list spans all
-   *  of them. */
-  clientId?: string;
-  engagementId?: string | null;
-  /** "job" draws the wall; "firm" is a plain list with a context line. */
+  /** "firm" adds the line saying which client and job each task belongs to. */
   variant?: "job" | "firm";
+  /**
+   * Opens a task that has a screen. Absent on the firm-wide list, where a row
+   * links you to the job instead — the screens live on the job's page and
+   * teleporting into one from a firm list would strand you there.
+   */
+  onOpen?: (taskId: string) => void;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
+
+  // The list as the user sees it: server truth with any in-flight change
+  // already applied. Reverts by itself if the write fails.
+  const [rows, patch] = useOptimistic(tasks, (state: WorkRow[], p: Patch) =>
+    p.remove
+      ? state.filter((r) => r.id !== p.id)
+      : state.map((r) => (r.id === p.id ? { ...r, ...p } : r)),
+  );
 
   const nameById = new Map(members.map((m) => [m.id, m.name]));
   const firmWide = variant === "firm";
 
-  function report(res: TaskActionResult) {
-    if (res.ok) {
-      startTransition(() => router.refresh());
-      return true;
-    }
-    toast.error(
-      res.needsMigration
-        ? t("work_needs_migration")
-        : res.error === "bad_title"
-          ? t("work_bad_title")
-          : t("work_failed"),
-    );
-    return false;
-  }
-
-  async function add() {
-    const title = draft.trim();
-    if (!title || busy || !clientId) return;
-    setBusy("new");
-    try {
-      if (report(await addTaskAction({ clientId, engagementId, title }))) {
-        setDraft("");
+  function run(p: Patch, call: () => Promise<TaskActionResult>) {
+    startTransition(async () => {
+      patch(p);
+      const res = await call();
+      if (res.ok) {
+        // Re-fetch so the optimistic value is replaced by server truth rather
+        // than merely agreeing with it. Inside the same transition, so React
+        // holds the optimistic row until the fresh data lands.
+        router.refresh();
+        return;
       }
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function cycle(task: WorkRow) {
-    setBusy(task.id);
-    try {
-      report(
-        await updateTaskAction({
-          taskId: task.id,
-          engagementId: task.engagementId,
-          status: NEXT[task.status],
-        }),
+      toast.error(
+        res.needsMigration
+          ? t("work_needs_migration")
+          : res.error === "bad_title"
+            ? t("work_bad_title")
+            : t("work_failed"),
       );
-    } finally {
-      setBusy(null);
-    }
+    });
   }
 
-  async function toggleAssignee(task: WorkRow, userId: string) {
-    setBusy(task.id);
-    try {
-      report(
-        await setTaskAssigneeAction({
-          taskId: task.id,
-          userId,
-          on: !task.assigneeIds.includes(userId),
-          engagementId: task.engagementId,
-        }),
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
+  const kindLabel = (kind: string) =>
+    kind === "document_collection"
+      ? t("kind_document_collection")
+      : kind === "signatures"
+        ? t("kind_signatures")
+        : kind === "deliverables"
+          ? t("kind_deliverables")
+          : null;
 
-  async function remove(task: WorkRow) {
-    setBusy(task.id);
-    try {
-      report(
-        await deleteTaskAction({
-          taskId: task.id,
-          engagementId: task.engagementId,
-        }),
-      );
-    } finally {
-      setBusy(null);
-    }
+  if (rows.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        {t(firmWide ? "work_empty_firm" : "work_empty")}
+      </p>
+    );
   }
-
-  const done = tasks.filter((x) => x.status === "done").length;
 
   return (
-    <div
-      className={
-        firmWide
-          ? ""
-          : "rounded-xl border border-dashed border-border bg-muted/30 p-4"
-      }
-    >
-      {/* On a job, said in words as well as in shape — somebody just added to
-          the firm has no reason to know which lists the client can read. */}
-      {!firmWide && (
-        <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <EyeOff className="size-3.5 shrink-0" aria-hidden />
-          {t("work_private_note")}
-          {tasks.length > 0 && (
-            <span className="ml-auto shrink-0 tabular-nums">
-              {t("work_progress", { done, total: tasks.length })}
-            </span>
-          )}
-        </p>
-      )}
+    <ul className="divide-y divide-border/50">
+      {rows.map((task) => {
+        const assignees = task.assigneeIds
+          .map((id) => ({ id, name: nameById.get(id) }))
+          .filter((a): a is Person => Boolean(a.name));
+        const Icon = KIND_ICON[task.kind];
+        const label = kindLabel(task.kind);
+        const openable = Boolean(onOpen && Icon);
 
-      {tasks.length === 0 && (
-        <p className="py-6 text-sm text-muted-foreground">
-          {/* "Nothing planned on your side yet" is written for a job, where the
-              other side is the client. On the firm-wide list there is no other
-              side — it is the whole firm — so the sentence had to be its own. */}
-          {t(firmWide ? "work_empty_firm" : "work_empty")}
-        </p>
-      )}
+        return (
+          <li key={task.id} className="group flex items-center gap-3 py-2.5">
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() =>
+                run({ id: task.id, status: NEXT[task.status] }, () =>
+                  updateTaskAction({
+                    taskId: task.id,
+                    engagementId: task.engagementId,
+                    status: NEXT[task.status],
+                  }),
+                )
+              }
+              aria-label={t("work_toggle", { title: task.title })}
+              className={cn(
+                "flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-50",
+                task.status === "done"
+                  ? "border-foreground bg-foreground text-background"
+                  : task.status === "doing"
+                    ? "border-foreground/60 text-foreground/70"
+                    : "border-border hover:border-foreground/50",
+              )}
+            >
+              {task.status === "done" && <Check className="size-3.5" aria-hidden />}
+              {task.status === "doing" && <Minus className="size-3.5" aria-hidden />}
+            </button>
 
-      <ul className="divide-y divide-border/50">
-        {tasks.map((task) => {
-          const assignees = task.assigneeIds
-            .map((id) => ({ id, name: nameById.get(id) }))
-            .filter((a): a is Person => Boolean(a.name));
-          return (
-            <li key={task.id} className="flex items-start gap-3 py-2">
-              <button
-                type="button"
-                disabled={!canEdit || busy === task.id}
-                onClick={() => cycle(task)}
-                aria-label={t("work_toggle", { title: task.title })}
-                className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-50 ${
-                  task.status === "done"
-                    ? "border-foreground bg-foreground text-background"
-                    : task.status === "doing"
-                      ? "border-foreground/60 text-foreground/70"
-                      : "border-border hover:border-foreground/50"
-                }`}
-              >
-                {task.status === "done" && (
-                  <Check className="size-3.5" aria-hidden />
-                )}
-                {task.status === "doing" && (
-                  <Minus className="size-3.5" aria-hidden />
-                )}
-              </button>
+            {/* The kind's mark, for the kinds that are more than a line of
+                text. A plain task has none, which is itself the signal. */}
+            {Icon && (
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <Icon className="size-4" aria-hidden />
+              </span>
+            )}
 
-              <span className="min-w-0 flex-1">
-                <span
-                  className={`block text-sm ${
-                    task.status === "done"
-                      ? "text-muted-foreground line-through decoration-border"
-                      : ""
-                  }`}
-                >
-                  {task.title}
-                </span>
-                {/* WHO IT IS FOR. Only on the firm-wide list: on a job every
-                    row has the same answer, and repeating it is noise. */}
-                {firmWide && (
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    <Link
-                      href={`/clients/${task.clientId}`}
-                      className="hover:text-foreground hover:underline"
-                    >
-                      {task.clientName ?? "—"}
-                    </Link>
-                    {task.engagementId && task.engagementTitle && (
+            <TaskName
+              task={task}
+              label={label}
+              firmWide={firmWide}
+              openable={openable}
+              onOpen={onOpen}
+              t={t}
+            />
+
+            {canEdit ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {assignees.length > 0 ? (
                       <>
-                        {" · "}
-                        <Link
-                          href={`/engagements/${task.engagementId}`}
-                          className="hover:text-foreground hover:underline"
-                        >
-                          {task.engagementTitle}
-                        </Link>
+                        {/* Faces, not names: two people on a task is the
+                            ordinary case and two full names do not fit. */}
+                        {assignees.slice(0, 3).map((a) => (
+                          <AvatarInitials key={a.id} name={a.name} size={18} />
+                        ))}
+                        {assignees.length > 3 && (
+                          <span className="tabular-nums">
+                            +{assignees.length - 3}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="size-3.5" aria-hidden />
+                        {t("work_unassigned")}
                       </>
                     )}
-                  </span>
-                )}
-              </span>
-
-              {canEdit ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      disabled={busy === task.id}
-                      className="flex shrink-0 items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {assignees.length > 0 ? (
-                        <>
-                          {/* Faces, not names: two people on a task is the
-                              ordinary case and two full names do not fit. */}
-                          {assignees.slice(0, 3).map((a) => (
-                            <AvatarInitials key={a.id} name={a.name} size={18} />
-                          ))}
-                          {assignees.length > 3 && (
-                            <span className="tabular-nums">
-                              +{assignees.length - 3}
-                            </span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {members.map((m) => {
+                    const on = task.assigneeIds.includes(m.id);
+                    return (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onSelect={(e) => {
+                          // Keep the menu open: putting two people on a task
+                          // should not cost two trips to the same button.
+                          e.preventDefault();
+                          run(
+                            {
+                              id: task.id,
+                              assigneeIds: on
+                                ? task.assigneeIds.filter((x) => x !== m.id)
+                                : [...task.assigneeIds, m.id],
+                            },
+                            () =>
+                              setTaskAssigneeAction({
+                                taskId: task.id,
+                                userId: m.id,
+                                on: !on,
+                                engagementId: task.engagementId,
+                              }),
+                          );
+                        }}
+                        className="gap-2"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
+                            on
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border",
                           )}
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="size-3.5" aria-hidden />
-                          {t("work_unassigned")}
-                        </>
-                      )}
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    {members.map((m) => {
-                      const on = task.assigneeIds.includes(m.id);
-                      return (
-                        <DropdownMenuItem
-                          key={m.id}
-                          onSelect={(e) => {
-                            // Keep the menu open: putting two people on a task
-                            // should not cost two trips to the same button.
-                            e.preventDefault();
-                            toggleAssignee(task, m.id);
-                          }}
-                          className="gap-2"
                         >
-                          <span
-                            className={`flex size-4 shrink-0 items-center justify-center rounded-[4px] border ${
-                              on
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-border"
-                            }`}
-                          >
-                            {on && <Check className="size-3" aria-hidden />}
-                          </span>
-                          <AvatarInitials name={m.name} size={18} />
-                          {m.name}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                assignees.length > 0 && (
-                  <span className="flex shrink-0 items-center gap-1">
-                    {assignees.slice(0, 3).map((a) => (
-                      <AvatarInitials key={a.id} name={a.name} size={18} />
-                    ))}
-                  </span>
-                )
-              )}
+                          {on && <Check className="size-3" aria-hidden />}
+                        </span>
+                        <AvatarInitials name={m.name} size={18} />
+                        {m.name}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              assignees.length > 0 && (
+                <span className="flex shrink-0 items-center gap-1">
+                  {assignees.slice(0, 3).map((a) => (
+                    <AvatarInitials key={a.id} name={a.name} size={18} />
+                  ))}
+                </span>
+              )
+            )}
 
-              {canEdit && (
-                <button
-                  type="button"
-                  disabled={busy === task.id}
-                  onClick={() => remove(task)}
-                  aria-label={t("work_delete", { title: task.title })}
-                  className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Trash2 className="size-3.5" aria-hidden />
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() =>
+                  run({ id: task.id, remove: true }, () =>
+                    deleteTaskAction({
+                      taskId: task.id,
+                      engagementId: task.engagementId,
+                    }),
+                  )
+                }
+                aria-label={t("work_delete", { title: task.title })}
+                // Appears on hover, like the row controls everywhere else in
+                // this app. A delete icon on every row of a list of ninety is
+                // ninety invitations to lose something.
+                className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
-      {/* Quick-add only where a new task has an obvious client. The firm-wide
-          list spans every client, so it cannot guess one. */}
-      {canEdit && clientId && (
-        <div className="mt-3 flex items-center gap-2">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                add();
-              }
-            }}
-            placeholder={t("work_add_placeholder")}
-            aria-label={t("work_add_placeholder")}
-            className="h-8 flex-1 bg-background text-sm"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-8 shrink-0"
-            disabled={!draft.trim() || busy === "new"}
-            onClick={add}
-          >
-            <Plus className="size-3.5" aria-hidden />
-            {t("work_add")}
-          </Button>
-        </div>
+/**
+ * The name, the kind tag, and whatever context the screen owes you. Split out
+ * because it is the one part that differs between the two screens, and the
+ * openable row has to wrap it in a button while the plain one must not — a
+ * button inside a button is invalid HTML that browsers silently rearrange.
+ */
+function TaskName({
+  task,
+  label,
+  firmWide,
+  openable,
+  onOpen,
+  t,
+}: {
+  task: WorkRow;
+  label: string | null;
+  firmWide: boolean;
+  openable: boolean;
+  onOpen?: (taskId: string) => void;
+  t: ReturnType<typeof useTranslations<"Engagements">>;
+}) {
+  const body = (
+    <>
+      <span className="flex min-w-0 items-center gap-2">
+        <span
+          className={cn(
+            "truncate text-sm",
+            task.status === "done" &&
+              "text-muted-foreground line-through decoration-border",
+          )}
+        >
+          {task.title}
+        </span>
+        {label && (
+          <span className="shrink-0 rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </span>
+        )}
+      </span>
+      {task.meta && (
+        <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
+          {task.meta}
+        </span>
       )}
-    </div>
+    </>
+  );
+
+  if (openable) {
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onOpen?.(task.id)}
+          aria-label={t("task_open", { title: task.title })}
+          className="min-w-0 flex-1 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {body}
+        </button>
+        <ChevronRight
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className="min-w-0 flex-1">
+      {body}
+      {/* WHO IT IS FOR. Only on the firm-wide list: on a job every row has the
+          same answer, and repeating it is noise. Rendered outside `body` so
+          the links are never nested inside the open-the-screen button. */}
+      {firmWide && (
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          <Link
+            href={`/clients/${task.clientId}`}
+            className="hover:text-foreground hover:underline"
+          >
+            {task.clientName ?? "—"}
+          </Link>
+          {task.engagementId && task.engagementTitle && (
+            <>
+              {" · "}
+              <Link
+                href={`/engagements/${task.engagementId}`}
+                className="hover:text-foreground hover:underline"
+              >
+                {task.engagementTitle}
+              </Link>
+            </>
+          )}
+        </span>
+      )}
+    </span>
   );
 }

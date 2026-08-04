@@ -114,7 +114,6 @@ import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementAccess } from "@/components/engagements/engagement-access";
-import { InternalWork } from "@/components/engagements/internal-work";
 import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
 import { EngagementPresence } from "@/components/engagements/engagement-presence";
 import { getLatestHandoffNote } from "@/lib/db/activity";
@@ -1399,14 +1398,39 @@ export default async function EngagementDetailPage({
           tab keeps its own controls. The Activity feed lives in the Assistant
           panel's Activity tab, opened from the header. */}
       <EngagementTabs
-        // Every task on this job, in order. The three built-in kinds are REAL
-        // rows now (1370), so an engagement nobody has planned shows nothing —
-        // which is the whole point of the change.
+        // Every task on this job, in order — ONE list, drawn by the same
+        // component the firm-wide Tasks page uses. The three built-in kinds are
+        // REAL rows (1370), so an engagement nobody has planned shows nothing.
         tasks={internalTasks.map((x) => ({
           id: x.id,
           title: x.title,
           kind: x.kind,
+          status: x.status,
+          assigneeIds: x.assigneeIds,
+          clientId: x.clientId,
+          engagementId: x.engagementId,
+          // The count belongs to the collection the task POINTS AT, which only
+          // this page has loaded — so it is computed here and passed down
+          // rather than re-queried by the list.
+          meta:
+            x.kind === "document_collection"
+              ? t("task_progress", {
+                  done: collectionItems.filter((i) => i.status === "approved")
+                    .length,
+                  total: collectionItems.length,
+                })
+              : x.kind === "signatures"
+                ? t("task_progress", {
+                    done: signatureItems.filter((i) => i.status === "approved")
+                      .length,
+                    total: signatureItems.length,
+                  })
+                : x.kind === "deliverables"
+                  ? t("task_count", { count: finalDocs.length })
+                  : undefined,
         }))}
+        members={activeMembers}
+        canEdit={isLive}
         addTask={
           isLive ? (
             <AddTaskDialog
@@ -1416,41 +1440,6 @@ export default async function EngagementDetailPage({
             />
           ) : null
         }
-        work={
-          <InternalWork
-            engagementId={engagement.id}
-            // PLAIN tasks only. The other kinds render as rows above with
-            // their own screens; showing them here too would put every task
-            // on the page twice.
-            tasks={internalTasks
-              .filter((x) => x.kind === "task")
-              .map((x) => ({
-                id: x.id,
-                title: x.title,
-                status: x.status,
-                assigneeIds: x.assigneeIds,
-                clientId: x.clientId,
-                engagementId: x.engagementId,
-              }))}
-            members={activeMembers}
-            canEdit={isLive}
-            clientId={engagement.client_id}
-            // The WALL stays on these. The rows above are client-facing work —
-            // documents, signatures, deliverables — and these are not, so the
-            // dashed panel and the line saying so are still doing a job.
-            variant="job"
-          />
-        }
-        checklistCount={collectionItems.length}
-        // Approved, not merely uploaded: "8 of 12" has to mean eight are DONE,
-        // or the row overstates progress on every engagement in the firm.
-        checklistDone={
-          collectionItems.filter((i) => i.status === "approved").length
-        }
-        signaturesDone={
-          signatureItems.filter((i) => i.status === "approved").length
-        }
-        signaturesCount={signatureItems.length}
         checklistControls={
           <>
             {/* Always-available visual review of every uploaded document. */}
@@ -1543,7 +1532,6 @@ export default async function EngagementDetailPage({
             </ul>
           )
         }
-        finalCount={finalDocs.length}
         finalControls={
           engagement.status !== "cancelled" ? (
             <AddFinalDocumentDialog engagementId={engagement.id} />

@@ -115,7 +115,11 @@ describe("AddTaskDialog — firm-wide mode", () => {
 });
 
 describe("AddTaskDialog — on a job", () => {
-  it("still asks which kind first, and hides the ones already there", async () => {
+  // Founder: "why is there only two options for the add task button?" Because
+  // the first version silently HID the built-in kinds the job already had, so
+  // the menu shrank with no way to find out why. They are shown now, disabled,
+  // with the reason — an answer beats an empty space.
+  it("shows every kind, disabling the ones this job already has, and says why", async () => {
     renderDialog({
       clientId: "c-abc",
       engagementId: "e-1",
@@ -123,25 +127,51 @@ describe("AddTaskDialog — on a job", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
 
-    // Already has one, and the database allows only one per job.
-    expect(
-      screen.queryByText(en.Engagements.kind_document_collection as string),
-    ).toBeNull();
-    expect(
-      screen.getByText(en.Engagements.kind_signatures as string),
-    ).toBeTruthy();
+    const row = (label: string) =>
+      screen.getByText(label).closest("button") as HTMLButtonElement;
 
+    for (const label of [
+      en.Engagements.kind_document_collection,
+      en.Engagements.kind_signatures,
+      en.Engagements.kind_deliverables,
+      en.Engagements.kind_task,
+    ] as string[]) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+
+    expect(row(en.Engagements.kind_document_collection as string)).toBeDisabled();
+    expect(row(en.Engagements.kind_signatures as string)).not.toBeDisabled();
+    expect(
+      screen.getByText(en.Engagements.add_task_kind_taken as string),
+    ).toBeTruthy();
+  });
+
+  // The whole point of 1380: a name is the user's words, not the category.
+  // Pre-filling it is what produced twenty-eight rows reading "Document
+  // collection", because nobody edits a field that looks answered.
+  it("leaves the name EMPTY after picking a kind, and will not submit until you type one", async () => {
+    renderDialog({ clientId: "c-abc", engagementId: "e-1", existingKinds: [] });
+    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
     fireEvent.click(screen.getByText(en.Engagements.kind_signatures as string));
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /Add task/i }).at(-1)!,
-    );
+
+    const field = screen.getByLabelText(
+      en.Engagements.add_task_name as string,
+    ) as HTMLInputElement;
+    expect(field.value).toBe("");
+
+    const submit = () =>
+      screen.getAllByRole("button", { name: /Add task/i }).at(-1)!;
+    expect(submit()).toBeDisabled();
+
+    fireEvent.change(field, { target: { value: "2025 engagement letter" } });
+    await waitFor(() => expect(submit()).not.toBeDisabled());
+    fireEvent.click(submit());
 
     await waitFor(() => expect(addTaskAction).toHaveBeenCalledTimes(1));
     expect(addTaskAction).toHaveBeenCalledWith({
       clientId: "c-abc",
       engagementId: "e-1",
-      // Pre-filled from the kind, because nobody wants to type "Signatures".
-      title: en.Engagements.kind_signatures,
+      title: "2025 engagement letter",
       kind: "signatures",
     });
   });
