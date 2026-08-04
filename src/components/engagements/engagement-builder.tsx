@@ -867,7 +867,7 @@ export function EngagementBuilder({
             label: t(`wizard_step_${k}` as WizardStepKey),
             complete: stepComplete[k],
             // Only the two that actually stop you sending are marked required.
-            required: k === "details" || k === "documents",
+            required: k === "details" || k === "tasks",
           }))}
         />
       </div>
