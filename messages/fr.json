@@ -2682,7 +2682,14 @@
     "item_description": "Description",
     "item_description_placeholder": "Ce que cela couvre — le client le voit.",
     "item_remove": "Retirer l’élément",
-    "wl_service_more": "+{count} autres"
+    "wl_service_more": "+{count} autres",
+    "view_all_label": "Tous les mandats",
+    "view_all_title": "Tous les mandats",
+    "view_all_empty": "Aucun mandat pour l'instant. Créez-en un pour commencer.",
+    "views_more": "Autres vues",
+    "tasks_panel_failed": "Impossible de charger ces tâches.",
+    "tasks_panel_open_engagement": "Ouvrir le mandat à la place",
+    "tasks_panel_loading": "Chargement des tâches"
   },
   "Attention": {
     "metric_active": "Actifs",

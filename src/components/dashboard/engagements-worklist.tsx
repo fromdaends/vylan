@@ -5,6 +5,11 @@ import { useTranslations } from "next-intl";
 import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import { PresenceFaces } from "@/components/engagements/presence-faces";
 import { BulkAssignBar } from "@/components/engagements/bulk-assign-bar";
+import {
+  EngagementTasksDialog,
+  type EngagementTasksPanelData,
+} from "@/components/engagements/engagement-tasks-dialog";
+import { loadEngagementTasksPanelAction } from "@/app/actions/engagement-tasks";
 import { useFirmPresence } from "@/lib/engagements/use-firm-presence";
 import {
   groupPresenceByEngagement,
@@ -374,6 +379,7 @@ export function WorklistTable({
   presenceRoster,
   bulkAssignMembers,
   countLabel,
+  flushTop = false,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -428,6 +434,17 @@ export function WorklistTable({
    * worse than no count at all. Whoever does the filtering owns the number.
    */
   countLabel?: (count: number) => string;
+  /**
+   * Drop the table's own top rule because the page already drew one.
+   *
+   * ⚠️ THE FOUNDER SAW TWO LINES. The engagements page ends its tab row with a
+   * rule and this table opens with one, eight pixels apart — which reads as a
+   * rendering mistake, because it is one. Explicit rather than inferred from
+   * some other prop: a hairline is exactly the kind of thing that goes missing
+   * on the three OTHER lists built from this component (the Overview, the
+   * Inbox queue, a teammate's profile), none of which has a tab row above it.
+   */
+  flushTop?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -496,6 +513,53 @@ export function WorklistTable({
   //
   // `null` means "the order I was handed", which is the parent's default of
   // newest-first. Nothing sorts until a header is used.
+  // The job whose tasks are open, or null. Held here rather than per row so
+  // only ONE dialog is ever mounted — a hundred rows each holding their own
+  // would mount a hundred.
+  const [tasksFor, setTasksFor] = useState<WorklistRow | null>(null);
+  const [tasksData, setTasksData] = useState<EngagementTasksPanelData | null>(
+    null,
+  );
+  const [tasksFailed, setTasksFailed] = useState(false);
+
+  /**
+   * Open a job's tasks, and fetch them.
+   *
+   * ⚠️ THE ID CHECK AFTER THE AWAIT is the whole reason this is worth reading.
+   * Click one row, close, click another, and both requests are in flight; the
+   * first can land second and fill the panel with the wrong job's tasks. So the
+   * response is only accepted if the panel is still open on the row that asked
+   * for it — which the handler knows, because the click told it.
+   */
+  const openTasks = (row: WorklistRow) => {
+    setTasksFor(row);
+    setTasksData(null);
+    setTasksFailed(false);
+    void loadEngagementTasksPanelAction(row.id)
+      .then((res) => {
+        setTasksFor((current) => {
+          if (current?.id !== row.id) return current;
+          if (res.ok) {
+            setTasksData({
+              tasks: res.tasks as unknown as EngagementTasksPanelData["tasks"],
+              members: res.members,
+              statuses:
+                res.statuses as unknown as EngagementTasksPanelData["statuses"],
+              currentUserId: res.currentUserId,
+            });
+          } else {
+            setTasksFailed(true);
+          }
+          return current;
+        });
+      })
+      .catch(() => {
+        setTasksFor((current) => {
+          if (current?.id === row.id) setTasksFailed(true);
+          return current;
+        });
+      });
+  };
   const [sort, setSort] = useState<SortState | null>(null);
   /** The service, in the one wording the whole app uses for it. */
   const serviceLabelFor = (type: string) =>
@@ -677,7 +741,7 @@ export function WorklistTable({
     (reassignMembers && reassignMembers.length > 0 ? 1 : 0);
 
   return (
-    <div className="border-t border-border">
+    <div className={cn(!flushTop && "border-t border-border")}>
       {countLabel && (
         <p className="px-4 py-2.5 text-sm tabular-nums text-muted-foreground">
           {countLabel(visibleRows.length)}
@@ -913,6 +977,7 @@ export function WorklistTable({
               unassignedText={t("wl_unassigned")}
               canDelete={canDelete}
               countdownText={countdownFor?.(r) ?? null}
+              onOpenTasks={openTasks}
               teamEnabled={teamEnabled}
             />
           ))}
@@ -933,6 +998,21 @@ export function WorklistTable({
           }}
         />
       )}
+
+      {/* ONE dialog for the whole table, fed by whichever row was clicked.
+          Stays mounted while closing so the panel fades rather than vanishing;
+          `tasksFor` is only cleared by the close handler. */}
+      <EngagementTasksDialog
+        engagementId={tasksFor?.id ?? null}
+        engagementTitle={tasksFor?.title ?? ""}
+        clientName={tasksFor?.clientName}
+        data={tasksData}
+        failed={tasksFailed}
+        open={tasksFor !== null}
+        onOpenChange={(next) => {
+          if (!next) setTasksFor(null);
+        }}
+      />
     </div>
   );
 }
@@ -948,6 +1028,7 @@ function WorklistRowView({
   unassignedText,
   canDelete,
   countdownText,
+  onOpenTasks,
   onOptimisticRemoval,
   teamEnabled,
   reassignMembers,
@@ -969,6 +1050,8 @@ function WorklistRowView({
   unassignedText: string;
   canDelete: boolean;
   countdownText: string | null;
+  /** Opens this job's tasks in a panel. Absent ⇒ the count is inert. */
+  onOpenTasks?: (row: WorklistRow) => void;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
   teamEnabled: boolean;
   reassignMembers?: { id: string; name: string }[];
@@ -1220,11 +1303,25 @@ function WorklistRowView({
               {!showProgress ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : (
-                <span className="text-sm tabular-nums text-foreground">
+                // THE COUNT OPENS THE TASKS. Founder, on Canopy: "click on the
+                // tasks like ex: 3/4 and it brings up a screen of all those
+                // tasks for that specific engagement."
+                //
+                // A button, not a link: the row's own click handler already
+                // bails on any <a>/<button>, so this does not fight it, and the
+                // panel is not a place you navigate to and come back from.
+                // Underline on hover so it reads as something you can press —
+                // a bare number gives you no reason to try.
+                <button
+                  type="button"
+                  onClick={() => onOpenTasks?.(row)}
+                  disabled={!onOpenTasks}
+                  className="-mx-1 rounded px-1 text-sm tabular-nums text-foreground transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:no-underline disabled:hover:text-foreground"
+                >
                   {row.tasksTotal > 0
                     ? `${row.tasksDone}/${row.tasksTotal}`
                     : `${pct}%`}
-                </span>
+                </button>
               )}
             </TableCell>
 

@@ -17,7 +17,7 @@ import {
 } from "@/components/dashboard/engagements-worklist";
 import { daysUntilPurge } from "@/lib/engagements/lifecycle";
 import {
-  ENGAGEMENT_VIEWS,
+  TAB_VIEWS,
   viewLabelKey,
   type EngagementView,
 } from "@/lib/engagements/views";
@@ -161,7 +161,7 @@ export function EngagementsView({
           className="flex-1 border-b-0"
           ariaLabel={t("views_label")}
           activeKey={view}
-          tabs={ENGAGEMENT_VIEWS.map((v) => ({
+          tabs={TAB_VIEWS.map((v) => ({
             key: v,
             label: t(viewLabelKey(v)),
             href: hrefFor(v),
@@ -221,6 +221,9 @@ export function EngagementsView({
         }
         canDelete={canDelete}
         countLabel={(count) => t("count_engagements", { count })}
+        // The tab row above already ends in a rule; the table drawing its own
+        // put two hairlines eight pixels apart.
+        flushTop
         growNameColumn
         teamEnabled={teamEnabled}
         // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.

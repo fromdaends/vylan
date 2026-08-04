@@ -2682,7 +2682,14 @@
     "item_description": "Description",
     "item_description_placeholder": "What this covers — the client sees this.",
     "item_remove": "Remove item",
-    "wl_service_more": "+{count} more"
+    "wl_service_more": "+{count} more",
+    "view_all_label": "All engagements",
+    "view_all_title": "All engagements",
+    "view_all_empty": "No engagements yet. Create one to get started.",
+    "views_more": "More views",
+    "tasks_panel_failed": "Couldn't load these tasks.",
+    "tasks_panel_open_engagement": "Open the engagement instead",
+    "tasks_panel_loading": "Loading tasks"
   },
   "Attention": {
     "metric_active": "Active",

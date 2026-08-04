@@ -9,11 +9,15 @@ import {
 import { getCurrentFirm } from "@/lib/db/firms";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import {
+  MENU_VIEWS,
   scopeForView,
   selectView,
+  viewHref,
+  viewLabelKey,
   viewTitleKey,
   type EngagementView,
 } from "@/lib/engagements/views";
+import { EngagementViewsMenu } from "@/components/engagements/engagement-views-menu";
 import { getEngagementBadges } from "@/lib/engagements/badges";
 import { EngagementsView } from "@/components/engagements/engagements-view";
 import { Link } from "@/i18n/navigation";
@@ -57,16 +61,29 @@ export async function renderEngagementsView({
             instead of routing through Templates. VYLAN'S BLUE (--accent), the
             same one "+ Add task" now uses — the product should have one
             call-to-action colour, not a navy on this page and a blue on that. */}
-        <Button
-          asChild
-          variant="accent"
-          className="shrink-0 self-start sm:self-auto"
-        >
-          <Link href="/engagements/new">
-            <Plus className="h-4 w-4" />
-            {t("new")}
-          </Link>
-        </Button>
+        <div className="flex shrink-0 items-center gap-1 self-start sm:self-auto">
+          <Button asChild variant="accent">
+            <Link href="/engagements/new">
+              <Plus className="h-4 w-4" />
+              {t("new")}
+            </Link>
+          </Button>
+          {/* The views that came off the tab strip. Canopy keeps its overflow
+              in the same place, beside Create engagement. */}
+          <EngagementViewsMenu
+            label={t("views_more")}
+            items={MENU_VIEWS.map((v) => ({
+              href: viewHref(v),
+              label: t(viewLabelKey(v)),
+              count:
+                v === "ready"
+                  ? badges.readyToReview
+                  : v === "deleted"
+                    ? badges.recentlyDeleted
+                    : undefined,
+            }))}
+          />
+        </div>
       </header>
 
       <EngagementsView

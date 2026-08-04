@@ -6,6 +6,8 @@ import {
   readyToReviewCount,
   recentlyDeletedCount,
   ENGAGEMENT_VIEWS,
+  TAB_VIEWS,
+  MENU_VIEWS,
 } from "./views";
 
 function row(
@@ -135,14 +137,47 @@ describe("badge counts", () => {
 });
 
 describe("ENGAGEMENT_VIEWS", () => {
-  it("lists all seven views in nav order", () => {
+  it("lists every routed view in nav order", () => {
     expect(ENGAGEMENT_VIEWS).toEqual([
       "active",
+      "all",
       "ready",
       "drafts",
       "completed",
       "archived",
       "deleted",
     ]);
+  });
+
+  // ⚠️ THE TABS AND THE ROUTES ARE DIFFERENT LISTS NOW. The founder cut the tab
+  // strip to three: "The only top tab things should be: Active, Drafts, All
+  // engagements." The other four kept their routes, so nothing 404s and no link
+  // anywhere in the app breaks.
+  it("shows exactly three tabs", () => {
+    expect(TAB_VIEWS).toEqual(["active", "drafts", "all"]);
+  });
+
+  // ⚠️ THE ONE THAT MATTERS. Recently deleted is a 30-day recovery window with
+  // a purge cron on the other side of it — unreachable in the UI means
+  // unrecoverable in practice. Every routed view must be reachable from either
+  // the tabs or the overflow menu, EXCEPT completed, which All engagements
+  // contains.
+  it("leaves no view stranded", () => {
+    const reachable = new Set([...TAB_VIEWS, ...MENU_VIEWS]);
+    const stranded = ENGAGEMENT_VIEWS.filter(
+      (v) => !reachable.has(v) && v !== "completed",
+    );
+    expect(stranded).toEqual([]);
+    expect(reachable.has("deleted")).toBe(true);
+  });
+
+  it("all = every status, archived and deleted excluded by its scope", () => {
+    expect(scopeForView("all")).toBe("active");
+    const rows = [
+      row({ id: "a", status: "draft" }),
+      row({ id: "b", status: "complete" }),
+      row({ id: "c", status: "in_progress" }),
+    ];
+    expect(selectView("all", rows).map((r) => r.id)).toEqual(["a", "b", "c"]);
   });
 });
