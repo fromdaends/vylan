@@ -195,7 +195,7 @@ export default async function EngagementDetailPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams?: Promise<{ panel?: string; comment?: string }>;
+  searchParams?: Promise<{ panel?: string; comment?: string; task?: string }>;
   // ?panel=invoice is Billing → New invoice landing here: the invoice flow
   // lives on this page and nowhere else, so that button picks an engagement
   // and links in rather than mounting a second copy of the builder.
@@ -1437,6 +1437,12 @@ export default async function EngagementDetailPage({
         members={activeMembers}
         canEdit={isLive}
         currentUserId={user?.id ?? ""}
+        // Arriving from the Tasks table's type link. Validated against the
+        // job's OWN tasks rather than trusted: a stale or hand-typed id would
+        // otherwise render an empty panel with a back arrow to nowhere.
+        initialTaskId={
+          internalTasks.some((x) => x.id === sp.task) ? (sp.task ?? null) : null
+        }
         addTask={
           isLive ? (
             <AddTaskDialog

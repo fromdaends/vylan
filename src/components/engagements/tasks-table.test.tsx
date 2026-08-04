@@ -23,11 +23,9 @@ const MEMBERS = [
   { id: "u-zach", name: "Zachary Thresh" },
 ];
 
-const base = {
-  clientId: "c-1",
-  engagementId: "e-1",
-  notes: null,
-} as const;
+// Distinct client ids on purpose: the Client menu keys by ID, so a fixture
+// that shares one would offer a single option and prove nothing about filtering.
+const base = { engagementId: "e-1", notes: null } as const;
 
 const TASKS: TaskRow[] = [
   {
@@ -38,6 +36,7 @@ const TASKS: TaskRow[] = [
     status: "todo",
     priority: "high",
     assigneeIds: ["u-tyler"],
+    clientId: "c-aber",
     clientName: "Abercrombie",
     dueDate: "2020-01-01",
   },
@@ -49,6 +48,7 @@ const TASKS: TaskRow[] = [
     status: "doing",
     priority: "none",
     assigneeIds: [],
+    clientId: "c-zen",
     clientName: "Zenith",
     dueDate: null,
   },
@@ -60,6 +60,7 @@ const TASKS: TaskRow[] = [
     status: "todo",
     priority: "low",
     assigneeIds: ["u-zach"],
+    clientId: "c-mat",
     clientName: "Mathieu",
     dueDate: "2099-06-01",
   },
@@ -71,6 +72,7 @@ const TASKS: TaskRow[] = [
     status: "done",
     priority: "medium",
     assigneeIds: ["u-tyler"],
+    clientId: "c-beta",
     clientName: "Beta",
     dueDate: "2021-01-01",
   },
@@ -96,12 +98,12 @@ beforeAll(() => {
 beforeEach(() => cleanup());
 afterEach(() => cleanup());
 
-/** Radix opens on POINTER-DOWN, not click. */
-function openFilter(name: RegExp) {
-  fireEvent.pointerDown(screen.getByRole("button", { name }), {
-    button: 0,
-    ctrlKey: false,
-  });
+/** Radix opens on POINTER-DOWN, not click. Every column header is a menu now. */
+function openColumn(label: string) {
+  fireEvent.pointerDown(
+    screen.getByRole("button", { name: `${label} — sort and filter` }),
+    { button: 0, ctrlKey: false },
+  );
 }
 
 /**
@@ -112,11 +114,18 @@ function openFilter(name: RegExp) {
  * Radix menu marks the rest of the page inert, so the table behind it is
  * unreachable until it is dismissed.
  */
-async function pickFilter(menu: RegExp, option: string) {
-  openFilter(menu);
+async function pickValue(column: string, option: string) {
+  openColumn(column);
   fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: option }));
   fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
 }
+
+async function pickSort(column: string, direction: string) {
+  openColumn(column);
+  fireEvent.click(await screen.findByRole("menuitem", { name: direction }));
+}
+
+const C = en.Engagements;
 
 /** The saved-view tabs, scoped — "Unassigned" also names the assignee cell on
  *  every unassigned row, so an unscoped query is ambiguous. */
@@ -150,96 +159,141 @@ describe("TasksTable — the saved views", () => {
     expect(names()).toContain("Zulu overdue thing");
   });
 
-  it("has a view for the three questions people actually arrive with", () => {
+  // Founder: "The unnasigned and completed tab bars for sorting should be
+  // removed like provided in the screenshot i sent." Both survive as FILTERS,
+  // so nothing became unreachable — it stopped being a tab.
+  it("keeps only three tabs: Active, Mine, All", () => {
     renderTable();
+    const tabs = within(screen.getByRole("tablist"))
+      .getAllByRole("button")
+      .map((b) => b.textContent?.replace(/\d+/g, "").trim());
+    expect(tabs).toEqual([
+      C.view_active,
+      C.view_mine,
+      C.view_all,
+    ]);
+  });
 
-    fireEvent.click(tab(/My work/));
-    // Tyler's, and not the done one — "my work" means what is left.
-    expect(names()).toEqual(["Zulu overdue thing"]);
-
-    fireEvent.click(tab(/Unassigned/));
+  it("still answers 'what is unassigned', from the Assignee column", async () => {
+    renderTable();
+    await pickValue(C.col_assignee as string, C.work_unassigned as string);
     expect(names()).toEqual(["Alpha no date"]);
+  });
 
-    fireEvent.click(tab(/Completed/));
+  it("still answers 'what is done', from the Status column", async () => {
+    renderTable();
+    fireEvent.click(within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }));
+    await pickValue(C.col_status as string, en.Clients.task_status_done as string);
     expect(names()).toEqual(["Delta finished"]);
-
-    fireEvent.click(tab(/All work/));
-    expect(names()).toHaveLength(4);
-  });
-
-  it("counts on the tab, so 'is anything unassigned' needs no click", () => {
-    renderTable();
-    expect(tab(/Unassigned/).textContent).toContain("1");
   });
 });
 
-describe("TasksTable — sorting", () => {
-  it("sorts by due date first, with no-date LAST rather than earliest", () => {
-    // An empty date is not "the most urgent thing in the firm", which is what
-    // sorting a blank string ascending would make it.
+describe("TasksTable — a header is a menu, not an arrow", () => {
+  // Founder: "it's actually the most redundant sorting I've ever seen...
+  // clicking on it should actually bring you up a drop down to sort and, like,
+  // select specific clients."
+  it("narrows to one client — the thing an arrow could never do", async () => {
     renderTable();
-    expect(names()).toEqual(["Zulu overdue thing", "Mike soon", "Alpha no date"]);
-  });
-
-  it("reverses on a second click of the same column", () => {
-    renderTable();
-    fireEvent.click(screen.getByRole("button", { name: en.Engagements.col_due as string }));
-    expect(names()[0]).toBe("Alpha no date");
-  });
-
-  it("ranks priority high → none, never alphabetically", () => {
-    // Alphabetically 'high' sits between 'none' and 'medium', which is the
-    // opposite of what the column is for.
-    renderTable();
-    fireEvent.click(
-      screen.getByRole("button", { name: en.Engagements.col_priority as string }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: en.Engagements.col_priority as string }),
-    );
-    expect(names()[0]).toBe("Zulu overdue thing"); // high
-  });
-
-  it("sorts by name and by client too", () => {
-    renderTable();
-    fireEvent.click(screen.getByRole("button", { name: en.Engagements.col_task as string }));
-    expect(names()).toEqual(["Alpha no date", "Mike soon", "Zulu overdue thing"]);
-
-    fireEvent.click(screen.getByRole("button", { name: en.Engagements.col_client as string }));
-    expect(names()).toEqual(["Zulu overdue thing", "Mike soon", "Alpha no date"]);
-  });
-});
-
-describe("TasksTable — filtering", () => {
-  it("narrows by task type and says how many are showing", async () => {
-    renderTable();
-    await pickFilter(/Filter by Task type/, en.Engagements.kind_signatures as string);
+    await pickValue(C.col_client as string, "Mathieu");
     expect(names()).toEqual(["Mike soon"]);
-    expect(screen.getByText("1 task")).toBeTruthy();
   });
 
-  it("treats Unassigned as a real answer in the assignee filter", async () => {
+  it("narrows by task type, and by priority", async () => {
     renderTable();
-    await pickFilter(/Filter by Assignee/, en.Engagements.work_unassigned as string);
-    expect(names()).toEqual(["Alpha no date"]);
+    await pickValue(C.col_kind as string, C.kind_signatures as string);
+    expect(names()).toEqual(["Mike soon"]);
+
+    await pickValue(C.col_kind as string, C.kind_signatures as string); // untick
+    await pickValue(C.col_priority as string, C.priority_high as string);
+    expect(names()).toEqual(["Zulu overdue thing"]);
   });
 
-  it("says so when nothing matches, rather than showing the blank-slate copy", async () => {
+  it("sorts in a direction worded for the column", async () => {
     renderTable();
-    await pickFilter(/Filter by Assignee/, "Zachary Thresh");
-    await pickFilter(/Filter by Task type/, en.Engagements.kind_document_collection as string);
+    await pickSort(C.col_due as string, C.sort_latest as string);
+    expect(names()[0]).toBe("Alpha no date");
+
+    await pickSort(C.col_due as string, C.sort_earliest as string);
+    expect(names()).toEqual(["Zulu overdue thing", "Mike soon", "Alpha no date"]);
+  });
+
+  it("ranks priority by rank, never alphabetically", async () => {
+    // Alphabetically 'high' sits between 'none' and 'medium'.
+    renderTable();
+    await pickSort(C.col_priority as string, C.sort_highest as string);
+    expect(names()[0]).toBe("Zulu overdue thing");
+  });
+
+  it("gives Task name no menu at all — there is nothing to narrow a name by", () => {
+    renderTable();
     expect(
-      screen.getByText(en.Engagements.tasks_none_match as string),
-    ).toBeTruthy();
+      screen.queryByRole("button", {
+        name: `${C.col_task} — sort and filter`,
+      }),
+    ).toBeNull();
+    expect(screen.getByText(C.col_task as string)).toBeTruthy();
   });
 
   it("offers a way back out of a filter it applied", async () => {
     renderTable();
-    await pickFilter(/Filter by Task type/, en.Engagements.kind_signatures as string);
-    fireEvent.click(
-      screen.getByRole("button", { name: en.Engagements.filters_clear as string }),
-    );
+    await pickValue(C.col_kind as string, C.kind_signatures as string);
+    expect(names()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: C.filters_clear as string }));
     expect(names()).toHaveLength(3);
+  });
+
+  it("says so when nothing matches, rather than showing the blank-slate copy", async () => {
+    renderTable();
+    await pickValue(C.col_assignee as string, "Zachary Thresh");
+    await pickValue(C.col_kind as string, C.kind_document_collection as string);
+    expect(screen.getByText(C.tasks_none_match as string)).toBeTruthy();
+  });
+});
+
+describe("TasksTable — the row", () => {
+  // Founder: "clicking on the task name shouldn't be the only way to bring up
+  // the sidebar. I think clicking on the task itself should bring up the
+  // sidebar. like, the entire thing."
+  it("opens the panel from anywhere on the row", () => {
+    renderTable();
+    const row = screen
+      .getByRole("button", { name: /Details for Mike soon/ })
+      .closest("tr")!;
+    fireEvent.click(row);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("does NOT open it when you meant to tick the status off", () => {
+    renderTable();
+    const row = screen
+      .getByRole("button", { name: /Details for Mike soon/ })
+      .closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /^Change the status/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // Founder: "you wanna actually click on it and see the specific document
+  // collection on the engagement... a link that brings you to the actual doc
+  // collection within the engagement, like, full page view."
+  it("makes the task type a doorway into that collection, opened", () => {
+    renderTable();
+    const row = screen
+      .getByRole("button", { name: /Details for Alpha no date/ })
+      .closest("tr")!;
+    const link = within(row).getByRole("link", {
+      name: C.kind_document_collection as string,
+    });
+    expect(link.getAttribute("href")).toBe("/engagements/e-1?task=t-nodate");
+  });
+
+  it("leaves a plain task as plain text — a link to nowhere is worse than none", () => {
+    renderTable();
+    const row = screen
+      .getByRole("button", { name: /Details for Zulu overdue thing/ })
+      .closest("tr")!;
+    expect(
+      within(row).queryByRole("link", { name: C.kind_task as string }),
+    ).toBeNull();
   });
 });
 
@@ -247,18 +301,22 @@ describe("TasksTable — the two screens", () => {
   it("drops the Client column on a job, where every row has the same answer", () => {
     renderTable({ variant: "job" });
     expect(
-      screen.queryByRole("button", { name: en.Engagements.col_client as string }),
+      screen.queryByRole("button", {
+        name: `${C.col_client} — sort and filter`,
+      }),
     ).toBeNull();
   });
 
   it("keeps it on the firm-wide list, where it is the thing that varies", () => {
     renderTable({ variant: "firm" });
     expect(
-      screen.getByRole("button", { name: en.Engagements.col_client as string }),
+      screen.getByRole("button", {
+        name: `${C.col_client} — sort and filter`,
+      }),
     ).toBeTruthy();
   });
 
-  it("marks an overdue row, and never an overdue one that is already done", () => {
+  it("marks an overdue row, and never an overdue one that is already done", async () => {
     renderTable({ variant: "firm" });
     const overdueRow = screen
       .getByRole("button", { name: /Details for Zulu overdue thing/ })
@@ -267,7 +325,7 @@ describe("TasksTable — the two screens", () => {
       "text-destructive",
     );
 
-    fireEvent.click(tab(/Completed/));
+    fireEvent.click(within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }));
     const doneRow = screen
       .getByRole("button", { name: /Details for Delta finished/ })
       .closest("tr")!;

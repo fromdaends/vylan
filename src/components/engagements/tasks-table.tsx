@@ -30,6 +30,24 @@
 // Priority IS here, and I argued against it once. See 1390 for why that was the
 // right call then and the wrong one now.
 //
+// ── A COLUMN HEADER IS A MENU, NOT AN ARROW ────────────────────────────────
+//
+// The founder, on the first version: "you're all able to sort by all of them,
+// um, with the up and down little arrows when you click, and it'll do, like, I
+// guess, most recent, but it's actually the most redundant sorting I've ever
+// seen... clicking on it should actually bring you up a drop down to sort and,
+// like, select specific clients."
+//
+// Right, and the diagnosis is sharper than the complaint: an arrow can only
+// REORDER. Almost every question you bring to this table is a NARROWING —
+// "what is Marie's", "what is high priority", "which document collections are
+// still open" — and reordering a hundred rows so the answer floats to the top
+// is not the same as showing the answer. So each header opens a menu with its
+// sort directions AND its values, and the values are where the work happens.
+//
+// Task name has no menu, on their instruction: there is nothing to narrow a
+// free-text name by, and A→Z on it answers no question anybody has.
+//
 // ── ONE TABLE, TWO SCREENS ─────────────────────────────────────────────────
 //
 // On a job the Client column is dropped, because every row has the same answer
@@ -99,7 +117,7 @@ const NEXT: Record<TaskStatus, TaskStatus> = {
   done: "todo",
 };
 
-const KIND_ICON: Record<string, typeof Inbox> = {
+const KIND_ICON: Partial<Record<string, typeof Inbox>> = {
   document_collection: Inbox,
   signatures: FileSignature,
   deliverables: FolderCheck,
@@ -118,7 +136,11 @@ const STATUS_RANK: Record<TaskStatus, number> = { todo: 0, doing: 1, done: 2 };
 /** Which saved view is showing. Each is a question somebody actually opens this
  *  screen with, not a demonstration that views exist. */
 export type TaskView = "active" | "mine" | "unassigned" | "done" | "all";
-const VIEWS: TaskView[] = ["active", "mine", "unassigned", "done", "all"];
+// Founder: "The unnasigned and completed tab bars for sorting should be
+// removed like provided in the screenshot i sent." Both questions survive as
+// FILTERS — Unassigned is a value in the assignee menu and Completed is one in
+// the status menu — so nothing became unreachable, it stopped being a tab.
+const VIEWS: TaskView[] = ["active", "mine", "all"];
 
 type SortKey = "status" | "title" | "client" | "kind" | "assignee" | "priority" | "due";
 
@@ -159,6 +181,8 @@ export function TasksTable({
     key: "due",
     desc: false,
   });
+  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority[]>([]);
@@ -221,6 +245,8 @@ export function TasksTable({
     const filtered = rows.filter(
       (r) =>
         inView(r, view) &&
+        (statusFilter.length === 0 || statusFilter.includes(r.status)) &&
+        (clientFilter.length === 0 || clientFilter.includes(r.clientId)) &&
         (kindFilter.length === 0 || kindFilter.includes(r.kind)) &&
         (priorityFilter.length === 0 || priorityFilter.includes(r.priority)) &&
         (assigneeFilter.length === 0 ||
@@ -253,18 +279,34 @@ export function TasksTable({
       return (av < bv ? -1 : 1) * (sort.desc ? -1 : 1);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, view, sort, kindFilter, assigneeFilter, priorityFilter, nameById]);
+  }, [rows, view, sort, statusFilter, clientFilter, kindFilter, assigneeFilter, priorityFilter, nameById]);
 
   const kinds = useMemo(
     () => [...new Set(rows.map((r) => r.kind))].sort(),
     [rows],
   );
 
-  const toggleSort = (key: SortKey) =>
-    setSort((s) => ({ key, desc: s.key === key ? !s.desc : false }));
+
+  const clientOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of rows) if (!seen.has(r.clientId)) seen.set(r.clientId, r.clientName ?? "—");
+    return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [rows]);
 
   const filtersOn =
-    kindFilter.length > 0 || assigneeFilter.length > 0 || priorityFilter.length > 0;
+    statusFilter.length > 0 ||
+    clientFilter.length > 0 ||
+    kindFilter.length > 0 ||
+    assigneeFilter.length > 0 ||
+    priorityFilter.length > 0;
+
+  const clearAll = () => {
+    setStatusFilter([]);
+    setClientFilter([]);
+    setKindFilter([]);
+    setAssigneeFilter([]);
+    setPriorityFilter([]);
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -295,50 +337,20 @@ export function TasksTable({
         <div className="ml-auto flex items-center gap-2 pb-1.5">{addTask}</div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterMenu
-          label={t("col_kind")}
-          accessibleName={t("filter_by", { label: t("col_kind") })}
-          selected={kindFilter}
-          onChange={setKindFilter}
-          options={kinds.map((k) => ({ value: k, label: kindLabel(k) }))}
-        />
-        <FilterMenu
-          label={t("col_assignee")}
-          accessibleName={t("filter_by", { label: t("col_assignee") })}
-          selected={assigneeFilter}
-          onChange={setAssigneeFilter}
-          options={[
-            { value: "none", label: t("work_unassigned") },
-            ...members.map((m) => ({ value: m.id, label: m.name })),
-          ]}
-        />
-        <FilterMenu
-          label={t("col_priority")}
-          accessibleName={t("filter_by", { label: t("col_priority") })}
-          selected={priorityFilter}
-          onChange={(v) => setPriorityFilter(v as TaskPriority[])}
-          options={(["high", "medium", "low", "none"] as TaskPriority[]).map(
-            (p) => ({ value: p, label: t(`priority_${p}` as "priority_none") }),
-          )}
-        />
-        {filtersOn && (
+      {filtersOn && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              setKindFilter([]);
-              setAssigneeFilter([]);
-              setPriorityFilter([]);
-            }}
-            className="rounded-full px-2 py-1 text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+            onClick={clearAll}
+            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             {t("filters_clear")}
           </button>
-        )}
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-          {t("task_count_total", { count: shown.length })}
-        </span>
-      </div>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {t("task_count_total", { count: shown.length })}
+          </span>
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
@@ -351,55 +363,94 @@ export function TasksTable({
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <Th
+                <ColumnMenu
                   label={t("col_status")}
-                  active={sort.key === "status"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("status")}
-                  className="w-[132px]"
+                  t={t}
+                  className="w-[136px]"
+                  sortKey="status"
+                  sort={sort}
+                  setSort={setSort}
+                  sortLabels={[t("sort_lowest"), t("sort_highest")]}
+                  selected={statusFilter}
+                  onChange={(v) => setStatusFilter(v as TaskStatus[])}
+                  options={(["todo", "doing", "done"] as TaskStatus[]).map((v) => ({
+                    value: v,
+                    label: tStatus(`task_status_${v}` as "task_status_todo"),
+                  }))}
                 />
-                <Th
-                  label={t("col_task")}
-                  active={sort.key === "title"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("title")}
-                />
+                {/* Nothing to narrow a free-text name by, and A→Z on it answers
+                    no question anybody brings here. The founder said so
+                    outright, and they are right. */}
+                <th className="px-2 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("col_task")}
+                </th>
                 {firmWide && (
-                  <Th
+                  <ColumnMenu
                     label={t("col_client")}
-                    active={sort.key === "client"}
-                    desc={sort.desc}
-                    onClick={() => toggleSort("client")}
-                    className="w-[180px]"
+                    t={t}
+                    // THE DIVIDER. Canopy puts one right before Client and the
+                    // founder asked for the same: it separates "what is this
+                    // task" from "whose is it", which is the actual seam in
+                    // the row.
+                    className="w-[190px] border-l border-border"
+                    sortKey="client"
+                    sort={sort}
+                    setSort={setSort}
+                    sortLabels={[t("sort_asc"), t("sort_desc")]}
+                    selected={clientFilter}
+                    onChange={setClientFilter}
+                    options={clientOptions}
                   />
                 )}
-                <Th
+                <ColumnMenu
                   label={t("col_kind")}
-                  active={sort.key === "kind"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("kind")}
-                  className="w-[160px]"
+                  t={t}
+                  className={cn("w-[170px]", !firmWide && "border-l border-border")}
+                  sortKey="kind"
+                  sort={sort}
+                  setSort={setSort}
+                  sortLabels={[t("sort_asc"), t("sort_desc")]}
+                  selected={kindFilter}
+                  onChange={setKindFilter}
+                  options={kinds.map((k) => ({ value: k, label: kindLabel(k) }))}
                 />
-                <Th
+                <ColumnMenu
                   label={t("col_assignee")}
-                  active={sort.key === "assignee"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("assignee")}
-                  className="w-[140px]"
+                  t={t}
+                  className="w-[150px]"
+                  sortKey="assignee"
+                  sort={sort}
+                  setSort={setSort}
+                  sortLabels={[t("sort_asc"), t("sort_desc")]}
+                  selected={assigneeFilter}
+                  onChange={setAssigneeFilter}
+                  options={[
+                    { value: "none", label: t("work_unassigned") },
+                    ...members.map((m) => ({ value: m.id, label: m.name })),
+                  ]}
                 />
-                <Th
+                <ColumnMenu
                   label={t("col_priority")}
-                  active={sort.key === "priority"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("priority")}
-                  className="w-[110px]"
+                  t={t}
+                  className="w-[120px]"
+                  sortKey="priority"
+                  sort={sort}
+                  setSort={setSort}
+                  sortLabels={[t("sort_lowest"), t("sort_highest")]}
+                  selected={priorityFilter}
+                  onChange={(v) => setPriorityFilter(v as TaskPriority[])}
+                  options={(["high", "medium", "low", "none"] as TaskPriority[]).map(
+                    (v) => ({ value: v, label: t(`priority_${v}` as "priority_none") }),
+                  )}
                 />
-                <Th
+                <ColumnMenu
                   label={t("col_due")}
-                  active={sort.key === "due"}
-                  desc={sort.desc}
-                  onClick={() => toggleSort("due")}
-                  className="w-[110px]"
+                  t={t}
+                  className="w-[120px]"
+                  sortKey="due"
+                  sort={sort}
+                  setSort={setSort}
+                  sortLabels={[t("sort_earliest"), t("sort_latest")]}
                 />
                 <th className="w-8" />
               </tr>
@@ -469,102 +520,137 @@ type Patch =
       >
     >);
 
-function Th({
-  label,
-  active,
-  desc,
-  onClick,
-  className,
-}: {
-  label: string;
-  active: boolean;
-  desc: boolean;
-  onClick: () => void;
-  className?: string;
-}) {
-  return (
-    <th className={cn("group/th px-2 py-2 font-medium", className)}>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex items-center gap-1 text-xs uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {label}
-        {active ? (
-          desc ? (
-            <ArrowDown className="size-3" aria-hidden />
-          ) : (
-            <ArrowUp className="size-3" aria-hidden />
-          )
-        ) : (
-          // Shown only on hover: eight permanent sort arrows is eight pieces of
-          // furniture saying nothing about the data underneath them.
-          <ChevronsUpDown className="size-3 opacity-0 transition-opacity group-hover/th:opacity-100" aria-hidden />
-        )}
-      </button>
-    </th>
-  );
-}
+type SortState = { key: SortKey; desc: boolean };
 
-function FilterMenu({
+/**
+ * A column header that is a MENU: its two sort directions, then its values.
+ *
+ * The values are the point. "Sort by client" floats one client's rows to the
+ * top of a hundred; "show me only this client" answers the question. An arrow
+ * could never do the second, which is what made the first version feel — the
+ * founder's word — redundant.
+ *
+ * Omitting `options` gives a sort-only menu, which is right for a date: there
+ * is nothing to tick in a column of a hundred distinct days.
+ */
+function ColumnMenu({
   label,
-  accessibleName,
+  t,
+  className,
+  sortKey,
+  sort,
+  setSort,
+  sortLabels,
   options,
-  selected,
+  selected = [],
   onChange,
 }: {
   label: string;
-  /** "Filter by Task type" — the visible chip says only "Task type", which is
-   *  also the name of a column header, so on its own it is ambiguous to anyone
-   *  navigating by control name. */
-  accessibleName: string;
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (next: string[]) => void;
+  t: ReturnType<typeof useTranslations<"Engagements">>;
+  className?: string;
+  sortKey: SortKey;
+  sort: SortState;
+  setSort: (next: SortState) => void;
+  /** [ascending, descending] — worded for the column. "Earliest first" beats
+   *  "A → Z" on a date, and "Lowest first" beats it on a priority. */
+  sortLabels: [string, string];
+  options?: { value: string; label: string }[];
+  selected?: string[];
+  onChange?: (next: string[]) => void;
 }) {
+  const active = sort.key === sortKey;
+  const filtering = selected.length > 0;
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={accessibleName}
-          className={cn(
-            "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            selected.length > 0
-              ? "border-foreground bg-foreground text-background"
-              : "border-border text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {label}
-          {selected.length > 0 && (
-            <span className="tabular-nums">{selected.length}</span>
-          )}
-          <ChevronsUpDown className="size-3 opacity-60" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuLabel className="text-xs">{label}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {options.map((o) => (
-          <DropdownMenuCheckboxItem
-            key={o.value}
-            checked={selected.includes(o.value)}
-            // Stays open: narrowing to three people should not cost three trips
-            // to the same button.
-            onSelect={(e) => e.preventDefault()}
-            onCheckedChange={(on) =>
-              onChange(
-                on
-                  ? [...selected, o.value]
-                  : selected.filter((x) => x !== o.value),
-              )
-            }
+    <th className={cn("px-2 py-2 font-medium", className)}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={t("column_menu", { label })}
+            className={cn(
+              "flex w-full items-center gap-1 text-xs uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              active || filtering
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
           >
-            {o.label}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+            {label}
+            {filtering && (
+              <span className="rounded-full bg-foreground px-1 text-[10px] tabular-nums text-background">
+                {selected.length}
+              </span>
+            )}
+            {active ? (
+              sort.desc ? (
+                <ArrowDown className="size-3 shrink-0" aria-hidden />
+              ) : (
+                <ArrowUp className="size-3 shrink-0" aria-hidden />
+              )
+            ) : (
+              <ChevronsUpDown className="size-3 shrink-0 opacity-45" aria-hidden />
+            )}
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuItem
+            className="gap-2 text-xs"
+            onSelect={() => setSort({ key: sortKey, desc: false })}
+          >
+            <ArrowUp className="size-3.5" aria-hidden />
+            {sortLabels[0]}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2 text-xs"
+            onSelect={() => setSort({ key: sortKey, desc: true })}
+          >
+            <ArrowDown className="size-3.5" aria-hidden />
+            {sortLabels[1]}
+          </DropdownMenuItem>
+
+          {options && options.length > 0 && onChange && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[11px] font-normal uppercase tracking-wide text-muted-foreground">
+                {label}
+              </DropdownMenuLabel>
+              <div className="max-h-64 overflow-y-auto">
+                {options.map((o) => (
+                  <DropdownMenuCheckboxItem
+                    key={o.value}
+                    checked={selected.includes(o.value)}
+                    // Stays open: narrowing to three clients should not cost
+                    // three trips to the same header.
+                    onSelect={(e) => e.preventDefault()}
+                    onCheckedChange={(on) =>
+                      onChange(
+                        on
+                          ? [...selected, o.value]
+                          : selected.filter((x) => x !== o.value),
+                      )
+                    }
+                  >
+                    <span className="truncate">{o.label}</span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </div>
+              {filtering && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-xs"
+                    onSelect={() => onChange([])}
+                  >
+                    {t("filter_all")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </th>
   );
 }
 
@@ -602,20 +688,32 @@ function Row({
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
   return (
-    <tr className="group border-b border-border/50 transition-colors hover:bg-muted/40">
+    // THE WHOLE ROW OPENS THE PANEL. Founder: "clicking on the task name
+    // shouldn't be the only way to bring up the sidebar. I think clicking on
+    // the task itself should bring up the sidebar. like, the entire thing."
+    //
+    // Every control inside it — the status pill, the assignee menu, the
+    // priority cell, the type link, delete — stops the click before it gets
+    // here, so a row is only "the empty parts" in practice. Without that, one
+    // careless click both ticks a task off and opens a panel about it.
+    <tr
+      onClick={onOpenDetail}
+      className="group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40"
+    >
       <td className="px-2 py-2">
         <button
           type="button"
           disabled={!canEdit}
-          onClick={() =>
+          onClick={(e) => {
+            e.stopPropagation();
             run({ id: task.id, status: NEXT[task.status] }, () =>
               updateTaskAction({
                 taskId: task.id,
                 engagementId: task.engagementId,
                 status: NEXT[task.status],
               }),
-            )
-          }
+            );
+          }}
           aria-label={t("work_toggle", { title: task.title })}
           className={cn(
             "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-50",
@@ -645,7 +743,10 @@ function Row({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onOpenDetail}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetail();
+            }}
             aria-label={t("task_open_detail", { title: task.title })}
             className={cn(
               "min-w-0 truncate text-left transition-colors hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -662,7 +763,10 @@ function Row({
           {openable && (
             <button
               type="button"
-              onClick={() => onOpenScreen?.(task.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenScreen?.(task.id);
+              }}
               aria-label={t("task_open", { title: task.title })}
               className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-[opacity,color] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
             >
@@ -673,9 +777,10 @@ function Row({
       </td>
 
       {firmWide && (
-        <td className="px-2 py-2">
+        <td className="border-l border-border px-2 py-2">
           <Link
             href={`/clients/${task.clientId}`}
+            onClick={(e) => e.stopPropagation()}
             className="block truncate text-muted-foreground transition-colors hover:text-foreground hover:underline"
           >
             {task.clientName ?? "—"}
@@ -683,11 +788,40 @@ function Row({
         </td>
       )}
 
-      <td className="px-2 py-2 text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
-          <span className="truncate">{kindLabel(task.kind)}</span>
-        </span>
+      {/* THE TYPE IS A DOORWAY. Founder: "imagine there's a task for document
+          collection on a specific engagement, but you're looking at it from the
+          task view, and you wanna actually click on it and see the specific
+          document collection on the engagement... like a link that brings you
+          to the actual doc collection within the engagement, like, full page
+          view."
+          ?task= opens that exact task on arrival, so it lands ON the collection
+          rather than on the job's task list with one more click to go. A plain
+          task has no screen, so it stays plain text — a link to nowhere is
+          worse than no link. */}
+      <td
+        className={cn(
+          "px-2 py-2 text-muted-foreground",
+          // ONE divider, and it sits where the row changes subject. On the
+          // firm table that seam is before Client; on a job there is no Client
+          // column, so it moves here.
+          !firmWide && "border-l border-border",
+        )}
+      >
+        {Icon && task.engagementId ? (
+          <Link
+            href={`/engagements/${task.engagementId}?task=${task.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 text-accent transition-colors hover:underline"
+          >
+            <Icon className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{kindLabel(task.kind)}</span>
+          </Link>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
+            <span className="truncate">{kindLabel(task.kind)}</span>
+          </span>
+        )}
       </td>
 
       <td className="px-2 py-2">
@@ -696,6 +830,7 @@ function Row({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {assignees.length > 0 ? (
@@ -786,14 +921,15 @@ function Row({
         {canEdit && (
           <button
             type="button"
-            onClick={() =>
+            onClick={(e) => {
+              e.stopPropagation();
               run({ id: task.id, remove: true }, () =>
                 deleteTaskAction({
                   taskId: task.id,
                   engagementId: task.engagementId,
                 }),
-              )
-            }
+              );
+            }}
             aria-label={t("work_delete", { title: task.title })}
             className="rounded p-1 text-muted-foreground opacity-0 transition-[opacity,color] hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
           >
@@ -832,6 +968,7 @@ function PriorityCell({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          onClick={(e) => e.stopPropagation()}
           className={cn(
             "flex items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             PRIORITY_STYLE[task.priority],

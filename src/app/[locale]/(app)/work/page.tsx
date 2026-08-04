@@ -98,13 +98,14 @@ export default async function WorkPage({
 
   return (
     <div className="space-y-5">
+      {/* Title only. The founder cut the subtitle — "Everything your firm has
+          to do, across every client" was describing the page to somebody who is
+          already looking at it. work_subtitle is left in the message files
+          rather than deleted; removing a key is on the ask-first list. */}
       <header>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           {t("work_title")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("work_subtitle")}
-        </p>
       </header>
 
       <TasksTable
