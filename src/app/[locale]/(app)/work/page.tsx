@@ -30,6 +30,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import { listTaskStatuses } from "@/lib/db/task-statuses";
 import {
   matchesDueFilter,
   toDueFilter,
@@ -55,7 +56,7 @@ export default async function WorkPage({
   const firm = await getCurrentFirm();
   if (!firm) redirect(`/${locale}/dashboard`);
 
-  const [tasks, members, clients, engagements] = await Promise.all([
+  const [tasks, members, clients, engagements, statuses] = await Promise.all([
     listFirmTasks(),
     listFirmUsers(),
     // For the "+ Add task" picker. The founder's own example is why this page
@@ -68,6 +69,9 @@ export default async function WorkPage({
     // the merge the founder asked for. A collection kind needs a job to hang
     // off, so the dialog asks for one rather than hiding the option.
     listEngagements(),
+    // The firm's own statuses. Request-cached, so the table, the create dialog
+    // and anything else on this page share one read.
+    listTaskStatuses(),
   ]);
 
   // The dashboard's stats strip links here as /work?due=overdue|today|week —
@@ -112,6 +116,7 @@ export default async function WorkPage({
         tasks={shown}
         members={activeMembers}
         canEdit
+        statuses={statuses}
         currentUserId={user.id}
         variant="firm"
         addTask={

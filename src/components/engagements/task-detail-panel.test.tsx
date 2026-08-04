@@ -15,6 +15,12 @@ import {
   type TaskDetailPanelPatch,
 } from "./task-detail-panel";
 
+const STATUSES = [
+  { id: "s-todo", name: "To do", color: "#64748b", bucket: "todo" as const },
+  { id: "s-review", name: "Needs review", color: "#2563eb", bucket: "doing" as const },
+  { id: "s-done", name: "Done", color: "#16a34a", bucket: "done" as const },
+];
+
 const MEMBERS = [
   { id: "u-tyler", name: "Tyler Jette" },
   { id: "u-zach", name: "Zachary Thresh" },
@@ -25,6 +31,7 @@ const TASK: DetailTask = {
   title: "2025 T2 supporting documents",
   kind: "document_collection",
   status: "doing",
+  statusId: "s-review",
   priority: "none",
   assigneeIds: ["u-tyler"],
   clientId: "c-abc",
@@ -59,6 +66,7 @@ function renderPanel(task: DetailTask | null = TASK, withScreen = true) {
     <NextIntlClientProvider locale="en" messages={en}>
       <TaskDetailPanel
         task={task}
+        statuses={STATUSES}
         members={MEMBERS}
         canEdit
         kindLabel={kindLabel}
@@ -136,10 +144,21 @@ describe("TaskDetailPanel", () => {
     );
   });
 
-  it("sets a status directly rather than cycling to it", () => {
+  // The firm's own statuses (1420), not the built-in three. The BUCKET goes
+  // with the id because every rule in the product reads the bucket — the label
+  // is only what a person sees.
+  it("sets one of the firm's statuses, and sends its bucket alongside", () => {
     renderPanel();
-    fireEvent.click(screen.getByText(en.Clients.task_status_done as string));
-    expect(onPatch).toHaveBeenCalledWith({ status: "done" }, {});
+    fireEvent.click(screen.getByText("Done"));
+    expect(onPatch).toHaveBeenCalledWith(
+      { status: "done", statusId: "s-done" },
+      {},
+    );
+  });
+
+  it("shows the firm's own labels, not todo/doing/done", () => {
+    renderPanel();
+    expect(screen.getByText("Needs review")).toBeTruthy();
   });
 
   it("clears a due date to null rather than an empty string", () => {

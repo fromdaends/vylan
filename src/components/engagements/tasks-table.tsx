@@ -92,11 +92,23 @@ import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 type TaskStatus = "todo" | "doing" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
 
+/** A status the firm named, as the table needs it. */
+export type FirmStatus = {
+  id: string;
+  name: string;
+  color: string;
+  bucket: TaskStatus;
+};
+
 export type TaskRow = {
   id: string;
   title: string;
   kind: string;
+  /** The BUCKET — todo / doing / done. Every rule in this file reads this and
+   *  never the label, which is the whole reason a firm can rename freely. */
   status: TaskStatus;
+  /** Which of the firm's statuses, when it has one. */
+  statusId?: string | null;
   priority: TaskPriority;
   assigneeIds: string[];
   clientId: string;
@@ -110,12 +122,6 @@ export type TaskRow = {
 };
 type Person = { id: string; name: string };
 
-const NEXT: Record<TaskStatus, TaskStatus> = {
-  todo: "doing",
-  doing: "done",
-  done: "todo",
-};
-
 // Rank, not alphabet. Sorting priority by its own name puts "high" between
 // "none" and "medium", which is the opposite of what the column is for.
 const PRIORITY_RANK: Record<TaskPriority, number> = {
@@ -125,6 +131,14 @@ const PRIORITY_RANK: Record<TaskPriority, number> = {
   none: 0,
 };
 const STATUS_RANK: Record<TaskStatus, number> = { todo: 0, doing: 1, done: 2 };
+
+// Used only when a firm has no statuses of its own — the same three colours the
+// seed in 1420 gives every firm, so the fallback looks like the real thing.
+const BUCKET_FALLBACK_COLOR: Record<TaskStatus, string> = {
+  todo: "#64748b",
+  doing: "#2563eb",
+  done: "#16a34a",
+};
 
 /** Which saved view is showing. Each is a question somebody actually opens this
  *  screen with, not a demonstration that views exist. */
@@ -142,6 +156,7 @@ export function TasksTable({
   members,
   canEdit,
   currentUserId,
+  statuses,
   variant = "firm",
   addTask,
   onOpen,
@@ -149,6 +164,9 @@ export function TasksTable({
   tasks: TaskRow[];
   members: Person[];
   canEdit: boolean;
+  /** The firm's own statuses, in board order. Empty before 1420 is applied,
+   *  which is why every label falls back to the built-in three. */
+  statuses: FirmStatus[];
   /** Drives the "Mine" view. */
   currentUserId: string;
   /** "job" drops the Client column — one value in it is decoration. */
@@ -174,7 +192,7 @@ export function TasksTable({
     key: "due",
     desc: false,
   });
-  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
@@ -207,8 +225,30 @@ export function TasksTable({
 
   // One source for every kind's label, icon and hint — see lib/tasks/kinds.ts
   // for why the ternary chain that used to live here had to go.
-  const kindLabel = (kind: string) =>
-    t(taskKindLabelKey(kind) as "kind_task");
+  const kindLabel = (kind: string) => t(taskKindLabelKey(kind) as "kind_task");
+
+  // The label and colour a row wears. Falls back to the built-in three when the
+  // firm has none — before 1420 is applied, and for a task whose status was
+  // deleted out from under it. A row must never render blank.
+  const statusOf = (task: TaskRow): FirmStatus =>
+    statuses.find((x) => x.id === task.statusId) ??
+    statuses.find((x) => x.bucket === task.status) ?? {
+      id: `bucket:${task.status}`,
+      name: tStatus(`task_status_${task.status}` as "task_status_todo"),
+      color: BUCKET_FALLBACK_COLOR[task.status],
+      bucket: task.status,
+    };
+
+  // What the Status column offers: the firm's own, or the built-in three.
+  const statusOptions: FirmStatus[] =
+    statuses.length > 0
+      ? statuses
+      : (["todo", "doing", "done"] as TaskStatus[]).map((b) => ({
+          id: `bucket:${b}`,
+          name: tStatus(`task_status_${b}` as "task_status_todo"),
+          color: BUCKET_FALLBACK_COLOR[b],
+          bucket: b,
+        }));
 
   const inView = (r: TaskRow, v: TaskView) =>
     v === "all"
@@ -234,7 +274,11 @@ export function TasksTable({
     const filtered = rows.filter(
       (r) =>
         inView(r, view) &&
-        (statusFilter.length === 0 || statusFilter.includes(r.status)) &&
+        // Filtering is by the firm's STATUS, not the bucket: "Needs review"
+        // and "With client" are both doing, and telling them apart is the
+        // entire reason a firm names its own.
+        (statusFilter.length === 0 ||
+          statusFilter.includes(r.statusId ?? `bucket:${r.status}`)) &&
         (clientFilter.length === 0 || clientFilter.includes(r.clientId)) &&
         (kindFilter.length === 0 || kindFilter.includes(r.kind)) &&
         (priorityFilter.length === 0 || priorityFilter.includes(r.priority)) &&
@@ -361,10 +405,10 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_lowest"), t("sort_highest")]}
                   selected={statusFilter}
-                  onChange={(v) => setStatusFilter(v as TaskStatus[])}
-                  options={(["todo", "doing", "done"] as TaskStatus[]).map((v) => ({
-                    value: v,
-                    label: tStatus(`task_status_${v}` as "task_status_todo"),
+                  onChange={setStatusFilter}
+                  options={statusOptions.map((v) => ({
+                    value: v.id,
+                    label: v.name,
                   }))}
                 />
                 {/* Nothing to narrow a free-text name by, and A→Z on it answers
@@ -449,13 +493,14 @@ export function TasksTable({
                 <Row
                   key={task.id}
                   task={task}
+                  status={statusOf(task)}
+                  statusOptions={statusOptions}
                   firmWide={firmWide}
                   canEdit={canEdit}
                   members={members}
                   nameById={nameById}
                   kindLabel={kindLabel}
                   t={t}
-                  tStatus={tStatus}
                   onOpenDetail={() => setDetailId(task.id)}
                   onOpenScreen={onOpen}
                   run={run}
@@ -470,6 +515,7 @@ export function TasksTable({
         task={rows.find((r) => r.id === detailId) ?? null}
         members={members}
         canEdit={canEdit}
+        statuses={statusOptions}
         kindLabel={(k) => (k === "task" ? null : kindLabel(k))}
         onClose={() => setDetailId(null)}
         onOpenScreen={onOpen}
@@ -488,7 +534,10 @@ export function TasksTable({
                   taskId: task.id,
                   engagementId: task.engagementId,
                   title: next.title,
-                  status: next.status,
+                  status: next.statusId ? undefined : next.status,
+                  statusId: next.statusId?.startsWith("bucket:")
+                    ? null
+                    : next.statusId,
                   dueDate: next.dueDate,
                   notes: next.notes,
                   priority: next.priority,
@@ -505,7 +554,13 @@ type Patch =
   | ({ id: string; remove?: false } & Partial<
       Pick<
         TaskRow,
-        "status" | "assigneeIds" | "title" | "notes" | "dueDate" | "priority"
+        | "status"
+        | "statusId"
+        | "assigneeIds"
+        | "title"
+        | "notes"
+        | "dueDate"
+        | "priority"
       >
     >);
 
@@ -645,25 +700,28 @@ function ColumnMenu({
 
 function Row({
   task,
+  status,
+  statusOptions,
   firmWide,
   canEdit,
   members,
   nameById,
   kindLabel,
   t,
-  tStatus,
   onOpenDetail,
   onOpenScreen,
   run,
 }: {
   task: TaskRow;
+  /** Already resolved to the firm's label and colour. */
+  status: FirmStatus;
+  statusOptions: FirmStatus[];
   firmWide: boolean;
   canEdit: boolean;
   members: Person[];
   nameById: Map<string, string>;
   kindLabel: (kind: string) => string;
   t: ReturnType<typeof useTranslations<"Engagements">>;
-  tStatus: ReturnType<typeof useTranslations<"Clients">>;
   onOpenDetail: () => void;
   onOpenScreen?: (taskId: string) => void;
   run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
@@ -690,42 +748,73 @@ function Row({
       className="group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40"
     >
       <td className="px-2 py-2">
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={(e) => {
-            e.stopPropagation();
-            run({ id: task.id, status: NEXT[task.status] }, () =>
-              updateTaskAction({
-                taskId: task.id,
-                engagementId: task.engagementId,
-                status: NEXT[task.status],
-              }),
-            );
-          }}
-          aria-label={t("work_toggle", { title: task.title })}
-          className={cn(
-            "flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-50",
-            task.status === "done"
-              ? "border-transparent bg-secondary text-muted-foreground"
-              : task.status === "doing"
-                ? "border-transparent bg-accent/10 text-accent"
-                : "border-border text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <span
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              task.status === "done"
-                ? "bg-muted-foreground"
-                : task.status === "doing"
-                  ? "bg-accent"
-                  : "bg-border",
-            )}
-            aria-hidden
-          />
-          {tStatus(`task_status_${task.status}` as "task_status_todo")}
-        </button>
+        {/* A MENU, not a cycle. Three states could be clicked through; a firm
+            with nine cannot, and "click Done eight times to get back to To do"
+            is the kind of control that only works in a demo. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!canEdit}>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={t("work_toggle", { title: task.title })}
+              className="flex items-center gap-1.5 rounded-full border border-transparent bg-muted px-2 py-0.5 text-xs transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            >
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: status.color }}
+                aria-hidden
+              />
+              <span className="truncate">{status.name}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="w-52"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {statusOptions.map((option) => (
+              <DropdownMenuItem
+                key={option.id}
+                className="gap-2"
+                onSelect={() =>
+                  run(
+                    {
+                      id: task.id,
+                      status: option.bucket,
+                      statusId: option.id.startsWith("bucket:")
+                        ? null
+                        : option.id,
+                    },
+                    () =>
+                      updateTaskAction({
+                        taskId: task.id,
+                        engagementId: task.engagementId,
+                        // The BUCKET is written by a database trigger from the
+                        // status, so sending it too would be a second writer
+                        // for one fact. Only the choice goes over the wire.
+                        statusId: option.id.startsWith("bucket:")
+                          ? null
+                          : option.id,
+                        status: option.id.startsWith("bucket:")
+                          ? option.bucket
+                          : undefined,
+                      }),
+                  )
+                }
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: option.color }}
+                  aria-hidden
+                />
+                {option.name}
+                {option.id === status.id && (
+                  <Check className="ml-auto size-3.5" aria-hidden />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </td>
 
       <td className="px-2 py-2">

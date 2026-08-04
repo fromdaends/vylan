@@ -173,6 +173,8 @@ export async function updateTaskAction(input: {
   /** Null clears it. Undefined leaves it alone — the two are different. */
   notes?: string | null;
   priority?: TaskPriority;
+  /** The firm's own status. Null clears it. */
+  statusId?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -187,6 +189,7 @@ export async function updateTaskAction(input: {
   if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
   if (input.notes !== undefined) patch.notes = input.notes;
   if (input.priority !== undefined) patch.priority = input.priority;
+  if (input.statusId !== undefined) patch.statusId = input.statusId;
 
   try {
     await updateEngagementTask({

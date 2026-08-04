@@ -99,6 +99,8 @@ export type EngagementTask = {
   /** Everybody on it. Empty is a real state — "somebody needs to do this". */
   assigneeIds: string[];
   status: TaskStatus;
+  /** The firm's own status, when it has one (1420). */
+  statusId: string | null;
   priority: TaskPriority;
   dueDate: string | null;
   orderIndex: number;
@@ -127,7 +129,7 @@ export function toTaskStatus(v: unknown): TaskStatus {
 }
 
 const SELECT =
-  "id, client_id, engagement_id, title, kind, notes, status, priority, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
+  "id, client_id, engagement_id, title, kind, notes, status, status_id, priority, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
 
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
@@ -149,6 +151,7 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
       .map((a) => (a as { user_id?: unknown }).user_id)
       .filter((u): u is string => typeof u === "string"),
     status: toTaskStatus(r.status),
+    statusId: typeof r.status_id === "string" ? r.status_id : null,
     priority: toTaskPriority(r.priority),
     dueDate: typeof r.due_date === "string" ? r.due_date : null,
     orderIndex: typeof r.order_index === "number" ? r.order_index : 0,
@@ -331,6 +334,10 @@ export async function updateEngagementTask(input: {
     status?: TaskStatus;
     dueDate?: string | null;
     priority?: TaskPriority;
+    /** The firm's own status (1420). Null clears it back to the bucket's
+     *  default label. The BUCKET column is written by a database trigger from
+     *  this, never here — two writers for one fact is how they drift. */
+    statusId?: string | null;
   };
   actorId?: string | null;
 }): Promise<void> {
@@ -341,6 +348,7 @@ export async function updateEngagementTask(input: {
   if (p.notes !== undefined) row.notes = p.notes;
   if (p.dueDate !== undefined) row.due_date = p.dueDate;
   if (p.priority !== undefined) row.priority = p.priority;
+  if (p.statusId !== undefined) row.status_id = p.statusId;
   if (p.status !== undefined) {
     row.status = p.status;
     row.completed_at = p.status === "done" ? new Date().toISOString() : null;
