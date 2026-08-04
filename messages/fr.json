@@ -2669,7 +2669,8 @@
     "item_tax": "Taxe %",
     "item_description": "Description",
     "item_description_placeholder": "Ce que cela couvre — le client le voit.",
-    "item_remove": "Retirer le service"
+    "item_remove": "Retirer le service",
+    "wl_service_more": "+{count} autres"
   },
   "Attention": {
     "metric_active": "Actifs",

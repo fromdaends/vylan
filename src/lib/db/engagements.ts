@@ -93,6 +93,52 @@ export type Engagement = {
   deleted_by_user_id: string | null;
 };
 
+/**
+ * The NAMES of every engagement's priced service lines, batched.
+ *
+ * This is what Canopy's "Service items" column actually shows — "Bookkeeping
+ * Monthly", "Tax Prep, Payroll" — and since #1274 Vylan has the same rows
+ * (engagement_items, migration 1450). Before that the list column could only
+ * show the engagement's TYPE, which is one of four fixed values and reads
+ * "Custom" on most real work.
+ *
+ * One query for the whole list, not one per row: this feeds a table that can be
+ * a hundred engagements long, and a query per row is the N+1 the perf sweep
+ * spent a day removing everywhere else.
+ *
+ * Ordered by order_index so the names read in the order the accountant put them
+ * on the proposal — the first one is the headline service, and a column that
+ * truncates to "+2 more" must truncate the RIGHT two.
+ */
+export async function listItemNamesByEngagement(): Promise<
+  Map<string, string[]>
+> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_items")
+    .select("engagement_id, name, order_index")
+    .order("order_index", { ascending: true });
+  if (error) {
+    // Deploy-ahead safe, the same rule the rest of this file follows: before
+    // 1450 is applied the table does not exist, and a list that 500s is far
+    // worse than one whose Service column falls back to the old type label.
+    if (isMissingSchema(error)) return new Map();
+    throw error;
+  }
+  const out = new Map<string, string[]>();
+  for (const row of (data ?? []) as Array<{
+    engagement_id: string;
+    name: string | null;
+  }>) {
+    const name = row.name?.trim();
+    // An unnamed line is a draft the accountant has not filled in. Showing a
+    // blank in a list of services is worse than showing one fewer.
+    if (!name) continue;
+    out.set(row.engagement_id, [...(out.get(row.engagement_id) ?? []), name]);
+  }
+  return out;
+}
+
 export async function setRemindersPaused(
   id: string,
   paused: boolean,

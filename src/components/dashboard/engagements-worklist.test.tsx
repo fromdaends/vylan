@@ -602,6 +602,50 @@ describe("every column header sorts and filters, on every list", () => {
     expect(q.getByText("1 engagements")).toBeInTheDocument();
   });
 
+  // ⚠️ THE COLUMN SHOWS THE PRICED LINES NOW (#1274), not the four fixed types.
+  // The types read "Custom" on most real work, which is exactly why the priced
+  // lines exist — so a row that HAS them must never fall back to its type.
+  it("shows the engagement's own service lines, not its type", () => {
+    const q = renderTable({
+      rows: [
+        row({
+          id: "sv",
+          title: "Priced",
+          type: "custom",
+          serviceNames: ["Monthly bookkeeping", "Payroll"],
+        }),
+      ],
+    });
+    expect(q.getByText("Monthly bookkeeping, Payroll")).toBeInTheDocument();
+    expect(
+      q.queryByText(en.Engagements.wl_service_custom),
+    ).not.toBeInTheDocument();
+  });
+
+  it("truncates past two, so one busy row cannot heighten the table", () => {
+    const q = renderTable({
+      rows: [
+        row({
+          id: "sv2",
+          title: "Busy",
+          serviceNames: ["A", "B", "C", "D"],
+        }),
+      ],
+    });
+    expect(q.getByText("A, B")).toBeInTheDocument();
+    expect(
+      q.getByText(en.Engagements.wl_service_more.replace("{count}", "2")),
+    ).toBeInTheDocument();
+  });
+
+  // Every engagement made before #1274 has no priced lines at all.
+  it("falls back to the type when there are no priced lines", () => {
+    const q = renderTable({
+      rows: [row({ id: "old", title: "Old", type: "t1", serviceNames: [] })],
+    });
+    expect(q.getByText(en.Engagements.wl_service_t1)).toBeInTheDocument();
+  });
+
   it("shows the service and the task count, in Canopy's words", () => {
     const q = renderTable();
     // Service items = what was sold; engagement items = the tasks inside it.
