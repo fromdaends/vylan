@@ -4,7 +4,11 @@ import { listLiveRelationshipsForFirm } from "@/lib/db/relationships";
 import type { ScopeWarningContact } from "@/lib/relationships/validate";
 import { listTemplates } from "@/lib/db/templates";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
@@ -47,6 +51,7 @@ export async function NewEngagementScreen({
     firmRelationships,
     services,
     engagementTemplates,
+    members,
   ] =
     await Promise.all([
       listClients({ includeArchived: false }),
@@ -60,6 +65,10 @@ export async function NewEngagementScreen({
       // Saved whole-engagement templates (migration 1500). Empty before it is
       // applied, which makes the start chooser skip itself.
       listEngagementTemplates(),
+      // Who the work can be handed to at creation. The save path has accepted
+      // assigned_user_id since 0001 — the form simply never offered it, which
+      // is why assigning was always a SECOND step after creating.
+      listFirmUsers(),
     ]);
 
   // Recipient safety (relationships spec §3): each business client's linked
