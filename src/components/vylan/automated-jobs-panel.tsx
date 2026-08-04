@@ -8,7 +8,7 @@ import { Link } from "@/i18n/navigation";
 // what Vylan already automates and linking straight to each control, so the tab
 // is useful on day one instead of a dead end.
 //
-// `hideSoon`: the automations library (1510) now renders ABOVE this panel on
+// `hideSoon`: the automations library (1560) now renders ABOVE this panel on
 // the same tab once a firm's switch is on — at which point the "coming soon"
 // blurb would be promising the thing sitting right above it. The links below
 // stay: they point at automations the library doesn't own (reminders cadence,

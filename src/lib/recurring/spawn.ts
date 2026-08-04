@@ -344,11 +344,11 @@ async function spawnOccurrence(
   // removed between two cycles stops receiving work on the very next one.
   const assignedUserId = await resolveSpawnAssignee(sb, series);
 
-  // Workflow snapshot (1510): each occurrence runs the same flow as the
+  // Workflow snapshot (1560): each occurrence runs the same flow as the
   // engagement the series was made from — re-frozen per spawn so the entry
   // ledger starts empty for the new period — falling back to the family
   // default when the source predates workflows. Flag-gated and fail-soft: a
-  // firm with the switch off (or a pre-1510 database, where the flag read
+  // firm with the switch off (or a pre-1560 database, where the flag read
   // itself returns false) spawns exactly as before, and any error here costs
   // the automation, never the occurrence.
   let workflowCol: Record<string, unknown> = {};

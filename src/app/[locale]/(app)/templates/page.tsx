@@ -56,7 +56,7 @@ export default async function TemplatesPage({
       // section that did not exist yet.
       listEngagementTemplates(),
     ]);
-  // Part A switch (1510): with it on, template cards open their detail page
+  // Part A switch (1560): with it on, template cards open their detail page
   // (built-ins read-only) and carry a one-line automation summary. Off = the
   // page exactly as it was.
   const workflowsOn =
