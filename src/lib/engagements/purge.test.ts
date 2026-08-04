@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { purgeExpiredDeletedEngagements } from "./purge";
+import { purgeExpiredDeletedEngagements, purgeOneEngagement } from "./purge";
 
 // The 30-day cutoff boundary is unit-tested in lifecycle.test.ts
 // (isPurgeableEngagement). Here we test the ORCHESTRATION given a set of
@@ -16,6 +16,7 @@ type ExpiredRow = {
 function makeMock(opts: {
   expired: ExpiredRow[];
   filesByEngagement?: Record<string, { storage_path: string | null }[]>;
+  finalsByEngagement?: Record<string, { storage_path: string | null }[]>;
   failDeleteIds?: Set<string>;
 }) {
   const recorded = {
@@ -23,6 +24,7 @@ function makeMock(opts: {
     inserts: [] as { table: string; row: Record<string, unknown> }[],
   };
   const files = opts.filesByEngagement ?? {};
+  const finals = opts.finalsByEngagement ?? {};
 
   function from(table: string) {
     const builder = {
@@ -43,6 +45,9 @@ function makeMock(opts: {
       eq(_col: string, val: string) {
         if (table === "uploaded_files") {
           return Promise.resolve({ data: files[val] ?? [], error: null });
+        }
+        if (table === "final_documents") {
+          return Promise.resolve({ data: finals[val] ?? [], error: null });
         }
         // engagements: delete().eq("id", id)
         if (opts.failDeleteIds?.has(val)) {
@@ -83,6 +88,10 @@ describe("purgeExpiredDeletedEngagements", () => {
         ],
         e2: [],
       },
+      // Deliverables live in the same bucket and must be removed too.
+      finalsByEngagement: {
+        e1: [{ storage_path: "d1" }],
+      },
     });
     const removed: string[][] = [];
 
@@ -96,10 +105,11 @@ describe("purgeExpiredDeletedEngagements", () => {
 
     expect(result.purged).toEqual(["e1", "e2"]);
     expect(result.failed).toEqual([]);
-    expect(result.filesRemoved).toBe(2);
+    expect(result.filesRemoved).toBe(3);
 
-    // Only e1 had files; nulls filtered out; e2 (no files) triggers no remove.
-    expect(removed).toEqual([["p1", "p2"]]);
+    // Only e1 had files; nulls filtered out; uploads + deliverables in ONE
+    // remove call; e2 (no files) triggers no remove.
+    expect(removed).toEqual([["p1", "p2", "d1"]]);
 
     // Both rows hard-deleted.
     expect(mock.recorded.deletedIds).toEqual(["e1", "e2"]);
@@ -137,5 +147,28 @@ describe("purgeExpiredDeletedEngagements", () => {
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0].id).toBe("bad");
     expect(mock.recorded.deletedIds).toEqual(["good"]);
+  });
+});
+
+describe("purgeOneEngagement", () => {
+  it("records the requesting user in the durable purge log", async () => {
+    const mock = makeMock({ expired: [] });
+
+    await purgeOneEngagement(
+      { supabase: mock.supabase, removeStorageObjects: async () => {} },
+      { id: "e9", firm_id: "f1", title: "GST 2026", deleted_at: "z" },
+      { type: "user", id: "u42" },
+    );
+
+    expect(mock.recorded.deletedIds).toEqual(["e9"]);
+    const log = mock.recorded.inserts.find((i) => i.table === "activity_log");
+    expect(log?.row).toMatchObject({
+      firm_id: "f1",
+      engagement_id: null,
+      actor_type: "user",
+      actor_id: "u42",
+      action: "engagement_purged",
+      metadata: { engagement_id: "e9", title: "GST 2026" },
+    });
   });
 });

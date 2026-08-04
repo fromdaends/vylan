@@ -30,6 +30,7 @@ import {
   unarchiveEngagementAction,
   softDeleteEngagementAction,
   restoreEngagementAction,
+  deleteEngagementForeverAction,
 } from "@/app/actions/engagements";
 import {
   rowMenuItemKeys,
@@ -119,6 +120,10 @@ export function useEngagementRowMenu(args: {
   const tStage = useTranslations("Stage");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // "Delete forever" warning: non-null = open, carrying how many documents in
+  // this engagement were never filed to the firm's storage.
+  const [foreverUnfiled, setForeverUnfiled] = useState<number | null>(null);
+  const [foreverBusy, setForeverBusy] = useState(false);
   const { setStage } = useStageOverride(engagementId);
 
   // Optimistic path: drop the row now + toast now, the server catches up.
@@ -196,6 +201,49 @@ export function useEngagementRowMenu(args: {
     icon: Trash2,
     variant: "destructive",
     onSelect: () => setConfirmOpen(true),
+  };
+
+  // "Delete forever" — only offered on a row that is ALREADY in the bin, and
+  // it asks first only when there is something to lose. The server decides:
+  // if every document was filed to the firm's storage while the engagement was
+  // live (or it has none), the first call purges immediately, no dialog; if
+  // some were never filed, the call comes back with the count and the warning
+  // dialog opens, and only an explicit confirm retries with force.
+  const finishForever = (res: Awaited<ReturnType<typeof deleteEngagementForeverAction>>) => {
+    setForeverBusy(false);
+    if (!res.ok) {
+      toast.error(t("forever_failed"));
+      return;
+    }
+    if (res.purged) {
+      toast(t("toast_deleted_forever"), { description: title });
+      router.refresh();
+    } else {
+      setForeverUnfiled(res.unfiledCount);
+    }
+  };
+
+  const deleteForever: RowMenuItem = {
+    key: "delete_forever",
+    label: t("menu_delete_forever"),
+    icon: Trash2,
+    variant: "destructive",
+    onSelect: () => {
+      setForeverBusy(true);
+      void deleteEngagementForeverAction({ id: engagementId }).then(
+        finishForever,
+        () => setForeverBusy(false),
+      );
+    },
+  };
+
+  const confirmForever = () => {
+    setForeverUnfiled(null);
+    setForeverBusy(true);
+    void deleteEngagementForeverAction({ id: engagementId, force: true }).then(
+      finishForever,
+      () => setForeverBusy(false),
+    );
   };
 
   // The Stage picker. Every stage is offered, not just the ones this engagement
@@ -301,6 +349,7 @@ export function useEngagementRowMenu(args: {
     unarchive,
     restore,
     delete: del,
+    delete_forever: deleteForever,
   };
   const items: RowMenuItem[] = rowMenuItemKeys(state, canDelete).map(
     (k) => byKey[k],
@@ -340,25 +389,59 @@ export function useEngagementRowMenu(args: {
   };
 
   const dialog = (
-    <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("delete_title")}</DialogTitle>
-          <DialogDescription>{t("delete_desc")}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              {t("delete_cancel")}
+    <>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("delete_title")}</DialogTitle>
+            <DialogDescription>{t("delete_desc")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                {t("delete_cancel")}
+              </Button>
+            </DialogClose>
+            <Button type="button" variant="destructive" onClick={confirmDelete}>
+              <Trash2 className="size-4" />
+              {t("delete_confirm")}
             </Button>
-          </DialogClose>
-          <Button type="button" variant="destructive" onClick={confirmDelete}>
-            <Trash2 className="size-4" />
-            {t("delete_confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The unfiled-documents warning. Only ever opens when the probe found
+          documents that exist nowhere but Vylan — this delete has no undo. */}
+      <Dialog
+        open={foreverUnfiled != null}
+        onOpenChange={(o) => !o && setForeverUnfiled(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("forever_title")}</DialogTitle>
+            <DialogDescription>
+              {t("forever_desc", { count: foreverUnfiled ?? 0 })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={foreverBusy}>
+                {t("delete_cancel")}
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={foreverBusy}
+              onClick={confirmForever}
+            >
+              <Trash2 className="size-4" />
+              {t("forever_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 
   return { items, dialog };

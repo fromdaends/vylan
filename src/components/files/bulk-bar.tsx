@@ -25,6 +25,7 @@ import {
 import {
   bulkDeleteDocumentsAction,
   bulkMoveDocumentsAction,
+  restoreDocumentAction,
 } from "@/app/actions/documents";
 import { setDocumentsFolderAction } from "@/app/actions/folders";
 import { bulkSetVisibilityAction } from "@/app/actions/documents";
@@ -62,7 +63,7 @@ export function BulkBar({
   const router = useRouter();
   const selection = useFileSelection();
   const [pending, startTransition] = useTransition();
-  const [dialog, setDialog] = useState<null | "move" | "delete">(null);
+  const [dialog, setDialog] = useState<null | "move">(null);
   const [folderDialog, setFolderDialog] = useState<null | "rename" | "delete">(null);
 
   // "keep" is the explicit do-not-touch value. Bulk move must be able to set
@@ -170,16 +171,32 @@ export function BulkBar({
     });
   }
 
+  // No confirmation — same rule as the row menu and the drag-to-trash strip:
+  // deleting is a recoverable move to Recently deleted, so it happens
+  // immediately and the toast carries Undo instead of a dialog asking first.
   function submitDelete() {
+    // Snapshot before clear(): the undo closure must restore what WAS selected.
+    const deleted = [...targets];
     startTransition(async () => {
-      const res = await bulkDeleteDocumentsAction({ targets });
-      setDialog(null);
+      const res = await bulkDeleteDocumentsAction({ targets: deleted });
       selection?.clear();
       router.refresh();
       if (res.failed > 0) {
         toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
       } else if (res.ok) {
-        toast.success(t("bulk_deleted", { count: res.succeeded }));
+        toast.success(t("bulk_deleted", { count: res.succeeded }), {
+          action: {
+            label: t("undo"),
+            onClick: () => {
+              startTransition(async () => {
+                for (const tgt of deleted) {
+                  await restoreDocumentAction(tgt);
+                }
+                router.refresh();
+              });
+            },
+          },
+        });
       } else {
         toast.error(t("action_failed"));
       }
@@ -336,7 +353,8 @@ export function BulkBar({
             variant="ghost"
             size="sm"
             className="gap-1.5 text-destructive hover:text-destructive"
-            onClick={() => setDialog("delete")}
+            disabled={pending}
+            onClick={submitDelete}
           >
             <Trash2 className="size-3.5" aria-hidden />
             {t("action_delete")}
@@ -445,22 +463,6 @@ export function BulkBar({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialog === "delete"} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("bulk_delete_title", { count })}</DialogTitle>
-            <DialogDescription>{t("bulk_delete_help", { count })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialog(null)} disabled={pending}>
-              {t("cancel")}
-            </Button>
-            <Button variant="destructive" onClick={submitDelete} disabled={pending}>
-              {t("action_delete")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
