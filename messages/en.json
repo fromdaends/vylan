@@ -4495,7 +4495,20 @@
     "summary_ends_signature_request_sent": "completes when sent to sign",
     "summary_ends_all_docs_verified": "completes when documents verified",
     "skipped_chip": "Skipped",
-    "saved_back_toast": "Saved — \"{name}\" updated too"
+    "saved_back_toast": "Saved — \"{name}\" updated too",
+    "letter_title": "Engagement letter",
+    "letter_intro": "The document Vylan sends for signature when an automation says \"Send engagement letter\". Set it up once — a client who already signed one for the same work and year won't be asked again.",
+    "letter_lang_en": "English clients",
+    "letter_lang_fr": "French clients",
+    "letter_none": "No letter yet",
+    "letter_upload": "Upload PDF",
+    "letter_replace": "Replace",
+    "letter_remove": "Remove this letter",
+    "letter_saved": "Engagement letter saved",
+    "letter_removed": "Engagement letter removed",
+    "letter_error_pdf": "The engagement letter has to be a PDF.",
+    "letter_error_size": "That file is too large.",
+    "letter_hint_empty": "Until you add one, automations that send the engagement letter record it as skipped instead — nothing goes out to a client."
   },
   "Files": {
     "page_title": "Files",

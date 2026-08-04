@@ -215,6 +215,49 @@ describe("the GST walk (manual trigger) and onboarding (triple skip)", () => {
   });
 });
 
+describe("the engagement letter must not look like the return going out", () => {
+  // THE TRAP (chunk 3): the return flow sends the letter on entering
+  // collecting, and leaves in_preparation on `signature_request_sent`. If the
+  // letter's own request counted, preparation would end the instant it began.
+  // stage-sync answers signatureEverSent from NON-letter requests only; these
+  // tests pin the resolver's half of that contract.
+  const wf = snap(returnTypeWorkflow());
+  const reviewed = facts({ ...APPROVED, gates: { in_review: GATE } });
+
+  it("stays in preparation while only the letter has gone out", () => {
+    // signatureEverSent is false because the sole request is the letter.
+    expect(resolveWorkflowStage(wf, reviewed)).toBe("in_preparation");
+  });
+
+  it("moves on once the RETURN is sent for signature", () => {
+    expect(
+      resolveWorkflowStage(wf, { ...reviewed, signatureEverSent: true }),
+    ).toBe("awaiting_signature");
+  });
+
+  it("still refuses to finish while the letter itself is unsigned", () => {
+    // hasOutstandingSignature counts EVERY request, letter included — an
+    // engagement whose letter was never signed is not a finished agreement.
+    const signedReturn = {
+      ...reviewed,
+      signatureEverSent: true,
+      completedSignatureCount: 1,
+      hasOutstandingSignature: true,
+    };
+    expect(resolveWorkflowStage(wf, signedReturn)).toBe("awaiting_signature");
+  });
+
+  it("blocks on an unsettled letter checklist item too", () => {
+    const signedReturn = {
+      ...reviewed,
+      signatureEverSent: true,
+      completedSignatureCount: 1,
+      signatureItemsUnsettled: 1,
+    };
+    expect(resolveWorkflowStage(wf, signedReturn)).toBe("awaiting_signature");
+  });
+});
+
 describe("pendingConfirmGate — what surfaces as the approval prompt", () => {
   it("names the held transition once its condition is met", () => {
     const wf = snap(returnTypeWorkflow());

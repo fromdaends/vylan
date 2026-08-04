@@ -188,13 +188,53 @@ export async function runWorkflowStageEffects(
           );
           actionsRun.push(action);
         } else if (action === "send_engagement_letter") {
-          // Chunk 3 wires the real sender (a firm letter template + saved
-          // placement). Until then the action records an honest skip.
-          await markEvent(
-            sb,
-            { engagement_id: input.engagementId, stage, action },
-            { status: "skipped", detail: { reason: "not_configured" } },
-          );
+          // Dynamic import for the same reason send_invoice uses one: the
+          // letter sender reaches back into the signature + item layers,
+          // which re-enter the stage engine.
+          const { sendEngagementLetter } = await import("./letter");
+          try {
+            const res = await sendEngagementLetter({
+              engagementId: input.engagementId,
+              firmId: input.firmId,
+            });
+            if (res.ok) {
+              // A new signature ITEM exists, which the resolver counts.
+              outcome.factsChanged = true;
+              actionsRun.push(action);
+            } else {
+              await markEvent(
+                sb,
+                { engagement_id: input.engagementId, stage, action },
+                {
+                  // already_signed / already_sent are the guard working, not
+                  // a failure: the client has the letter, which is the point.
+                  status:
+                    res.reason === "already_signed" ||
+                    res.reason === "already_sent" ||
+                    res.reason === "not_configured"
+                      ? "skipped"
+                      : "failed",
+                  detail: {
+                    reason: res.reason,
+                    ...(res.detail ? { detail: res.detail } : {}),
+                  },
+                },
+              );
+              if (
+                res.reason === "already_signed" ||
+                res.reason === "already_sent"
+              ) {
+                actionsRun.push(action);
+              }
+            }
+          } catch (e) {
+            console.error("[workflow] send_engagement_letter failed:", e);
+            await markEvent(
+              sb,
+              { engagement_id: input.engagementId, stage, action },
+              { status: "failed", detail: { reason: "exception" } },
+            );
+          }
         } else if (action === "send_invoice") {
           // Dynamic import breaks a real cycle: invoices/send re-syncs the
           // stage after raising its invoice (send → stage-sync → effects).

@@ -4495,7 +4495,20 @@
     "summary_ends_signature_request_sent": "se termine à l'envoi pour signature",
     "summary_ends_all_docs_verified": "se termine quand les documents sont vérifiés",
     "skipped_chip": "Sautée",
-    "saved_back_toast": "Enregistré — « {name} » mis à jour aussi"
+    "saved_back_toast": "Enregistré — « {name} » mis à jour aussi",
+    "letter_title": "Lettre de mission",
+    "letter_intro": "Le document que Vylan envoie pour signature lorsqu'une automatisation dit « Envoyer la lettre de mission ». À configurer une seule fois — un client qui en a déjà signé une pour le même mandat et la même année ne sera pas sollicité de nouveau.",
+    "letter_lang_en": "Clients anglophones",
+    "letter_lang_fr": "Clients francophones",
+    "letter_none": "Aucune lettre",
+    "letter_upload": "Téléverser un PDF",
+    "letter_replace": "Remplacer",
+    "letter_remove": "Retirer cette lettre",
+    "letter_saved": "Lettre de mission enregistrée",
+    "letter_removed": "Lettre de mission retirée",
+    "letter_error_pdf": "La lettre de mission doit être un PDF.",
+    "letter_error_size": "Ce fichier est trop volumineux.",
+    "letter_hint_empty": "Tant qu'il n'y en a pas, les automatisations qui envoient la lettre de mission l'inscrivent comme sautée — rien n'est envoyé au client."
   },
   "Files": {
     "page_title": "Fichiers",
