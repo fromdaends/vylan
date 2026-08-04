@@ -29,6 +29,10 @@ import {
 } from "@/app/actions/items";
 import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
+import { listEngagementItems } from "@/lib/db/engagements";
+import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
+import { StageChip } from "@/components/engagements/stage-chip";
+import { engagementStatusVariant } from "@/lib/engagements/status-pill";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { CommentThread } from "@/components/engagements/comment-thread";
@@ -265,6 +269,11 @@ export default async function EngagementDetailPage({
   // returns a signed copy) render in their own "Signatures" group, separate
   // from the document-collection checklist.
   const signatureItems = items.filter((i) => i.kind === "signature");
+
+  // The engagement's PRICED lines (#1274) — Canopy's "Services" column on the
+  // details card. Awaited on its own rather than in a batch above because it
+  // is one small indexed read and everything above it was already in flight.
+  const engagementItems = await listEngagementItems(engagement.id);
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
   // SECOND batch: everything keyed off engagement/firm fields, fanned out in
@@ -1073,14 +1082,9 @@ export default async function EngagementDetailPage({
                 {relHeaderLine}
               </Link>
             )}
-            {engagement.due_date && (
-              <span className="text-muted-foreground">
-                ·{" "}
-                {t("due", {
-                  date: formatDate(engagement.due_date, locale, "medium"),
-                })}
-              </span>
-            )}
+            {/* The due date moved into the Engagement details card, which
+                owns every date now. Printing it here as well was the same
+                fact in two places two inches apart. */}
             {engagement.reminders_paused && (
               <Badge variant="outline" className="text-xs">
                 <BellOff className="size-3" />
@@ -1358,6 +1362,64 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
+
+      {/* ── THE FACTS, IN CANOPY'S SHAPE ──────────────────────────────────
+          Founder, with thirteen screenshots: "I want to copy their UI and the
+          actual process itself... the way it's structured."
+
+          Three columns that never move — who owes a signature, when it
+          happened, what we are doing — replacing a header that answered all
+          three by being read in full. The header above keeps the CONTROLS
+          (stage, assignee, the kebab); this card holds the FACTS. */}
+      <EngagementDetailsCard
+        locale={locale}
+        people={
+          <div className="text-sm">
+            <div className="font-medium text-foreground">
+              {assignee ? userDisplayLabel(assignee) : t("unassigned")}
+            </div>
+            {client && (
+              <div className="mt-0.5 text-muted-foreground">
+                {client.display_name}
+              </div>
+            )}
+          </div>
+        }
+        // Vylan has ONE signer — the client — and N documents for them to
+        // sign (SignWell is wired to a single signer). So the count is
+        // documents, as Canopy's is, and the row is the person.
+        signers={
+          signatureItems.length > 0 && client
+            ? [
+                {
+                  name: client.display_name,
+                  signed: signatureItems.every((i) => i.status === "approved"),
+                },
+              ]
+            : []
+        }
+        sentAt={engagement.sent_at ?? null}
+        // A sent engagement has begun; a draft has not, and Canopy words that
+        // exact state "On acceptance".
+        startsAt={engagement.sent_at ?? null}
+        // ⚠️ ALWAYS NULL TODAY. Vylan has no client-acceptance step until the
+        // creation wizard's later phases; deriving it from sent_at would claim
+        // a client agreed to something they were only shown.
+        acceptedAt={null}
+        dueDate={engagement.due_date ?? null}
+        // The engagement's priced line names — Canopy's Services column. Loaded
+        // here rather than by the card so the card stays a pure presenter.
+        services={engagementItems.map((i) => i.name).filter(Boolean)}
+        statusChip={
+          engagement.stage ? (
+            <StageChip stage={engagement.stage} />
+          ) : (
+            <Badge variant={engagementStatusVariant(engagement.status)}>
+              {tStatus(engagement.status)}
+            </Badge>
+          )
+        }
+      />
 
       {/* Billing → New invoice arrives as ?panel=invoice. Mounted HERE, at page
           level, rather than inside the header kebab: Radix unmounts the menu's
