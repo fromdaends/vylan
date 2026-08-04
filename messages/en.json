@@ -2723,6 +2723,7 @@
     "details_on_acceptance": "On acceptance",
     "details_services": "Services",
     "details_no_services": "No services on this engagement yet.",
+    "wizard_save": "Save",
     "engagement_panels_label": "Engagement views",
     "panel_tasks": "Manage tasks",
     "panel_services": "Services",

@@ -2723,6 +2723,7 @@
     "details_on_acceptance": "À l'acceptation",
     "details_services": "Services",
     "details_no_services": "Aucun service sur ce mandat pour l'instant.",
+    "wizard_save": "Enregistrer",
     "engagement_panels_label": "Vues du mandat",
     "panel_tasks": "Gérer les tâches",
     "panel_services": "Services",
