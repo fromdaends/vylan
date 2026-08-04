@@ -327,6 +327,7 @@ export type CreateEngagementInput = {
   // every engagement created before this shipped.
   service_items?: {
     name: string;
+    service_id?: string | null;
     description: string | null;
     rate_cents: number | null;
     rate_type: "item" | "hour";
@@ -562,6 +563,7 @@ export async function createEngagementWithItems(
         engagement_id: (engagement as Engagement).id,
         firm_id: u.firm_id,
         name: it.name,
+        service_id: it.service_id ?? null,
         description: it.description,
         rate_cents: it.rate_cents,
         rate_type: it.rate_type,

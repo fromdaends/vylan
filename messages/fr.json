@@ -2708,7 +2708,9 @@
     "views_more": "Autres vues",
     "tasks_panel_failed": "Impossible de charger ces tâches.",
     "tasks_panel_open_engagement": "Ouvrir le mandat à la place",
-    "tasks_panel_loading": "Chargement des tâches"
+    "tasks_panel_loading": "Chargement des tâches",
+    "item_service": "Service",
+    "item_service_none": "Hors catalogue"
   },
   "Attention": {
     "metric_active": "Actifs",

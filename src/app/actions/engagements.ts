@@ -158,6 +158,8 @@ const CreateSchema = z
       .array(
         z.object({
           name: z.string().trim().min(1).max(200),
+          // Provenance only — the line keeps its own copied values.
+          service_id: z.string().uuid().nullable().optional(),
           description: z.string().trim().max(2000).nullable().default(null),
           // Cents. Nullable = "not fixed yet", never 0.
           rate_cents: z.number().int().min(0).max(1_000_000_00).nullable(),
@@ -256,6 +258,7 @@ export async function createEngagementAction(
     invoice_description?: string | null;
     service_items?: {
       name: string;
+      service_id?: string | null;
       description: string | null;
       rate_cents: number | null;
       rate_type: "item" | "hour";

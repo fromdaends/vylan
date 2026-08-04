@@ -2708,7 +2708,9 @@
     "views_more": "More views",
     "tasks_panel_failed": "Couldn't load these tasks.",
     "tasks_panel_open_engagement": "Open the engagement instead",
-    "tasks_panel_loading": "Loading tasks"
+    "tasks_panel_loading": "Loading tasks",
+    "item_service": "Service",
+    "item_service_none": "Not from your catalogue"
   },
   "Attention": {
     "metric_active": "Active",

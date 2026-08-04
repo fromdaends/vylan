@@ -33,6 +33,19 @@ export type EngagementItem = {
   id: string;
   /** What the client reads on the proposal, e.g. "Monthly Bookkeeping". */
   name: string;
+  /**
+   * Which catalogue entry this line came from (migration 1480).
+   *
+   * PROVENANCE ONLY — the line keeps its own copied name and price and never
+   * reads through. Canopy holds the same line: their folder templates say
+   * "Edited folder templates do not update any pre-existing folder templates
+   * that are already applied", and the reason is the same one that matters
+   * here — editing the catalogue must not rewrite a proposal a client has
+   * already agreed to.
+   *
+   * NULL = a bespoke line, which is the ordinary case for one-off work.
+   */
+  serviceId: string | null;
   description: string | null;
   /**
    * Integer cents, or NULL for "not fixed yet".
@@ -54,6 +67,7 @@ export type EngagementItemDraft = Omit<EngagementItem, "id"> & { id?: string };
 export function emptyItem(): EngagementItemDraft {
   return {
     name: "",
+    serviceId: null,
     description: null,
     rateCents: null,
     rateType: "item",
