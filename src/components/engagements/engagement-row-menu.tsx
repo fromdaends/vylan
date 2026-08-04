@@ -30,6 +30,7 @@ import {
   unarchiveEngagementAction,
   softDeleteEngagementAction,
   restoreEngagementAction,
+  deleteEngagementForeverAction,
 } from "@/app/actions/engagements";
 import {
   rowMenuItemKeys,
@@ -119,6 +120,18 @@ export function useEngagementRowMenu(args: {
   const tStage = useTranslations("Stage");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // "Delete forever" dialog state. Non-null = open: "checking" while the
+  // server decides whether anything would be lost, a number when it found that
+  // many documents never filed to the firm's storage, "deleting" while the
+  // confirmed purge runs. The dialog opens SYNCHRONOUSLY from onSelect — the
+  // same beat as the soft-delete confirm above, which is the one
+  // menu-into-dialog sequence this codebase knows survives Radix's focus
+  // return (see document-actions-menu's onCloseAutoFocus note). Opening it
+  // only after the server round-trip looked cleaner but the late open lands
+  // mid menu-close and the dialog can dismiss itself instantly.
+  const [forever, setForever] = useState<null | "checking" | "deleting" | number>(
+    null,
+  );
   const { setStage } = useStageOverride(engagementId);
 
   // Optimistic path: drop the row now + toast now, the server catches up.
@@ -196,6 +209,61 @@ export function useEngagementRowMenu(args: {
     icon: Trash2,
     variant: "destructive",
     onSelect: () => setConfirmOpen(true),
+  };
+
+  // "Delete forever" — only offered on a row that is ALREADY in the bin, and
+  // it asks first only when there is something to lose. The server decides:
+  // if every document was filed to the firm's storage while the engagement was
+  // live (or it has none), the first call purges outright and the dialog just
+  // closes; if some never were, the call comes back with the count, the dialog
+  // becomes the warning, and only an explicit confirm retries with force.
+  const finishForever = (
+    res: Awaited<ReturnType<typeof deleteEngagementForeverAction>>,
+  ) => {
+    if (!res.ok) {
+      setForever(null);
+      toast.error(t("forever_failed"));
+      return;
+    }
+    if (res.purged) {
+      setForever(null);
+      toast(t("toast_deleted_forever"), { description: title });
+      router.refresh();
+    } else {
+      // Only morph into the warning if the dialog is still up — the person may
+      // have dismissed it while the check was in flight, and a dialog that
+      // reopens itself after being closed is exactly the kind of ghost this
+      // state machine exists to prevent.
+      setForever((prev) => (prev === "checking" ? res.unfiledCount : prev));
+    }
+  };
+
+  const deleteForever: RowMenuItem = {
+    key: "delete_forever",
+    label: t("menu_delete_forever"),
+    icon: Trash2,
+    variant: "destructive",
+    onSelect: () => {
+      setForever("checking");
+      void deleteEngagementForeverAction({ id: engagementId }).then(
+        finishForever,
+        () => {
+          setForever(null);
+          toast.error(t("forever_failed"));
+        },
+      );
+    },
+  };
+
+  const confirmForever = () => {
+    setForever("deleting");
+    void deleteEngagementForeverAction({ id: engagementId, force: true }).then(
+      finishForever,
+      () => {
+        setForever(null);
+        toast.error(t("forever_failed"));
+      },
+    );
   };
 
   // The Stage picker. Every stage is offered, not just the ones this engagement
@@ -301,6 +369,7 @@ export function useEngagementRowMenu(args: {
     unarchive,
     restore,
     delete: del,
+    delete_forever: deleteForever,
   };
   const items: RowMenuItem[] = rowMenuItemKeys(state, canDelete).map(
     (k) => byKey[k],
@@ -340,25 +409,74 @@ export function useEngagementRowMenu(args: {
   };
 
   const dialog = (
-    <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("delete_title")}</DialogTitle>
-          <DialogDescription>{t("delete_desc")}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              {t("delete_cancel")}
+    <>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("delete_title")}</DialogTitle>
+            <DialogDescription>{t("delete_desc")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                {t("delete_cancel")}
+              </Button>
+            </DialogClose>
+            <Button type="button" variant="destructive" onClick={confirmDelete}>
+              <Trash2 className="size-4" />
+              {t("delete_confirm")}
             </Button>
-          </DialogClose>
-          <Button type="button" variant="destructive" onClick={confirmDelete}>
-            <Trash2 className="size-4" />
-            {t("delete_confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete forever. Opens in a "checking" beat, then either closes itself
+          (everything was filed — purged, no question asked) or becomes the
+          unfiled-documents warning — this delete has no undo. */}
+      <Dialog open={forever != null} onOpenChange={(o) => !o && setForever(null)}>
+        <DialogContent
+          // The dialog opens from a menu item, and the menu's close beat —
+          // focus returning to the trigger, the dismissable-layer teardown —
+          // lands OUTSIDE the just-mounted dialog and silently dismisses it
+          // (observed live: mounted, gone 250ms later). The repo has hit this
+          // Radix race before (see document-actions-menu). Refusing
+          // outside-dismissal both dodges the race and is right for a
+          // destructive confirm: it closes on Cancel, Escape, or a decision —
+          // not on a stray click.
+          onInteractOutside={(e) => e.preventDefault()}
+          onFocusOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("forever_title")}</DialogTitle>
+            <DialogDescription>
+              {typeof forever === "number"
+                ? t("forever_desc", { count: forever })
+                : t("forever_checking")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={forever === "deleting"}
+              >
+                {t("delete_cancel")}
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={typeof forever !== "number"}
+              onClick={confirmForever}
+            >
+              <Trash2 className="size-4" />
+              {t("forever_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 
   return { items, dialog };

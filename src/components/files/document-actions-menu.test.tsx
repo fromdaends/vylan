@@ -23,6 +23,7 @@ vi.mock("@/app/actions/documents", () => ({
   deleteDocumentAction: vi.fn(async () => ({ ok: true })),
   moveDocumentAction: vi.fn(async () => ({ ok: true })),
   renameDocumentAction: vi.fn(async () => ({ ok: true })),
+  restoreDocumentAction: vi.fn(async () => ({ ok: true })),
   setDocumentVisibilityAction: vi.fn(async () => ({ ok: true })),
 }));
 
@@ -74,6 +75,21 @@ describe("DocumentRowContextMenu", () => {
     fireEvent.contextMenu(screen.getByText("THE ROW"));
     fireEvent.click(screen.getByText("action_rename"));
     expect(screen.getByText("rename_title")).toBeInTheDocument();
+  });
+
+  // Delete moves to the recycle bin IMMEDIATELY — no "are you sure" dialog
+  // (it's recoverable for 30 days, and the toast carries Undo). Pins both that
+  // the action fires and that no confirmation ever renders.
+  it("delete fires straight away with no confirmation dialog", async () => {
+    const { deleteDocumentAction } = await import("@/app/actions/documents");
+    renderRow();
+    fireEvent.contextMenu(screen.getByText("THE ROW"));
+    fireEvent.click(screen.getByText("action_delete"));
+    expect(screen.queryByText("delete_title")).toBeNull();
+    expect(deleteDocumentAction).toHaveBeenCalledWith({
+      source: "imported",
+      id: "d1",
+    });
   });
 
   // Files HOME wraps a whole row LINK in this menu, so the recent-files rows

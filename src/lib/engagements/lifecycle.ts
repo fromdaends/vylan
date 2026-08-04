@@ -106,14 +106,20 @@ export type EngagementLifecycleState = "active" | "archived" | "deleted";
 // (engagement-row-menu.tsx) maps these keys to handlers + icons.
 //   active   → Open, Archive, [Delete]
 //   archived → Open, Unarchive, [Delete]
-//   deleted  → Open, [Restore]
-// Delete / Restore appear only for owners (canDelete); Archive / Unarchive are
-// available to everyone.
+//   deleted  → Open, [Restore, Delete forever]
+// Delete / Restore / Delete forever appear only for owners (canDelete);
+// Archive / Unarchive are available to everyone.
+//
+// delete_forever is the ONE hard delete reachable from the UI, and only from a
+// row that is already soft-deleted — it skips the rest of the 30-day wait, it
+// never skips the trash. Its handler warns first when the engagement still
+// holds client documents that were never filed to the firm's storage.
 export function rowMenuItemKeys(
   state: EngagementLifecycleState,
   canDelete: boolean,
-): ("open" | "archive" | "unarchive" | "restore" | "delete")[] {
-  if (state === "deleted") return canDelete ? ["open", "restore"] : ["open"];
+): ("open" | "archive" | "unarchive" | "restore" | "delete" | "delete_forever")[] {
+  if (state === "deleted")
+    return canDelete ? ["open", "restore", "delete_forever"] : ["open"];
   if (state === "archived")
     return canDelete ? ["open", "unarchive", "delete"] : ["open", "unarchive"];
   return canDelete ? ["open", "archive", "delete"] : ["open", "archive"];

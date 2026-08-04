@@ -26,6 +26,8 @@ describe("resolveFilesTab", () => {
       { status: "approved" },
       { sort: "date" },
       { page: "2" },
+      { view: "files" },
+      { deleted: "1" },
     ]) {
       expect(resolveFilesTab(sp), JSON.stringify(sp)).toBe("browse");
     }

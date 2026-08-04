@@ -21,6 +21,12 @@ const BROWSE_STATE_KEYS = [
   "status",
   "sort",
   "page",
+  // The flat "view all files" list and the recycle bin are Browse positions
+  // too. Both were missing from this list, so /files?deleted=1 — the only link
+  // to the files' Recently deleted — landed on Home and the bin was
+  // unreachable.
+  "view",
+  "deleted",
 ] as const;
 
 export function resolveFilesTab(
