@@ -46,7 +46,11 @@ export const ENGAGEMENT_VIEWS: EngagementView[] = [
  *
  * Completed needs no home of its own: All engagements contains it.
  */
-export const TAB_VIEWS: EngagementView[] = ["active", "drafts", "all"];
+// Order is the founder's: "at the top dividers put drafts after All
+// engagements." It is Canopy's order too — Active, All Engagements, then
+// Drafts — and it reads as narrowest-to-widest-to-unsent rather than putting
+// the not-yet-sent pile in the middle of the two live lists.
+export const TAB_VIEWS: EngagementView[] = ["active", "all", "drafts"];
 
 /**
  * The overflow menu, in the order it reads. Ready to review is a slice of live
