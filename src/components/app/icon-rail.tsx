@@ -27,7 +27,11 @@ import {
 import { openCommandPalette } from "@/components/app/sidebar-search";
 import { logoutAction } from "@/app/actions/auth";
 import { isNavItemActive, isPanelItemActive } from "@/lib/navigation/active-nav";
-import { RailFlyout, type FlyoutItem } from "@/components/app/rail-flyout";
+import {
+  RailFlyout,
+  type FlyoutAction,
+  type FlyoutItem,
+} from "@/components/app/rail-flyout";
 
 // The primary desktop navigation: a FIXED 76px icon rail (Canopy-style), from
 // the founder's Claude Design import. It replaced the old expandable 64/256px
@@ -66,11 +70,17 @@ export type RailItem = {
    * whichever one happened to be picked as the default. `href` stays set — it
    * is what the rail highlights against.
    */
-  panel?: { title: string; items: FlyoutItem[] };
+  panel?: { title: string; items: FlyoutItem[]; actions?: FlyoutAction[] };
 };
+
+// The + button's panel is keyed like a rail item so it can reuse the open/close,
+// focus and page-push machinery unchanged — but it is not a destination, so it
+// gets a sentinel that can never collide with a real route.
+const CREATE_PANEL_KEY = "__create__";
 
 export function IconRail({
   items,
+  createPanel,
   footerItem,
   navLabel,
   labels,
@@ -80,6 +90,15 @@ export function IconRail({
   brandColor,
 }: {
   items: RailItem[];
+  /**
+   * What the + button opens. Absent → + stays a plain link to its href.
+   *
+   * The + used to navigate straight to /engagements/new. That made the rail's
+   * most prominent control answer one question ("a new engagement?") when the
+   * thing you actually want to make varies — which is exactly what Canopy's
+   * Create panel solves by asking first.
+   */
+  createPanel?: { title: string; items: FlyoutItem[]; actions?: FlyoutAction[] };
   // Pinned below the scrolling nav, above the account avatar. For a destination
   // that must ALWAYS be visible and labelled whatever the viewport height: the
   // nav above is overflow-y-auto with a hidden scrollbar (see its comment), so a
@@ -120,7 +139,16 @@ export function IconRail({
 
   // Narrowed once here so the render below can read item.panel without a
   // non-null assertion on every line.
-  const panelItems = items.filter(
+  const createPanelItem: RailItem | null = createPanel
+    ? { href: CREATE_PANEL_KEY, label: createPanel.title, icon: Plus, panel: createPanel }
+    : null;
+
+  const panelItems = [
+    ...items,
+    // The + panel rides the same list, so it is mounted (and therefore
+    // animatable) on exactly the same terms as every section panel.
+    ...(createPanelItem ? [createPanelItem] : []),
+  ].filter(
     (i): i is RailItem & { panel: NonNullable<RailItem["panel"]> } =>
       i.panel != null,
   );
@@ -188,15 +216,47 @@ export function IconRail({
         />
       </Link>
 
-      {/* New engagement — the rail's primary action, in brand blue. */}
-      <Link
-        href="/engagements/new"
-        aria-label={tHome("new_engagement")}
-        title={tHome("new_engagement")}
-        className="mt-8 inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-      >
-        <Plus className="size-[18px]" aria-hidden />
-      </Link>
+      {/* Create — the rail's primary action, in brand blue. OPENS rather than
+          navigates: it used to go straight to /engagements/new, which answered
+          one question when the thing you want to make varies. */}
+      {createPanel ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            panelTriggerRef.current = e.currentTarget;
+            // detail === 0 means Enter/Space rather than a pointer — the same
+            // modality test the section panels use, so a mouse user never picks
+            // up a focus ring on a row they only walked past.
+            setOpenedViaKeyboard(e.detail === 0);
+            setPanel((current) =>
+              current?.href === CREATE_PANEL_KEY ? null : createPanelItem,
+            );
+          }}
+          aria-label={createPanel.title}
+          title={createPanel.title}
+          aria-expanded={panel?.href === CREATE_PANEL_KEY}
+          className="mt-8 inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+        >
+          <Plus
+            aria-hidden
+            className={cn(
+              "size-[18px] transition-transform duration-200",
+              // Turns into an x. The button is the only way to shut the panel
+              // from the rail, so it has to look like a toggle while it is open.
+              panel?.href === CREATE_PANEL_KEY && "rotate-45",
+            )}
+          />
+        </button>
+      ) : (
+        <Link
+          href="/engagements/new"
+          aria-label={tHome("new_engagement")}
+          title={tHome("new_engagement")}
+          className="mt-8 inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+        >
+          <Plus className="size-[18px]" aria-hidden />
+        </Link>
+      )}
 
       {/* Search — opens the same command palette as Cmd/Ctrl-K. */}
       <button
@@ -254,6 +314,7 @@ export function IconRail({
           open={panel?.href === item.href}
           title={item.panel.title}
           items={item.panel.items}
+          actions={item.panel.actions}
           // isPanelItemActive, NOT isNavItemActive. The rail's rule deliberately
           // treats /engagements as part of /work so the section stays lit across
           // both — correct one level up, wrong here, where it would match Tasks

@@ -47,7 +47,8 @@ export default async function WorkPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ due?: string }>;
+  // `new` arrives from the rail's Create panel and means "open the task form".
+  searchParams: Promise<{ due?: string; new?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -128,6 +129,7 @@ export default async function WorkPage({
           {t("work_title")}
         </h1>
         <AddTaskDialog
+          defaultOpen={sp.new === "1"}
           clients={clients.map((c) => ({
             id: c.id,
             display_name: c.display_name,

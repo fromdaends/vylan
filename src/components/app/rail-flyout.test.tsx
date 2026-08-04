@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, fireEvent, cleanup, within } from "@testing-library/react";
-import { ListTodo, FileText } from "lucide-react";
+import { CircleCheckBig, UserPlus } from "lucide-react";
 
 // The panel links through the locale-aware router, which cannot resolve under
 // vitest. Only the href matters here, so a plain anchor is a faithful stand-in.
@@ -28,14 +28,18 @@ const ITEMS = [
     href: "/work",
     label: "Tasks",
     description: "Everything the firm has to do",
-    icon: ListTodo,
   },
   {
     href: "/engagements",
     label: "Engagements",
     description: "Jobs with a client portal",
-    icon: FileText,
   },
+];
+
+// Canopy's three-up shortcut row, above the list.
+const ACTIONS = [
+  { href: "/work?new=1", label: "Create task", icon: CircleCheckBig },
+  { href: "/clients?new=1", label: "Add client", icon: UserPlus },
 ];
 
 function renderPanel(overrides: Partial<Parameters<typeof RailFlyout>[0]> = {}) {
@@ -197,5 +201,62 @@ describe("RailFlyout", () => {
     const { getByRole } = renderPanel({ autoFocus: true });
     const first = within(getByRole("dialog")).getByRole("link", { name: /Tasks/ });
     expect(document.activeElement).toBe(first);
+  });
+});
+
+// ── Canopy's shape ────────────────────────────────────────────────────────
+//
+// The founder sent Canopy's own Create panel as the reference. Two things
+// define its list and both are load-bearing: the label carries the LINK COLOUR
+// with the chevron INLINE after the words (not parked at the right edge like a
+// settings menu), and there are NO ICONS. The icons were a deliberate earlier
+// fix for "the text ui looks bad" — this reverses that on purpose, so these
+// tests exist to stop a future session helpfully restoring them.
+describe("RailFlyout — the Canopy row", () => {
+  it("shows the label and its description, with no icon", () => {
+    const { getByRole } = renderPanel();
+    const row = getByRole("link", { name: /Tasks/ });
+    expect(row).toHaveTextContent("Tasks");
+    expect(row).toHaveTextContent("Everything the firm has to do");
+    // One chevron, and nothing else drawn. An icon block would be a second.
+    expect(row.querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("keeps the chevron visible rather than revealing it on hover", () => {
+    // A chevron that only appears under the cursor is an answer to "is this
+    // clickable". Canopy's is part of the sentence, so it is always there.
+    const { getByRole } = renderPanel();
+    const chevron = getByRole("link", { name: /Tasks/ }).querySelector("svg");
+    expect(chevron?.getAttribute("class") ?? "").not.toContain("opacity-0");
+  });
+});
+
+describe("RailFlyout — the action strip", () => {
+  it("renders a round button per action, linking where it says", () => {
+    const { getByRole } = renderPanel({ actions: ACTIONS });
+    expect(getByRole("link", { name: "Create task" })).toHaveAttribute(
+      "href",
+      "/work?new=1",
+    );
+    expect(getByRole("link", { name: "Add client" })).toHaveAttribute(
+      "href",
+      "/clients?new=1",
+    );
+  });
+
+  it("closes the panel when an action is taken", () => {
+    // Leaving it open behind the page you just navigated to would cover the
+    // thing you asked for.
+    const { getByRole, onClose } = renderPanel({ actions: ACTIONS });
+    fireEvent.click(getByRole("link", { name: "Add client" }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("draws no strip at all when a panel has no actions", () => {
+    // The section panels (Work) are a plain list — an empty strip would leave a
+    // rule and a gap above the first row.
+    const { queryByRole } = renderPanel();
+    expect(queryByRole("link", { name: "Create task" })).toBeNull();
+    expect(queryByRole("link", { name: "Add client" })).toBeNull();
   });
 });

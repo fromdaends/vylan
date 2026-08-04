@@ -20,12 +20,12 @@ import {
   FolderOpen,
   Gauge,
   LayoutDashboard,
-  ListTodo,
   LogOut,
   Receipt,
   Settings,
   Sparkles,
   UserCircle,
+  UserPlus,
   Users,
   Users2,
 } from "lucide-react";
@@ -127,6 +127,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
+  const tHome = useTranslations("Home");
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
   // Routes that draw their own full-width canvas. Exact match on purpose:
@@ -196,9 +197,11 @@ export function AppShell({
       // lists and neither is the obvious default, so it asks which — landing
       // somebody on Tasks when they wanted Engagements is a click and a page
       // load to undo.
-      // Each row carries an icon and one line on what is inside. Two bare
-      // words in a 256px column is a list with nothing to look at, which is
-      // what the founder meant by "the text ui looks bad".
+      // Each row is a blue label with the chevron inline and one line under it
+      // saying what is inside. The rows USED to carry an icon block as well —
+      // that was the fix for "the text ui looks bad", and it is deliberately
+      // gone now: the founder sent Canopy's own Create panel as the reference
+      // and it has no icons. Do not put them back without asking.
       panel: {
         title: labels.work,
         items: [
@@ -206,13 +209,11 @@ export function AppShell({
             href: "/work",
             label: labels.workTasks,
             description: labels.workTasksHint,
-            icon: ListTodo,
           },
           {
             href: "/engagements",
             label: labels.workEngagements,
             description: labels.workEngagementsHint,
-            icon: FileText,
           },
         ],
       },
@@ -245,6 +246,53 @@ export function AppShell({
           icon-rail.tsx for why it doesn't collapse and has no sub-menus. */}
       <IconRail
         items={railNav}
+        // What the + opens. Canopy's shape: the two things you reach for most as
+        // round buttons, then the longer list underneath.
+        //
+        // The BUTTONS navigate to the page that already owns the dialog and let
+        // it open itself (?new=1) rather than opening one here. AddTaskDialog
+        // needs the client and member lists and ClientFormDialog needs the
+        // teammates; loading either in this shell would put that cost on every
+        // page render for a panel that is shut almost all of the time.
+        //
+        // NO "Client Request" button, deliberately. Canopy has one; Vylan has no
+        // standalone document-request object — asking a client for documents is
+        // what an engagement's checklist IS — and inventing one here would mean a
+        // data model, a portal surface and a migration. The founder's call was to
+        // drop it for now rather than ship a button that half-means it.
+        createPanel={{
+          title: tHome("create_title"),
+          actions: [
+            { href: "/work?new=1", label: tHome("create_task"), icon: CircleCheckBig },
+            { href: "/clients?new=1", label: tHome("create_client"), icon: UserPlus },
+          ],
+          items: [
+            {
+              href: "/engagements/new",
+              label: tHome("create_engagement"),
+              description: tHome("create_engagement_hint"),
+            },
+            {
+              // Plain /billing, NOT ?new=1: the invoice picker renders nothing
+              // at all for a firm with no payment rails connected, so an
+              // auto-open would silently do nothing on exactly the firms least
+              // likely to know why.
+              href: "/billing",
+              label: tHome("create_invoice"),
+              description: tHome("create_invoice_hint"),
+            },
+            {
+              href: "/templates",
+              label: tHome("create_template"),
+              description: tHome("create_template_hint"),
+            },
+            {
+              href: "/clients/import",
+              label: tHome("create_import"),
+              description: tHome("create_import_hint"),
+            },
+          ],
+        }}
         // Firm is PINNED below the list, not in it. Added to the list first, it
         // became the ninth item, fell past the fold of the rail's hidden-scrollbar
         // nav, and rendered as an unlabelled glyph pressed against the avatar.
