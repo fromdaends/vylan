@@ -183,6 +183,34 @@ client members / "who works on it"; settings panels wherever they appear; the
 document row, the client picker, the money cell, the status pill. If two files
 would both need editing to answer one founder sentence, they are one concept.
 
+### TASKS ARE ONE LIST — they surface everywhere the client does
+
+A task belongs to a **client**; an engagement is optional (migration 1350,
+`engagement_tasks.client_id`). That makes "the client's tasks" and "this
+engagement's tasks" two VIEWS of one list, not two features.
+
+**The rule:** a task created anywhere must appear on every surface that shows
+that client's work — the client profile's Tasks card, the engagement it belongs
+to (when it has one), and the firm-wide Work list. Nobody re-enters a task to
+make it show up somewhere else, and no surface keeps its own copy or its own
+notion of status.
+
+**How to apply:**
+- Read tasks through `src/lib/db/engagement-tasks.ts`. If a surface needs a cut
+  that file doesn't expose yet (by client, by assignee), ADD a reader there —
+  never query `engagement_tasks` directly from a page or component.
+- Status labels, the status dot colours and the due-date formatting live in ONE
+  shared component. "In progress" must not be accent on one screen and amber on
+  another.
+- Adding a task field (priority, reminder, assignee) means updating every
+  surface in the SAME PR, or explicitly saying in the summary which one is
+  behind and why.
+
+This is written down because the client profile's Tasks card and the Work
+section were built by different sessions days apart. The client page reads the
+shared list rather than keeping its own — that is the whole point, and the next
+person to touch tasks should not quietly reintroduce a second one.
+
 ### Exceptions — narrow, and stated out loud
 
 Two surfaces may stay separate ONLY when they genuinely differ in behaviour and

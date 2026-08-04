@@ -1923,7 +1923,15 @@
     "organizers_col_live": "Travail en cours",
     "organizers_why_owner": "Propriétaire du cabinet",
     "organizers_why_assignee": "Responsable du client",
-    "organizers_why_member": "Dans l'équipe"
+    "organizers_why_member": "Dans l'équipe",
+    "tasks_title": "Tâches",
+    "tasks_view_all": "Voir toutes les tâches",
+    "tasks_empty": "Aucune tâche pour l’instant — tout ce que vous ou un mandat ajoutez pour ce client apparaîtra ici.",
+    "task_status_todo": "À faire",
+    "task_status_doing": "En cours",
+    "task_status_done": "Terminé",
+    "back_all_clients": "Tous les clients",
+    "field_none_yet": "Aucune pour l’instant"
   },
   "Engagements": {
     "add_comment": "Ajouter un commentaire",
