@@ -843,6 +843,14 @@ export default async function ClientDetailPage({
 
             >=1180  details | tasks  | files      details spans both rows
                             | notes  | payments
+
+          Columns 2 and 3 are both FLUID at 1.35fr / 1fr rather than the
+          prototype's fixed 260-340px third track. The prototype was drawn at
+          ~1320px, where a capped third column looks right; on a real 1800px+
+          monitor that cap freezes Recent files and Payments at 340px while the
+          middle column swallows every extra pixel, and they read as offcuts.
+          Fluid keeps the intended relationship — middle a little wider, the
+          two of them comparable — at every width.
             >= 880  details | tasks / notes / files / payments   (spans 4)
             < 880   one column, in reading order
 
@@ -851,7 +859,7 @@ export default async function ClientDetailPage({
       <div
         className={
           tab === "overview"
-            ? "grid gap-5 min-[880px]:grid-cols-[minmax(240px,320px)_minmax(0,1fr)] min-[1180px]:grid-cols-[minmax(240px,300px)_minmax(0,1fr)_minmax(260px,340px)]"
+            ? "grid gap-5 min-[880px]:grid-cols-[minmax(240px,320px)_minmax(0,1fr)] min-[1180px]:grid-cols-[minmax(240px,300px)_minmax(0,1.35fr)_minmax(0,1fr)]"
             : ""
         }
       >
