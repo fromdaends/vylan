@@ -18,9 +18,7 @@ import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { Input } from "@/components/ui/input";
 import {
   AddTaskDialog,
   type AddTaskEngagement,
@@ -84,8 +82,6 @@ export function TasksOverviewCard({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [tab, setTab] = useState<Tab>("all");
-  const [draft, setDraft] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
 
   // Server truth with any in-flight change already applied — the exact
   // optimistic shape InternalWork uses, so a tick lands instantly here too.
@@ -311,6 +307,16 @@ export function TasksOverviewCard({
           >
             {t("tasks_view_all")}
           </Link>
+          {/* THE SAME BUTTON as the Tasks page and every job. Founder: "the
+              create new task button on the overview page is outdated. Make it
+              look and functioon like every other new task button." It was a
+              type-a-title bar with its own grey Add — a third way to make a
+              task, which is exactly what the merge in #1235 was for. */}
+          <AddTaskDialog
+            clients={clients}
+            engagements={engagements}
+            members={members}
+          />
         </div>
       </div>
 
@@ -414,48 +420,6 @@ export function TasksOverviewCard({
         </>
       )}
 
-      {/* Quick-add: type the title here, and the Add button opens THE add-task
-          popover (the same one /work and every job use) seeded with it — the
-          client picker and optional due date live there. One add-task UI. */}
-      <div className="mt-5 flex items-center gap-2.5 border-t border-border/70 pt-4">
-        <div className="relative min-w-0 flex-1">
-          <Plus
-            className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && draft.trim()) {
-                e.preventDefault();
-                setAddOpen(true);
-              }
-            }}
-            placeholder={t("tasks_quickadd_placeholder")}
-            aria-label={t("tasks_quickadd_placeholder")}
-            className="h-[34px] bg-background pl-8 text-[13.5px]"
-          />
-        </div>
-        <AddTaskDialog
-          clients={clients}
-          engagements={engagements}
-          members={members}
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          initialTitle={draft.trim()}
-          onCreated={() => setDraft("")}
-          trigger={
-            <button
-              type="button"
-              disabled={!draft.trim()}
-              className="h-[34px] flex-none rounded-md bg-secondary px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {t("tasks_quickadd_add")}
-            </button>
-          }
-        />
-      </div>
     </div>
   );
 }

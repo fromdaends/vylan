@@ -105,6 +105,9 @@ export type EngagementTask = {
   dueDate: string | null;
   orderIndex: number;
   completedAt: string | null;
+  /** Newest first is the table's default order — a task you just made must be
+   *  the one you can see. */
+  createdAt: string | null;
 };
 
 /** A task plus the names around it — what a firm-wide list needs to render. */
@@ -129,7 +132,7 @@ export function toTaskStatus(v: unknown): TaskStatus {
 }
 
 const SELECT =
-  "id, client_id, engagement_id, title, kind, notes, status, status_id, priority, due_date, order_index, completed_at, engagement_task_assignees(user_id)";
+  "id, client_id, engagement_id, title, kind, notes, status, status_id, priority, due_date, order_index, completed_at, created_at, engagement_task_assignees(user_id)";
 
 function toTask(r: Record<string, unknown>): EngagementTask | null {
   const id = typeof r.id === "string" ? r.id : null;
@@ -155,6 +158,7 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
     priority: toTaskPriority(r.priority),
     dueDate: typeof r.due_date === "string" ? r.due_date : null,
     orderIndex: typeof r.order_index === "number" ? r.order_index : 0,
+    createdAt: typeof r.created_at === "string" ? r.created_at : null,
     completedAt: typeof r.completed_at === "string" ? r.completed_at : null,
   };
 }
