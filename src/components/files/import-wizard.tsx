@@ -37,6 +37,7 @@ import {
   recordImportedFileAction,
   startImportRunAction,
 } from "@/app/actions/document-import";
+import { createOrGetFolderAction } from "@/app/actions/folders";
 
 // THE IMPORT WIZARD — the one way documents enter Vylan outside the
 // engagement/portal pipeline, and deliberately not a general upload button.
@@ -46,6 +47,13 @@ import {
 // "SKIP" is a first-class mapping choice. The spec's hard rule is that nothing
 // imports without an explicit client, so a folder left unmapped blocks the run
 // rather than quietly defaulting to anything.
+//
+// INSIDE A CLIENT the mapping step disappears entirely (founder: "you
+// obviously shouldn't have to pick a client... it should just be created in
+// the folder that you are in, just like Google Drive"). Locked mode imports
+// straight into the client being browsed, and each top-level folder picked
+// from disk becomes a REAL folder in the current location with its files
+// inside — Drive's exact semantics for uploading a folder where you stand.
 
 type Step = "source" | "map" | "run";
 
@@ -55,12 +63,19 @@ export function ImportWizard({
   clients,
   externalOpen,
   onExternalOpenChange,
+  lockedClientId,
+  lockedFolderId,
 }: {
   clients: { id: string; name: string }[];
   /** Drive-style "+ New" menu drives the wizard from outside; when these are
    * provided the wizard renders NO button of its own. */
   externalOpen?: boolean;
   onExternalOpenChange?: (open: boolean) => void;
+  /** Present when browsing inside a client: no mapping step, everything
+   * imports into THIS client. */
+  lockedClientId?: string | null;
+  /** The folder being browsed — imported folders are created inside it. */
+  lockedFolderId?: string | null;
 }) {
   const t = useTranslations("Files");
   const router = useRouter();
@@ -105,6 +120,16 @@ export function ImportWizard({
     filesRef.current = map;
     const planned = planImport(dropped, MAX_BYTES);
     setGroups(planned);
+
+    if (lockedClientId) {
+      // Inside a client there is nothing to map — every folder goes to the
+      // client being browsed. The map step stays as a plain confirm screen.
+      const next: Mapping = {};
+      for (const g of planned) next[g.folder] = lockedClientId;
+      setMapping(next);
+      setStep("map");
+      return;
+    }
 
     // Pre-fill the mapping with confident matches only. Everything else stays
     // blank so the person has to look at it.
@@ -154,6 +179,26 @@ export function ImportWizard({
     for (const group of groups) {
       const clientId = mapping[group.folder];
       if (!clientId || clientId === "skip") continue;
+
+      // Drive semantics in locked mode: the folder picked from disk becomes a
+      // REAL folder where the user is standing (reusing one already named
+      // that), and its files land inside. Loose files land in the current
+      // folder itself. If creation fails the files still import — unfiled
+      // beats lost.
+      let destFolderId: string | null = null;
+      if (lockedClientId) {
+        if (group.folder) {
+          const made = await createOrGetFolderAction({
+            clientId: lockedClientId,
+            parentId: lockedFolderId ?? null,
+            name: group.folder,
+          });
+          destFolderId = made.folderId ?? lockedFolderId ?? null;
+        } else {
+          destFolderId = lockedFolderId ?? null;
+        }
+      }
+
       for (const planned of group.files) {
         if (planned.skip) continue;
         const file = filesRef.current.get(planned.path);
@@ -187,6 +232,7 @@ export function ImportWizard({
             mimeType: file.type,
             sizeBytes: file.size,
             contentHash: await computeContentHashWeb(bytes),
+            folderId: destFolderId,
           });
           if (!rec.ok) throw new Error(rec.error);
           if (rec.skipped === "duplicate") skipped++;
@@ -309,6 +355,10 @@ export function ImportWizard({
                         })}
                       </span>
                     </span>
+                    {/* Inside a client nothing asks for one — the mapping is
+                        already the client being browsed, and this screen is a
+                        plain confirmation. */}
+                    {!lockedClientId && (
                     <Select
                       value={mapping[g.folder] ?? ""}
                       onValueChange={(v) =>
@@ -327,6 +377,7 @@ export function ImportWizard({
                         ))}
                       </SelectContent>
                     </Select>
+                    )}
                   </div>
                 ))}
               </div>

@@ -127,6 +127,10 @@ export async function recordImportedFileAction(input: {
   mimeType: string;
   sizeBytes: number;
   contentHash: string | null;
+  /** File straight into this folder — the Drive semantics of importing or
+   * uploading while standing inside one. Validated against the client below;
+   * an invalid id degrades to unfiled rather than failing the file. */
+  folderId?: string | null;
 }): Promise<RecordResult> {
   const firm = await getCurrentFirm();
   if (!firm) return { ok: false, error: "no_firm" };
@@ -138,6 +142,19 @@ export async function recordImportedFileAction(input: {
     .eq("id", input.clientId)
     .maybeSingle();
   if (!client) return { ok: false, error: "client_not_found" };
+
+  // The folder must be THIS client's (RLS scopes the read). A mismatch means
+  // a stale or forged id — the file still imports, just unfiled.
+  let folderId: string | null = null;
+  if (input.folderId) {
+    const { data: folder } = await sb
+      .from("document_folders")
+      .select("id")
+      .eq("id", input.folderId)
+      .eq("client_id", input.clientId)
+      .maybeSingle();
+    folderId = folder?.id ?? null;
+  }
 
   const service = getServiceRoleSupabase();
 
@@ -167,6 +184,7 @@ export async function recordImportedFileAction(input: {
     size_bytes: input.sizeBytes,
     content_hash: input.contentHash,
     source_path: input.sourcePath,
+    folder_id: folderId,
     // The firm's own folder names are their existing organisation — reading a
     // year out of them means confirming a guess instead of typing from scratch.
     browse_year: yearFromSourcePath(input.sourcePath),
