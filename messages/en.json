@@ -1549,7 +1549,15 @@
     "create_template": "Document request template",
     "create_template_hint": "Save a set of document requests you reuse for every client.",
     "create_service": "Service template",
-    "create_service_hint": "Save something you sell, with its price, so you stop retyping it."
+    "create_service_hint": "Save something you sell, with its price, so you stop retyping it.",
+    "templates_engagement": "Engagement",
+    "templates_engagement_hint": "A whole job saved for reuse — its scope, its pricing and what you ask the client for.",
+    "templates_task": "Task",
+    "templates_task_hint": "The steps a piece of work takes, dropped into any engagement.",
+    "templates_request": "Client request",
+    "templates_request_hint": "A checklist of what you need the client to send you.",
+    "templates_service": "Service",
+    "templates_service_hint": "One priced line your firm sells."
   },
   "Dashboard": {
     "greeting_morning": "Good morning",
