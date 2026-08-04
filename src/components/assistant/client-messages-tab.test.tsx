@@ -12,11 +12,11 @@ import type { FirmConversation } from "@/lib/db/client-messages";
 import type { TeamConversation } from "@/lib/db/team-messages";
 import en from "../../../messages/en.json";
 
-// The opened-thread view hosts EngagementMessages (its own fetch + observers).
+// The opened-thread view hosts ClientThread (its own fetch + observers).
 // Stub it so these tests stay focused on the inbox list ⇆ thread navigation.
-vi.mock("@/components/engagements/engagement-messages", () => ({
-  EngagementMessages: ({ engagementId }: { engagementId: string }) => (
-    <div data-testid="thread">Thread {engagementId}</div>
+vi.mock("@/components/messages/client-thread", () => ({
+  ClientThread: ({ clientId }: { clientId: string }) => (
+    <div data-testid="thread">Thread {clientId}</div>
   ),
 }));
 
@@ -29,10 +29,8 @@ const fetchMock = vi.fn();
 
 const conversations: FirmConversation[] = [
   {
-    engagementId: "e1",
-    engagementTitle: "GST/QST 2026",
+    clientId: "c1",
     clientName: "Acme Corp",
-    status: "in_progress",
     lastMessage: {
       sender: "client",
       body: "Any update?",
@@ -42,10 +40,8 @@ const conversations: FirmConversation[] = [
     lastActivityAt: "2026-07-02T09:00:00Z",
   },
   {
-    engagementId: "e2",
-    engagementTitle: "T1 2025",
+    clientId: "c2",
     clientName: "Beta Inc",
-    status: "complete",
     lastMessage: {
       sender: "firm",
       body: "All done",
@@ -53,6 +49,14 @@ const conversations: FirmConversation[] = [
     },
     unreadCount: 0,
     lastActivityAt: "2026-06-01T09:00:00Z",
+  },
+  // Never messaged — still listed, so a chat can be started from the inbox.
+  {
+    clientId: "c3",
+    clientName: "Zephyr Ltd",
+    lastMessage: null,
+    unreadCount: 0,
+    lastActivityAt: null,
   },
 ];
 
@@ -117,7 +121,7 @@ describe("ClientMessagesTab (inbox)", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Acme Corp/ }));
-    expect(screen.getByTestId("thread")).toHaveTextContent("Thread e1");
+    expect(screen.getByTestId("thread")).toHaveTextContent("Thread c1");
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -130,7 +134,21 @@ describe("ClientMessagesTab (inbox)", () => {
     expect(screen.queryByTestId("thread")).not.toBeInTheDocument();
   });
 
-  it("shows an empty state when there are no conversations", async () => {
+  it("lists a client you have never messaged, ready to start one", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Zephyr Ltd")).toBeInTheDocument(),
+    );
+    // The preview says there is nothing yet, and no relative time is shown for
+    // a conversation that has never happened.
+    expect(
+      screen.getByText(en.Assistant.messages_no_messages_yet),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Zephyr Ltd/ }));
+    expect(screen.getByTestId("thread")).toHaveTextContent("Thread c3");
+  });
+
+  it("shows an empty state when the firm has no clients at all", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ conversations: [], team: null }),
@@ -138,7 +156,7 @@ describe("ClientMessagesTab (inbox)", () => {
     renderTab();
     await waitFor(() =>
       expect(
-        screen.getByText(en.Assistant.messages_inbox_empty),
+        screen.getByText(en.Assistant.messages_inbox_no_clients),
       ).toBeInTheDocument(),
     );
   });
@@ -216,7 +234,7 @@ describe("ClientMessagesTab (pinned team chat)", () => {
       expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
     );
     expect(
-      screen.getByText(en.Assistant.messages_inbox_empty),
+      screen.getByText(en.Assistant.messages_inbox_no_clients),
     ).toBeInTheDocument();
   });
 

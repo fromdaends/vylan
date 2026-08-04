@@ -1,6 +1,11 @@
 // Client messaging notifications (Phase 3).
 //
-// Debounce model: every send cancels the engagement's pending notify job and
+// Keyed on the CLIENT since 1440 — one thread per client means one debounce
+// per client, not per engagement. Job payloads carry client_id; the workers
+// still accept a legacy engagement_id payload and resolve it, so jobs already
+// queued when this deploys still fire correctly.
+//
+// Debounce model: every send cancels the client's pending notify job and
 // re-enqueues one DEBOUNCE_MS out, so a burst of messages produces exactly
 // ONE email covering the whole burst. The worker re-checks state at send
 // time: if the recipient already opened the thread (read pointer) — or, for
@@ -8,14 +13,16 @@
 // which also makes reruns idempotent) — it sends nothing.
 //
 // Client email: firm-branded, snippet + magic link straight into the portal
-// thread (?view=messages). Accountant email: compact internal note to the
-// assigned user (else firm owner), linking to the engagement page.
+// thread (?view=messages). The link needs SOME live engagement of theirs to
+// hang off, since portal links are per-engagement; the newest usable one wins.
+// Accountant email: compact internal note to the assigned user (else firm
+// owner), linking to the conversation.
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
 import {
   CLIENT_MESSAGING_SCHEMA_MISSING,
-  getThreadForEngagement,
+  getThreadForClient,
   listClientMessages,
   markClientNotified,
   type ClientMessageRow,
@@ -113,58 +120,107 @@ export function firmNotifyDecision(args: {
   return { send: true, count, latest };
 }
 
-// Rolling debounce: cancel the engagement's pending job, re-enqueue fresh.
+// Rolling debounce: cancel the client's pending job, re-enqueue fresh.
 // Best-effort by design — callers must never fail a send over scheduling.
 export async function scheduleClientMessageNotification(
-  engagementId: string,
+  clientId: string,
 ): Promise<void> {
   await cancelPendingJobs(
     "notify_client_messages",
-    (p) => p.engagement_id === engagementId,
+    (p) => p.client_id === clientId,
   );
   await enqueueJob({
     kind: "notify_client_messages",
-    payload: { engagement_id: engagementId },
+    payload: { client_id: clientId },
     runAfter: new Date(Date.now() + MESSAGE_NOTIFY_DEBOUNCE_MS),
   });
 }
 
 export async function scheduleFirmMessageNotification(
-  engagementId: string,
+  clientId: string,
 ): Promise<void> {
   await cancelPendingJobs(
     "notify_firm_messages",
-    (p) => p.engagement_id === engagementId,
+    (p) => p.client_id === clientId,
   );
   await enqueueJob({
     kind: "notify_firm_messages",
-    payload: { engagement_id: engagementId },
+    payload: { client_id: clientId },
     runAfter: new Date(Date.now() + MESSAGE_NOTIFY_DEBOUNCE_MS),
   });
+}
+
+// Which client a notify job is about. New jobs carry client_id; jobs queued
+// before this deploy carry engagement_id, so resolve those rather than dropping
+// somebody's pending notification on the floor.
+async function resolveJobClientId(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  payload: Record<string, unknown>,
+): Promise<string | null> {
+  const clientId = String(payload.client_id ?? "");
+  if (clientId) return clientId;
+  const engagementId = String(payload.engagement_id ?? "");
+  if (!engagementId) return null;
+  const { data } = await sb
+    .from("engagements")
+    .select("client_id")
+    .eq("id", engagementId)
+    .maybeSingle();
+  return (data as { client_id: string } | null)?.client_id ?? null;
+}
+
+// The engagement to hang a portal link off, newest first. Portal links are
+// per-engagement, so a client-level notification still needs one — any live,
+// unexpired, tokened engagement of theirs will do, and they all now open the
+// same conversation. Null when the client has no usable portal link at all
+// (in which case the client email is skipped: there would be nowhere to send
+// them). `complete` is included because a completed portal still opens.
+async function newestPortalEngagement(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  clientId: string,
+): Promise<{ id: string; title: string; magic_token: string } | null> {
+  const { data } = await sb
+    .from("engagements")
+    .select("id, title, magic_token, magic_expires_at, status, created_at")
+    .eq("client_id", clientId)
+    .not("magic_token", "is", null)
+    .neq("status", "cancelled")
+    .neq("status", "draft")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const now = Date.now();
+  for (const e of (data ?? []) as {
+    id: string;
+    title: string;
+    magic_token: string | null;
+    magic_expires_at: string | null;
+  }[]) {
+    if (!e.magic_token) continue;
+    if (e.magic_expires_at && new Date(e.magic_expires_at).getTime() < now) {
+      continue;
+    }
+    return { id: e.id, title: e.title, magic_token: e.magic_token };
+  }
+  return null;
 }
 
 // Job worker: email the CLIENT about unseen firm messages.
 export async function processNotifyClientMessagesJob(
   payload: Record<string, unknown>,
 ): Promise<{ skipped?: string; sent?: boolean }> {
-  const engagementId = String(payload.engagement_id ?? "");
-  if (!engagementId) return { skipped: "missing_engagement_id" };
   const sb = getServiceRoleSupabase();
+  const clientId = await resolveJobClientId(sb, payload);
+  if (!clientId) return { skipped: "missing_client_id" };
 
-  const { data: engagement } = await sb
-    .from("engagements")
-    .select("id, firm_id, client_id, status, title, magic_token")
-    .eq("id", engagementId)
-    .maybeSingle();
-  if (!engagement) return { skipped: "engagement_not_found" };
-  // Cancelled portals 404, so the link would be dead. Complete stays fine:
-  // the thread is readable read-only.
-  if (engagement.status === "cancelled") return { skipped: "cancelled" };
-  if (!engagement.magic_token) return { skipped: "no_token" };
+  // A portal link is the whole point of this email, so no usable link means
+  // nothing to send. Cancelled/draft/expired ones are excluded upstream —
+  // they 404 on open.
+  const portal = await newestPortalEngagement(sb, clientId);
+  if (!portal) return { skipped: "no_portal_link" };
 
   const [messages, thread] = await Promise.all([
-    listClientMessages(sb, engagementId),
-    getThreadForEngagement(sb, engagementId),
+    listClientMessages(sb, clientId),
+    getThreadForClient(sb, clientId),
   ]);
   if (
     messages === CLIENT_MESSAGING_SCHEMA_MISSING ||
@@ -182,19 +238,19 @@ export async function processNotifyClientMessagesJob(
 
   const { data: client } = await sb
     .from("clients")
-    .select("display_name, email, locale")
-    .eq("id", engagement.client_id)
+    .select("firm_id, display_name, email, locale")
+    .eq("id", clientId)
     .single();
   if (!client?.email) return { skipped: "client_has_no_email" };
   const { data: firm } = await sb
     .from("firms")
     .select("name, logo_url, brand_color")
-    .eq("id", engagement.firm_id)
+    .eq("id", client.firm_id)
     .single();
   if (!firm) return { skipped: "firm_missing" };
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const url = `${appUrl}/r/${engagement.magic_token}?view=messages`;
+  const url = `${appUrl}/r/${portal.magic_token}?view=messages`;
   const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
   // The sender line: the author of the LATEST message; the thread row holds
   // sender_name, so re-read it off the decision's latest message.
@@ -208,7 +264,9 @@ export async function processNotifyClientMessagesJob(
     firmLogoUrl,
     brandColor: firm.brand_color,
     senderName: latestFull?.sender_name ?? firm.name,
-    engagementTitle: engagement.title,
+    // The chat is no longer about one engagement, so the email doesn't claim
+    // it is. buildClientMessageEmail drops the "about X" clause on null.
+    engagementTitle: null,
     snippet: buildSnippet(decision.latest.body),
     count: decision.count,
     url,
@@ -222,7 +280,7 @@ export async function processNotifyClientMessagesJob(
   }
 
   // Watermark AFTER a successful send: reruns skip, later messages notify.
-  await markClientNotified(sb, engagementId, decision.latest.created_at);
+  await markClientNotified(sb, clientId, decision.latest.created_at);
   return { sent: true };
 }
 
@@ -230,21 +288,20 @@ export async function processNotifyClientMessagesJob(
 export async function processNotifyFirmMessagesJob(
   payload: Record<string, unknown>,
 ): Promise<{ skipped?: string; sent?: boolean }> {
-  const engagementId = String(payload.engagement_id ?? "");
-  if (!engagementId) return { skipped: "missing_engagement_id" };
   const sb = getServiceRoleSupabase();
+  const clientId = await resolveJobClientId(sb, payload);
+  if (!clientId) return { skipped: "missing_client_id" };
 
-  const { data: engagement } = await sb
-    .from("engagements")
-    .select("id, firm_id, client_id, status, title, assigned_user_id")
-    .eq("id", engagementId)
+  const { data: client } = await sb
+    .from("clients")
+    .select("firm_id, display_name")
+    .eq("id", clientId)
     .maybeSingle();
-  if (!engagement) return { skipped: "engagement_not_found" };
-  if (engagement.status === "cancelled") return { skipped: "cancelled" };
+  if (!client) return { skipped: "client_not_found" };
 
   const [messages, thread] = await Promise.all([
-    listClientMessages(sb, engagementId),
-    getThreadForEngagement(sb, engagementId),
+    listClientMessages(sb, clientId),
+    getThreadForClient(sb, clientId),
   ]);
   if (
     messages === CLIENT_MESSAGING_SCHEMA_MISSING ||
@@ -259,16 +316,25 @@ export async function processNotifyFirmMessagesJob(
   });
   if (!decision.send) return { skipped: decision.reason };
 
+  // Who hears about it: the client has no single owner, so fall back to whoever
+  // is assigned their most recent live engagement — the person most likely to
+  // be working with them right now — and to the firm owner when there is none.
+  const { data: recentEngagement } = await sb
+    .from("engagements")
+    .select("assigned_user_id, created_at")
+    .eq("client_id", clientId)
+    .not("assigned_user_id", "is", null)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   const contact = await resolveAccountantContact(sb, {
-    assignedUserId: (engagement.assigned_user_id as string | null) ?? null,
-    firmId: engagement.firm_id,
+    assignedUserId:
+      (recentEngagement as { assigned_user_id: string | null } | null)
+        ?.assigned_user_id ?? null,
+    firmId: client.firm_id,
   });
   if (!contact) return { skipped: "no_accountant_contact" };
-  const { data: client } = await sb
-    .from("clients")
-    .select("display_name")
-    .eq("id", engagement.client_id)
-    .single();
 
   // The Notifications tab's Email switch for "Client replied" governs THIS
   // email — this debounced job is the event's only email path (the send route
@@ -289,8 +355,23 @@ export async function processNotifyFirmMessagesJob(
     return { skipped: "email_pref_off" };
   }
 
+  // Straight to the conversation where possible: ?panel=messages opens the
+  // messages popup, and the client's row sits at the top of it with its unread
+  // dot. That deep link only exists on the engagement page, so a client with no
+  // engagement (now possible — the chat doesn't need one) gets their profile.
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const url = `${appUrl}/${contact.locale}/engagements/${engagementId}`;
+  const { data: anyEngagement } = await sb
+    .from("engagements")
+    .select("id, created_at")
+    .eq("client_id", clientId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const engagementId = (anyEngagement as { id: string } | null)?.id ?? null;
+  const url = engagementId
+    ? `${appUrl}/${contact.locale}/engagements/${engagementId}?panel=messages`
+    : `${appUrl}/${contact.locale}/clients/${clientId}`;
 
   // Respect the recipient's detail level. This job is the ONLY email for
   // message.client_replied, so without this a user on "minimal" still receives
@@ -318,8 +399,9 @@ ${url}`,
 
   const { subject, html, text } = buildFirmMessageEmail({
     accountantName: contact.name,
-    clientName: client?.display_name ?? "Client",
-    engagementTitle: engagement.title,
+    clientName: client.display_name ?? "Client",
+    // No engagement framing: this is the client's general thread.
+    engagementTitle: null,
     snippet: buildSnippet(decision.latest.body),
     count: decision.count,
     url,

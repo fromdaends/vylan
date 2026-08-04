@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const res = await markThreadReadByClient(
     getServiceRoleSupabase(),
-    engagement.id,
+    engagement.client_id,
   );
   if (res === CLIENT_MESSAGING_SCHEMA_MISSING) {
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
