@@ -57,6 +57,7 @@ export function EngagementTabs({
   signatures,
   final,
   addTask,
+  initialTaskId = null,
 }: {
   /** Every task on this job, in order. Empty is the ordinary state of a new
    *  job and renders as such. */
@@ -73,9 +74,15 @@ export function EngagementTabs({
   final: ReactNode;
   /** The "+ Add task" control — Canopy's own label on this screen. */
   addTask: ReactNode;
+  /**
+   * Open this task's screen straight away. Set from ?task= so the Task type
+   * link on the firm-wide table lands ON the document collection rather than
+   * on the job's task list with one more click to go.
+   */
+  initialTaskId?: string | null;
 }) {
   const t = useTranslations("Engagements");
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialTaskId);
 
   const openTask = tasks.find((x) => x.id === open) ?? null;
 
