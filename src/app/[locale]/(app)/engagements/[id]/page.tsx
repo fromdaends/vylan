@@ -30,6 +30,8 @@ import {
 import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { listEngagementItems } from "@/lib/db/engagements";
+import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
+import { EngagementClientViewPanel } from "@/components/engagements/engagement-client-view-panel";
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
 import { StageChip } from "@/components/engagements/stage-chip";
 import { engagementStatusVariant } from "@/lib/engagements/status-pill";
@@ -1471,6 +1473,19 @@ export default async function EngagementDetailPage({
           tab keeps its own controls. The Activity feed lives in the Assistant
           panel's Activity tab, opened from the header. */}
       <EngagementTabs
+        itemCount={engagementItems.length}
+        // Rendered HERE because the page owns the data; the tab strip only
+        // decides which of the three is on screen.
+        servicesPanel={
+          <EngagementServicesPanel items={engagementItems} locale={locale} />
+        }
+        clientViewPanel={
+          <EngagementClientViewPanel
+            engagementId={engagement.id}
+            magicToken={engagement.magic_token}
+            sent={Boolean(engagement.sent_at)}
+          />
+        }
         // Every task on this job, in order — ONE list, drawn by the same
         // component the firm-wide Tasks page uses. The three built-in kinds are
         // REAL rows (1370), so an engagement nobody has planned shows nothing.
