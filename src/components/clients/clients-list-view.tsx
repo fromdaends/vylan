@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import { ClientsToolbar } from "./clients-toolbar";
 import {
   ClientsTable,
-  type ClientEngagementRow,
   type ClientEngagementSummary,
   type ClientRelationshipBadge,
 } from "./clients-table";
@@ -26,7 +25,6 @@ import type { AppLocale } from "@/lib/format";
 export function ClientsListView({
   clients,
   summaries,
-  engagementsByClient,
   owners,
   currentUserId,
   ownerFilter,
@@ -43,7 +41,6 @@ export function ClientsListView({
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
-  engagementsByClient: Record<string, ClientEngagementRow[]>;
   owners: Record<string, ClientOwner>;
   relationships?: Record<string, ClientRelationshipBadge>;
   currentUserId: string;
@@ -106,8 +103,6 @@ export function ClientsListView({
       </header>
 
       <ClientsToolbar
-        query={query}
-        onQueryChange={setQuery}
         type={type}
         includeArchived={includeArchived}
         sort={sort}
@@ -116,24 +111,32 @@ export function ClientsListView({
         teamEnabled={teamEnabled}
       />
       {filtered.length === 0 && clients.length > 0 ? (
-        // Live-filter empty state: the firm has clients but none
-        // match the search box. Distinct from the page-level "you
-        // haven't added any clients" empty state, which the existing
-        // ClientsTable already handles when `clients` is empty.
-        <div className="py-12 text-center text-sm text-muted-foreground">
-          {t("empty_search")}
+        // Live-filter empty state: the firm HAS clients, none match what was
+        // typed. Distinct from the page-level "you haven't added any clients"
+        // state, and it says the query back so it is obvious what was searched.
+        <div className="rounded-xl border border-border/70 bg-card px-6 py-14 text-center">
+          <p className="text-sm font-medium">
+            {t("empty_search_title", { query })}
+          </p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {t("empty_search_hint")}
+          </p>
         </div>
       ) : (
         <ClientsTable
           clients={filtered}
           summaries={summaries}
-          engagementsByClient={engagementsByClient}
           owners={owners}
           currentUserId={currentUserId}
           locale={locale}
           teamEnabled={teamEnabled}
           relationships={relationships}
         />
+      )}
+      {filtered.length > 0 && (
+        <p className="text-[12.5px] text-muted-foreground">
+          {t("count", { count: filtered.length })}
+        </p>
       )}
     </div>
   );

@@ -582,7 +582,6 @@ export default async function TeamMemberProfilePage({
           <ClientsTable
             clients={clients}
             summaries={clientSummaries}
-            engagementsByClient={engagementsByClient}
             owners={clientOwners}
             currentUserId={user.id}
             locale={locale}

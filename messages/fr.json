@@ -1931,7 +1931,15 @@
     "task_status_doing": "En cours",
     "task_status_done": "Terminé",
     "back_all_clients": "Tous les clients",
-    "field_none_yet": "Aucune pour l’instant"
+    "field_none_yet": "Aucune pour l’instant",
+    "empty_search_title": "Personne ne correspond à « {query} »",
+    "empty_search_hint": "Essayez un autre nom, ou effacez la recherche.",
+    "filter_button": "Trier et filtrer",
+    "filter_active": "Filtré : {list}",
+    "filter_show_label": "Afficher",
+    "filter_active_only": "Travail en cours seulement",
+    "filter_include_archived": "Inclure les archivés",
+    "filter_clear": "Effacer"
   },
   "Engagements": {
     "add_comment": "Ajouter un commentaire",
