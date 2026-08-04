@@ -75,15 +75,28 @@ export function ServiceCatalogue({
   services,
   locale,
   canManage,
+  /**
+   * Open the "add service" dialog on first render.
+   *
+   * The + Create panel's "Service template" row means CREATE ONE, not "go and
+   * look at the list" — the founder's correction: "the whole function is to
+   * create one not just bring you to the page". So it arrives with ?new=service
+   * and the form is already open.
+   */
+  openOnMount = false,
 }: {
   services: ServiceRow[];
   locale: AppLocale;
   canManage: boolean;
+  openOnMount?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const [, startTransition] = useTransition();
   const [editing, setEditing] = useState<ServiceRow | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  // Seeded, not forced: once you close it, it stays closed for this page view.
+  const [draft, setDraft] = useState<Draft | null>(
+    openOnMount && canManage ? { ...EMPTY } : null,
+  );
   const [busy, setBusy] = useState(false);
 
   function open(service: ServiceRow | null) {

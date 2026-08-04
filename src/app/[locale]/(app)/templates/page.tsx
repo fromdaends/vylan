@@ -20,16 +20,21 @@ import { listFirmServices } from "@/lib/db/firm-services";
 import { getCurrentUser } from "@/lib/db/users";
 import { can } from "@/lib/auth/capabilities";
 import { ServiceCatalogue } from "@/components/templates/service-catalogue";
+import { AutoNewTemplate } from "@/components/templates/auto-new-template";
 
 export default async function TemplatesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  // `new` comes from the + Create panel and means "start making one".
+  searchParams: Promise<{ new?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
+  const sp = await searchParams;
   const [templates, services, user] = await Promise.all([
     listTemplates(),
     listFirmServices(),
@@ -73,6 +78,11 @@ export default async function TemplatesPage({
         </p>
       </header>
 
+      {/* Fires the same server action the "New template" button uses, then
+          redirects into the new template's editor. See auto-new-template.tsx
+          for why this is a client effect rather than a server redirect. */}
+      {sp.new === "document" && <AutoNewTemplate locale={locale} />}
+
       {/* SERVICES FIRST — what you SELL comes before what you ask a client to
           send you. The founder put the catalogue here rather than in Settings
           because it is the same kind of thing as the lists below: something you
@@ -89,6 +99,7 @@ export default async function TemplatesPage({
           services={services}
           locale={locale}
           canManage={canManageServices}
+          openOnMount={sp.new === "service"}
         />
       </Section>
 
