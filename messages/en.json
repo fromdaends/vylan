@@ -2094,6 +2094,7 @@
     "task_mark_done": "Mark {title} done",
     "subtasks": "Steps",
     "subtasks_add_placeholder": "Add a step…",
+    "tasks_more": "{count, plural, one {# more} other {# more}}",
     "tasks_none_match": "Nothing matches those filters.",
     "task_count_total": "{count, plural, =1 {# task} other {# tasks}}",
     "add_task_pick_job": "Pick a job",

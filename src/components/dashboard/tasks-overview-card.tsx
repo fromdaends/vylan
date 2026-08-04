@@ -95,6 +95,12 @@ export function TasksOverviewCard({
         statuses={statuses}
         currentUserId={viewerId}
         variant="firm"
+        // A PANEL on a page of panels, not the page itself. Uncapped it ran the
+        // dashboard down past everything else on it; the founder: "make the
+        // tasks box a little shorter... the same size it was last time."
+        // Five is what the old card showed, and "+N more" goes to the full list.
+        maxRows={5}
+        moreHref="/work"
       />
     </div>
   );

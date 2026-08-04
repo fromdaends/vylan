@@ -184,6 +184,8 @@ export function TasksTable({
   statuses,
   variant = "firm",
   onOpen,
+  maxRows,
+  moreHref,
 }: {
   tasks: TaskRow[];
   members: Person[];
@@ -197,6 +199,18 @@ export function TasksTable({
   variant?: "firm" | "job";
   /** Opens a task's own screen. Job page only; see task-detail-panel.tsx. */
   onOpen?: (taskId: string) => void;
+  /**
+   * Show at most this many rows, with a "+N more" link to the rest.
+   *
+   * For the Overview, where this table is a PANEL on a page of other panels
+   * rather than the page itself — uncapped it ran the dashboard down past
+   * everything else on it. The cap is on what is DRAWN, never on what is
+   * counted: the tabs above still say 22, because a truncated list that also
+   * under-reports is a list you cannot trust.
+   */
+  maxRows?: number;
+  /** Where "+N more" goes. Required for the cap to be honest about the rest. */
+  moreHref?: string;
 }) {
   const t = useTranslations("Engagements");
   const tStatus = useTranslations("Clients");
@@ -406,6 +420,11 @@ export function TasksTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, view, sort, statusFilter, clientFilter, kindFilter, assigneeFilter, priorityFilter, nameById]);
 
+  // What is drawn, versus what exists. `shown` stays the honest total so the
+  // count and the tabs never disagree with each other.
+  const visible = maxRows ? shown.slice(0, maxRows) : shown;
+  const hidden = shown.length - visible.length;
+
   const kinds = useMemo(
     () => [...new Set(rows.map((r) => r.kind))].sort(),
     [rows],
@@ -588,7 +607,7 @@ export function TasksTable({
               </tr>
             </thead>
             <tbody>
-              {shown.map((task) => (
+              {visible.map((task) => (
                 <Row
                   key={task.id}
                   task={task}
@@ -606,6 +625,18 @@ export function TasksTable({
                   run={run}
                 />
               ))}
+            {hidden > 0 && moreHref && (
+                <tr>
+                  <td colSpan={firmWide ? 8 : 7} className="px-2">
+                    <Link
+                      href={moreHref}
+                      className="block py-2.5 text-xs text-muted-foreground transition-colors hover:text-accent"
+                    >
+                      {t("tasks_more", { count: hidden })}
+                    </Link>
+                  </td>
+                </tr>
+              )}
             {shown.length === 0 && (
                 <tr>
                   <td
