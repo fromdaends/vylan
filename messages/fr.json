@@ -2962,6 +2962,8 @@
     "task_templates_new": "Nouveau modèle de tâches",
     "task_templates_name_placeholder": "Nom du modèle",
     "task_templates_save": "Enregistrer le modèle",
+    "task_template_client_request": "Demande au client :",
+    "task_template_apply_request": "Appliquer un modèle de demande",
     "task_templates_save_failed": "Impossible d'enregistrer — réessayez.",
     "task_templates_needs_migration": "Une mise à jour de la base de données est requise et n'a pas encore été appliquée. Le SQL se trouve dans la pull request.",
     "access_team": "Équipe",

@@ -104,3 +104,84 @@ describe("isWorthSavingTaskTemplate", () => {
     expect(isWorthSavingTaskTemplate(p)).toBe(false);
   });
 });
+
+describe("readTaskTemplatePayload — the client request a task carries", () => {
+  const req = (over = {}) => ({ label_en: "T4", label_fr: "T4", ...over });
+
+  it("keeps a checklist on a document-collection task", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [
+        { title: "Collect", kind: "document_collection", checklist: [req()] },
+      ],
+    });
+    expect(p.tasks[0].checklist).toHaveLength(1);
+    expect(p.tasks[0].checklist?.[0].label_en).toBe("T4");
+  });
+
+  it("omits the key entirely when there is no client request", () => {
+    const p = readTaskTemplatePayload({ tasks: [{ title: "Review" }] });
+    expect(p.tasks[0]).not.toHaveProperty("checklist");
+  });
+
+  it("omits it when the checklist is present but empty", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [{ title: "Review", checklist: [] }],
+    });
+    expect(p.tasks[0]).not.toHaveProperty("checklist");
+  });
+
+  it("survives a checklist that is not an array", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [{ title: "Review", checklist: "nope" }],
+    });
+    expect(p.tasks[0]).not.toHaveProperty("checklist");
+    expect(p.tasks[0].title).toBe("Review");
+  });
+
+  it("drops a line with no label in either language", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [
+        {
+          title: "Collect",
+          checklist: [{ label_en: "", label_fr: "  " }, req()],
+        },
+      ],
+    });
+    expect(p.tasks[0].checklist).toHaveLength(1);
+  });
+
+  it("mirrors one language into the other when only one is given", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [{ title: "Collect", checklist: [{ label_fr: "Relevé T4" }] }],
+    });
+    expect(p.tasks[0].checklist?.[0].label_en).toBe("Relevé T4");
+    expect(p.tasks[0].checklist?.[0].label_fr).toBe("Relevé T4");
+  });
+
+  it('does NOT treat the string "true" as required', () => {
+    const p = readTaskTemplatePayload({
+      tasks: [{ title: "Collect", checklist: [req({ required: "true" })] }],
+    });
+    expect(p.tasks[0].checklist?.[0].required).toBe(false);
+  });
+
+  it("keeps required when it is really true", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [{ title: "Collect", checklist: [req({ required: true })] }],
+    });
+    expect(p.tasks[0].checklist?.[0].required).toBe(true);
+  });
+
+  it("nulls an empty description and doc_type rather than storing blanks", () => {
+    const p = readTaskTemplatePayload({
+      tasks: [
+        {
+          title: "Collect",
+          checklist: [req({ description_en: "", doc_type: "" })],
+        },
+      ],
+    });
+    expect(p.tasks[0].checklist?.[0].description_en).toBeNull();
+    expect(p.tasks[0].checklist?.[0].doc_type).toBeNull();
+  });
+});

@@ -148,6 +148,8 @@ export default async function NewEngagementPage({
         taskTemplates={taskTemplates.map((x) => ({
           id: x.id,
           name: x.name,
+          // Includes the client request a document-collection task carries, so
+          // applying the template also fills the checklist.
           tasks: x.payload.tasks,
         }))}
         // Active firm members, for the assignee picker.

@@ -75,6 +75,7 @@ import { SaveAsTemplateDialog } from "@/components/engagements/save-as-template-
 import {
   readPayload,
   type EngagementTemplatePayload,
+  type TemplateChecklistItem,
 } from "@/lib/engagements/template-payload";
 import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
@@ -228,7 +229,12 @@ export function EngagementBuilder({
   taskTemplates?: {
     id: string;
     name: string;
-    tasks: { title: string; kind: TaskKind }[];
+    tasks: {
+      title: string;
+      kind: TaskKind;
+      /** The client request the task carries, if any. */
+      checklist?: TemplateChecklistItem[];
+    }[];
   }[];
   /** Saved whole-engagement templates (migration 1500). */
   engagementTemplates?: {
@@ -431,6 +437,33 @@ export function EngagementBuilder({
     const res = appendTemplateTasks(tasks, tpl.tasks);
     setTasks(res.tasks);
     setDowngradedTasks(res.downgraded);
+
+    // A task template can carry the CLIENT REQUEST its document-collection task
+    // asks for (Canopy's "Add client request"). Bring it across — a template
+    // that says "collect these six documents" and then collects none of them
+    // has done half its job.
+    //
+    // ONLY WHEN THE CHECKLIST IS STILL EMPTY. Overwriting would throw away
+    // lines already typed by hand, and appending would duplicate them on a
+    // second apply. Leaving a filled checklist alone is the one option that
+    // cannot lose anything the accountant did.
+    if (items.length === 0) {
+      const carried = tpl.tasks.find(
+        (x) => x.kind === "document_collection" && (x.checklist?.length ?? 0) > 0,
+      )?.checklist;
+      if (carried && carried.length > 0) {
+        setItems(
+          carried.map((c) => ({
+            label_en: c.label_en,
+            label_fr: c.label_fr,
+            description_en: c.description_en ?? "",
+            description_fr: c.description_fr ?? "",
+            doc_type: c.doc_type ?? null,
+            required: c.required,
+          })) as TemplateItem[],
+        );
+      }
+    }
   }
   function moveTask(idx: number, delta: number) {
     setTasks((prev) => {
