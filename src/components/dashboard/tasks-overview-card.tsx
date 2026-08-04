@@ -70,7 +70,7 @@ export function TasksOverviewCard({
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold tracking-tight">
-          {t("tasks_title")}
+          {t("tasks_card_title")}
         </h2>
         <div className="flex items-center gap-3">
           <Link
