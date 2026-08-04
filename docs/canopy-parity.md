@@ -15,7 +15,7 @@ none — see `feedback_keep-roadmap-artifact-live`.
 |---|---|---|
 | A1 | `support.getcanopy.com/en/articles/10263111` — *How do I create an Engagement Template* | The four builder tabs, Introduction fields, the live preview, Save draft vs Save template |
 | A2 | `support.getcanopy.com/en/articles/9375953` — *Add Client Request Templates to Task Templates* | A client request is attached from INSIDE a task template; "Apply template" COPIES the fields |
-| A3 | `support.getcanopy.com/en/articles/12573386` — *How do I create a Task Template* | Task template fields, recurrence scheduler (beta) |
+| A3 | `support.getcanopy.com/en/articles/12573386` — *How do I create a Task Template (New Recurrence Scheduler Beta)* | Task template fields, recurrence. **A legacy twin exists** at `.../9376001-...-legacy-recurrence-scheduler`; same builder, different recurrence section |
 | S1 | Founder screenshots of Canopy's **Create Engagement Template** modal | Tab chrome, the red ⓘ required marker, the eye/preview toggle, exact empty-state copy |
 | S2 | Founder screenshot of Canopy's **Templates flyout** | Eleven template types in a plain row list, no button strip |
 
@@ -88,6 +88,43 @@ Draggable rows, each with a toggle: **Welcome Message** (can autofill from a
 letter template), **Video** (YouTube/Vimeo/Zoom link), **Document** (internal
 file or PDF upload). Vylan has `intro_message` (plain text, 1510) which covers
 the first only. Source: A1, S1.
+
+### 5b. Known divergences from Canopy — deliberate, and worth a decision
+
+These are places where Vylan's shape is **not** Canopy's. None is an accident;
+each needs a founder call before it is "fixed".
+
+**Task template structure.** Canopy's task template (A3) is ONE PARENT TASK —
+name, description, roles, assignees, tags, budgeted hours, return type, a Dates
+section — with **subtasks** and **client requests** added under it via `+ Add`.
+Vylan's is a flat list of task rows with a name on the template. Flat is simpler
+and matches how Vylan's `engagement_tasks` are actually used today (it already
+supports `parent_id` subtasks, which the template does not expose). Going to
+Canopy's shape means the template payload gains a parent level.
+
+**Who can edit a shared template.** Canopy: *"All users can access shared task
+templates, but only admins or the template creator can edit them."* Vylan's RLS
+on `task_templates` lets anyone in the firm edit a `team` one — copied from
+`engagement_templates` (1500), where that rule was deliberate. If the founder
+wants Canopy's stricter rule, it is a policy change on the update/delete
+policies, not a code change.
+
+**When a template is applied.** Canopy applies a task template only at task
+CREATION (Create Task modal → Template → Apply); there is no documented way to
+apply one to an existing task. Vylan applies it in the engagement builder's
+Tasks step, which is a superset — worth keeping.
+
+**Fields Vylan's task template does not carry:** roles, task tags, budgeted
+hours, return type, dates (fixed / relative / custom), automations, file and
+reminder tools. Several have no Vylan counterpart at all yet.
+
+**Recurrence.** A3 exists in two live versions — a *New Recurrence Scheduler
+(Beta)* and a *Legacy* one — describing the same builder with different
+recurrence sections. A recurring Canopy template stays LINKED to the task it
+created, locks most fields, pushes future edits into future instances, and can
+be unlinked exactly once. Vylan has recurring ENGAGEMENTS (0770/0890) but
+nothing equivalent on tasks. **Do not build against the beta article without
+asking** — a beta is a moving target.
 
 ### 6. Standalone task-template editing
 Today a task template can be created and removed but not EDITED. Canopy's A2
