@@ -69,7 +69,11 @@ export function InlineCommentThread({
   // The target is an object literal at most call sites, so a new identity every
   // render. Key the effect on its VALUES, or this refetches forever.
   const targetKey =
-    target.kind === "task" ? `task:${target.taskId}` : `client:${target.clientId}`;
+    target.kind === "task"
+      ? `task:${target.taskId}`
+      : target.kind === "engagement"
+        ? `eng:${target.engagementId}`
+        : `client:${target.clientId}`;
 
   useEffect(() => {
     let alive = true;

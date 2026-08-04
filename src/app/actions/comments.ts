@@ -32,6 +32,7 @@ import {
   insertFileComment,
   deleteFileComment,
   listByTargetOrMissing,
+  listCommentsForEngagement,
   COMMENTS_SCHEMA_MISSING,
   type FileComment,
 } from "@/lib/db/file-comments";
@@ -48,7 +49,16 @@ import { revalidateAllLocales } from "@/lib/revalidate";
 // What a thread hangs off. Serializable — it crosses the server boundary.
 export type CommentTargetInput =
   | { kind: "task"; taskId: string }
-  | { kind: "client"; clientId: string };
+  | { kind: "client"; clientId: string }
+  // The ENGAGEMENT itself. This target has existed in the data since 0930
+  // ("every target column null") and the engagement PAGE already renders it
+  // through the props-fed popover. It is repeated here so the SELF-LOADING
+  // thread can carry it too — which is what let it drop into the engagement
+  // SIDEBAR (#1311) the founder asked for: "theres a build going on adding a
+  // sidebar view for engagements and thats where the commenting thing should
+  // exist". Both routes read and write the same rows, so a comment left in the
+  // sidebar is the same comment the page shows.
+  | { kind: "engagement"; engagementId: string };
 
 // A note that still lives in client_notes (1270) because 1520 has not been
 // applied yet carries this prefix on its id, so a later delete knows which
@@ -93,6 +103,21 @@ export async function loadCommentThreadAction(
       // A task thread has no older home to fall back to — nothing could write
       // one before 1520 — so an unapplied migration is simply an empty thread.
       comments: res === COMMENTS_SCHEMA_MISSING ? [] : res,
+      members: mentionable,
+      currentUserId: user.id,
+      legacy: false,
+    };
+  }
+
+  if (target.kind === "engagement") {
+    // The engagement's OWN thread is the rows with no target column set, so it
+    // cannot be read with a simple .eq() — reuse the page's grouped reader and
+    // take the engagement bucket. That bucket already excludes file, item and
+    // task comments, which is the whole reason groupEngagementComments has a
+    // byTask bucket at all.
+    const grouped = await listCommentsForEngagement(target.engagementId);
+    return {
+      comments: grouped.engagement,
       members: mentionable,
       currentUserId: user.id,
       legacy: false,
@@ -162,6 +187,43 @@ export async function addCommentAction(input: {
   );
   const mentions = sanitizeMentions(input.mentions ?? [], validIds, user.id);
   const authorName = userDisplayLabel(user);
+
+  if (input.target.kind === "engagement") {
+    // Every target column stays null — that IS the engagement target (0930).
+    const engagementId = input.target.engagementId;
+    const sb = await getServerSupabase();
+    const { data } = await sb
+      .from("engagements")
+      .select("id, client_id")
+      .eq("id", engagementId)
+      .maybeSingle();
+    const eng = data as { id: string; client_id: string } | null;
+    if (!eng) return { ok: false, error: "failed" };
+
+    const res = await insertFileComment({
+      firmId: firm.id,
+      engagementId,
+      authorUserId: user.id,
+      authorName,
+      body,
+      mentions,
+    });
+    if (!res.ok) return { ok: false, error: "failed" };
+
+    await notifyMentions({
+      mentions,
+      firmId: firm.id,
+      engagementId,
+      clientId: eng.client_id,
+      actorId: user.id,
+      kind: "task",
+      targetId: engagementId,
+    });
+
+    revalidateAllLocales(`/engagements/${engagementId}`);
+    revalidateAllLocales("/engagements");
+    return { ok: true, comment: res.comment };
+  }
 
   if (input.target.kind === "task") {
     // Resolve the task's own engagement + client. engagement_id is DENORMALIZED
@@ -288,6 +350,8 @@ export async function deleteCommentAction(input: {
   if (ok) {
     if (input.target.kind === "client") {
       revalidateAllLocales(`/clients/${input.target.clientId}`);
+    } else if (input.target.kind === "engagement") {
+      revalidateAllLocales(`/engagements/${input.target.engagementId}`);
     } else {
       revalidateAllLocales("/work");
     }

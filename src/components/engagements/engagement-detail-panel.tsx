@@ -39,6 +39,7 @@ import {
   PersonCheckRow,
 } from "@/components/engagements/detail-panel-bits";
 import { Button } from "@/components/ui/button";
+import { InlineCommentThread } from "@/components/engagements/inline-comment-thread";
 import {
   Sheet,
   SheetContent,
@@ -222,6 +223,25 @@ function PanelBody({
               {t("details_no_services")}
             </p>
           )}
+        </Field>
+
+        {/* Comments on the engagement, where the founder asked for them:
+            "theres a build going on adding a sidebar view for engagements and
+            thats where the commenting thing should exist."
+
+            NOT A NEW THREAD. Engagement-level comments have existed in the data
+            since 0930 and the engagement PAGE already renders them — but the
+            only door was an entry buried in the "..." menu, and the bubble
+            hides itself until a comment exists, which is why the founder
+            reported commenting as missing everywhere except checklist items.
+            This is the same rows, the same component and the same @mentions,
+            finally somewhere you can see them. A comment left here shows on the
+            engagement page and vice versa. */}
+        <Field label={t("details_comments")}>
+          <InlineCommentThread
+            target={{ kind: "engagement", engagementId: row.id }}
+            quotedText={row.title}
+          />
         </Field>
       </div>
     </>
