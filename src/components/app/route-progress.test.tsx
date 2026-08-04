@@ -97,7 +97,12 @@ describe("RouteProgress", () => {
     expect(bar()).not.toBeNull();
 
     arriveAt("/clients", rerender);
-    // Full width and fading — the snap people read as "done".
+    // The floor: a prefetched page arrives in a few frames, and the bar must
+    // still be visible when it does.
+    expect(inner()?.className).toContain("w-[90%]");
+    act(() => void vi.advanceTimersByTime(400));
+    rerender(<RouteProgress />);
+    // NOW it finishes — full width and fading, the snap people read as "done".
     expect(inner()?.className).toContain("w-full");
     expect(inner()?.className).toContain("opacity-0");
 
@@ -113,6 +118,8 @@ describe("RouteProgress", () => {
     clickLink("/dashboard?due=overdue");
     expect(bar()).not.toBeNull();
     arriveAt("/dashboard?due=overdue", rerender);
+    act(() => void vi.advanceTimersByTime(400));
+    rerender(<RouteProgress />);
     expect(inner()?.className).toContain("w-full");
   });
 
@@ -141,5 +148,36 @@ describe("RouteProgress", () => {
     clickLink("/clients");
     expect(bar()?.className).toContain("h-0.5");
     expect(bar()?.className).toContain("pointer-events-none");
+  });
+
+  // ⚠️ The reason the first version was invisible. Next prefetches every <Link>
+  // in view, so most navigations land in under 50ms; a bar that finishes that
+  // fast mounts and unmounts inside three frames and reads as nothing
+  // happening — the exact complaint it was built to answer.
+  it("stays up for its floor even when the page arrives immediately", () => {
+    const { rerender } = render(<RouteProgress />);
+    clickLink("/clients");
+
+    // The page lands almost at once.
+    act(() => void vi.advanceTimersByTime(30));
+    arriveAt("/clients", rerender);
+
+    // Still creeping, not finishing.
+    expect(inner()?.className).toContain("w-[90%]");
+    expect(inner()?.className).not.toContain("opacity-0");
+
+    act(() => void vi.advanceTimersByTime(400));
+    rerender(<RouteProgress />);
+    expect(inner()?.className).toContain("w-full");
+  });
+
+  it("does NOT add the floor on top of a slow page", () => {
+    // A page that already took longer than the floor finishes at once —
+    // padding a slow navigation would make it feel slower still.
+    const { rerender } = render(<RouteProgress />);
+    clickLink("/clients");
+    act(() => void vi.advanceTimersByTime(1500));
+    arriveAt("/clients", rerender);
+    expect(inner()?.className).toContain("w-full");
   });
 });

@@ -23,6 +23,12 @@
 // It only jumps to 100% when the new page is actually here, and that final
 // snap is the part people feel as "done".
 //
+// ⚠️ AND IT STAYS UP FOR AT LEAST 400ms. Next prefetches every <Link> in view,
+// so most navigations here land in under 50ms; without a floor the bar mounts
+// and unmounts inside three frames and reads as nothing happening — which is
+// exactly the complaint it exists to answer. A correct bar nobody can see is
+// not a bar.
+//
 // ── SUBTLE, ON PURPOSE ─────────────────────────────────────────────────────
 //
 // Two pixels, the accent blue, no glow, no spinner, no dimming. It sits above
@@ -60,6 +66,20 @@ import { cn } from "@/lib/cn";
 const FINISH_TOTAL_MS = 430;
 /** Nothing may leave the bar running longer than this. */
 const MAX_MS = 20000;
+/**
+ * The floor. Once the bar is up it stays up this long, even if the page has
+ * already arrived.
+ *
+ * ⚠️ THIS IS THE WHOLE DIFFERENCE between a reassuring bar and one nobody ever
+ * sees. Next prefetches every <Link> in view, so most navigations in this app
+ * land in under 50ms — the bar would mount and unmount inside three frames and
+ * read as nothing happening at all, which is precisely the complaint it was
+ * built to answer.
+ *
+ * 400ms is long enough to register as a deliberate sweep and short enough that
+ * it never feels like it is holding the page back.
+ */
+const MIN_VISIBLE_MS = 400;
 
 export function RouteProgress() {
   const pathname = usePathname();
@@ -72,6 +92,8 @@ export function RouteProgress() {
   // query here the bar would start and never finish.
   const url = `${pathname}?${searchParams}`;
   const seen = useRef(url);
+  /** When the current run started, so the floor above can be honoured. */
+  const startedAt = useRef(0);
 
   function clearTimers() {
     for (const id of timers.current) window.clearTimeout(id);
@@ -110,6 +132,7 @@ export function RouteProgress() {
       }
 
       clearTimers();
+      startedAt.current = Date.now();
       setState("loading");
       timers.current.push(
         window.setTimeout(() => setState("idle"), MAX_MS),
@@ -137,10 +160,20 @@ export function RouteProgress() {
     if (seen.current === url) return;
     seen.current = url;
     clearTimers();
-    setState("done");
-    timers.current.push(
-      window.setTimeout(() => setState("idle"), FINISH_TOTAL_MS),
-    );
+
+    // Hold the floor. A prefetched page arrives in a few frames, and finishing
+    // that fast means the bar was technically correct and completely invisible.
+    const elapsed = startedAt.current ? Date.now() - startedAt.current : 0;
+    const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
+
+    const finish = () => {
+      setState("done");
+      timers.current.push(
+        window.setTimeout(() => setState("idle"), FINISH_TOTAL_MS),
+      );
+    };
+    if (wait === 0) finish();
+    else timers.current.push(window.setTimeout(finish, wait));
   }, [url]);
 
   useEffect(() => clearTimers, []);
