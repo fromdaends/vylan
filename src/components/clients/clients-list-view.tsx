@@ -24,6 +24,7 @@ import type { AppLocale } from "@/lib/format";
 // on every keystroke against the already-loaded clients prop.
 export function ClientsListView({
   clients,
+  avatarUrls,
   summaries,
   owners,
   currentUserId,
@@ -41,6 +42,8 @@ export function ClientsListView({
   actions,
 }: {
   clients: Client[];
+  /** clientId -> signed picture URL (1530), minted by the page. */
+  avatarUrls?: Record<string, string | null>;
   summaries: Record<string, ClientEngagementSummary>;
   owners: Record<string, ClientOwner>;
   relationships?: Record<string, ClientRelationshipBadge>;
@@ -128,6 +131,7 @@ export function ClientsListView({
       ) : (
         <ClientsTable
           clients={filtered}
+          avatarUrls={avatarUrls}
           summaries={summaries}
           owners={owners}
           currentUserId={currentUserId}

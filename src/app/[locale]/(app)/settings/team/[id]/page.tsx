@@ -182,6 +182,19 @@ export default async function TeamMemberProfilePage({
     ),
   ];
 
+  // Their pictures (1530), signed here for the same reason /clients signs them:
+  // avatar_path is a path and only the server can turn one into a URL. The
+  // SAME table renders on both screens, so signing on only one would have put
+  // photos on /clients and letters on a teammate's Clients tab — one component,
+  // two looks, which is exactly what the cohesion rule forbids.
+  const teamClientAvatarList = await Promise.all(
+    clients.map((c) => getBrandingImageUrl(c.avatar_path ?? null)),
+  );
+  const teamClientAvatars: Record<string, string | null> = {};
+  clients.forEach((c, i) => {
+    teamClientAvatars[c.id] = teamClientAvatarList[i];
+  });
+
   // The Clients TAB renders the firm's real clients table, so it needs what
   // that table reads: per-client engagement tallies and the rows its expanded
   // drawer lists. One firm-wide engagement read, on this tab only — the same
@@ -581,6 +594,7 @@ export default async function TeamMemberProfilePage({
         ) : tab === "clients" ? (
           <ClientsTable
             clients={clients}
+            avatarUrls={teamClientAvatars}
             summaries={clientSummaries}
             owners={clientOwners}
             currentUserId={user.id}

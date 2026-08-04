@@ -166,6 +166,18 @@ export default async function ClientsPage({
 
   const t = await getTranslations("Clients");
 
+  // The clients' OWN pictures (1530). Signed AFTER the list is filtered and
+  // sorted, so this only ever signs rows that will actually render — signing
+  // before the filters would mint URLs for clients the page then throws away.
+  const clientAvatarList = await Promise.all(
+    clients.map((c) => getBrandingImageUrl(c.avatar_path ?? null)),
+  );
+  const clientAvatars: Record<string, string | null> = {};
+  clients.forEach((c, i) => {
+    clientAvatars[c.id] = clientAvatarList[i];
+  });
+
+
   // Relationships indicator (spec §3): one query for the firm's live links;
   // the name map reuses the superset fetched above (archived included so a
   // link to an archived client still reads as a name, and unaffected by this
@@ -265,6 +277,7 @@ export default async function ClientsPage({
         subtitle={t("count", { count: clients.length })}
         actions={headerActions}
         clients={clients}
+        avatarUrls={clientAvatars}
         summaries={summaries}
         owners={owners}
         currentUserId={currentUserId}

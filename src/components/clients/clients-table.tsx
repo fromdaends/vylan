@@ -65,6 +65,7 @@ export type ClientRelationshipBadge = { count: number; summary: string };
 
 export function ClientsTable({
   clients,
+  avatarUrls,
   summaries,
   owners,
   currentUserId,
@@ -73,6 +74,11 @@ export function ClientsTable({
   relationships,
 }: {
   clients: Client[];
+  /** clientId -> signed picture URL (1530). Minted by the SERVER that renders
+   *  this — clients.avatar_path is a path, and a client component cannot sign
+   *  one. Missing entries simply fall back to initials, which is also the
+   *  correct state for a client with no picture. */
+  avatarUrls?: Record<string, string | null>;
   summaries: Record<string, ClientEngagementSummary>;
   owners: Record<string, ClientOwner>;
   currentUserId: string;
@@ -106,6 +112,7 @@ export function ClientsTable({
         <ClientRow
           key={c.id}
           client={c}
+          avatarUrl={avatarUrls?.[c.id] ?? null}
           summary={summaries[c.id]}
           relationshipBadge={relationships?.[c.id]}
           owner={c.assigned_user_id ? owners[c.assigned_user_id] : undefined}
@@ -154,6 +161,7 @@ function stop(e: React.MouseEvent) {
 
 function ClientRow({
   client,
+  avatarUrl,
   summary,
   relationshipBadge,
   owner,
@@ -162,6 +170,7 @@ function ClientRow({
   teamEnabled,
 }: {
   client: Client;
+  avatarUrl?: string | null;
   summary: ClientEngagementSummary | undefined;
   relationshipBadge: ClientRelationshipBadge | undefined;
   owner: ClientOwner | undefined;
@@ -189,12 +198,31 @@ function ClientRow({
           )}
         >
           <span className={cn(COL.name, "flex items-center gap-[11px]")}>
-            <span
-              className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11.5px] font-semibold text-accent"
-              aria-hidden
-            >
-              {initialsOf(client.display_name)}
-            </span>
+            {/* The client's picture (1530) when there is one, the flat accent
+                circle when there is not.
+
+                THIS ROW WAS THE COHESION TRAP. Every other client circle in the
+                app is <AvatarInitials>, which has taken an optional `src` all
+                along — this one was hand-rolled, so shipping pictures without
+                touching it would have put photos on the client's profile and
+                letters on the LIST, the screen you actually look at. Keeping
+                the bespoke markup for the no-picture case preserves the exact
+                look this list already had. */}
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                aria-hidden
+                className="size-[30px] shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span
+                className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11.5px] font-semibold text-accent"
+                aria-hidden
+              >
+                {initialsOf(client.display_name)}
+              </span>
+            )}
             <Link
               href={href}
               onClick={stop}
