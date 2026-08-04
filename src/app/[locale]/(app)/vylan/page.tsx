@@ -62,7 +62,7 @@ export default async function VylanHubPage({
   // The automations library lives INSIDE Automated jobs — the founder's call,
   // and the right one: that tab was built as the scaffold for exactly this
   // feature, so the library replaces its "coming soon" promise rather than
-  // moving in next door. It rides the Part A switch (1510): a firm that
+  // moving in next door. It rides the Part A switch (1560): a firm that
   // hasn't been turned on sees the hub exactly as before. A stale
   // ?tab=automations link (the brief separate-tab build) lands here too.
   const firm = await getCurrentFirm();

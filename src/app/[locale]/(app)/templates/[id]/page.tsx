@@ -17,7 +17,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 //     Automation · Tasks · Assignees), the whole playbook editable here, and
 //     BUILT-INS open too (read-only, Clone to customize) so their ready-made
 //     flows are inspectable before cloning.
-//   * workflows OFF — exactly the page that existed before 1510: the firm's
+//   * workflows OFF — exactly the page that existed before 1560: the firm's
 //     own checklist editor, built-ins 404. No firm sees a change it didn't
 //     turn on.
 export default async function TemplateEditPage({
@@ -44,7 +44,7 @@ export default async function TemplateEditPage({
   const displayName = cleanLabel(localizedTemplateName(tmpl, locale));
 
   if (!workflowsOn) {
-    // Pre-1510 behaviour, byte for byte: firm templates only.
+    // Pre-1560 behaviour, byte for byte: firm templates only.
     if (tmpl.firm_id == null) notFound();
     return (
       <div className="space-y-6 max-w-3xl mx-auto">

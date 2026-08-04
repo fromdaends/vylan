@@ -63,7 +63,7 @@ export type TemplateCardData = {
   requiredCount: number;
   /** First few item labels, already localized — the "peek inside". */
   preview: string[];
-  /** One-line automation summary (1510), already localized. Rendered only
+  /** One-line automation summary (1560), already localized. Rendered only
    *  when present — firms without the workflow switch never see it. */
   workflowSummary?: string | null;
 };

@@ -1,3 +1,24 @@
+-- ⚠️ RENUMBERED FROM 1510 → 1560. This file shipped as 1510 in #1318, but
+-- #1312's 1510_engagement_details.sql had already merged, so the two formed a
+-- duplicate pair. Supabase's ledger keys on the VERSION, so the second file of
+-- a pair can never be tracked and a from-scratch replay cannot apply both —
+-- the exact failure that broke this repo's migration checks for months and the
+-- reason CLAUDE.md's `uniq -d` rule exists.
+--
+-- WHY THIS ONE MOVED AND NOT THE OTHER: 1510_engagement_details merged first
+-- (a9281bd6 vs b1dd29a4), so by the house convention the later arrival takes a
+-- new number.
+--
+-- SAFE TO REPLAY, which is what made the rename possible at all. Every
+-- statement below is already idempotent by its own design: create table /
+-- create index / add column all carry `if not exists`, every policy is wrapped
+-- in a `do $$ if not exists ... $$` guard, and the built-in automations are
+-- inserted with `on conflict (id) do update`. So whether or not the ledger
+-- recorded 1510, running this at 1560 converges on the same state rather than
+-- erroring or duplicating the seeds.
+--
+-- Nothing about the SQL itself changed in the rename.
+
 -- AUTOMATED WORKFLOWS, chunk 1 — the engine's storage.
 --
 -- The founder's model, in their words: automations are their own named,
@@ -180,7 +201,7 @@ alter table public.firms add column if not exists workflows_enabled boolean not 
 alter table public.firms add column if not exists ai_suggestions_enabled boolean not null default false;
 
 comment on column public.firms.workflows_enabled is
-  'Part A switch: engagement workflows (automations library + stage engine effects). Off = byte-identical to pre-1510 behaviour.';
+  'Part A switch: engagement workflows (automations library + stage engine effects). Off = byte-identical to pre-1560 behaviour.';
 comment on column public.firms.ai_suggestions_enabled is
   'Part B switch: AI workflow suggestions (propose-and-approve only). Independent of workflows_enabled.';
 

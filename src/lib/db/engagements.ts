@@ -38,7 +38,7 @@ export type Engagement = {
   // reads survive the pre-migration window (column absent → undefined → treated
   // as ON everywhere via the `=== false` checks).
   ai_enabled?: boolean;
-  // Workflow snapshot + confirm-gate latches (migration 1510). Optional so
+  // Workflow snapshot + confirm-gate latches (migration 1560). Optional so
   // reads survive the pre-migration window. Null/absent = no workflow — the
   // legacy stage resolver applies unchanged. Parse with parseWorkflowSnapshot
   // / parseStageGates (src/lib/workflow/definition.ts); never read raw.
@@ -397,10 +397,10 @@ export type CreateEngagementInput = {
   // the RLS policy can't do it (assigned_user_id has no FK constraint to a
   // firm-scoped view).
   assigned_user_id?: string | null;
-  // Workflow snapshot (migration 1510) — a WorkflowSnapshot built by the
+  // Workflow snapshot (migration 1560) — a WorkflowSnapshot built by the
   // create action (definition copied from the template or family default,
   // assignees resolved to user ids). Written best-effort AFTER the insert so
-  // a pre-1510 environment costs the automation, never the engagement.
+  // a pre-1560 environment costs the automation, never the engagement.
   workflow?: unknown;
   items: TemplateItem[];
 };
@@ -597,8 +597,8 @@ export async function createEngagementWithItems(
   }
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
-  // Workflow snapshot (1510), deliberately OUTSIDE the tiered insert above: a
-  // missing column (pre-1510) or a write hiccup costs the automation — the
+  // Workflow snapshot (1560), deliberately OUTSIDE the tiered insert above: a
+  // missing column (pre-1560) or a write hiccup costs the automation — the
   // engagement then simply runs legacy — never the engagement itself.
   if (input.workflow != null) {
     const { error: wfErr } = await supabase

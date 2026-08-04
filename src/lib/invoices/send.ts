@@ -60,7 +60,7 @@ export async function sendEngagementInvoice(
   engagementId: string,
   opts: {
     atSpawn?: boolean;
-    // Workflow stage entry (1510): the engagement is live, not complete —
+    // Workflow stage entry (1560): the engagement is live, not complete —
     // same status rule as at-spawn. The existing "never bill twice" guard
     // below is what makes workflow + invoice_auto_mode overlap safe.
     atStage?: boolean;

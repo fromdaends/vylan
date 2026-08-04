@@ -109,7 +109,7 @@ export async function startPreparationAction(
 }
 
 /**
- * Approve a workflow confirm-gate (1510) — the human tap that lets a
+ * Approve a workflow confirm-gate (1560) — the human tap that lets a
  * confirm-mode transition pass, and the only way a `manual` advance condition
  * ever fires. The third and last person-driven stage action; recorded in
  * stage_gates against the approver and sticky thereafter.

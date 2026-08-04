@@ -106,7 +106,7 @@ describe("parseWorkflowDefinition — total reading", () => {
   });
 
   it("round-trips every family seed unchanged", () => {
-    // The SQL seeds in 1510 are the same shapes — if these survive the parser
+    // The SQL seeds in 1560 are the same shapes — if these survive the parser
     // intact, so do the database rows. The parser's one normalization is
     // filling a task's omitted `assignee` with null.
     for (const def of [
