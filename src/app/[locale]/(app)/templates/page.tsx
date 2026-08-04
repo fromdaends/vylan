@@ -16,6 +16,10 @@ import {
 } from "@/app/actions/templates";
 import { assertLocale } from "@/lib/locale";
 import { Plus, FilePlus2 } from "lucide-react";
+import { listFirmServices } from "@/lib/db/firm-services";
+import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
+import { ServiceCatalogue } from "@/components/templates/service-catalogue";
 
 export default async function TemplatesPage({
   params,
@@ -26,7 +30,15 @@ export default async function TemplatesPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const templates = await listTemplates();
+  const [templates, services, user] = await Promise.all([
+    listTemplates(),
+    listFirmServices(),
+    getCurrentUser(),
+  ]);
+  // Editing what the firm SELLS is a firm-settings decision, not something
+  // anyone with an engagement can do. The server action enforces this too —
+  // this only decides whether the controls are drawn.
+  const canManageServices = user != null && can(user, "firm.settings");
   // Hide the empty "blank" built-in — it's only the clone source for
   // "New template", never a template a firm should pick.
   const builtIn = templates.filter(
@@ -35,6 +47,7 @@ export default async function TemplatesPage({
   const firm = templates.filter((tmpl) => tmpl.firm_id != null);
 
   const t = await getTranslations("Templates");
+  const tEng = await getTranslations("Engagements");
 
   // Localized "peek inside" + required count, computed once per template.
   const cardData = (tmpl: Template) => {
@@ -60,7 +73,30 @@ export default async function TemplatesPage({
         </p>
       </header>
 
-      <Section title={t("section_builtin")} count={builtIn.length}>
+      {/* SERVICES FIRST — what you SELL comes before what you ask a client to
+          send you. The founder put the catalogue here rather than in Settings
+          because it is the same kind of thing as the lists below: something you
+          set up once and reuse on every engagement. */}
+      <Section
+        id="services"
+        title={tEng("services_title")}
+        count={services.length}
+      >
+        <p className="-mt-1 mb-4 max-w-xl text-sm text-muted-foreground">
+          {tEng("services_subtitle")}
+        </p>
+        <ServiceCatalogue
+          services={services}
+          locale={locale}
+          canManage={canManageServices}
+        />
+      </Section>
+
+      <Section
+        id="document-requests"
+        title={t("section_builtin")}
+        count={builtIn.length}
+      >
         <CardGrid>
           {builtIn.map((tmpl) => (
             <TemplateCard
@@ -154,11 +190,14 @@ export default async function TemplatesPage({
 }
 
 function Section({
+  id,
   title,
   count,
   children,
   action,
 }: {
+  /** Anchor target, so the Create panel can link straight to a section. */
+  id?: string;
   title: string;
   count: number;
   children: ReactNode;
@@ -167,7 +206,7 @@ function Section({
   action?: ReactNode;
 }) {
   return (
-    <section className="space-y-4">
+    <section id={id} className="space-y-4">
       <div className="flex items-center justify-between border-b border-border/60 pb-2">
         <div className="flex items-baseline gap-2.5">
           <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
