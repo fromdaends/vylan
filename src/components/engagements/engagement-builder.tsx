@@ -229,6 +229,9 @@ export function EngagementBuilder({
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  // Canopy's step 1 (migration 1510).
+  const [startDate, setStartDate] = useState("");
+  const [introMessage, setIntroMessage] = useState("");
   // Optional structured tax year ("" = none). Options: next year down to 6
   // back — covers late prior-year filings without a free-text field.
   const [taxYear, setTaxYear] = useState("");
@@ -594,6 +597,8 @@ export function EngagementBuilder({
             title: effectiveTitle.trim(),
             type: selectedTemplate.type,
             due_date: dueDate || null,
+            start_date: startDate || null,
+            intro_message: introMessage.trim() || null,
             tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
@@ -887,6 +892,23 @@ export function EngagementBuilder({
                   required
                 />
               </div>
+              {/* START date — Canopy's step 1 has both, and they answer
+                  different questions: when the work BEGINS versus when it is
+                  OWED. Conflating them is why an engagement created in advance
+                  for next season had no honest way to say it had not started. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="start_date">{t("field_start_date")}</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-fit"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("start_date_hint")}
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="due_date">{t("field_due_date_optional")}</Label>
                 <Input
@@ -921,6 +943,26 @@ export function EngagementBuilder({
                   {t("builder_tax_year_hint")}
                 </p>
               </div>
+              {/* The covering note at the top of the client's proposal.
+                  PLAIN TEXT for now: nothing in this repo has a rich-text
+                  editor, and adding one is its own decision that also affects
+                  the item descriptions and the terms. Storing text now and
+                  upgrading the EDITOR later is safe; storing HTML from an
+                  editor that does not exist is not. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="intro_message">{t("field_intro_message")}</Label>
+                <Textarea
+                  id="intro_message"
+                  value={introMessage}
+                  onChange={(e) => setIntroMessage(e.target.value)}
+                  rows={3}
+                  placeholder={t("intro_message_placeholder")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("intro_message_hint")}
+                </p>
+              </div>
+
               {/* "AI Analyze" toggle. On by default; turning it off means no
                   document uploaded to this engagement is ever sent to the AI —
                   helps the firm control AI usage on engagements that don't need it. */}

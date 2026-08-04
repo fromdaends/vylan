@@ -2780,7 +2780,12 @@
     "agr_accepted": "Accepted",
     "agr_active": "Active",
     "agr_complete": "Complete",
-    "agr_cancelled": "Cancelled"
+    "agr_cancelled": "Cancelled",
+    "field_start_date": "Start date",
+    "start_date_hint": "When the work begins. Leave blank if it starts now.",
+    "field_intro_message": "Message to the client",
+    "intro_message_placeholder": "A short note that appears at the top of what your client sees.",
+    "intro_message_hint": "Optional. The client reads this first."
   },
   "Attention": {
     "metric_active": "Active",
