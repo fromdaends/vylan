@@ -148,6 +148,60 @@ describe("ClientMessagesTab (inbox)", () => {
     expect(screen.getByTestId("thread")).toHaveTextContent("Thread c3");
   });
 
+  it("filters the list down to the person you typed", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Acme Corp")).toBeInTheDocument(),
+    );
+    fireEvent.change(
+      screen.getByLabelText(en.Assistant.messages_search_placeholder),
+      { target: { value: "beta" } },
+    );
+    expect(screen.getByText("Beta Inc")).toBeInTheDocument();
+    expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
+    expect(screen.queryByText("Zephyr Ltd")).not.toBeInTheDocument();
+    // Clearing brings everyone back — the filter is local, nothing refetches.
+    fireEvent.change(
+      screen.getByLabelText(en.Assistant.messages_search_placeholder),
+      { target: { value: "" } },
+    );
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+  });
+
+  it("says so when nothing matches, instead of looking like an empty inbox", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Acme Corp")).toBeInTheDocument(),
+    );
+    fireEvent.change(
+      screen.getByLabelText(en.Assistant.messages_search_placeholder),
+      { target: { value: "nobody-by-that-name" } },
+    );
+    expect(
+      screen.getByText(en.Assistant.messages_search_no_matches),
+    ).toBeInTheDocument();
+    // NOT the "you have no clients" state — they have three.
+    expect(
+      screen.queryByText(en.Assistant.messages_inbox_no_clients),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides the search field when there is nothing to filter", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversations: [], team: null }),
+    });
+    renderTab();
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.Assistant.messages_inbox_no_clients),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByLabelText(en.Assistant.messages_search_placeholder),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when the firm has no clients at all", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
@@ -259,6 +313,38 @@ describe("ClientMessagesTab (pinned team chat)", () => {
     expect(
       screen.getByText(en.Assistant.messages_inbox_no_clients),
     ).toBeInTheDocument();
+  });
+
+  // The team row is pinned, not exempt: a search for a client shouldn't leave
+  // the firm's own chat sitting on top of the results as noise.
+  it("takes the pinned row out of the results when it doesn't match", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
+    );
+    fireEvent.change(
+      screen.getByLabelText(en.Assistant.messages_search_placeholder),
+      { target: { value: "acme" } },
+    );
+    expect(screen.queryByText("Jette Comptables")).not.toBeInTheDocument();
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+  });
+
+  it("finds the team chat by the firm's own name", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
+    );
+    fireEvent.change(
+      screen.getByLabelText(en.Assistant.messages_search_placeholder),
+      { target: { value: "jette" } },
+    );
+    expect(screen.getByText("Jette Comptables")).toBeInTheDocument();
+    expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
+    // A matching team row alone is a result, not "no matches".
+    expect(
+      screen.queryByText(en.Assistant.messages_search_no_matches),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the pinned row for a firm without a team", async () => {

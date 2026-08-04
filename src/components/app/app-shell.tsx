@@ -296,8 +296,20 @@ export function AppShell({
               label: tHome("create_invoice"),
               description: tHome("create_invoice_hint"),
             },
+            // BOTH kinds of template, as separate rows. They point at the
+            // same page today, but they are different things you set up — one
+            // is what you sell, the other is what you ask a client to send —
+            // and collapsing them into "Templates" would hide the new one
+            // behind a word that already meant the old one.
             {
-              href: "/templates",
+              // Anchored so each row lands on its own section — and so the
+              // two rows have distinct keys in the panel's list.
+              href: "/templates#services",
+              label: tHome("create_service"),
+              description: tHome("create_service_hint"),
+            },
+            {
+              href: "/templates#document-requests",
               label: tHome("create_template"),
               description: tHome("create_template_hint"),
             },
