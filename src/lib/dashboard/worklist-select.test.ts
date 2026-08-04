@@ -26,6 +26,9 @@ function row(
     title: `Engagement ${over.id}`,
     clientName: "Client",
     clientId: "client-1",
+    // Progress counts TASKS now (see worklist.ts).
+    tasksDone: 1,
+    tasksTotal: 2,
     status: "in_progress",
     derivedStatus,
     dueDate: null,

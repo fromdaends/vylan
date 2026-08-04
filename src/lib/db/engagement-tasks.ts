@@ -138,6 +138,48 @@ function toTask(r: Record<string, unknown>): EngagementTask | null {
   };
 }
 
+/**
+ * How many tasks each engagement has, and how many are done or under way.
+ *
+ * ONE query for the whole board, grouped in memory. The dashboard renders a
+ * progress bar per row, and a count per row would be an N+1 across every
+ * engagement in the firm — the exact shape the perf sweep spent a day removing.
+ *
+ * Client-only tasks are excluded by the null-engagement filter: they belong to
+ * a person, not to a job, so counting them toward a job's progress would mean a
+ * phone call about a CRA notice moved a tax return's bar.
+ */
+export async function countTasksByEngagement(): Promise<
+  Map<string, { total: number; done: number; doing: number }>
+> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_tasks")
+    .select("engagement_id, status")
+    .not("engagement_id", "is", null);
+  if (error) {
+    // Deploy-ahead safe: before 1340/1350 are applied this table does not
+    // exist, and a dashboard that 500s is far worse than one whose bars are
+    // briefly empty.
+    if (isMissingSchema(error)) return new Map();
+    throw error;
+  }
+  const out = new Map<string, { total: number; done: number; doing: number }>();
+  for (const row of (data ?? []) as Array<{
+    engagement_id: string | null;
+    status: unknown;
+  }>) {
+    if (!row.engagement_id) continue;
+    const bucket = out.get(row.engagement_id) ?? { total: 0, done: 0, doing: 0 };
+    bucket.total += 1;
+    const status = toTaskStatus(row.status);
+    if (status === "done") bucket.done += 1;
+    else if (status === "doing") bucket.doing += 1;
+    out.set(row.engagement_id, bucket);
+  }
+  return out;
+}
+
 /** One job's tasks, in display order. */
 export async function listEngagementTasks(
   engagementId: string,
