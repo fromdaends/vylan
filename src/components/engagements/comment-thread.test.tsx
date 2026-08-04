@@ -59,6 +59,8 @@ const existing: FileComment[] = [
     id: "c1",
     uploadedFileId: null,
     requestItemId: "i1",
+    engagementTaskId: null,
+    clientId: null,
     authorUserId: "u-zach",
     authorName: "Zach",
     body: "Missing page 2 here",

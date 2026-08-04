@@ -15,3 +15,9 @@ export function commentKeyForItem(itemId: string): string {
 export function commentKeyForEngagement(engagementId: string): string {
   return `eng:${engagementId}`;
 }
+export function commentKeyForTask(taskId: string): string {
+  return `task:${taskId}`;
+}
+export function commentKeyForClient(clientId: string): string {
+  return `client:${clientId}`;
+}
