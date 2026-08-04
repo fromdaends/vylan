@@ -29,7 +29,10 @@ import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users"
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
-import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import {
+  listFirmTasks,
+  listSubtasksByParent,
+} from "@/lib/db/engagement-tasks";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
 import {
   matchesDueFilter,
@@ -91,6 +94,10 @@ export default async function WorkPage({
     ? tasks.filter((task) => matchesDueFilter(task, due, today))
     : tasks;
 
+  // The steps inside each task, batched by parent — a query per row would be
+  // the N+1 the perf sweep spent a day removing.
+  const subtasksByParent = await listSubtasksByParent(tasks.map((x) => x.id));
+
   const t = await getTranslations("Engagements");
   const activeMembers = members
     .filter((m) => !m.deactivated_at)
@@ -138,7 +145,17 @@ export default async function WorkPage({
       </header>
 
       <TasksTable
-        tasks={shown}
+        tasks={shown.map((task) => ({
+          ...task,
+          subtasks: (subtasksByParent.get(task.id) ?? []).map((x) => ({
+            id: x.id,
+            title: x.title,
+            status: x.status,
+            statusId: x.statusId,
+            assigneeIds: x.assigneeIds,
+            dueDate: x.dueDate,
+          })),
+        }))}
         members={activeMembers}
         canEdit
         statuses={statuses}

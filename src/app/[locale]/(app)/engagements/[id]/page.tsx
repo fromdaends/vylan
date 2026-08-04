@@ -172,7 +172,7 @@ import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
-import { listEngagementTasks } from "@/lib/db/engagement-tasks";
+import { listSubtasksByParent, listEngagementTasks } from "@/lib/db/engagement-tasks";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
@@ -537,6 +537,10 @@ export default async function EngagementDetailPage({
     listEngagementTasks(id),
     listTaskStatuses(),
   ]);
+  // The steps inside each of them, batched by parent.
+  const subtasksByParent = await listSubtasksByParent(
+    internalTasks.map((x) => x.id),
+  );
   const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
   // Anyone who can ALREADY see this through the client is not a candidate:
   // adding them would grant nothing, and removing them later would take

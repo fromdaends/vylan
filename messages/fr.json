@@ -2090,6 +2090,8 @@
     "filter_all": "Tout afficher",
     "statuses_new": "Nouveau statut…",
     "task_mark_done": "Marquer {title} comme terminée",
+    "subtasks": "Étapes",
+    "subtasks_add_placeholder": "Ajouter une étape…",
     "tasks_none_match": "Aucune tâche ne correspond à ces filtres.",
     "task_count_total": "{count, plural, =1 {# tâche} other {# tâches}}",
     "add_task_pick_job": "Choisir un mandat",

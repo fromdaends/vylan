@@ -119,6 +119,16 @@ export type TaskRow = {
   notes?: string | null;
   dueDate?: string | null;
   createdAt?: string | null;
+  /** The steps inside this task. The ROW shows only their count; the panel
+   *  shows the steps — see subtask-list.tsx for why they are not nested rows. */
+  subtasks?: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    statusId?: string | null;
+    assigneeIds: string[];
+    dueDate?: string | null;
+  }[];
   /** "2 of 3 done" for a kind that owns a collection. Job page only. */
   meta?: string;
 };
@@ -926,6 +936,14 @@ function Row({
           {task.meta && (
             <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
               {task.meta}
+            </span>
+          )}
+          {/* The count IS the link between the row and the panel: "2 of 5"
+              here, the five steps in there. */}
+          {task.subtasks && task.subtasks.length > 0 && (
+            <span className="shrink-0 rounded border border-border/70 px-1 py-px text-[10px] tabular-nums text-muted-foreground">
+              {task.subtasks.filter((x) => x.status === "done").length}/
+              {task.subtasks.length}
             </span>
           )}
           {openable && (
