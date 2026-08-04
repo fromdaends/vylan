@@ -147,6 +147,8 @@ export async function updateTaskAction(input: {
   title?: string;
   status?: TaskStatus;
   dueDate?: string | null;
+  /** Null clears it. Undefined leaves it alone — the two are different. */
+  notes?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -159,6 +161,7 @@ export async function updateTaskAction(input: {
   }
   if (input.status !== undefined) patch.status = input.status;
   if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
+  if (input.notes !== undefined) patch.notes = input.notes;
 
   try {
     await updateEngagementTask({

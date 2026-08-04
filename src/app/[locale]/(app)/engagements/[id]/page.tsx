@@ -1409,6 +1409,8 @@ export default async function EngagementDetailPage({
           assigneeIds: x.assigneeIds,
           clientId: x.clientId,
           engagementId: x.engagementId,
+          notes: x.notes,
+          dueDate: x.dueDate,
           // The count belongs to the collection the task POINTS AT, which only
           // this page has loaded — so it is computed here and passed down
           // rather than re-queried by the list.
