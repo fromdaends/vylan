@@ -20,6 +20,7 @@ import {
   FolderOpen,
   Gauge,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Receipt,
   Settings,
@@ -42,6 +43,9 @@ type Labels = {
   work: string;
   workTasks: string;
   workEngagements: string;
+  // One line each, under the label in the rail's second sidebar.
+  workTasksHint: string;
+  workEngagementsHint: string;
   closePanel: string;
   engagementsToggle: string;
   templates: string;
@@ -192,11 +196,24 @@ export function AppShell({
       // lists and neither is the obvious default, so it asks which — landing
       // somebody on Tasks when they wanted Engagements is a click and a page
       // load to undo.
+      // Each row carries an icon and one line on what is inside. Two bare
+      // words in a 256px column is a list with nothing to look at, which is
+      // what the founder meant by "the text ui looks bad".
       panel: {
         title: labels.work,
         items: [
-          { href: "/work", label: labels.workTasks },
-          { href: "/engagements", label: labels.workEngagements },
+          {
+            href: "/work",
+            label: labels.workTasks,
+            description: labels.workTasksHint,
+            icon: ListTodo,
+          },
+          {
+            href: "/engagements",
+            label: labels.workEngagements,
+            description: labels.workEngagementsHint,
+            icon: FileText,
+          },
         ],
       },
     },
@@ -261,10 +278,18 @@ export function AppShell({
           // horizontally by ~the sidebar width. min-w-0 lets it size to the
           // available width; <main> below clips any remaining child overflow
           // (and the table keeps its own internal scroll).
-          // One fixed offset now — the rail never changes width, so the
-          // left-margin transition the collapse toggle needed is gone. The right
-          // margin still animates for the expandable messaging sidebar.
-          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-right] duration-300 ease-out sm:ml-[var(--rail-width)] sm:mr-[var(--assistant-shell-offset)]",
+          // The left margin animates again, but for a different reason than the
+          // old collapse toggle: the rail's second sidebar PUSHES this column
+          // aside rather than lying on top of it. That was the founder's first
+          // complaint about it — "its overlapping with the page" — and a panel
+          // that covers your work while you decide where to go is the wrong
+          // object. --rail-flyout-offset is 0px until one opens.
+          //
+          // transition-[margin] rather than naming both sides: a comma-joined
+          // arbitrary property list is one Tailwind parser quirk away from
+          // silently producing no transition at all, and there is nothing else
+          // on this element whose margin moves.
+          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin] duration-300 ease-out sm:ml-[calc(var(--rail-width)+var(--rail-flyout-offset))] sm:mr-[var(--assistant-shell-offset)]",
         )}
       >
         {topBar && (

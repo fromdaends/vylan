@@ -134,6 +134,8 @@ export default async function AppLayout({
         work: t("nav_work"),
         workTasks: t("nav_work_tasks"),
         workEngagements: t("nav_engagements"),
+        workTasksHint: t("nav_work_tasks_hint"),
+        workEngagementsHint: t("nav_engagements_hint"),
         closePanel: t("nav_close_panel"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),

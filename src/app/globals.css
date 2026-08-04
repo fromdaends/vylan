@@ -98,6 +98,15 @@
      own width from this and the main content offsets by the same value, so they
      can never drift apart — and resizing the rail is a one-line change here. */
   --rail-width: 92px;
+
+  /* The rail's second sidebar (rail-flyout.tsx), and how far it pushes the
+     page across. The offset is zero until a panel opens, and the panel sets it
+     — but it MUST be declared here regardless: the content column's left margin
+     is a calc() of the two, and one undefined variable invalidates the whole
+     expression, which would drop the rail offset with it and slide every page
+     in the app underneath the navigation. */
+  --rail-flyout-width: 272px;
+  --rail-flyout-offset: 0px;
 }
 
 .dark {
@@ -1236,6 +1245,16 @@
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* One row of the rail's second sidebar arriving. An ANIMATION rather than a
+   delayed transition on purpose: a transition-delay on the row would delay its
+   hover colour by the same amount, so every row below the first would feel
+   broken to the mouse for a tenth of a second. Applied under motion-safe only,
+   and the rows are simply present without it. */
+@keyframes rail-flyout-item-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
