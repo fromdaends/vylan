@@ -369,6 +369,10 @@ export type CreateEngagementInput = {
   // Priced service lines — the scope (migration 1450). Optional so every
   // existing caller is unaffected; absent means "no priced scope", which is
   // every engagement created before this shipped.
+  // Canopy's step 1 (migration 1510). start_date is WHEN THE WORK BEGINS,
+  // distinct from due_date which is when it is owed.
+  start_date?: string | null;
+  intro_message?: string | null;
   service_items?: {
     name: string;
     service_id?: string | null;
@@ -434,6 +438,15 @@ export async function createEngagementWithItems(
   // is then simply not stored — fail-open, title scrape still covers filing).
   const taxYearCol =
     input.tax_year != null ? { tax_year: input.tax_year } : {};
+  // Included only when SET, so a pre-1510 database only hits the retry ladder
+  // for an engagement that actually used them — and the retry drops them, which
+  // creates the engagement without a start date rather than not at all.
+  const detailCols1510 = {
+    ...(input.start_date != null ? { start_date: input.start_date } : {}),
+    ...(input.intro_message != null
+      ? { intro_message: input.intro_message }
+      : {}),
+  };
 
   // Base row (valid in every environment). ai_enabled (migration 0340) is added
   // separately so creation survives the deploy→migrate window: if that column
@@ -497,9 +510,10 @@ export async function createEngagementWithItems(
       ...invoiceCols610,
       ...reminderCols660,
       ...privateCol,
-      // 0900 is the newest column; if it's missing the FIRST retry tier below
-      // (which omits it) still creates the engagement — fail-open.
       ...taxYearCol,
+      // 1510 is the newest set; if it's missing the FIRST retry tier below
+      // (which omits it) still creates the engagement — fail-open.
+      ...detailCols1510,
     })
     .select("*")
     .single();
@@ -507,7 +521,8 @@ export async function createEngagementWithItems(
   // takes co-located data down with it: without 0850 (is_private), then 0660,
   // then 0610, then 0590, then ai_enabled (a very old env missing 0340 too).
   if (engErr && isUnknownColumnError(engErr)) {
-    // Drop ONLY tax_year (0900) — keep is_private (0850) and everything older.
+    // Drop the NEWEST set first: 1510 (start_date, intro_message) and tax_year
+    // (0900). Everything older is kept.
     ({ data: engagement, error: engErr } = await supabase
       .from("engagements")
       .insert({
