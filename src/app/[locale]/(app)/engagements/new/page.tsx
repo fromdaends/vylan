@@ -122,6 +122,21 @@ export async function NewEngagementScreen({
         reminderDefaultSettings={getFirmReminderDefault(firm)}
         canManageReminderDefaults={can(user, "firm.settings")}
         authorizedContacts={authorizedContacts}
+        // The firm's service catalogue (1480). Without this the Service
+        // dropdown on an engagement item never appears.
+        services={services}
+        // Saved whole-engagement templates (1500). Without this the start
+        // chooser can never offer one.
+        engagementTemplates={engagementTemplates.map((x) => ({
+          id: x.id,
+          name: x.name,
+          access: x.access,
+          payload: x.payload,
+        }))}
+        // Active firm members, for the assignee picker.
+        members={members
+          .filter((m) => !m.deactivated_at)
+          .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
       />
   );
 }
