@@ -2709,8 +2709,23 @@
     "tasks_panel_failed": "Couldn't load these tasks.",
     "tasks_panel_open_engagement": "Open the engagement instead",
     "tasks_panel_loading": "Loading tasks",
+<<<<<<< HEAD
     "item_service": "Service",
     "item_service_none": "Not from your catalogue"
+=======
+    "details_card_title": "Engagement details",
+    "details_signatures": "{signed}/{total} Signatures",
+    "details_signed": "Signed",
+    "details_awaiting_signature": "Awaiting",
+    "details_dates": "Dates",
+    "details_sent": "Sent",
+    "details_starts": "Starts",
+    "details_accepted": "Accepted",
+    "details_due": "Due",
+    "details_on_acceptance": "On acceptance",
+    "details_services": "Services",
+    "details_no_services": "No services on this engagement yet."
+>>>>>>> origin/main
   },
   "Attention": {
     "metric_active": "Active",
