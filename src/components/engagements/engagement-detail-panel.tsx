@@ -122,7 +122,12 @@ function PanelBody({
   return (
     <>
       <SheetHeader className="space-y-1.5">
-        <div className="flex items-start justify-between gap-3">
+        {/* ⚠️ pr-7 IS LOAD-BEARING. SheetContent draws its own close button
+            absolutely positioned in the top-right corner, so anything this row
+            puts at its end lands UNDERNEATH it — the status chip was half
+            hidden behind the X on the deployed page, which no test could have
+            caught. The padding reserves the corner the sheet already owns. */}
+        <div className="flex items-start justify-between gap-3 pr-7">
           <SheetTitle className="min-w-0 text-lg font-semibold tracking-tight">
             {row.title}
           </SheetTitle>
