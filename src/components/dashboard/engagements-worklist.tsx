@@ -774,23 +774,6 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
             />
-            {/* START DATE — when it actually began, which is when it went to
-                the client. A draft has not begun, so it shows its creation
-                date instead of an empty cell.
-
-                xl only, deliberately. It is reference rather than triage: you
-                sort by it once a quarter, you read the due date every day. On a
-                laptop the two dates side by side would squeeze the columns that
-                earn their place. */}
-            <ColumnMenu
-              label={t("wl_col_started")}
-              t={tEng}
-              className="hidden border-l border-border/60 px-4 lg:table-cell"
-              sortKey="started"
-              sort={sort ?? UNSORTED}
-              setSort={setSort}
-              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
-            />
             <ColumnMenu
               label={t("wl_col_status")}
               t={tEng}
@@ -807,6 +790,23 @@ export function WorklistTable({
                 value: v,
                 label: stageLabel(v),
               }))}
+            />
+            {/* START DATE — when it actually began, which is when it went to
+                the client. A draft has not begun, so it shows its creation
+                date instead of an empty cell.
+
+                xl only, deliberately. It is reference rather than triage: you
+                sort by it once a quarter, you read the due date every day. On a
+                laptop the two dates side by side would squeeze the columns that
+                earn their place. */}
+            <ColumnMenu
+              label={t("wl_col_started")}
+              t={tEng}
+              className="hidden border-l border-border/60 px-4 lg:table-cell"
+              sortKey="started"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
             />
             {reassignMembers && reassignMembers.length > 0 && (
               <TableHead className="w-10 px-2" />
@@ -869,7 +869,6 @@ export function WorklistTable({
                   : null
               }
               unassignedText={t("wl_unassigned")}
-              pctLabel={(pct) => t("wl_pct_complete", { pct })}
               canDelete={canDelete}
               countdownText={countdownFor?.(r) ?? null}
               teamEnabled={teamEnabled}
@@ -905,7 +904,6 @@ function WorklistRowView({
   staleText,
   readyText,
   unassignedText,
-  pctLabel,
   canDelete,
   countdownText,
   onOptimisticRemoval,
@@ -927,7 +925,6 @@ function WorklistRowView({
   staleText: string | null;
   readyText: string | null;
   unassignedText: string;
-  pctLabel: (pct: number) => string;
   canDelete: boolean;
   countdownText: string | null;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
@@ -952,16 +949,12 @@ function WorklistRowView({
   const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
-  // Otherwise the % is the APPROVED share of required items; the dimmer
-  // second segment is the submitted-awaiting-review share, so "everything's
-  // in but not yet cleared" reads at a glance instead of a premature 100%.
+  // The fallback for a row whose task counts have not landed: the approved
+  // share of its required items. `awaitingPct` fed the bar's dim second
+  // segment and has no reader now the bar is gone — it stays on the row type
+  // because the loader still computes it and the Overview may want it back.
   const pct =
     row.status === "complete" ? 100 : Math.round(row.approvedPct * 100);
-  const awaitingPctValue =
-    row.status === "complete" ? 0 : Math.round(row.awaitingPct * 100);
-  // Drafts haven't been sent and cancelled work is moot — neither has a
-  // meaningful progress bar (and an unfetched-items draft would otherwise
-  // read as 100%).
   // A job with no tasks yet has nothing to measure. It reads "—" rather than a
   // 0% bar, which would say "started and got nowhere" about work nobody has
   // planned. Drafts and cancelled work stay out for the same reason.
@@ -1141,39 +1134,22 @@ function WorklistRowView({
             </TableCell>
 
             <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top md:table-cell">
+              {/* ⚠️ THE BAR CAME OUT. Canopy's Engagement items column is a
+                  VALUE, not a gauge, and the founder asked for its UI exactly.
+
+                  The bar was also saying the same thing twice: "2/5" is the
+                  share AND the amount left, and only the number can tell you
+                  the difference between three tasks to go and thirty. What the
+                  bar added was a second thing to read in a column that already
+                  answered the question. */}
               {!showProgress ? (
                 <span className="text-sm text-muted-foreground">—</span>
               ) : (
-                <div className="flex items-center gap-2">
-                  <div
-                    className="flex h-1.5 w-20 overflow-hidden rounded-full bg-muted"
-                    role="progressbar"
-                    aria-valuenow={pct}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={pctLabel(pct)}
-                  >
-                    {/* Solid = tasks DONE; dim = tasks under way (#1239). */}
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                    <div
-                      className="h-full bg-primary/35 transition-all"
-                      style={{ width: `${awaitingPctValue}%` }}
-                    />
-                  </div>
-                  {/* The COUNT, not just a share. The bar now measures tasks
-                      (#1239), and "2 of 5" says what a percentage cannot: how
-                      much work is actually left. It also makes this column
-                      speak the same language as the Tasks page, where every
-                      parent row carries the same figure. */}
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {row.tasksTotal > 0
-                      ? `${row.tasksDone}/${row.tasksTotal}`
-                      : `${pct}%`}
-                  </span>
-                </div>
+                <span className="text-sm tabular-nums text-foreground">
+                  {row.tasksTotal > 0
+                    ? `${row.tasksDone}/${row.tasksTotal}`
+                    : `${pct}%`}
+                </span>
               )}
             </TableCell>
 
@@ -1213,12 +1189,6 @@ function WorklistRowView({
               </div>
             </TableCell>
 
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top lg:table-cell">
-              <div className="text-sm tabular-nums text-muted-foreground">
-                {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
-              </div>
-            </TableCell>
-
             {/* Status column. A live engagement shows its workflow STAGE —
                 real position ("In review", "Awaiting signature") instead of the
                 generic "In progress" every live row used to read.
@@ -1233,7 +1203,14 @@ function WorklistRowView({
                 Everything else (draft / complete / cancelled, or any row before
                 migration 0690 lands) keeps the status pill: those have no
                 workflow position to show. */}
-            <TableCell className="border-l border-border/60 px-4 py-3 align-top">
+            <TableCell
+              // A stable hook for the tests. Status has now moved twice, and a
+              // helper that counted cells from the end broke silently both
+              // times — a positional assertion is really a test of the column
+              // order dressed up as a test of the pill.
+              data-column="status"
+              className="border-l border-border/60 px-4 py-3 align-top"
+            >
               {row.stage ? (
                 <StageChip stage={row.stage} />
               ) : (
@@ -1252,6 +1229,12 @@ function WorklistRowView({
             {/* Opt-in reassign menu (the teammate profile passes the teammates
                 to hand work to). Built here inside the client component so no
                 function crosses the server→client boundary. */}
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top lg:table-cell">
+              <div className="text-sm tabular-nums text-muted-foreground">
+                {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
+              </div>
+            </TableCell>
+
             {reassignMembers && reassignMembers.length > 0 && (
               <TableCell className="px-2 py-3 align-top">
                 <EngagementReassignMenu
