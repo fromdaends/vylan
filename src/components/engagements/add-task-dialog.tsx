@@ -117,6 +117,7 @@ export function AddTaskDialog({
   members = [],
   trigger,
   initialTitle,
+  defaultOpen = false,
   open: controlledOpen,
   onOpenChange,
   onCreated,
@@ -137,6 +138,10 @@ export function AddTaskDialog({
   trigger?: ReactNode;
   /** Seeds the name field on open — what the quick-add row already typed. */
   initialTitle?: string;
+  /** Opens on FIRST render only — for arriving from a link that means "make
+   *  one now" (the rail's Create panel sends ?new=1). Unlike `open` below it
+   *  does not fight the user: once closed it stays closed. */
+  defaultOpen?: boolean;
   /** Controlled-open pair, for a caller whose trigger lives outside. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -146,7 +151,10 @@ export function AddTaskDialog({
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [openSelf, setOpenSelf] = useState(false);
+  // Seeded rather than forced: the rail's Create panel navigates here with
+  // ?new=1 and expects the form already open. Only the INITIAL state, so
+  // closing it stays closed for this page view.
+  const [openSelf, setOpenSelf] = useState(defaultOpen);
   // Controlled when the caller owns the trigger (the dashboard quick-add),
   // self-managed everywhere else.
   const open = controlledOpen ?? openSelf;

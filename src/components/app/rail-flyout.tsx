@@ -47,13 +47,21 @@ export type FlyoutItem = {
   label: string;
   /** One line on what is in there. Optional; a row without one just sits shorter. */
   description?: string;
-  icon?: LucideIcon;
+};
+
+/** A round icon button in the panel's header strip. Canopy's three-up shortcut
+ *  row: the things you reach for most, above the longer list. */
+export type FlyoutAction = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
 };
 
 export function RailFlyout({
   open,
   title,
   items,
+  actions,
   activeHref,
   closeLabel,
   autoFocus,
@@ -62,6 +70,8 @@ export function RailFlyout({
   open: boolean;
   title: string;
   items: FlyoutItem[];
+  /** Optional round-button strip above the list (Canopy's three-up shortcuts). */
+  actions?: FlyoutAction[];
   /** Which room you are already standing in, so the panel says so. */
   activeHref: string | null;
   closeLabel: string;
@@ -162,12 +172,34 @@ export function RailFlyout({
         </button>
       </div>
 
+      {actions && actions.length > 0 && (
+        // Evenly spread rather than left-packed: with two or three items a
+        // left-packed row leaves a hole on the right that reads as a missing
+        // fourth button.
+        <div className="flex items-start justify-around gap-2 px-3 pb-4 pt-3">
+          {actions.map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              onClick={() => onClose()}
+              className="group flex w-[84px] flex-col items-center gap-2 rounded-lg py-1 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors group-hover:bg-accent-hover">
+                <action.icon className="size-[21px]" aria-hidden />
+              </span>
+              <span className="text-[11.5px] font-medium leading-tight text-foreground">
+                {action.label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div aria-hidden className="mx-4 h-px bg-border" />
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {items.map((item, i) => {
           const active = activeHref === item.href;
-          const Icon = item.icon;
           return (
             <Link
               key={item.href}
@@ -182,12 +214,10 @@ export function RailFlyout({
               // time rather than only on the first open.
               style={open ? { animationDelay: `${60 + i * 55}ms` } : undefined}
               className={cn(
-                "group relative flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "group relative block rounded-lg px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 open &&
                   "motion-safe:animate-[rail-flyout-item-in_320ms_cubic-bezier(0.32,0.72,0,1)_both]",
-                active
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                active ? "bg-secondary" : "hover:bg-muted",
               )}
             >
               {/* Where you are is said twice, because either half has to survive
@@ -199,40 +229,25 @@ export function RailFlyout({
                   className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-accent"
                 />
               )}
-              {Icon && (
-                <span
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-[10px] border transition-colors",
-                    active
-                      ? "border-accent/25 bg-accent/10 text-accent"
-                      : "border-border/70 bg-background text-muted-foreground group-hover:border-border group-hover:text-foreground",
-                  )}
-                >
-                  <Icon className="size-[17px]" aria-hidden />
+              {/* The LABEL carries the link colour and the chevron sits directly
+                  after the words rather than parked at the right edge — that is
+                  the whole difference between Canopy's list and a settings menu.
+                  The arrow is part of the sentence, not a row ornament, so it is
+                  always visible instead of arriving on hover. */}
+              <span
+                className={cn(
+                  "flex items-center gap-1 text-[13.5px] leading-tight text-accent transition-colors group-hover:text-accent-hover",
+                  active ? "font-semibold" : "font-medium",
+                )}
+              >
+                <span className="min-w-0 truncate">{item.label}</span>
+                <ChevronRight aria-hidden className="size-3.5 shrink-0" />
+              </span>
+              {item.description && (
+                <span className="mt-1 block text-[11.5px] leading-[1.4] text-muted-foreground">
+                  {item.description}
                 </span>
               )}
-              <span className="min-w-0 flex-1">
-                <span
-                  className={cn(
-                    "block truncate text-[13.5px] leading-tight",
-                    active ? "font-semibold" : "font-medium",
-                  )}
-                >
-                  {item.label}
-                </span>
-                {item.description && (
-                  <span className="mt-1 line-clamp-2 text-[11.5px] leading-[1.35] text-muted-foreground">
-                    {item.description}
-                  </span>
-                )}
-              </span>
-              {/* Arrives on hover only. A chevron parked on every row is a
-                  decoration; one that appears under the cursor is an answer to
-                  "is this clickable". */}
-              <ChevronRight
-                aria-hidden
-                className="size-3.5 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 motion-reduce:translate-x-0 motion-reduce:transition-opacity"
-              />
             </Link>
           );
         })}
