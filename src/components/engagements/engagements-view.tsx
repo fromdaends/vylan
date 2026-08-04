@@ -34,11 +34,9 @@ import type { EngagementStage } from "@/lib/engagements/stage";
 import {
   DIR_PARAM,
   SORT_PARAM,
-  SORT_STAGE,
   STAGE_PARAM,
   countByStage,
   filterRowsByStage,
-  nextStageSort,
   parseStageFilter,
   parseStageSort,
   sortRowsByStage,
@@ -94,6 +92,9 @@ export function EngagementsView({
   const stageFilter = stageFilteringOn
     ? parseStageFilter(searchParams?.get(STAGE_PARAM))
     : null;
+  // Kept for links shared BEFORE the table owned its own sorting — a
+  // bookmarked ?sort=stage&dir=asc still opens in that order. Nothing in the UI
+  // writes these any more; every column header is a menu on the table itself.
   const stageSort = stageFilteringOn
     ? parseStageSort(searchParams?.get(SORT_PARAM), searchParams?.get(DIR_PARAM))
     : null;
@@ -117,16 +118,6 @@ export function EngagementsView({
   const selectStage = (stage: EngagementStage | null) =>
     setParams({ [STAGE_PARAM]: stage });
 
-  const toggleStageSort = () => {
-    const next = nextStageSort(stageSort);
-    setParams({
-      [SORT_PARAM]: next ? SORT_STAGE : null,
-      // Drop the direction with the sort key — a lone ?dir= means nothing and
-      // parseStageSort ignores it anyway, so leaving it would be litter in a
-      // URL people are meant to share.
-      [DIR_PARAM]: next,
-    });
-  };
   // Scope filter — All firm / Mine, and deliberately nothing else.
   //
   // This used to offer every teammate as a third kind of option, reachable by
@@ -316,10 +307,6 @@ export function EngagementsView({
         // teammate profile pass nothing and get no checkbox column at all —
         // this is the list you actually triage from.
         bulkAssignMembers={teamEnabled ? assignMembers : undefined}
-        // Opt in to the sortable Status header. Only this view passes these, so
-        // every other table (the Overview included) keeps its plain header.
-        statusSort={stageFilteringOn ? stageSort : null}
-        onStatusSortToggle={stageFilteringOn ? toggleStageSort : undefined}
         countdownFor={
           view === "deleted"
             ? (r) =>

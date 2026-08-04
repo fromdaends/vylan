@@ -12,9 +12,6 @@ import {
 } from "@/lib/engagements/presence";
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   Check,
   Clock,
   FileWarning,
@@ -24,6 +21,21 @@ import {
 import { Link, useRouter } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/payments/payment-badge";
+import type { EngagementType } from "@/lib/db/templates";
+import { SERVICE_LABEL_KEY } from "@/lib/engagements/services";
+import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
+import { sortRowsByStage } from "@/lib/engagements/stage-filter";
+import { ENGAGEMENT_STAGES, stageLabelKey } from "@/lib/engagements/stage";
+
+/**
+ * What the headers show before anything has been sorted.
+ *
+ * ColumnMenu wants a SortState, and "no column is sorted" is not one — a key
+ * that matches nothing gives every header its neutral arrows, which is the
+ * honest picture: the rows are in the order the page handed them over (newest
+ * first), not in any column's order.
+ */
+const UNSORTED: SortState = { key: "", desc: false };
 import type { PaymentRequestStatus } from "@/lib/db/payment-requests";
 import { Input } from "@/components/ui/input";
 import {
@@ -70,7 +82,6 @@ import {
   READY_PILL_CLASS,
 } from "@/lib/engagements/status-pill";
 import type { EngagementStage } from "@/lib/engagements/stage";
-import type { StageSortDir } from "@/lib/engagements/stage-filter";
 import { StageChip } from "@/components/engagements/stage-chip";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 
@@ -123,6 +134,19 @@ export type WorklistRow = {
    *  rather than only a percentage. */
   tasksDone: number;
   tasksTotal: number;
+  /**
+   * The SERVICE this engagement delivers — Canopy's "Service items" column.
+   *
+   * The founder was unsure what separates their Service items from their
+   * Engagement items; the difference is breadth. A service is what you sold
+   * ("Tax prep", "Monthly bookkeeping"); the engagement items are the specific
+   * pieces of work inside it. Vylan already has both under other names — the
+   * engagement's TYPE is the service, and its TASKS are the items — so neither
+   * column needs new storage, only a name.
+   */
+  type?: EngagementType;
+  /** When it went to the client; falls back to creation for a draft. */
+  startedAt?: string | null;
   itemsDone: number;
   itemsTotal: number;
   attentionScore: number;
@@ -337,8 +361,6 @@ export function WorklistTable({
   countdownFor,
   growNameColumn = false,
   teamEnabled = true,
-  statusSort = null,
-  onStatusSortToggle,
   reassignMembers,
   assignMembers,
   viewerId,
@@ -353,13 +375,12 @@ export function WorklistTable({
   // Optional per-row caption (e.g. the Recently Deleted "deleted in N days"
   // countdown). Returns null for rows that shouldn't show one.
   countdownFor?: (row: WorklistRow) => string | null;
-  // Stage sorting, opt-in. Passing onStatusSortToggle is what makes the Status
-  // header a control at all — without it the header is the plain label every
-  // other caller (the Overview, the other sub-pages) has always rendered. This
-  // component never sorts: the caller owns the order of `rows` (as it already
-  // does for recency), and these props only draw the current state.
-  statusSort?: StageSortDir | null;
-  onStatusSortToggle?: () => void;
+  // ⚠️ statusSort / onStatusSortToggle are GONE. The Status header used to be
+  // an opt-in arrow driven by the page around it, which meant sorting existed
+  // on exactly one of the five lists built from this table. Every header is now
+  // a menu owned by the table itself, so all five sort the same way. The stage
+  // FILTER chips on the engagements page still live in the URL — only the sort
+  // moved.
   // On the WIDE Overview (>=1800px viewport) only, let the Engagement (name)
   // column absorb the extra horizontal space so the other columns stay at their
   // natural widths instead of drifting apart. Below 1800px — and on any table
@@ -444,6 +465,141 @@ export function WorklistTable({
     [presenceState, viewerId, presenceRoster],
   );
 
+  // ── SORT AND FILTER, PER COLUMN ──────────────────────────────────────────
+  //
+  // The founder, on this page: "how the tasks looks needs to be similar to how
+  // the engagements look and function in a similar process." On the Tasks page
+  // every header is a menu — two sort directions, then the column's own values
+  // as tick-boxes — and that is what actually made sorting usable there:
+  // "sort by client" floats one client's rows to the top of a hundred, while
+  // "show me only this client" answers the question.
+  //
+  // It lives HERE, in the table, rather than in the engagements page around it,
+  // so every list built on this component gets it — the Overview, the Inbox
+  // queue and a teammate's profile, none of which had any sorting at all.
+  //
+  // `null` means "the order I was handed", which is the parent's default of
+  // newest-first. Nothing sorts until a header is used.
+  const [sort, setSort] = useState<SortState | null>(null);
+  /** The service, in the one wording the whole app uses for it. */
+  const serviceLabelFor = (type: string) =>
+    tEng(SERVICE_LABEL_KEY[type as EngagementType] ?? "wl_service_custom");
+  /**
+   * The Status column mixes two vocabularies, because the rows do: a live
+   * engagement shows its workflow STAGE, and everything else (draft,
+   * complete, cancelled) shows its status. The menu has to name both or it
+   * would silently offer no way to filter for drafts.
+   */
+  const stageLabel = (v: string) =>
+    (ENGAGEMENT_STAGES as readonly string[]).includes(v)
+      ? tStage(stageLabelKey(v as EngagementStage))
+      : tStatus(v);
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [serviceFilter, setServiceFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string[]>([]);
+
+  /** The distinct values actually present, so a menu never offers an empty row. */
+  const distinct = useMemo(() => {
+    const clients = new Map<string, string>();
+    const services = new Set<string>();
+    const assignees = new Map<string, string>();
+    const stages = new Set<string>();
+    for (const r of rows) {
+      if (r.clientName) clients.set(r.clientName, r.clientName);
+      if (r.type) services.add(r.type);
+      // Unassigned is a real answer to "whose is this", and the one people
+      // filter for most — it gets a row of its own rather than being absent.
+      assignees.set(r.assigneeName ?? "", r.assigneeName ?? "");
+      stages.add(r.stage ?? r.derivedStatus);
+    }
+    return {
+      clients: [...clients.keys()].sort((a, b) => a.localeCompare(b)),
+      services: [...services],
+      assignees: [...assignees.keys()].sort((a, b) => a.localeCompare(b)),
+      stages: [...stages],
+    };
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    let out = rows;
+    if (clientFilter.length) {
+      out = out.filter((r) => clientFilter.includes(r.clientName));
+    }
+    if (serviceFilter.length) {
+      out = out.filter((r) => r.type && serviceFilter.includes(r.type));
+    }
+    if (assigneeFilter.length) {
+      out = out.filter((r) => assigneeFilter.includes(r.assigneeName ?? ""));
+    }
+    if (stageFilter.length) {
+      out = out.filter((r) => stageFilter.includes(r.stage ?? r.derivedStatus));
+    }
+    if (!sort) return out;
+
+    // localeCompare on the text columns so accented client names land where a
+    // French-speaking accountant expects them, not after Z.
+    const dir = sort.desc ? -1 : 1;
+    const text = (v: string | null | undefined) => v ?? "";
+    // A missing date sorts LAST in both directions: "no due date" is not
+    // earlier than every date, and burying the dated rows under the undated
+    // ones is exactly what a date sort was reached for to avoid.
+    const byDate = (a: string | null, b: string | null) => {
+      if (!a && !b) return 0;
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b) * dir;
+    };
+    return [...out].sort((a, b) => {
+      switch (sort.key) {
+        case "engagement":
+          return text(a.title).localeCompare(text(b.title)) * dir;
+        case "client":
+          return text(a.clientName).localeCompare(text(b.clientName)) * dir;
+        case "service":
+          return text(a.type).localeCompare(text(b.type)) * dir;
+        case "items":
+          // By what is LEFT, not by the share done. "3 of 4" and "30 of 40"
+          // are the same percentage and nothing like the same afternoon.
+          return (
+            (a.tasksTotal - a.tasksDone - (b.tasksTotal - b.tasksDone)) * dir
+          );
+        case "assignee":
+          return (
+            text(a.assigneeName).localeCompare(text(b.assigneeName)) * dir
+          );
+        case "due":
+          return byDate(a.dueDate ?? null, b.dueDate ?? null);
+        case "started":
+          return byDate(a.startedAt ?? null, b.startedAt ?? null);
+        case "status":
+          // Workflow POSITION, not the alphabet — "In review" belongs after
+          // "Collecting" wherever the two letters fall. The stage helper
+          // already knows the order and breaks its ties by recency.
+          return 0;
+        default:
+          return 0;
+      }
+    });
+  }, [
+    rows,
+    sort,
+    clientFilter,
+    serviceFilter,
+    assigneeFilter,
+    stageFilter,
+  ]);
+
+  // Stage is ordered by its own helper rather than by string comparison, so it
+  // is applied after the switch above rather than inside it.
+  const sortedRows = useMemo(
+    () =>
+      sort?.key === "status"
+        ? sortRowsByStage(filteredRows, sort.desc ? "desc" : "asc")
+        : filteredRows,
+    [filteredRows, sort],
+  );
+
   // Optimistic removal: archiving / deleting a row drops it from the list
   // instantly. `removedIds` is a client-only overlay — once the server action
   // revalidates and a fresh `rows` set arrives, that IS the truth, so reset the
@@ -456,8 +612,8 @@ export function WorklistTable({
     if (removedIds.size > 0) setRemovedIds(new Set());
   }
   const visibleRows = removedIds.size
-    ? rows.filter((r) => !removedIds.has(r.id))
-    : rows;
+    ? sortedRows.filter((r) => !removedIds.has(r.id))
+    : sortedRows;
 
   const removeRow = (id: string, action: () => Promise<unknown>) => {
     setRemovedIds((prev) => new Set(prev).add(id));
@@ -471,13 +627,27 @@ export function WorklistTable({
     });
   };
 
-  if (visibleRows.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border/50 px-5 py-12 text-center text-sm text-muted-foreground">
-        {emptyText}
-      </div>
-    );
-  }
+  // ⚠️ NO EARLY RETURN ON AN EMPTY LIST.
+  //
+  // This used to swap the whole table for a dashed box, which took the column
+  // headers with it — and the headers are now the only sort and filter controls
+  // there are. The founder caught the same thing on the Tasks page: "when there
+  // is no tasks the top sorting bars are gone. They should be there no matter
+  // what." Filter down to nothing and the way BACK disappeared with the rows.
+  //
+  // So the empty message is a row in the table instead, and the headers stay.
+  const filtersOn =
+    clientFilter.length > 0 ||
+    serviceFilter.length > 0 ||
+    assigneeFilter.length > 0 ||
+    stageFilter.length > 0;
+  // Header cells, for the empty row's colSpan: name, client, service, items,
+  // due, start, status, and the menu — plus the optional ones.
+  const columnCount =
+    8 +
+    (bulkEnabled ? 1 : 0) +
+    (teamEnabled ? 1 : 0) +
+    (reassignMembers && reassignMembers.length > 0 ? 1 : 0);
 
   return (
     <div className="border-t border-border">
@@ -510,7 +680,9 @@ export function WorklistTable({
                 />
               </TableHead>
             )}
-            <TableHead
+            <ColumnMenu
+              label={t("wl_col_engagement")}
+              t={tEng}
               className={cn(
                 "px-4",
                 // Only let the name column go greedy on the WIDE canvas
@@ -518,59 +690,124 @@ export function WorklistTable({
                 // MacBooks / laptops are byte-identical.
                 growNameColumn && "min-[1800px]:w-full",
               )}
-            >
-              {t("wl_col_engagement")}
-            </TableHead>
-            <TableHead className="hidden px-4 sm:table-cell">
-              {t("wl_col_due")}
-            </TableHead>
+              sortKey="engagement"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
+            />
+            {/* CLIENT, and the divider before it — the same seam the Tasks
+                table has, where the row stops describing the work and starts
+                saying whose it is. Canopy puts one in the same place. */}
+            <ColumnMenu
+              label={t("wl_col_client")}
+              t={tEng}
+              className="hidden border-l border-border px-4 lg:table-cell"
+              sortKey="client"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
+              selected={clientFilter}
+              onChange={setClientFilter}
+              options={distinct.clients.map((c) => ({ value: c, label: c }))}
+            />
+            {/* SERVICE ITEMS in Canopy's words. The founder was unsure what
+                separates their Service items from their Engagement items; the
+                difference is breadth. The service is what you SOLD — tax prep,
+                monthly bookkeeping — and Vylan already stores it as the
+                engagement's type. */}
+            <ColumnMenu
+              label={t("wl_col_service")}
+              t={tEng}
+              className="hidden px-4 lg:table-cell"
+              sortKey="service"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
+              selected={serviceFilter}
+              onChange={setServiceFilter}
+              options={distinct.services.map((v) => ({
+                value: v,
+                label: serviceLabelFor(v),
+              }))}
+            />
+            {/* ENGAGEMENT ITEMS: the specific pieces of work inside it, which
+                in Vylan are its TASKS. Replaces the old "Progress" header —
+                the bar has counted tasks since #1239, so the column was already
+                showing this and calling it something else. */}
+            <ColumnMenu
+              label={t("wl_col_items")}
+              t={tEng}
+              className="hidden px-4 md:table-cell"
+              sortKey="items"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              // Worded for what it counts: the fewest things left to do first.
+              sortLabels={[tEng("sort_lowest"), tEng("sort_highest")]}
+            />
             {teamEnabled && (
-              <TableHead className="hidden px-4 lg:table-cell">
-                {t("wl_col_assigned")}
-              </TableHead>
+              <ColumnMenu
+                label={t("wl_col_assigned")}
+                t={tEng}
+                className="hidden px-4 lg:table-cell"
+                sortKey="assignee"
+                sort={sort ?? UNSORTED}
+                setSort={setSort}
+                sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
+                selected={assigneeFilter}
+                onChange={setAssigneeFilter}
+                options={distinct.assignees.map((name) => ({
+                  value: name,
+                  // "" is nobody. It is the value people filter for most, so it
+                  // gets a name rather than an empty row.
+                  label: name || t("wl_unassigned"),
+                }))}
+              />
             )}
-            <TableHead className="hidden px-4 md:table-cell">
-              {t("wl_col_progress")}
-            </TableHead>
-            {/* Sortable ONLY where a caller opts in by passing the toggle (the
-                Active engagements view). Everywhere else — the Overview, and
-                every other All-Engagements sub-page — the header stays the
-                plain label it has always been. */}
-            <TableHead
+            {/* Sort only: there is nothing to tick in a column of a hundred
+                distinct days. */}
+            <ColumnMenu
+              label={t("wl_col_due")}
+              t={tEng}
+              className="hidden px-4 sm:table-cell"
+              sortKey="due"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
+            />
+            {/* START DATE — when it actually began, which is when it went to
+                the client. A draft has not begun, so it shows its creation
+                date instead of an empty cell.
+
+                xl only, deliberately. It is reference rather than triage: you
+                sort by it once a quarter, you read the due date every day. On a
+                laptop the two dates side by side would squeeze the columns that
+                earn their place. */}
+            <ColumnMenu
+              label={t("wl_col_started")}
+              t={tEng}
+              className="hidden px-4 xl:table-cell"
+              sortKey="started"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              sortLabels={[tEng("sort_earliest"), tEng("sort_latest")]}
+            />
+            <ColumnMenu
+              label={t("wl_col_status")}
+              t={tEng}
               className="px-4"
-              aria-sort={
-                !onStatusSortToggle
-                  ? undefined
-                  : statusSort === "asc"
-                    ? "ascending"
-                    : statusSort === "desc"
-                      ? "descending"
-                      : "none"
-              }
-            >
-              {onStatusSortToggle ? (
-                <button
-                  type="button"
-                  onClick={onStatusSortToggle}
-                  // Communicates the CURRENT state to assistive tech, which is
-                  // what aria-sort is for; the visible arrow does the same job
-                  // for everyone else.
-                  aria-label={tStage("sort_by_stage")}
-                  className="-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("wl_col_status")}
-                  {statusSort === "asc" ? (
-                    <ArrowUp className="size-3.5" aria-hidden />
-                  ) : statusSort === "desc" ? (
-                    <ArrowDown className="size-3.5" aria-hidden />
-                  ) : (
-                    <ArrowUpDown className="size-3.5 opacity-40" aria-hidden />
-                  )}
-                </button>
-              ) : (
-                t("wl_col_status")
-              )}
-            </TableHead>
+              sortKey="status"
+              sort={sort ?? UNSORTED}
+              setSort={setSort}
+              // By workflow POSITION, not the alphabet — the first thing you
+              // want from a status sort is "what is nearly finished".
+              sortLabels={[tStage("sort_earliest"), tStage("sort_latest")]}
+              selected={stageFilter}
+              onChange={setStageFilter}
+              options={distinct.stages.map((v) => ({
+                value: v,
+                label: stageLabel(v),
+              }))}
+            />
             {reassignMembers && reassignMembers.length > 0 && (
               <TableHead className="w-10 px-2" />
             )}
@@ -580,6 +817,16 @@ export function WorklistTable({
           </TableRow>
         </TableHeader>
         <TableBody>
+          {visibleRows.length === 0 && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell
+                colSpan={columnCount}
+                className="py-12 text-center text-sm text-muted-foreground"
+              >
+                {filtersOn ? tEng("tasks_none_match") : emptyText}
+              </TableCell>
+            </TableRow>
+          )}
           {visibleRows.map((r) => (
             <WorklistRowView
               key={r.id}
@@ -699,6 +946,9 @@ function WorklistRowView({
   anySelected?: boolean;
 }) {
   const tEng = useTranslations("Engagements");
+  // One shared map (lib/engagements/services.ts) so a second surface showing
+  // the service cannot invent its own wording for the same four things.
+  const serviceLabel = (type: EngagementType) => tEng(SERVICE_LABEL_KEY[type]);
   const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
@@ -812,7 +1062,10 @@ function WorklistRowView({
                   <PresenceFaces people={presentPeople} compact />
                 )}
               </div>
-              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {/* lg:hidden — above that width the Client column shows it, and
+                  printing the same name twice on one row is just noise. Below
+                  it the column is gone, so this is the only place it appears. */}
+              <div className="mt-0.5 truncate text-xs text-muted-foreground lg:hidden">
                 {row.clientName}
               </div>
               {/* Recently Deleted countdown — how long until the purge cron
@@ -861,35 +1114,28 @@ function WorklistRowView({
               )}
             </TableCell>
 
-            <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
-              <div className={cn("text-sm tabular-nums", dueTone)}>
-                {formatDate(row.dueDate, locale, "medium")}
-              </div>
+            {/* CLIENT — behind the same divider as the header, and a link,
+                because "whose is this" is a question you answer by GOING there.
+                The row's own click handler bails on any <a>, so this does not
+                fight it. */}
+            <TableCell className="hidden border-l border-border px-4 py-3 align-top text-sm lg:table-cell">
+              {row.clientId ? (
+                <Link
+                  href={`/clients/${row.clientId}`}
+                  className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                >
+                  {row.clientName}
+                </Link>
+              ) : (
+                <span className="text-foreground">{row.clientName}</span>
+              )}
             </TableCell>
 
-            {teamEnabled && (
-              <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
-                {/* A person is a place. This name is where you actually think
-                    "what else is she on?", so it has to be the way there —
-                    until now nobody in the app was clickable, and the only
-                    route to a teammate was through Settings. The row's own
-                    click handler bails on any <a>, so this doesn't fight it. */}
-                {row.assigneeName && row.assigneeUserId ? (
-                  <Link
-                    href={`/settings/team/${row.assigneeUserId}`}
-                    className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
-                  >
-                    {row.assigneeName}
-                  </Link>
-                ) : row.assigneeName ? (
-                  <span className="text-foreground">{row.assigneeName}</span>
-                ) : (
-                  <span className="italic text-muted-foreground">
-                    {unassignedText}
-                  </span>
-                )}
-              </TableCell>
-            )}
+            {/* SERVICE ITEMS — what was sold. Quiet by design: it repeats down
+                the column, so it must not compete with the engagement's name. */}
+            <TableCell className="hidden px-4 py-3 align-top text-sm text-muted-foreground lg:table-cell">
+              {row.type ? serviceLabel(row.type) : "—"}
+            </TableCell>
 
             <TableCell className="hidden px-4 py-3 align-top md:table-cell">
               {!showProgress ? (
@@ -926,6 +1172,42 @@ function WorklistRowView({
                   </span>
                 </div>
               )}
+            </TableCell>
+
+            {teamEnabled && (
+              <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
+                {/* A person is a place. This name is where you actually think
+                    "what else is she on?", so it has to be the way there —
+                    until now nobody in the app was clickable, and the only
+                    route to a teammate was through Settings. The row's own
+                    click handler bails on any <a>, so this doesn't fight it. */}
+                {row.assigneeName && row.assigneeUserId ? (
+                  <Link
+                    href={`/settings/team/${row.assigneeUserId}`}
+                    className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  >
+                    {row.assigneeName}
+                  </Link>
+                ) : row.assigneeName ? (
+                  <span className="text-foreground">{row.assigneeName}</span>
+                ) : (
+                  <span className="italic text-muted-foreground">
+                    {unassignedText}
+                  </span>
+                )}
+              </TableCell>
+            )}
+
+            <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
+              <div className={cn("text-sm tabular-nums", dueTone)}>
+                {formatDate(row.dueDate, locale, "medium")}
+              </div>
+            </TableCell>
+
+            <TableCell className="hidden px-4 py-3 align-top xl:table-cell">
+              <div className="text-sm tabular-nums text-muted-foreground">
+                {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
+              </div>
             </TableCell>
 
             {/* Status column. A live engagement shows its workflow STAGE —

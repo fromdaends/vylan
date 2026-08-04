@@ -217,6 +217,11 @@ export const loadEngagementWorklist = cache(
         awaitingPct: doingPct,
         tasksDone: taskCounts?.done ?? 0,
         tasksTotal: taskCounts?.total ?? 0,
+        // The service (its type) and when it started. sent_at is the honest
+        // start — a draft has not begun — with created_at as the fallback so
+        // the column is never empty on a row that plainly exists.
+        type: e.type,
+        startedAt: e.sent_at ?? e.created_at ?? null,
         itemsDone: a.itemsDone,
         itemsTotal: a.itemsTotal,
         attentionScore: attentionScore(a),

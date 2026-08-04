@@ -443,60 +443,153 @@ describe("status column — workflow stage", () => {
   });
 });
 
-// The Status header is a CONTROL only where a caller opts in. The Overview and
-// every other sub-page must keep the plain label they've always had.
-describe("status column — sortable header (opt-in)", () => {
+// ⚠️ SORTING USED TO EXIST ON EXACTLY ONE OF THE FIVE LISTS BUILT FROM THIS
+// TABLE. The Status header was an opt-in arrow driven by the page around it, so
+// the Overview, the Inbox queue, a teammate's profile and every engagements
+// sub-page but Active had no way to reorder anything at all.
+//
+// Every header is now a menu owned by the table, which is what the founder
+// asked for after the Tasks page got the same treatment: "how the tasks looks
+// needs to be similar to how the engagements look and function in a similar
+// process."
+describe("every column header sorts and filters, on every list", () => {
+  const ROWS = [
+    row({
+      id: "s1",
+      title: "Alpha",
+      clientName: "Zeta Corp",
+      type: "t1",
+      stage: "in_review",
+    }),
+    row({
+      id: "s2",
+      title: "Beta",
+      clientName: "Acme Ltd",
+      type: "bookkeeping",
+      stage: "collecting",
+    }),
+  ];
+
   function renderTable(props: Record<string, unknown> = {}) {
     const { container } = render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <WorklistTable
-          rows={[row({ id: "s1", title: "Stage Row", stage: "in_review" })]}
-          locale="en"
-          emptyText="none"
-          {...props}
-        />
+        <WorklistTable rows={ROWS} locale="en" emptyText="none" {...props} />
       </NextIntlClientProvider>,
     );
     return within(container);
   }
 
-  it("renders a plain header when no toggle is passed (the Overview)", () => {
+  const headerName = (label: string) =>
+    en.Engagements.column_menu.replace("{label}", label);
+
+  /**
+   * Open a header menu by the column's label.
+   *
+   * pointerDown, not click: Radix's dropdown opens on the pointer, and a
+   * synthetic click alone leaves the menu shut and every assertion below it
+   * failing for the wrong reason.
+   */
+  function openHeader(q: ReturnType<typeof within>, label: string) {
+    fireEvent.pointerDown(q.getByRole("button", { name: headerName(label) }), {
+      button: 0,
+      ctrlKey: false,
+    });
+  }
+
+  /**
+   * Shut the open menu.
+   *
+   * ⚠️ NOT COSMETIC. Radix's dropdown is modal, so while it is open the rest of
+   * the page is aria-hidden — every getByRole against the table underneath
+   * fails, and it fails looking exactly like the filter wiped the wrong rows.
+   */
+  function closeMenu() {
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+  }
+
+  it("gives the plain Overview a menu on every column", () => {
     const q = renderTable();
-    expect(
-      q.queryByRole("button", { name: en.Stage.sort_by_stage }),
-    ).not.toBeInTheDocument();
-    // No sort semantics announced either — there is nothing to sort by.
-    expect(q.getByText(en.Dashboard.wl_col_status).closest("th"))
-      .not.toHaveAttribute("aria-sort");
+    for (const label of [
+      en.Dashboard.wl_col_engagement,
+      en.Dashboard.wl_col_client,
+      en.Dashboard.wl_col_service,
+      en.Dashboard.wl_col_items,
+      en.Dashboard.wl_col_due,
+      en.Dashboard.wl_col_started,
+      en.Dashboard.wl_col_status,
+    ]) {
+      expect(
+        q.getByRole("button", { name: headerName(label) }),
+      ).toBeInTheDocument();
+    }
   });
 
-  it("becomes a button when a toggle IS passed (the Active view)", () => {
-    const onStatusSortToggle = vi.fn();
-    const q = renderTable({ onStatusSortToggle });
-    const btn = q.getByRole("button", { name: en.Stage.sort_by_stage });
-    fireEvent.click(btn);
-    expect(onStatusSortToggle).toHaveBeenCalledTimes(1);
+  it("actually reorders the rows — sorting is not just an arrow", async () => {
+    const q = renderTable();
+    openHeader(q, en.Dashboard.wl_col_client);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: en.Engagements.sort_asc }),
+    );
+
+    // Acme before Zeta, which is the reverse of the order handed in.
+    const alpha = q.getByRole("link", { name: "Alpha" });
+    const beta = q.getByRole("link", { name: "Beta" });
+    expect(beta.compareDocumentPosition(alpha)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
-  it("announces the current sort to assistive tech", () => {
-    const onStatusSortToggle = vi.fn();
+  // The point of a menu over a bare arrow: "sort by client" floats one client
+  // to the top of a hundred rows; "only this client" answers the question.
+  it("narrows to the ticked values", async () => {
+    const q = renderTable();
+    openHeader(q, en.Dashboard.wl_col_client);
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Acme Ltd" }),
+    );
+    closeMenu();
+
+    expect(q.queryByRole("link", { name: "Alpha" })).not.toBeInTheDocument();
+    expect(q.getByRole("link", { name: "Beta" })).toBeInTheDocument();
+  });
+
+  // ⚠️ The founder caught exactly this on the Tasks page: "when there is no
+  // tasks the top sorting bars are gone. They should be there no matter what."
+  // The headers ARE the filter controls, so losing them with the last row takes
+  // away the only way back.
+  it("keeps the headers when a filter empties the list", async () => {
+    const q = renderTable();
+    // Acme's row is the bookkeeping one, so "Acme + personal tax" matches
+    // nothing. (The menus only offer values the rows actually have, which is
+    // why this takes two filters rather than one impossible value.)
+    openHeader(q, en.Dashboard.wl_col_client);
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Acme Ltd" }),
+    );
+    closeMenu();
+    openHeader(q, en.Dashboard.wl_col_service);
+    fireEvent.click(
+      await screen.findByRole("menuitemcheckbox", {
+        name: en.Engagements.wl_service_t1,
+      }),
+    );
+    closeMenu();
+
+    expect(q.queryByRole("link", { name: "Alpha" })).not.toBeInTheDocument();
+    expect(q.queryByRole("link", { name: "Beta" })).not.toBeInTheDocument();
     expect(
-      renderTable({ onStatusSortToggle, statusSort: null })
-        .getByRole("button", { name: en.Stage.sort_by_stage })
-        .closest("th"),
-    ).toHaveAttribute("aria-sort", "none");
-    cleanup();
-    expect(
-      renderTable({ onStatusSortToggle, statusSort: "asc" })
-        .getByRole("button", { name: en.Stage.sort_by_stage })
-        .closest("th"),
-    ).toHaveAttribute("aria-sort", "ascending");
-    cleanup();
-    expect(
-      renderTable({ onStatusSortToggle, statusSort: "desc" })
-        .getByRole("button", { name: en.Stage.sort_by_stage })
-        .closest("th"),
-    ).toHaveAttribute("aria-sort", "descending");
+      q.getByRole("button", { name: headerName(en.Dashboard.wl_col_client) }),
+    ).toBeInTheDocument();
+    expect(q.getByText(en.Engagements.tasks_none_match)).toBeInTheDocument();
+  });
+
+  it("shows the service and the task count, in Canopy's words", () => {
+    const q = renderTable();
+    // Service items = what was sold; engagement items = the tasks inside it.
+    expect(q.getByText(en.Engagements.wl_service_t1)).toBeInTheDocument();
+    expect(q.getAllByText("1/2").length).toBe(ROWS.length);
   });
 });
 
