@@ -168,6 +168,7 @@ export function TasksTable({
   currentUserId,
   statuses,
   variant = "firm",
+  initialView = "active",
   onOpen,
   maxRows,
   moreHref,
@@ -182,6 +183,15 @@ export function TasksTable({
   currentUserId: string;
   /** "job" drops the Client column — one value in it is decoration. */
   variant?: "firm" | "job";
+  /**
+   * Which saved view opens first.
+   *
+   * "active" is right when this table IS the screen — the working list. The
+   * engagements list's task panel passes "all" instead, because you reach it by
+   * clicking a job's TOTAL, and hiding the finished half of that total is the
+   * one thing the panel must not do.
+   */
+  initialView?: TaskView;
   /** Opens a task's own screen. Job page only; see task-detail-panel.tsx. */
   onOpen?: (taskId: string) => void;
   /**
@@ -208,7 +218,9 @@ export function TasksTable({
       : state.map((r) => (r.id === p.id ? { ...r, ...p } : r)),
   );
 
-  const [view, setView] = useState<TaskView>("active");
+  // "active" everywhere the table is the page. The engagements list's panel
+  // passes "all", because you get there by clicking a total.
+  const [view, setView] = useState<TaskView>(initialView);
   // NEWEST FIRST until you say otherwise. Founder: "tasks should auto sort for
   // newest to appear ontop always unless changed by filters and stuff." A task
   // you just made must be the one you can see — landing it in the middle of a
