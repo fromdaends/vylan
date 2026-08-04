@@ -223,6 +223,7 @@ export function TasksOverviewCard({
                   clientName={task.clientName}
                   engagementId={task.engagementId}
                   engagementTitle={task.engagementTitle}
+                  taskTitle={task.title}
                   className="mt-px"
                 />
               </span>
@@ -347,6 +348,7 @@ export function TasksOverviewCard({
                   clientName={task.clientName}
                   engagementId={task.engagementId}
                   engagementTitle={task.engagementTitle}
+                  taskTitle={task.title}
                   className="mt-px"
                 />
               </span>

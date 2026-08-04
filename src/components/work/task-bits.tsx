@@ -81,14 +81,24 @@ export function TaskWhoFor({
   clientName,
   engagementId,
   engagementTitle,
+  taskTitle,
   className,
 }: {
   clientId: string;
   clientName?: string | null;
   engagementId?: string | null;
   engagementTitle?: string | null;
+  /** When given, an engagement title that merely repeats it is skipped. 1380
+   *  named each backfilled task after its own job, which is right on a job
+   *  page and reads as a stutter in a list: "T2 Tax Return / ABC Inc · T2 Tax
+   *  Return". The client is the part that varies; keep that. */
+  taskTitle?: string;
   className?: string;
 }) {
+  const showEngagement =
+    engagementId &&
+    engagementTitle &&
+    (taskTitle === undefined || engagementTitle !== taskTitle);
   return (
     <span
       className={cn(
@@ -102,7 +112,7 @@ export function TaskWhoFor({
       >
         {clientName ?? "—"}
       </Link>
-      {engagementId && engagementTitle && (
+      {showEngagement && (
         <>
           {" · "}
           <Link

@@ -1409,6 +1409,7 @@ export default async function EngagementDetailPage({
           assigneeIds: x.assigneeIds,
           clientId: x.clientId,
           engagementId: x.engagementId,
+          notes: x.notes,
           // Drawn by DueIndicator on the row (design 2a) — the same label the
           // dashboard and /work use.
           dueDate: x.dueDate,

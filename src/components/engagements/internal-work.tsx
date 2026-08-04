@@ -44,7 +44,7 @@
 // it triggered has actually returned, so there is no flash back to the old one
 // in between. If the write fails the value snaps back on its own and says so.
 
-import { useOptimistic, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -71,6 +71,7 @@ import {
   setTaskAssigneeAction,
   type TaskActionResult,
 } from "@/app/actions/engagement-tasks";
+import { TaskDetailPanel } from "@/components/engagements/task-detail-panel";
 
 export type WorkRow = {
   id: string;
@@ -80,13 +81,16 @@ export type WorkRow = {
   assigneeIds: string[];
   clientId: string;
   engagementId: string | null;
-  /** YYYY-MM-DD, or null for "whenever". Drawn by DueIndicator (design 2a). */
+  /** YYYY-MM-DD, or null for "whenever". Drawn by DueIndicator on the row
+   *  (design 2a) and edited in the detail panel (#1233). */
   dueDate?: string | null;
   /** Only supplied on the firm-wide list. */
   clientName?: string | null;
   engagementTitle?: string | null;
   /** "2 of 3 done" for a kind that owns a collection. Job page only. */
   meta?: string;
+  /** Free text on the task, edited in the detail panel. */
+  notes?: string | null;
 };
 
 const KIND_ICON: Record<string, typeof Inbox> = {
@@ -97,7 +101,9 @@ const KIND_ICON: Record<string, typeof Inbox> = {
 
 type Patch =
   | { id: string; remove: true }
-  | { id: string; remove?: false; status?: TaskStatus; assigneeIds?: string[] };
+  | ({ id: string; remove?: false } & Partial<
+      Pick<WorkRow, "status" | "assigneeIds" | "title" | "notes" | "dueDate">
+    >);
 
 export function InternalWork({
   tasks,
@@ -125,6 +131,9 @@ export function InternalWork({
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [, startTransition] = useTransition();
+  // Which task's panel is open. Client state — everything it shows is already
+  // in the row, so a URL would cost a round trip to display what is on screen.
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   // The list as the user sees it: server truth with any in-flight change
   // already applied. Reverts by itself if the write fails.
@@ -175,7 +184,8 @@ export function InternalWork({
   }
 
   return (
-    <ul className="divide-y divide-border/50">
+    <>
+      <ul className="divide-y divide-border/50">
       {rows.map((task) => {
         const Icon = KIND_ICON[task.kind];
         const label = kindLabel(task.kind);
@@ -211,7 +221,8 @@ export function InternalWork({
               label={label}
               firmWide={firmWide}
               openable={openable}
-              onOpen={onOpen}
+              onOpenScreen={onOpen}
+              onOpenDetail={() => setDetailId(task.id)}
               t={t}
             />
 
@@ -268,7 +279,38 @@ export function InternalWork({
           </li>
         );
       })}
-    </ul>
+      </ul>
+
+      <TaskDetailPanel
+        task={rows.find((r) => r.id === detailId) ?? null}
+        members={members}
+        canEdit={canEdit}
+        kindLabel={kindLabel}
+        onClose={() => setDetailId(null)}
+        onOpenScreen={onOpen}
+        onPatch={(next, call) => {
+          const task = rows.find((r) => r.id === detailId);
+          if (!task) return;
+          run({ id: task.id, ...next }, () =>
+            call.assigneeId
+              ? setTaskAssigneeAction({
+                  taskId: task.id,
+                  userId: call.assigneeId,
+                  on: call.on === true,
+                  engagementId: task.engagementId,
+                })
+              : updateTaskAction({
+                  taskId: task.id,
+                  engagementId: task.engagementId,
+                  title: next.title,
+                  status: next.status,
+                  dueDate: next.dueDate,
+                  notes: next.notes,
+                }),
+          );
+        }}
+      />
+    </>
   );
 }
 
@@ -283,14 +325,17 @@ function TaskName({
   label,
   firmWide,
   openable,
-  onOpen,
+  onOpenScreen,
+  onOpenDetail,
   t,
 }: {
   task: WorkRow;
   label: string | null;
   firmWide: boolean;
   openable: boolean;
-  onOpen?: (taskId: string) => void;
+  /** Present only where the task's own screen is reachable. */
+  onOpenScreen?: (taskId: string) => void;
+  onOpenDetail: () => void;
   t: ReturnType<typeof useTranslations<"Engagements">>;
 }) {
   const body = (
@@ -319,28 +364,41 @@ function TaskName({
     </>
   );
 
+  // TWO TARGETS, and they are different things on purpose. The NAME is about
+  // the task — who is on it, when it is due, the note. The CHEVRON goes INTO
+  // it, which is what a chevron has meant everywhere else in this app. Merging
+  // them would mean either burying the checklist behind a panel or having no
+  // way to reach a task's own fields.
+  const name = (
+    <button
+      type="button"
+      onClick={onOpenDetail}
+      aria-label={t("task_open_detail", { title: task.title })}
+      className="min-w-0 flex-1 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {body}
+    </button>
+  );
+
   if (openable) {
     return (
       <span className="flex min-w-0 flex-1 items-center gap-2">
+        {name}
         <button
           type="button"
-          onClick={() => onOpen?.(task.id)}
+          onClick={() => onOpenScreen?.(task.id)}
           aria-label={t("task_open", { title: task.title })}
-          className="min-w-0 flex-1 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {body}
+          <ChevronRight className="size-4" aria-hidden />
         </button>
-        <ChevronRight
-          className="size-4 shrink-0 text-muted-foreground"
-          aria-hidden
-        />
       </span>
     );
   }
 
   return (
-    <span className="min-w-0 flex-1">
-      {body}
+    <span className="flex min-w-0 flex-1 flex-col">
+      {name}
       {/* WHO IT IS FOR. Only on the firm-wide list: on a job every row has the
           same answer, and repeating it is noise. Rendered outside `body` so
           the links are never nested inside the open-the-screen button. */}
@@ -350,6 +408,9 @@ function TaskName({
           clientName={task.clientName}
           engagementId={task.engagementId}
           engagementTitle={task.engagementTitle}
+          // Lets the shared line skip an engagement title that only repeats
+          // the task's own name (#1233's stutter rule, now everywhere).
+          taskTitle={task.title}
           className="mt-0.5"
         />
       )}
