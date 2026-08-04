@@ -20,6 +20,28 @@ export type WorkflowSummaryFacts = {
   finalCondition: AdvanceCondition | null;
 };
 
+/**
+ * The words, assembled from the facts — shared by the automations library
+ * rows and the template cards so the two lines can never disagree. Takes any
+ * next-intl-shaped translator (client useTranslations or server
+ * getTranslations) scoped to the "Automations" namespace.
+ */
+export function buildWorkflowSummaryLine(
+  def: WorkflowDefinition,
+  t: (key: string, values?: Record<string, number>) => string,
+): string {
+  const f = workflowSummaryFacts(def);
+  const bits: string[] = [t("summary_stages", { count: f.stageCount })];
+  if (f.sendsLetter && f.activatesChecklist) {
+    bits.push(t("summary_letter_checklist"));
+  } else if (f.activatesChecklist) {
+    bits.push(t("summary_checklist"));
+  }
+  if (f.taskCount > 0) bits.push(t("summary_tasks", { count: f.taskCount }));
+  if (f.finalCondition) bits.push(t(`summary_ends_${f.finalCondition}`));
+  return bits.join(" · ");
+}
+
 export function workflowSummaryFacts(
   def: WorkflowDefinition,
 ): WorkflowSummaryFacts {

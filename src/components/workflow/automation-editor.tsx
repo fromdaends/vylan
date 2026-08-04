@@ -1,13 +1,14 @@
 "use client";
 
-// The per-stage workflow editor — ONE component, per the cohesion rule: the
-// automations library (Vylan tab) renders it now, and the template page's
-// Automation section (chunk 2b) renders the SAME one. Behaviour lives here;
-// persistence belongs to whichever parent is hosting it.
+// The per-stage workflow editor — ONE component, per the cohesion rule. The
+// automations library renders it whole (`aspect="all"`); the template page's
+// sidebar renders the SAME component three times with a narrower aspect —
+// Automation (flow: skip + entry actions + advance), Tasks, Assignees — the
+// client-team-editor precedent: one component, a mode prop, never a copy.
 //
 // Controlled: `value` in, `onChange(next)` out. `disabled` renders the
-// read-only view a built-in automation gets (look, don't touch — Clone to
-// customize is the parent's affordance).
+// read-only view a built-in gets (look, don't touch — Clone to customize is
+// the parent's affordance).
 
 import { useTranslations } from "next-intl";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
@@ -41,6 +42,7 @@ import {
 } from "@/lib/workflow/definition";
 
 export type EditorMember = { id: string; name: string };
+export type EditorAspect = "all" | "flow" | "tasks" | "assignees";
 
 // The assignee <Select> can't hold an object, so rules round-trip through a
 // string encoding. "none" = no assignee for the stage.
@@ -60,14 +62,20 @@ export function AutomationEditor({
   onChange,
   members,
   disabled = false,
+  aspect = "all",
 }: {
   value: WorkflowDefinition;
   onChange: (next: WorkflowDefinition) => void;
   members: EditorMember[];
   disabled?: boolean;
+  aspect?: EditorAspect;
 }) {
   const t = useTranslations("Automations");
   const tStage = useTranslations("Stage");
+
+  const showFlow = aspect === "all" || aspect === "flow";
+  const showTasks = aspect === "all" || aspect === "tasks";
+  const showAssignee = aspect === "all" || aspect === "assignees";
 
   function setStage(stage: EngagementStage, patch: Partial<WorkflowStageDef>) {
     onChange({
@@ -85,6 +93,9 @@ export function AutomationEditor({
         const def = value.stages[stage];
         const lockedStage = stage === "collecting" || stage === "completed";
         const ghosted = def.skipped;
+        // A narrowed aspect on a stage with nothing to show (completed has no
+        // assignee control, for instance) still renders the numbered card, so
+        // the six-stage shape stays legible in every section.
         return (
           <section
             key={stage}
@@ -99,9 +110,13 @@ export function AutomationEditor({
                 <span className="mr-1.5 text-muted-foreground">{i + 1} ·</span>
                 {tStage(stageLabelKey(stage))}
               </h3>
+              {ghosted && (
+                <span className="text-xs text-muted-foreground">
+                  {t("skipped_chip")}
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-4">
-                {/* Assignee */}
-                {stage !== "completed" && (
+                {showAssignee && stage !== "completed" && (
                   <div className="flex items-center gap-2">
                     <Label className="text-xs text-muted-foreground">
                       {t("assignee_label")}
@@ -137,7 +152,7 @@ export function AutomationEditor({
                 )}
                 {/* Skip — never for collecting/completed (the engine refuses
                     it anyway; hiding the switch says so honestly). */}
-                {!lockedStage && (
+                {showFlow && !lockedStage && (
                   <div className="flex items-center gap-2">
                     <Label className="text-xs text-muted-foreground">
                       {t("skip_label")}
@@ -154,104 +169,108 @@ export function AutomationEditor({
               </div>
             </div>
 
-            {!ghosted && (
+            {!ghosted && (showFlow || showTasks) && (
               <div className="mt-3 flex flex-col gap-3">
-                {/* Entry actions */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <span className="text-xs text-muted-foreground">
-                    {t("on_entry_label")}
-                  </span>
-                  {ENTRY_ACTIONS.map((action) => {
-                    const on = def.on_entry.includes(action);
-                    return (
-                      <label
-                        key={action}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-1.5 text-xs",
-                          disabled && "cursor-default",
-                        )}
-                      >
-                        <Switch
-                          className="scale-75"
-                          checked={on}
-                          onCheckedChange={(next) =>
+                {showFlow && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("on_entry_label")}
+                    </span>
+                    {ENTRY_ACTIONS.map((action) => {
+                      const on = def.on_entry.includes(action);
+                      return (
+                        <label
+                          key={action}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 text-xs",
+                            disabled && "cursor-default",
+                          )}
+                        >
+                          <Switch
+                            className="scale-75"
+                            checked={on}
+                            onCheckedChange={(next) =>
+                              setStage(stage, {
+                                on_entry:
+                                  next === true
+                                    ? ([
+                                        ...def.on_entry,
+                                        action,
+                                      ] as EntryAction[])
+                                    : def.on_entry.filter((a) => a !== action),
+                              })
+                            }
+                            disabled={disabled}
+                          />
+                          {t(`action_${action}`)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {showTasks && (
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      {t("tasks_label")}
+                    </span>
+                    <div className="mt-1.5 flex flex-col gap-1.5">
+                      {def.tasks.map((task, ti) => (
+                        <TaskRow
+                          key={ti}
+                          task={task}
+                          disabled={disabled}
+                          canMoveUp={ti > 0}
+                          canMoveDown={ti < def.tasks.length - 1}
+                          onChange={(next) =>
                             setStage(stage, {
-                              on_entry:
-                                next === true
-                                  ? ([...def.on_entry, action] as EntryAction[])
-                                  : def.on_entry.filter((a) => a !== action),
+                              tasks: def.tasks.map((x, xi) =>
+                                xi === ti ? next : x,
+                              ),
                             })
                           }
-                          disabled={disabled}
+                          onMove={(dir) => {
+                            const next = [...def.tasks];
+                            const [row] = next.splice(ti, 1);
+                            next.splice(ti + dir, 0, row);
+                            setStage(stage, { tasks: next });
+                          }}
+                          onRemove={() =>
+                            setStage(stage, {
+                              tasks: def.tasks.filter((_, xi) => xi !== ti),
+                            })
+                          }
                         />
-                        {t(`action_${action}`)}
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {/* Stage tasks */}
-                <div>
-                  <span className="text-xs text-muted-foreground">
-                    {t("tasks_label")}
-                  </span>
-                  <div className="mt-1.5 flex flex-col gap-1.5">
-                    {def.tasks.map((task, ti) => (
-                      <TaskRow
-                        key={ti}
-                        task={task}
-                        disabled={disabled}
-                        canMoveUp={ti > 0}
-                        canMoveDown={ti < def.tasks.length - 1}
-                        onChange={(next) =>
-                          setStage(stage, {
-                            tasks: def.tasks.map((x, xi) =>
-                              xi === ti ? next : x,
-                            ),
-                          })
-                        }
-                        onMove={(dir) => {
-                          const next = [...def.tasks];
-                          const [row] = next.splice(ti, 1);
-                          next.splice(ti + dir, 0, row);
-                          setStage(stage, { tasks: next });
-                        }}
-                        onRemove={() =>
-                          setStage(stage, {
-                            tasks: def.tasks.filter((_, xi) => xi !== ti),
-                          })
-                        }
-                      />
-                    ))}
-                    {!disabled && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-fit text-xs"
-                        onClick={() =>
-                          setStage(stage, {
-                            tasks: [
-                              ...def.tasks,
-                              { title_en: "", title_fr: "", assignee: null },
-                            ],
-                          })
-                        }
-                      >
-                        <Plus className="mr-1 size-3.5" aria-hidden />
-                        {t("add_task")}
-                      </Button>
-                    )}
-                    {disabled && def.tasks.length === 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {t("no_tasks")}
-                      </span>
-                    )}
+                      ))}
+                      {!disabled && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-fit text-xs"
+                          onClick={() =>
+                            setStage(stage, {
+                              tasks: [
+                                ...def.tasks,
+                                { title_en: "", title_fr: "", assignee: null },
+                              ],
+                            })
+                          }
+                        >
+                          <Plus className="mr-1 size-3.5" aria-hidden />
+                          {t("add_task")}
+                        </Button>
+                      )}
+                      {disabled && def.tasks.length === 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("no_tasks")}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Advance rule */}
-                {stage !== "completed" && (
+                {showFlow && stage !== "completed" && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-muted-foreground">
                       {t("advance_label")}

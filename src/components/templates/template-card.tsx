@@ -15,6 +15,7 @@ import {
   ScrollText,
   UserPlus,
   UserRound,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
@@ -63,6 +64,9 @@ export type TemplateCardData = {
   requiredCount: number;
   /** First few item labels, already localized — the "peek inside". */
   preview: string[];
+  /** One-line automation summary (1510), already localized. Rendered only
+   *  when present — firms without the workflow switch never see it. */
+  workflowSummary?: string | null;
 };
 
 export function TemplateCard({
@@ -71,11 +75,14 @@ export function TemplateCard({
   itemCount,
   requiredCount,
   preview,
+  workflowSummary,
   href,
   footer,
   className,
 }: TemplateCardData & {
-  /** When set, the whole card is a link (the click-to-use case). */
+  /** When set, the card body is a link. Without a footer the WHOLE card is
+   *  the anchor; with one, the footer's forms/buttons stay outside the link
+   *  (interactive elements can't nest inside an anchor). */
   href?: string;
   /** Action row rendered at the bottom (the firm-template edit/delete case). */
   footer?: ReactNode;
@@ -137,19 +144,38 @@ export function TemplateCard({
         </p>
       )}
 
-      {footer && (
-        <div className="mt-3 flex items-center justify-end gap-1 border-t border-border/50 pt-2">
-          {footer}
-        </div>
+      {workflowSummary && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Zap className="h-3 w-3 shrink-0 text-accent" aria-hidden />
+          <span className="truncate">{workflowSummary}</span>
+        </p>
       )}
     </>
   );
+
+  const footerRow = footer ? (
+    <div className="mt-3 flex items-center justify-end gap-1 border-t border-border/50 pt-2">
+      {footer}
+    </div>
+  ) : null;
 
   const cardClass = cn(
     "group block rounded-xl border border-border/70 bg-card p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
     className,
   );
 
+  if (href && footerRow) {
+    // Body links, footer stays a sibling — forms and buttons can't legally
+    // live inside an anchor.
+    return (
+      <div className={cardClass}>
+        <Link href={href} className="block cursor-pointer">
+          {body}
+        </Link>
+        {footerRow}
+      </div>
+    );
+  }
   if (href) {
     return (
       <Link href={href} className={cn(cardClass, "cursor-pointer")}>
@@ -157,7 +183,12 @@ export function TemplateCard({
       </Link>
     );
   }
-  return <div className={cardClass}>{body}</div>;
+  return (
+    <div className={cardClass}>
+      {body}
+      {footerRow}
+    </div>
+  );
 }
 
 // A single-select variant of the same card, for the New-engagement template
