@@ -40,13 +40,27 @@
 -- unknown column and NOTHING is copied — which is safe, because the columns
 -- they read from are untouched. Apply 1520 first.
 --
--- Migration number: 1530 is mine; 1510 is duplicated on main (#1312's
--- engagement_details and #1318's workflow_automations both took it — flagged
--- before #1318 merged, and it merged anyway), so the highest usable is 1530 and
--- this is 1540. Re-run
+-- Migration number: RENUMBERED FROM 1540, the THIRD collision in one session.
+-- 1530 was mine and 1540 was free when this was written; #1325 then merged its
+-- own 1540_engagement_assignees.sql minutes before this PR, so this became the
+-- second file of the pair — again. 1550.
+--
+-- THE PATTERN IS NOW UNMISTAKABLE and worth writing down where the next person
+-- will read it: on a repo with several sessions in flight, "highest + 10 at
+-- creation" is not enough, and neither is re-checking after a pull. The number
+-- must be re-verified IMMEDIATELY BEFORE MERGE, because the window that matters
+-- is between opening a PR and it landing. Three collisions this session (1510,
+-- 1540 twice over) all happened inside that window.
+--
+-- Replaying at the new number is harmless: every statement here is guarded by
+-- `not exists` on the exact body, so a note already copied is not copied twice.
+--
+-- ⚠️ STILL BROKEN AND NOT MINE TO FIX: 1510 is duplicated on main —
+-- #1312's engagement_details and #1318's workflow_automations both took it.
+-- Flagged before #1318 merged; it merged anyway. Supabase's ledger keys on the
+-- version, so the second file of that pair can never be tracked. Whoever owns
+-- #1318 needs to renumber. Re-run
 --   ls supabase/migrations | sed 's/_.*//' | sort | uniq -d
--- after pulling; it currently prints 1510, and that pair still needs fixing by
--- whoever owns #1318.
 
 -- ── Task notes ────────────────────────────────────────────────────────────
 insert into file_comments (
