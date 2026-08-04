@@ -89,11 +89,15 @@ export function ClientMessagesTab({
 }) {
   const t = useTranslations("Assistant");
   const tTeam = useTranslations("TeamChat");
+  const tMessages = useTranslations("ClientMessages");
   const [conversations, setConversations] = useState<FirmConversation[] | null>(
     null,
   );
   const [team, setTeam] = useState<TeamConversation | null>(null);
   const [failed, setFailed] = useState(false);
+  // The messaging migrations aren't applied on this environment — an empty
+  // inbox that is NOT "you have no clients".
+  const [notActivated, setNotActivated] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -106,10 +110,12 @@ export function ClientMessagesTab({
       const data = (await res.json()) as {
         conversations?: FirmConversation[];
         team?: TeamConversation | null;
+        notActivated?: boolean;
       };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
         setTeam(data.team ?? null);
+        setNotActivated(data.notActivated === true);
         setFailed(false);
       }
     } catch {
@@ -293,11 +299,15 @@ export function ClientMessagesTab({
                   aria-hidden
                 />
                 <p className="text-sm font-medium text-foreground">
-                  {t("messages_inbox_no_clients")}
+                  {notActivated
+                    ? tMessages("not_activated")
+                    : t("messages_inbox_no_clients")}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {t("messages_inbox_no_clients_hint")}
-                </p>
+                {!notActivated && (
+                  <p className="text-sm text-muted-foreground">
+                    {t("messages_inbox_no_clients_hint")}
+                  </p>
+                )}
               </div>
             ) : (
               <ul className="divide-y divide-border/60">

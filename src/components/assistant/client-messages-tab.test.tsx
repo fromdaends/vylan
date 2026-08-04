@@ -160,6 +160,29 @@ describe("ClientMessagesTab (inbox)", () => {
       ).toBeInTheDocument(),
     );
   });
+
+  // The inbox is empty both when the firm has no clients and when the
+  // messaging migrations haven't been applied. Telling a firm full of clients
+  // "No clients yet" during that window would be a plain lie, so the two states
+  // must read differently.
+  it("says messaging isn't activated rather than 'no clients' pre-migration", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversations: [], team: null, notActivated: true }),
+    });
+    renderTab();
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.ClientMessages.not_activated),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(en.Assistant.messages_inbox_no_clients),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(en.Assistant.messages_inbox_no_clients_hint),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ClientMessagesTab (pinned team chat)", () => {

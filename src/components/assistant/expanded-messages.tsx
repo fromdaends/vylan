@@ -56,6 +56,7 @@ export function ExpandedMessages({
 }) {
   const t = useTranslations("Assistant");
   const tTeam = useTranslations("TeamChat");
+  const tMessages = useTranslations("ClientMessages");
   const { expanded } = useSyncExternalStore(
     subscribeChatLauncher,
     getChatLauncherState,
@@ -67,6 +68,9 @@ export function ExpandedMessages({
   );
   const [team, setTeam] = useState<TeamConversation | null>(null);
   const [failed, setFailed] = useState(false);
+  // The messaging migrations aren't applied on this environment — an empty
+  // inbox that is NOT "you have no clients".
+  const [notActivated, setNotActivated] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -79,10 +83,12 @@ export function ExpandedMessages({
       const data = (await res.json()) as {
         conversations?: FirmConversation[];
         team?: TeamConversation | null;
+        notActivated?: boolean;
       };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
         setTeam(data.team ?? null);
+        setNotActivated(data.notActivated === true);
         setFailed(false);
       }
     } catch {
@@ -388,7 +394,9 @@ export function ExpandedMessages({
                       aria-hidden
                     />
                     <p className="text-sm font-medium text-foreground">
-                      {t("messages_inbox_no_clients")}
+                      {notActivated
+                        ? tMessages("not_activated")
+                        : t("messages_inbox_no_clients")}
                     </p>
                   </div>
                 ) : (

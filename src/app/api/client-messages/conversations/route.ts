@@ -45,12 +45,14 @@ export async function GET() {
     listFirmConversations(supabase),
     loadTeamConversation(supabase, dbUser.id),
   ]);
-  const conversations =
-    conversationsRaw === CLIENT_MESSAGING_SCHEMA_MISSING
-      ? // Messaging not activated on this environment yet → empty inbox.
-        []
-      : conversationsRaw;
-  return NextResponse.json({ conversations, team });
+  // Messaging not activated on this environment yet (0650/1440 unapplied).
+  // The inbox is empty EITHER WAY, but the two cases must not look alike: with
+  // 1440 pending, a firm full of clients would otherwise be told "No clients
+  // yet", which is simply untrue. The flag lets the panel say what's actually
+  // going on instead.
+  const notActivated = conversationsRaw === CLIENT_MESSAGING_SCHEMA_MISSING;
+  const conversations = notActivated ? [] : conversationsRaw;
+  return NextResponse.json({ conversations, team, notActivated });
 }
 
 // The pinned team-chat row, or null when it shouldn't exist: the firm hasn't
