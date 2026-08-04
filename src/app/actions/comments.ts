@@ -33,6 +33,7 @@ import {
   deleteFileComment,
   listByTargetOrMissing,
   listCommentsForEngagement,
+  countCommentsByTarget,
   COMMENTS_SCHEMA_MISSING,
   type FileComment,
 } from "@/lib/db/file-comments";
@@ -163,6 +164,24 @@ export async function loadCommentThreadAction(
     currentUserId: user.id,
     legacy: true,
   };
+}
+
+// Comment counts for a whole table, in one call. The rows then know which of
+// them carry a bubble without each one asking.
+export async function loadCommentCountsAction(input: {
+  kind: "task" | "client";
+  ids: string[];
+}): Promise<Record<string, number>> {
+  const user = await getCurrentUser();
+  if (!user) return {};
+  // Bound it: a caller passing an unbounded list would build a URL long enough
+  // to be rejected by PostgREST, and a silently truncated count is better than
+  // a failed request that leaves every bubble missing.
+  const ids = (input.ids ?? []).filter(Boolean).slice(0, 500);
+  return countCommentsByTarget(
+    input.kind === "task" ? "engagement_task_id" : "client_id",
+    ids,
+  );
 }
 
 export type AddCommentResult =

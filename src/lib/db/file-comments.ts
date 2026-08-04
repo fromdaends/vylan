@@ -260,6 +260,40 @@ export async function listCommentsForClientOrMissing(
   );
 }
 
+// How many comments each of these targets has — ONE query for a whole table.
+//
+// The bubble in a row's margin has to know its count before anyone clicks it,
+// or a commented task looks identical to an uncommented one. Doing that per row
+// would be forty requests on a full /work list, so the table asks once and each
+// row is handed its number. Rows with no comments are simply absent from the
+// result, which is what keeps a clean list clean.
+//
+// {} before the SQL lands, so a table on a deployment ahead of its database
+// renders exactly as it did before commenting existed.
+export async function countCommentsByTarget(
+  column: "engagement_task_id" | "client_id",
+  ids: string[],
+): Promise<Record<string, number>> {
+  if (ids.length === 0) return {};
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("file_comments")
+    .select(column)
+    .in(column, ids);
+  if (error) {
+    if (!isMissingFileCommentsSchema(error)) {
+      console.error("[file-comments] countCommentsByTarget failed:", error);
+    }
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const row of (data as Array<Record<string, unknown>> | null) ?? []) {
+    const id = row[column] as string | null;
+    if (id) out[id] = (out[id] ?? 0) + 1;
+  }
+  return out;
+}
+
 export type InsertFileCommentResult =
   | { ok: true; comment: FileComment }
   | { ok: false; error: "schema" | "failed" };

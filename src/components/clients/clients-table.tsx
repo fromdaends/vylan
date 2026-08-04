@@ -1,7 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { RowCommentBubble } from "@/components/engagements/row-comment-bubble";
+import { commentKeyForClient } from "@/components/engagements/comment-keys";
+import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
+import { loadCommentCountsAction } from "@/app/actions/comments";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -87,6 +92,28 @@ export function ClientsTable({
   relationships?: Record<string, ClientRelationshipBadge>;
 }) {
   const t = useTranslations("Clients");
+
+  // Which clients carry a comment — ONE request for the whole table, fired
+  // after paint and never awaited, so the list renders exactly as fast as it
+  // did before commenting existed. Declared BEFORE the empty-state early
+  // return below: a hook after a conditional return is a hook-order crash.
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const idsKey = clients.map((c) => c.id).join(",");
+  useEffect(() => {
+    const ids = idsKey ? idsKey.split(",") : [];
+    if (ids.length === 0) {
+      setCommentCounts({});
+      return;
+    }
+    let alive = true;
+    void loadCommentCountsAction({ kind: "client", ids }).then((counts) => {
+      if (alive) setCommentCounts(counts);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [idsKey]);
+
   // Set of expanded client ids. Multi-expand by design — comparing two
   // clients side-by-side is a real workflow at tax season.
   if (clients.length === 0) {
@@ -113,6 +140,7 @@ export function ClientsTable({
           key={c.id}
           client={c}
           avatarUrl={avatarUrls?.[c.id] ?? null}
+          commentCount={commentCounts[c.id] ?? 0}
           summary={summaries[c.id]}
           relationshipBadge={relationships?.[c.id]}
           owner={c.assigned_user_id ? owners[c.assigned_user_id] : undefined}
@@ -162,6 +190,7 @@ function stop(e: React.MouseEvent) {
 function ClientRow({
   client,
   avatarUrl,
+  commentCount,
   summary,
   relationshipBadge,
   owner,
@@ -171,6 +200,8 @@ function ClientRow({
 }: {
   client: Client;
   avatarUrl?: string | null;
+  /** From the table's one batched count. */
+  commentCount: number;
   summary: ClientEngagementSummary | undefined;
   relationshipBadge: ClientRelationshipBadge | undefined;
   owner: ClientOwner | undefined;
@@ -179,6 +210,10 @@ function ClientRow({
   teamEnabled: boolean;
 }) {
   const t = useTranslations("Clients");
+  // The comment entry's label lives in Engagements alongside every other
+  // "Add a comment" in the app — one string, so the four menus cannot drift.
+  const tEng = useTranslations("Engagements");
+  const comment = useCommentFromMenu();
   const router = useRouter();
   const href = `/clients/${client.id}`;
 
@@ -230,6 +265,15 @@ function ClientRow({
             >
               {client.display_name}
             </Link>
+            {/* Same bubble, same rules, same component as a task row and the
+                engagement page: invisible until this client HAS a comment or
+                the right-click menu asks for the composer. */}
+            <RowCommentBubble
+              target={{ kind: "client", clientId: client.id }}
+              commentKey={commentKeyForClient(client.id)}
+              initialCount={commentCount}
+              quotedText={client.display_name}
+            />
             {relationshipBadge && relationshipBadge.count > 0 && (
               <span title={relationshipBadge.summary} className="flex shrink-0">
                 <Link2
@@ -277,7 +321,15 @@ function ClientRow({
           </span>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent onCloseAutoFocus={comment.onCloseAutoFocus}>
+        {/* Right-click reaches the comment composer here exactly as it does on
+            a task, a file and an engagement. Founder: "the right click should
+            be universal." */}
+        <ContextMenuItem
+          onSelect={() => comment.request(commentKeyForClient(client.id))}
+        >
+          {tEng("add_comment")}
+        </ContextMenuItem>
         <ClientMenuItems
           client={client}
           locale={locale}

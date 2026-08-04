@@ -31,6 +31,7 @@ vi.mock("@/app/actions/comments", () => ({
     currentUserId: "u-me",
     legacy: false,
   })),
+  loadCommentCountsAction: vi.fn(async () => ({})),
   addCommentAction: vi.fn(async () => ({ ok: false, error: "failed" })),
   deleteCommentAction: vi.fn(async () => ({ ok: true })),
 }));

@@ -55,7 +55,7 @@
 // that is the whole point, after "the task view for a specific engagement ...
 // doesnt match with the actual tasks screen".
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -84,6 +84,16 @@ import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { taskKindLabelKey, taskKindHasScreen } from "@/lib/tasks/kinds";
 import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { RowCommentBubble } from "@/components/engagements/row-comment-bubble";
+import { commentKeyForTask } from "@/components/engagements/comment-keys";
+import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
+import { loadCommentCountsAction } from "@/app/actions/comments";
 
 type TaskStatus = "todo" | "doing" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -424,6 +434,31 @@ export function TasksTable({
   // What is drawn, versus what exists. `shown` stays the honest total so the
   // count and the tabs never disagree with each other.
   const visible = maxRows ? shown.slice(0, maxRows) : shown;
+
+  // Which of these tasks carry a comment. ONE request for the whole table, not
+  // one per row — the bubble has to know its count before anybody touches it,
+  // and forty rows each asking would be forty round trips on /work.
+  //
+  // Fired after paint and never awaited, so the list renders at exactly the
+  // speed it did before commenting existed; bubbles appear a moment later on
+  // the rows that have something to show. Keyed on the ids actually visible, so
+  // filtering or paging re-asks only when the set really changes.
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const visibleIdsKey = visible.map((x) => x.id).join(",");
+  useEffect(() => {
+    const ids = visibleIdsKey ? visibleIdsKey.split(",") : [];
+    if (ids.length === 0) {
+      setCommentCounts({});
+      return;
+    }
+    let alive = true;
+    void loadCommentCountsAction({ kind: "task", ids }).then((counts) => {
+      if (alive) setCommentCounts(counts);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [visibleIdsKey]);
   const hidden = shown.length - visible.length;
 
   const kinds = useMemo(
@@ -618,6 +653,7 @@ export function TasksTable({
                 <Row
                   key={task.id}
                   task={task}
+                  commentCount={commentCounts[task.id] ?? 0}
                   status={statusOf(task)}
                   statusOptions={statusOptions}
                   firmWide={firmWide}
@@ -715,6 +751,7 @@ type Patch =
 
 function Row({
   task,
+  commentCount,
   status,
   statusOptions,
   firmWide,
@@ -729,6 +766,8 @@ function Row({
   run,
 }: {
   task: TaskRow;
+  /** How many comments this task has, from the table's one batched count. */
+  commentCount: number;
   /** Already resolved to the firm's label and colour. */
   status: FirmStatus;
   statusOptions: FirmStatus[];
@@ -747,6 +786,7 @@ function Row({
   const assignees = task.assigneeIds
     .map((id) => ({ id, name: nameById.get(id) }))
     .filter((a): a is Person => Boolean(a.name));
+  const comment = useCommentFromMenu();
   // Only a kind with a real screen is clickable through.
   const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
   const isDone = status.bucket === "done";
@@ -754,14 +794,26 @@ function Row({
     task.dueDate && task.status !== "done" && task.dueDate < today();
 
   return (
-    // THE WHOLE ROW OPENS THE PANEL. Founder: "clicking on the task name
-    // shouldn't be the only way to bring up the sidebar. I think clicking on
-    // the task itself should bring up the sidebar. like, the entire thing."
+    // RIGHT-CLICK REACHES THE COMMENT COMPOSER. Founder: "you can't right click
+    // on a task to add a comment... the right click should be universal." The
+    // engagements list and the file rows have had this; tasks never did, so the
+    // only way to say something about a task was to open the whole panel.
     //
-    // Every control inside it — the status pill, the assignee menu, the
-    // priority cell, the type link, delete — stops the click before it gets
-    // here, so a row is only "the empty parts" in practice. Without that, one
-    // careless click both ticks a task off and opens a panel about it.
+    // The entry goes through useCommentFromMenu rather than calling
+    // openCommentComposer directly — see that file: a menu restoring focus on
+    // close counts as an interaction-outside and dismisses the card that was
+    // just asked for. It opens from onCloseAutoFocus instead, after the menu
+    // is gone.
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+    {/* THE WHOLE ROW OPENS THE PANEL. Founder: "clicking on the task name
+        shouldn't be the only way to bring up the sidebar. I think clicking on
+        the task itself should bring up the sidebar. like, the entire thing."
+
+        Every control inside it — the status pill, the assignee menu, the
+        priority cell, the type link, delete — stops the click before it gets
+        here, so a row is only "the empty parts" in practice. Without that, one
+        careless click both ticks a task off and opens a panel about it. */}
     <tr
       onClick={onOpenDetail}
       className="group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40"
@@ -891,6 +943,15 @@ function Row({
               {task.subtasks.length}
             </span>
           )}
+          {/* The comment bubble. Invisible until this task HAS a comment or the
+              right-click menu asks for the composer — same rule as every other
+              commentable row, so a clean list stays clean. */}
+          <RowCommentBubble
+            target={{ kind: "task", taskId: task.id }}
+            commentKey={commentKeyForTask(task.id)}
+            initialCount={commentCount}
+            quotedText={task.title}
+          />
           {openable && (
             <button
               type="button"
@@ -1061,6 +1122,15 @@ function Row({
         )}
       </td>
     </tr>
+      </ContextMenuTrigger>
+      <ContextMenuContent onCloseAutoFocus={comment.onCloseAutoFocus}>
+        <ContextMenuItem
+          onSelect={() => comment.request(commentKeyForTask(task.id))}
+        >
+          {t("add_comment")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
