@@ -154,7 +154,7 @@ describe("ENGAGEMENT_VIEWS", () => {
   // engagements." The other four kept their routes, so nothing 404s and no link
   // anywhere in the app breaks.
   it("shows exactly three tabs", () => {
-    expect(TAB_VIEWS).toEqual(["active", "drafts", "all"]);
+    expect(TAB_VIEWS).toEqual(["active", "all", "drafts"]);
   });
 
   // ⚠️ THE ONE THAT MATTERS. Recently deleted is a 30-day recovery window with
