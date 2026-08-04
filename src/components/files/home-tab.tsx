@@ -92,13 +92,15 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
     // page longer. The min-h floor keeps a short window from crushing the rail
     // cards — below it the page scrolls, which beats clipped controls.
     // Under lg the columns wrap into a stack and the page scrolls normally.
-    <div className="flex flex-wrap items-start gap-5 lg:h-[calc(100dvh-200px)] lg:min-h-[520px] lg:flex-nowrap lg:items-stretch">
+    // gap-6 between cards — the site-wide rhythm (dashboard, client page and
+    // Work all separate cards by 24px), not a Files-only value.
+    <div className="flex flex-wrap items-start gap-6 lg:h-[calc(100dvh-200px)] lg:min-h-[520px] lg:flex-nowrap lg:items-stretch">
       {/* SIDE RAIL, on the LEFT. The things you DO — drop files in, check that
           filing is still connected, see who touched what — sit against the
           navigation edge; the things you READ get the open width to their
           right. Rail first in the DOM as well as on screen, so keyboard and
           screen-reader order match what you see. */}
-      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-5 lg:min-h-0 lg:max-w-[300px]">
+      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-6 lg:min-h-0 lg:max-w-[300px]">
         <UploadDropzone clients={clients} />
         <CloudFiling t={t} storage={storage} />
         <TeamActivity
@@ -112,7 +114,7 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
       {/* MAIN COLUMN. flex-999 makes it take essentially all the spare width
           while still being allowed to wrap; 560px is the basis below which it
           drops under the rail rather than squeezing the file names. */}
-      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-5 lg:min-h-0">
+      <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-6 lg:min-h-0">
         {organize.available && <OrganizeBar t={t} total={organize.total} />}
         <RecentFiles
           t={t}
