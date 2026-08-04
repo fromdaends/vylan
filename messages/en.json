@@ -3949,6 +3949,8 @@
     "messages_inbox_empty_hint": "Messages with your clients show up here.",
     "messages_inbox_no_clients": "No clients yet",
     "messages_inbox_no_clients_hint": "Add a client and you can message them from here.",
+    "messages_search_placeholder": "Search",
+    "messages_search_no_matches": "No matches",
     "messages_back_to_inbox": "All conversations",
     "messages_no_messages_yet": "No messages yet",
     "messages_preview_you": "You: ",
