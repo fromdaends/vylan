@@ -1,0 +1,80 @@
+"use server";
+
+// Server actions for task templates (migration 1570).
+//
+// Only async exports live here — a `"use server"` module that exports anything
+// else fails the production build, and nothing else in the toolchain catches it.
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/db/users";
+import {
+  archiveTaskTemplate,
+  createTaskTemplate,
+} from "@/lib/db/task-templates";
+import {
+  isWorthSavingTaskTemplate,
+  readTaskTemplatePayload,
+} from "@/lib/tasks/template-payload";
+
+// `kind` is a loose string rather than the enum, matching the create-engagement
+// action: a kind from a newer bundle must not fail the whole save.
+// readTaskTemplatePayload downgrades anything unrecognised to a plain task.
+const TaskSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  kind: z.string().max(60).optional(),
+});
+
+const SaveSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  access: z.enum(["team", "private"]),
+  tasks: z.array(TaskSchema).max(100),
+});
+
+type Result = {
+  ok: boolean;
+  needsMigration?: boolean;
+  error?: "unauthenticated" | "invalid" | "empty" | "failed";
+};
+
+export async function saveTaskTemplateAction(
+  input: z.input<typeof SaveSchema>,
+): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+
+  const parsed = SaveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+
+  // Normalised through the SAME reader the pickers use, so what gets stored is
+  // exactly what will come back out. Storing the raw post instead would let a
+  // template save fields that silently vanish on load.
+  const payload = readTaskTemplatePayload({ tasks: parsed.data.tasks });
+  if (!isWorthSavingTaskTemplate(payload)) return { ok: false, error: "empty" };
+
+  const res = await createTaskTemplate({
+    name: parsed.data.name,
+    access: parsed.data.access,
+    payload,
+  });
+  if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
+
+  revalidatePath("/templates");
+  revalidatePath("/engagements/new");
+  return { ok: true };
+}
+
+export async function archiveTaskTemplateAction(id: string): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+  if (!z.string().uuid().safeParse(id).success) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const res = await archiveTaskTemplate(id);
+  if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
+
+  revalidatePath("/templates");
+  revalidatePath("/engagements/new");
+  return { ok: true };
+}

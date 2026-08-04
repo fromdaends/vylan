@@ -28,6 +28,8 @@ import { ServiceCatalogue } from "@/components/templates/service-catalogue";
 import { AutoNewTemplate } from "@/components/templates/auto-new-template";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
 import { ArchiveEngagementTemplate } from "@/components/templates/archive-engagement-template";
+import { listTaskTemplates } from "@/lib/db/task-templates";
+import { TaskTemplateCatalogue } from "@/components/templates/task-template-catalogue";
 
 export default async function TemplatesPage({
   params,
@@ -42,8 +44,14 @@ export default async function TemplatesPage({
   setRequestLocale(locale);
 
   const sp = await searchParams;
-  const [templates, services, user, currentFirm, engagementTemplates] =
-    await Promise.all([
+  const [
+    templates,
+    services,
+    user,
+    currentFirm,
+    engagementTemplates,
+    taskTemplates,
+  ] = await Promise.all([
       listTemplates(),
       listFirmServices(),
       getCurrentUser(),
@@ -55,6 +63,9 @@ export default async function TemplatesPage({
       // archiveEngagementTemplateAction already revalidated this route for a
       // section that did not exist yet.
       listEngagementTemplates(),
+      // Named sets of tasks (migration 1570). Empty list before it is applied,
+      // which renders as an ordinary empty section rather than an error.
+      listTaskTemplates(),
     ]);
   // Part A switch (1510): with it on, template cards open their detail page
   // (built-ins read-only) and carry a one-line automation summary. Off = the
@@ -190,6 +201,25 @@ export default async function TemplatesPage({
             ))}
           </CardGrid>
         )}
+      </Section>
+
+      {/* TASK TEMPLATES — the steps a piece of work takes.
+          Sits between the whole engagement above and the building blocks below,
+          which is exactly where it belongs: bigger than a service line, smaller
+          than a job. Canopy's third template type, and the one Vylan was
+          missing. */}
+      <Section
+        id="task-templates"
+        title={t("section_task_templates")}
+        count={taskTemplates.length}
+      >
+        <p className="-mt-1 mb-4 max-w-xl text-sm text-muted-foreground">
+          {t("task_templates_subtitle")}
+        </p>
+        <TaskTemplateCatalogue
+          templates={taskTemplates}
+          openOnMount={sp.new === "task"}
+        />
       </Section>
 
       {/* SERVICES — what you SELL comes before what you ask a client to
