@@ -49,6 +49,19 @@ export function EngagementModalShell({
    * roughly 800px of empty sheet, which reads as a page that failed to load.
    */
   compact = false,
+  /**
+   * Float over the page behind it, blurring what is there.
+   *
+   * Founder: "it should be an overlap and maybe blur the background of what the
+   * screen was originally on... a box that appears overlapping over the UI that
+   * already exists." That needs the previous page to still be MOUNTED, which is
+   * what the @modal intercepting route provides — a normal navigation replaces
+   * the page and leaves nothing behind to blur.
+   *
+   * False on a direct load or refresh, where there genuinely is nothing behind
+   * and a panel floating over blankness would be worse than a full page.
+   */
+  overlay = false,
   busy = false,
   children,
 }: {
@@ -77,13 +90,28 @@ export function EngagementModalShell({
    */
   onSaveAsTemplate?: () => void;
   compact?: boolean;
+  overlay?: boolean;
   busy?: boolean;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="w-full animate-in-fade px-4 pb-14 pt-5 sm:px-6 lg:px-8">
+    <div
+      className={cn(
+        "w-full animate-in-fade px-4 pb-14 pt-5 sm:px-6 lg:px-8",
+        overlay &&
+          // Covers the app's own content column, not the whole viewport: the
+          // icon rail stays live and un-dimmed, which is how Canopy's modal
+          // behaves and what keeps this feeling like part of the app rather
+          // than a takeover.
+          //
+          // backdrop-blur needs something translucent OVER it to read at all —
+          // a bare blur on a near-black page is invisible. The wash does that
+          // work; the blur softens whatever colour is underneath.
+          "fixed inset-0 z-40 overflow-y-auto bg-background/70 backdrop-blur-sm sm:left-[var(--rail-width)]",
+      )}
+    >
       <div
         className={cn(
           "mx-auto flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
