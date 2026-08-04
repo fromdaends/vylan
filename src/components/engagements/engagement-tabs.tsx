@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronLeft } from "lucide-react";
-import { InternalWork, type WorkRow } from "@/components/engagements/internal-work";
+import { TasksTable, type TaskRow } from "@/components/engagements/tasks-table";
 
 // An engagement's TASKS, as one list.
 //
@@ -49,6 +49,7 @@ export function EngagementTabs({
   tasks,
   members,
   canEdit,
+  currentUserId,
   checklistControls,
   signaturesControls,
   finalControls,
@@ -59,9 +60,11 @@ export function EngagementTabs({
 }: {
   /** Every task on this job, in order. Empty is the ordinary state of a new
    *  job and renders as such. */
-  tasks: WorkRow[];
+  tasks: TaskRow[];
   members: { id: string; name: string }[];
   canEdit: boolean;
+  /** Drives the table's "Mine" view. */
+  currentUserId: string;
   checklistControls: ReactNode;
   signaturesControls: ReactNode;
   finalControls: ReactNode;
@@ -102,19 +105,22 @@ export function EngagementTabs({
   }
 
   return (
-    <section className="space-y-1">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
-        <h2 className="px-1 py-2 text-base font-semibold tracking-tight text-foreground">
-          {t("engagement_work")}
-        </h2>
-        <div className="flex items-center gap-2 pb-1.5">{addTask}</div>
-      </div>
-
-      <InternalWork
+    <section className="space-y-3">
+      <h2 className="text-base font-semibold tracking-tight text-foreground">
+        {t("engagement_work")}
+      </h2>
+      {/* THE SAME TABLE the firm-wide Tasks page draws, minus the Client column
+          — every row on a job has the same client, and a column with one value
+          is decoration. The founder's complaint was exactly this: "the task view
+          for a specific engagement ... doesnt match with the actual tasks
+          screen." One component is the only durable answer to that. */}
+      <TasksTable
         tasks={tasks}
         members={members}
         canEdit={canEdit}
+        currentUserId={currentUserId}
         variant="job"
+        addTask={addTask}
         onOpen={setOpen}
       />
     </section>

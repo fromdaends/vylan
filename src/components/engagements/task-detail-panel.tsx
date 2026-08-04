@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/sheet";
 
 type TaskStatus = "todo" | "doing" | "done";
+type TaskPriority = "none" | "low" | "medium" | "high";
 type Person = { id: string; name: string };
 
 export type DetailTask = {
@@ -59,6 +60,7 @@ export type DetailTask = {
   title: string;
   kind: string;
   status: TaskStatus;
+  priority: TaskPriority;
   assigneeIds: string[];
   clientId: string;
   engagementId: string | null;
@@ -70,6 +72,7 @@ export type DetailTask = {
 };
 
 const STATUSES: TaskStatus[] = ["todo", "doing", "done"];
+const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 
 export type TaskDetailPanelPatch = (
   patch: {
@@ -77,6 +80,7 @@ export type TaskDetailPanelPatch = (
     notes?: string | null;
     status?: TaskStatus;
     dueDate?: string | null;
+    priority?: TaskPriority;
     assigneeIds?: string[];
   },
   /** What to send the server. Kept separate because toggling one person is one
@@ -286,6 +290,28 @@ function DetailBody({
                       {t("work_unassigned")}
                     </p>
                   )}
+                </div>
+              </Field>
+
+              <Field label={t("col_priority")}>
+                <div className="flex gap-1">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => onPatch({ priority: p }, {})}
+                      aria-pressed={task.priority === p}
+                      className={cn(
+                        "flex-1 rounded-lg border px-2 py-1.5 text-xs transition-colors disabled:opacity-50",
+                        task.priority === p
+                          ? "border-foreground/30 bg-secondary font-medium text-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      {t(`priority_${p}` as "priority_none")}
+                    </button>
+                  ))}
                 </div>
               </Field>
 

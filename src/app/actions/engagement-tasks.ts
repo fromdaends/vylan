@@ -24,6 +24,7 @@ import {
   EngagementTasksUnsupportedError,
   type TaskStatus,
   type TaskKind,
+  type TaskPriority,
 } from "@/lib/db/engagement-tasks";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
@@ -80,6 +81,13 @@ export async function addTaskAction(input: {
    *  by the database (1370), so a duplicate comes back as "failed" rather than
    *  silently making a second row that shows the same documents. */
   kind?: TaskKind;
+  // The founder: "creating a task should ask for a due date and whatever
+  // relevant information. Not only after." Setting a due date and an owner as
+  // a second step after creating is how a list fills with unowned, undated
+  // rows — the state this whole screen exists to make visible.
+  dueDate?: string | null;
+  priority?: TaskPriority;
+  assigneeIds?: string[];
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -100,6 +108,9 @@ export async function addTaskAction(input: {
       firmId: g.firm.id,
       title,
       kind: input.kind ?? "task",
+      dueDate: input.dueDate ?? null,
+      priority: input.priority ?? "none",
+      assigneeIds: input.assigneeIds,
       createdBy: g.user.id,
       orderIndex: existing.length,
     });
@@ -149,6 +160,7 @@ export async function updateTaskAction(input: {
   dueDate?: string | null;
   /** Null clears it. Undefined leaves it alone — the two are different. */
   notes?: string | null;
+  priority?: TaskPriority;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -162,6 +174,7 @@ export async function updateTaskAction(input: {
   if (input.status !== undefined) patch.status = input.status;
   if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
   if (input.notes !== undefined) patch.notes = input.notes;
+  if (input.priority !== undefined) patch.priority = input.priority;
 
   try {
     await updateEngagementTask({

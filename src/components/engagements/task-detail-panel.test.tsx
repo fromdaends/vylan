@@ -25,6 +25,7 @@ const TASK: DetailTask = {
   title: "2025 T2 supporting documents",
   kind: "document_collection",
   status: "doing",
+  priority: "none",
   assigneeIds: ["u-tyler"],
   clientId: "c-abc",
   engagementId: "e-1",

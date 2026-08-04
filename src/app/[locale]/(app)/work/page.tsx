@@ -1,4 +1,4 @@
-// WORK — the firm's whole workload, in one place.
+// TASKS — the firm's whole workload, in one table.
 //
 // The gap the founder named: "the way ours works rn is dead". To see what
 // needed doing you opened a client, then a job. There was no screen that
@@ -14,6 +14,11 @@
 // stages, AI classification, filing and payments, and folding that into a
 // generic task would be a rewrite with a real chance of breaking the core of
 // the product for no gain the founder asked for.
+//
+// The view tabs, the sorting and the filtering all live in the TABLE, client
+// side. Everything is already on the page — the list is in the hundreds, not
+// the millions — so a query per click would put a network round trip between
+// the founder and a sort order.
 
 export const dynamic = "force-dynamic";
 
@@ -23,93 +28,89 @@ import { assertLocale } from "@/lib/locale";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listClients } from "@/lib/db/clients";
+import { listEngagements } from "@/lib/db/engagements";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
-import { InternalWork } from "@/components/engagements/internal-work";
-import { WorkFilters, type WorkScope } from "@/components/work/work-filters";
+import { TasksTable } from "@/components/engagements/tasks-table";
 
 export default async function WorkPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ scope?: string; open?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
-  const sp = await searchParams;
 
   const user = await getCurrentUser();
   if (!user) redirect(`/${locale}/login`);
   const firm = await getCurrentFirm();
   if (!firm) redirect(`/${locale}/dashboard`);
 
-  const [tasks, members, clients] = await Promise.all([
+  const [tasks, members, clients, engagements] = await Promise.all([
     listFirmTasks(),
     listFirmUsers(),
-    // For the "+ Add task" picker. The founder's own example is the reason
-    // this page can create anything at all: "a way to create tasks that dont
-    // live within an engagement but they would still be tied to a client" —
-    // Mathieu gets a CRA notice, somebody has to phone about it, and that is
-    // part of no tax return.
+    // For the "+ Add task" picker. The founder's own example is why this page
+    // can create anything at all: "a way to create tasks that dont live within
+    // an engagement but they would still be tied to a client" — Mathieu gets a
+    // CRA notice, somebody has to phone about it, and that is part of no tax
+    // return.
     listClients(),
+    // And the jobs, so a DOCUMENT COLLECTION can be started from here too —
+    // the merge the founder asked for. A collection kind needs a job to hang
+    // off, so the dialog asks for one rather than hiding the option.
+    listEngagements(),
   ]);
 
-  // Filters are applied HERE rather than in the query, because the two of them
-  // are cheap set operations over a list the page already has and running them
-  // server-side would cost a round trip per click.
-  const scope: WorkScope = sp.scope === "mine" ? "mine" : "all";
-  const openOnly = sp.open !== "0";
-  const shown = tasks
-    .filter((t) => (scope === "mine" ? t.assigneeIds.includes(user.id) : true))
-    .filter((t) => (openOnly ? t.status !== "done" : true));
-
   const t = await getTranslations("Engagements");
+  const activeMembers = members
+    .filter((m) => !m.deactivated_at)
+    .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
+
+  // Which built-in kinds each job already has, so the picker can grey out the
+  // ones the database would refuse (1370) instead of erroring after the click.
+  const kindsByEngagement = new Map<string, string[]>();
+  for (const task of tasks) {
+    if (!task.engagementId || task.kind === "task") continue;
+    const list = kindsByEngagement.get(task.engagementId) ?? [];
+    list.push(task.kind);
+    kindsByEngagement.set(task.engagementId, list);
+  }
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {t("work_title")}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("work_subtitle")}
-          </p>
-        </div>
-        {/* The same dialog the job page uses, in its firm-wide mode — a client
-            picker instead of a kind picker. Not a second copy: see the note at
-            the top of add-task-dialog.tsx. */}
-        <AddTaskDialog
-          mode="firm"
-          clients={clients.map((c) => ({
-            id: c.id,
-            display_name: c.display_name,
-            type: c.type,
-            email: c.email,
-          }))}
-        />
+    <div className="space-y-5">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          {t("work_title")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("work_subtitle")}
+        </p>
       </header>
 
-      <WorkFilters
-        scope={scope}
-        openOnly={openOnly}
-        counts={{
-          all: tasks.filter((x) => x.status !== "done").length,
-          mine: tasks.filter(
-            (x) => x.status !== "done" && x.assigneeIds.includes(user.id),
-          ).length,
-        }}
-      />
-
-      <InternalWork
-        variant="firm"
-        tasks={shown}
-        members={members
-          .filter((m) => !m.deactivated_at)
-          .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
+      <TasksTable
+        tasks={tasks}
+        members={activeMembers}
         canEdit
+        currentUserId={user.id}
+        variant="firm"
+        addTask={
+          <AddTaskDialog
+            clients={clients.map((c) => ({
+              id: c.id,
+              display_name: c.display_name,
+              type: c.type,
+              email: c.email,
+            }))}
+            engagements={engagements.map((e) => ({
+              id: e.id,
+              clientId: e.client_id,
+              title: e.title,
+              existingKinds: kindsByEngagement.get(e.id) ?? [],
+            }))}
+            members={activeMembers}
+          />
+        }
       />
     </div>
   );

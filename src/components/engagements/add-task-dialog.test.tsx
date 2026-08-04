@@ -17,18 +17,19 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 import { AddTaskDialog } from "./add-task-dialog";
 
 const CLIENTS = [
-  {
-    id: "c-mathieu",
-    display_name: "Mathieu Lévesque",
-    type: "individual" as const,
-    email: null,
-  },
-  {
-    id: "c-abc",
-    display_name: "ABC Incorporation Inc",
-    type: "business" as const,
-    email: null,
-  },
+  { id: "c-mathieu", display_name: "Mathieu Lévesque", type: "individual" as const, email: null },
+  { id: "c-abc", display_name: "ABC Incorporation Inc", type: "business" as const, email: null },
+];
+
+const ENGAGEMENTS = [
+  { id: "e-abc-t2", clientId: "c-abc", title: "T2 Tax Return", existingKinds: ["document_collection"] },
+  { id: "e-abc-bk", clientId: "c-abc", title: "Bookkeeping 2026", existingKinds: [] },
+  { id: "e-mat-t1", clientId: "c-mathieu", title: "T1 2025", existingKinds: [] },
+];
+
+const MEMBERS = [
+  { id: "u-tyler", name: "Tyler Jette" },
+  { id: "u-zach", name: "Zachary Thresh" },
 ];
 
 beforeEach(() => {
@@ -36,10 +37,9 @@ beforeEach(() => {
   addTaskAction.mockResolvedValue({ ok: true });
   refresh.mockClear();
 });
-
 afterEach(() => cleanup());
 
-function renderDialog(props: React.ComponentProps<typeof AddTaskDialog>) {
+function renderDialog(props: React.ComponentProps<typeof AddTaskDialog> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <AddTaskDialog {...props} />
@@ -47,89 +47,21 @@ function renderDialog(props: React.ComponentProps<typeof AddTaskDialog>) {
   );
 }
 
-describe("AddTaskDialog — firm-wide mode", () => {
-  // The founder's ask, still unreachable until this shipped: "i want to have a
-  // way to create tasks that dont live within an engagement but they would
-  // still be tied to a client". The database has allowed it since 1350; there
-  // was simply no button.
-  it("creates a task against a client with NO engagement", async () => {
-    renderDialog({ mode: "firm", clients: CLIENTS });
-    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
+const openIt = () =>
+  fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
+const submit = () => screen.getAllByRole("button", { name: /Add task/i }).at(-1)!;
+const nameField = () =>
+  screen.getByLabelText(en.Engagements.add_task_name as string) as HTMLInputElement;
 
-    // Pick the client through the shared combobox.
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(await screen.findByText("Mathieu Lévesque"));
-
-    fireEvent.change(
-      screen.getByLabelText(en.Engagements.add_task_name as string),
-      { target: { value: "  Call about the CRA notice  " } },
-    );
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /Add task/i }).at(-1)!,
-    );
-
-    await waitFor(() => expect(addTaskAction).toHaveBeenCalledTimes(1));
-    expect(addTaskAction).toHaveBeenCalledWith({
-      clientId: "c-mathieu",
-      // Explicitly null, not omitted — this belongs to the client and to no job.
-      engagementId: null,
-      title: "Call about the CRA notice",
-      // The only kind possible without a job: the other three point at
-      // collections keyed by engagement_id.
-      kind: "task",
-    });
-  });
-
-  it("refuses to submit until BOTH a client and a name are given", async () => {
-    renderDialog({ mode: "firm", clients: CLIENTS });
-    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
-
-    const submit = () => screen.getAllByRole("button", { name: /Add task/i }).at(-1)!;
-    expect(submit()).toBeDisabled();
-
-    fireEvent.change(
-      screen.getByLabelText(en.Engagements.add_task_name as string),
-      { target: { value: "Call about the CRA notice" } },
-    );
-    // Named, but nobody to file it against. Guessing a client is how a task
-    // ends up on the wrong person's file.
-    expect(submit()).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(await screen.findByText("ABC Incorporation Inc"));
-    await waitFor(() => expect(submit()).not.toBeDisabled());
-  });
-
-  it("never offers a kind that needs a job", async () => {
-    renderDialog({ mode: "firm", clients: CLIENTS });
-    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
-
-    for (const gone of [
-      en.Engagements.kind_document_collection as string,
-      en.Engagements.kind_signatures as string,
-      en.Engagements.kind_deliverables as string,
-    ]) {
-      expect(screen.queryByText(gone)).toBeNull();
-    }
-  });
-});
-
-describe("AddTaskDialog — on a job", () => {
-  // Founder: "why is there only two options for the add task button?" Because
-  // the first version silently HID the built-in kinds the job already had, so
-  // the menu shrank with no way to find out why. They are shown now, disabled,
-  // with the reason — an answer beats an empty space.
-  it("shows every kind, disabling the ones this job already has, and says why", async () => {
-    renderDialog({
-      clientId: "c-abc",
-      engagementId: "e-1",
-      existingKinds: ["document_collection"],
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
-
-    const row = (label: string) =>
-      screen.getByText(label).closest("button") as HTMLButtonElement;
-
+// The founder: "now theres 2 kinds of ways of adding tasks... MERGE THE TWO
+// VERSIONS." They were two flows because the CONTEXT decided the questions —
+// on a job it asked the kind, on the Tasks page it asked the client and
+// skipped the kind entirely. Now the questions are identical everywhere and
+// only the pre-filled answers differ, which is what these pin.
+describe("AddTaskDialog — the kind question comes first, on BOTH screens", () => {
+  it("asks the kind on the firm-wide Tasks page, where it used to be skipped", () => {
+    renderDialog({ clients: CLIENTS, engagements: ENGAGEMENTS, members: MEMBERS });
+    openIt();
     for (const label of [
       en.Engagements.kind_document_collection,
       en.Engagements.kind_signatures,
@@ -138,41 +70,132 @@ describe("AddTaskDialog — on a job", () => {
     ] as string[]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
-
-    expect(row(en.Engagements.kind_document_collection as string)).toBeDisabled();
-    expect(row(en.Engagements.kind_signatures as string)).not.toBeDisabled();
-    expect(
-      screen.getByText(en.Engagements.add_task_kind_taken as string),
-    ).toBeTruthy();
   });
 
-  // The whole point of 1380: a name is the user's words, not the category.
-  // Pre-filling it is what produced twenty-eight rows reading "Document
-  // collection", because nobody edits a field that looks answered.
-  it("leaves the name EMPTY after picking a kind, and will not submit until you type one", async () => {
-    renderDialog({ clientId: "c-abc", engagementId: "e-1", existingKinds: [] });
-    fireEvent.click(screen.getByRole("button", { name: /Add task/i }));
-    fireEvent.click(screen.getByText(en.Engagements.kind_signatures as string));
+  it("asks it on a job too, greying out the kinds that job already has", () => {
+    renderDialog({
+      clientId: "c-abc",
+      engagementId: "e-abc-t2",
+      existingKinds: ["document_collection"],
+      members: MEMBERS,
+    });
+    openIt();
+    const row = (l: string) =>
+      screen.getByText(l).closest("button") as HTMLButtonElement;
+    expect(row(en.Engagements.kind_document_collection as string)).toBeDisabled();
+    expect(row(en.Engagements.kind_signatures as string)).not.toBeDisabled();
+    expect(screen.getByText(en.Engagements.add_task_kind_taken as string)).toBeTruthy();
+  });
+});
 
-    const field = screen.getByLabelText(
-      en.Engagements.add_task_name as string,
-    ) as HTMLInputElement;
-    expect(field.value).toBe("");
+describe("AddTaskDialog — everything is asked up front", () => {
+  // "creating a task should ask for a due date and whatever relevant
+  // information. Not only after."
+  it("sends the due date and assignees WITH the create, not after it", async () => {
+    renderDialog({ clientId: "c-abc", engagementId: "e-abc-t2", members: MEMBERS });
+    openIt();
+    fireEvent.click(screen.getByText(en.Engagements.kind_task as string));
 
-    const submit = () =>
-      screen.getAllByRole("button", { name: /Add task/i }).at(-1)!;
-    expect(submit()).toBeDisabled();
+    fireEvent.change(nameField(), {
+      target: { value: "  Call about the CRA notice  " },
+    });
+    fireEvent.change(screen.getByLabelText(en.Engagements.task_due as string), {
+      target: { value: "2026-04-30" },
+    });
+    fireEvent.click(screen.getByText("Zachary Thresh"));
 
-    fireEvent.change(field, { target: { value: "2025 engagement letter" } });
     await waitFor(() => expect(submit()).not.toBeDisabled());
     fireEvent.click(submit());
 
     await waitFor(() => expect(addTaskAction).toHaveBeenCalledTimes(1));
     expect(addTaskAction).toHaveBeenCalledWith({
       clientId: "c-abc",
-      engagementId: "e-1",
-      title: "2025 engagement letter",
-      kind: "signatures",
+      engagementId: "e-abc-t2",
+      title: "Call about the CRA notice",
+      kind: "task",
+      dueDate: "2026-04-30",
+      priority: "none",
+      assigneeIds: ["u-zach"],
     });
+  });
+
+  it("still only REQUIRES a name — forcing an owner is how everything lands on its creator", async () => {
+    renderDialog({ clientId: "c-abc", engagementId: "e-abc-t2", members: MEMBERS });
+    openIt();
+    fireEvent.click(screen.getByText(en.Engagements.kind_task as string));
+    expect(submit()).toBeDisabled();
+
+    fireEvent.change(nameField(), {
+      target: { value: "Reconcile the trial balance" },
+    });
+    await waitFor(() => expect(submit()).not.toBeDisabled());
+    fireEvent.click(submit());
+
+    await waitFor(() => expect(addTaskAction).toHaveBeenCalledTimes(1));
+    expect(addTaskAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dueDate: null,
+        priority: "none",
+        assigneeIds: [],
+      }),
+    );
+  });
+});
+
+describe("AddTaskDialog — a collection kind needs a job, so it asks for one", () => {
+  it("will not submit a document collection with only a name and a client", async () => {
+    renderDialog({ clients: CLIENTS, engagements: ENGAGEMENTS, members: MEMBERS });
+    openIt();
+    fireEvent.click(
+      screen.getByText(en.Engagements.kind_document_collection as string),
+    );
+    fireEvent.change(nameField(), {
+      target: { value: "2025 T2 supporting documents" },
+    });
+    expect(submit()).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByText("ABC Incorporation Inc"));
+    // Still not enough: a document collection drives one engagement's items,
+    // so it cannot exist without being told which.
+    expect(submit()).toBeDisabled();
+  });
+
+  it("offers only the jobs that can actually TAKE this kind", async () => {
+    renderDialog({ clients: CLIENTS, engagements: ENGAGEMENTS, members: MEMBERS });
+    openIt();
+    fireEvent.click(
+      screen.getByText(en.Engagements.kind_document_collection as string),
+    );
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByText("ABC Incorporation Inc"));
+
+    // T2 Tax Return already has one and the database refuses a second, so it is
+    // off the list. An option that always errors is worse than no option.
+    expect(screen.queryByText("T2 Tax Return")).toBeNull();
+  });
+
+  it("a PLAIN task needs no job at all — the whole point of the firm-wide list", async () => {
+    renderDialog({ clients: CLIENTS, engagements: ENGAGEMENTS, members: MEMBERS });
+    openIt();
+    fireEvent.click(screen.getByText(en.Engagements.kind_task as string));
+    fireEvent.change(nameField(), {
+      target: { value: "Call about the CRA notice" },
+    });
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByText("Mathieu Lévesque"));
+
+    await waitFor(() => expect(submit()).not.toBeDisabled());
+    fireEvent.click(submit());
+
+    await waitFor(() => expect(addTaskAction).toHaveBeenCalledTimes(1));
+    expect(addTaskAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "c-mathieu",
+        // Explicitly null, not omitted.
+        engagementId: null,
+        kind: "task",
+      }),
+    );
   });
 });
