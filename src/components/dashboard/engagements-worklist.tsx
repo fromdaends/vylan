@@ -745,10 +745,16 @@ export function WorklistTable({
                 label: serviceLabelFor(v),
               }))}
             />
-            {/* ENGAGEMENT ITEMS: the specific pieces of work inside it, which
-                in Vylan are its TASKS. Replaces the old "Progress" header —
-                the bar has counted tasks since #1239, so the column was already
-                showing this and calling it something else. */}
+            {/* TASKS — and it is called that because that is what it counts.
+                It was briefly "Engagement items", Canopy's name for the priced
+                scope lines on an engagement ("Tax Prep Individual Package").
+                Vylan has no such thing, so the label described something the
+                column did not show. Canopy has since MERGED engagement items
+                into service items anyway — their docs: "Engagement Item
+                templates have been removed. All Engagement-related
+                functionality is now part of Service Items" — so the
+                distinction the founder could not pin down is one Canopy
+                stopped drawing too. */}
             <ColumnMenu
               label={t("wl_col_items")}
               t={tEng}

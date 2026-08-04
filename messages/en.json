@@ -1640,7 +1640,7 @@
     "stats_due_soon": "Due within 7 days",
     "wl_col_client": "Client",
     "wl_col_service": "Service items",
-    "wl_col_items": "Engagement items",
+    "wl_col_items": "Tasks",
     "wl_col_started": "Start date"
   },
   "App": {

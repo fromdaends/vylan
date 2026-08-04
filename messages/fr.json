@@ -1640,7 +1640,7 @@
     "stats_due_soon": "Échéance sous 7 jours",
     "wl_col_client": "Client",
     "wl_col_service": "Services",
-    "wl_col_items": "Éléments",
+    "wl_col_items": "Tâches",
     "wl_col_started": "Date de début"
   },
   "App": {
