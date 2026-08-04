@@ -31,6 +31,7 @@ export const BILLING_FREQUENCIES: readonly BillingFrequency[] = [
 
 export type EngagementItem = {
   id: string;
+  /** What the client reads on the proposal, e.g. "Monthly Bookkeeping". */
   name: string;
   description: string | null;
   /**

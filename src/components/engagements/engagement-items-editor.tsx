@@ -60,6 +60,7 @@ export function EngagementItemsEditor({
     onChange(items.map((it, i) => (i === idx ? { ...it, ...next } : it)));
   }
 
+
   // Dollars in the box, cents in state. Empty stays NULL rather than becoming 0:
   // "we will tell you the rate later" is a real answer, and a proposal that says
   // $0.00 where it means that has promised the work for free.
@@ -108,6 +109,7 @@ export function EngagementItemsEditor({
                       className="mt-1"
                     />
                   </div>
+
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
