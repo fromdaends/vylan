@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { EngagementAccessDialog } from "@/components/engagements/engagement-access-dialog";
 import { toast } from "sonner";
 import {
   Bell,
@@ -17,6 +18,7 @@ import {
   Receipt,
   Repeat,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -82,6 +84,7 @@ export function EngagementMoreMenu({
   repeatSeriesOutOfSync,
   privacy,
   commentable,
+  access,
 }: {
   engagementId: string;
   // NOTE: clientId used to be a prop here, solely to deep-link the Activity
@@ -120,6 +123,17 @@ export function EngagementMoreMenu({
   // Team mode: "Add a comment" opens the engagement-level comment composer
   // under the page header (same thread the worklist right-click deep-links to).
   commentable?: boolean;
+  /**
+   * Per-job access — "let someone see just this job".
+   *
+   * Absent (a solo firm, or a viewer who cannot grant) and the item is not
+   * shown. It lives here rather than under the page title because the founder
+   * is right that it is a rare deliberate act, not a daily control.
+   */
+  access?: {
+    guests: { id: string; name: string }[];
+    candidates: { id: string; name: string }[];
+  };
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -200,6 +214,22 @@ export function EngagementMoreMenu({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
+          )}
+          {access && (
+            <EngagementAccessDialog
+              engagementId={engagementId}
+              guests={access.guests}
+              candidates={access.candidates}
+              trigger={
+                // preventDefault, or Radix closes the menu and unmounts the
+                // dialog with it before it can open. Same shape as
+                // ReminderAutomationDialog below.
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <UserPlus />
+                  {t("access_menu")}
+                </DropdownMenuItem>
+              }
+            />
           )}
           {commentable && (
             <DropdownMenuItem

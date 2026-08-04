@@ -2770,7 +2770,9 @@
     "save_template_empty": "Remplissez d’abord quelque chose — un modèle vide, c’est déjà « partir de zéro ».",
     "save_template_failed": "Impossible d’enregistrer ce modèle. Réessayez.",
     "save_template_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des modèles.",
-    "task_progress_label": "Progression"
+    "task_progress_label": "Progression",
+    "access_menu": "Donner accès à ce mandat seulement",
+    "access_dialog_title": "Qui peut voir ce mandat"
   },
   "Attention": {
     "metric_active": "Actifs",

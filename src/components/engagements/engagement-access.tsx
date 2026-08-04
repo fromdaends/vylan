@@ -36,7 +36,9 @@ import {
   type EngagementMemberResult,
 } from "@/app/actions/engagement-members";
 
-type Person = { id: string; name: string };
+/** Exported so the dialog that now hosts this can type its own props. */
+export type AccessPerson = { id: string; name: string };
+type Person = AccessPerson;
 
 export function EngagementAccess({
   engagementId,

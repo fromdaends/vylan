@@ -1336,6 +1336,14 @@ export default async function EngagementDetailPage({
               engagementId={engagement.id}
               locale={locale}
               commentable={teamEnabled}
+              // The door the hidden row needed. Only when this viewer can
+              // actually grant — otherwise the item would open a dialog whose
+              // every action is refused.
+              access={
+                canGrantJobAccess
+                  ? { guests: jobGuests, candidates: jobCandidates }
+                  : undefined
+              }
               privacy={
                 teamEnabled && user?.role === "owner"
                   ? {
