@@ -50,6 +50,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { TaskProgressRing } from "@/components/engagements/task-progress-ring";
 import { SubtaskList } from "@/components/engagements/subtask-list";
 
 type TaskStatus = "todo" | "doing" | "done";
@@ -187,7 +188,8 @@ function DetailBody({
 
   return (
           <>
-            <SheetHeader className="gap-1.5">
+            <SheetHeader className="flex-row items-start justify-between gap-3 space-y-0">
+              <div className="min-w-0 flex-1 space-y-1.5">
               {label && (
                 <span className="w-fit rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   {label}
@@ -227,6 +229,18 @@ function DetailBody({
                   </>
                 )}
               </SheetDescription>
+              </div>
+              {/* Canopy's progress ring. Renders nothing when the task has no
+                  steps — an empty ring on a task nobody has broken down reads
+                  as "started and got nowhere", which is a judgement about work
+                  that has not been planned. Blank is not zero. */}
+              <TaskProgressRing
+                done={
+                  (task.subtasks ?? []).filter((x) => x.status === "done").length
+                }
+                total={(task.subtasks ?? []).length}
+                label={t("task_progress_label")}
+              />
             </SheetHeader>
 
             <div className="flex flex-col gap-5 overflow-y-auto px-4 pb-6">

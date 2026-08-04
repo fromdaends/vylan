@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, fireEvent, cleanup, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -58,6 +60,34 @@ const nameField = () =>
 // on a job it asked the kind, on the Tasks page it asked the client and
 // skipped the kind entirely. Now the questions are identical everywhere and
 // only the pre-filled answers differ, which is what these pin.
+// ⚠️ THE PANEL RAN OFF THE TOP OF THE SCREEN (founder screenshot, 2026-08-05).
+// The Add task button sits low on the engagement page, so Radix flips this
+// above it; the kind list is taller than the space up there, and the top two
+// kinds — Deliverables and Tax return, the most-used — were clipped by the
+// viewport with no way to scroll to them.
+//
+// A layout bug cannot be asserted in jsdom (no real geometry), so what is
+// pinned here is the CONTRACT that prevents it: the panel is capped to the room
+// Radix measured, and scrolls inside rather than overflowing the window.
+describe("the kind panel cannot exceed the window", () => {
+  it("caps its height to the space available and scrolls inside", () => {
+    const src = readFileSync(
+      join(process.cwd(), "src/components/engagements/add-task-dialog.tsx"),
+      "utf8",
+    );
+    // ⚠️ THE FULL TAILWIND CLASS, not the bare CSS variable name. The first
+    // version of this asserted the variable, which also appears in the comment
+    // explaining it — so deleting the class left the test passing. It was
+    // caught by running it against the bug, which is the only way that kind of
+    // guard is ever caught.
+    expect(src).toContain(
+      "max-h-[var(--radix-popover-content-available-height)]",
+    );
+    expect(src).toContain("overflow-y-auto");
+    expect(src).toContain("collisionPadding={12}");
+  });
+});
+
 describe("AddTaskDialog — the kind question comes first, on BOTH screens", () => {
   it("asks the kind on the firm-wide Tasks page, where it used to be skipped", () => {
     renderDialog({ clients: CLIENTS, engagements: ENGAGEMENTS, members: MEMBERS });

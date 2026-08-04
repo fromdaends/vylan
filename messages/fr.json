@@ -2745,7 +2745,8 @@
     "client_view_not_sent": "Rien à afficher pour l'instant — le client voit ceci une fois le mandat envoyé.",
     "client_view_intro": "Voici la page que votre client voit.",
     "client_view_open": "Ouvrir la vue du client",
-    "client_view_warning": "Ouvre son vrai lien dans un nouvel onglet. Tout ce que vous y faites est enregistré comme le client."
+    "client_view_warning": "Ouvre son vrai lien dans un nouvel onglet. Tout ce que vous y faites est enregistré comme le client.",
+    "task_progress_label": "Progression"
   },
   "Attention": {
     "metric_active": "Actifs",

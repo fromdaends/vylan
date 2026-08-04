@@ -2745,7 +2745,8 @@
     "client_view_not_sent": "Nothing to show yet — the client sees this once the engagement is sent.",
     "client_view_intro": "This is the page your client sees.",
     "client_view_open": "Open the client's view",
-    "client_view_warning": "Opens their real link in a new tab. Anything you do there is recorded as the client."
+    "client_view_warning": "Opens their real link in a new tab. Anything you do there is recorded as the client.",
+    "task_progress_label": "Progress"
   },
   "Attention": {
     "metric_active": "Active",
