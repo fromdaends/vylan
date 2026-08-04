@@ -174,7 +174,7 @@ import {
   stageEnteredAt,
 } from "@/lib/engagements/stage";
 import { StageStepper } from "@/components/engagements/stage-stepper";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { BackLink } from "@/components/ui/back-link";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
 import { listEngagementMembers } from "@/lib/db/engagement-members";
@@ -900,8 +900,6 @@ export default async function EngagementDetailPage({
           : t("payment_status_requested")
     : null;
   const tStatus = await getTranslations("Status");
-  const tApp = await getTranslations("App");
-  const tCommon = await getTranslations("Common");
   // Scope names live in the Clients namespace (shared with the profile card).
   const tClients = await getTranslations("Clients");
   const relHeaderLine = soleOwnerLink
@@ -1002,16 +1000,14 @@ export default async function EngagementDetailPage({
           sub-page highlights. Renders nothing. */}
       <SetEngagementDetailView view={view} />
 
-      {/* Orientation: Engagements › {sub-page} › {this engagement}. Replaces the
-          old single "Back" link — the crumbs return to the right list. */}
-      <Breadcrumb
-        label={tCommon("breadcrumb")}
-        items={[
-          { label: tApp("nav_engagements"), href: "/engagements" },
-          { label: t(viewLabelKey(view)), href: viewHref(view) },
-          { label: engagement.title },
-        ]}
-      />
+      {/* ⚠️ THE BREADCRUMB THAT USED TO SIT HERE RENDERED NOTHING. Its comment
+          claimed "the crumbs return to the right list", but
+          components/ui/breadcrumb.tsx is a stub that returns null — breadcrumb
+          navigation was switched off site-wide — so this page has had NO way
+          back for as long as that has been true. The back arrow now on the
+          title row is the first working one, and it keeps what the crumbs
+          promised: it returns to the SUB-LIST you came from (Drafts, Ready to
+          review, …), not to a generic /engagements. */}
 
       {/* Floating "Apply to future occurrences?" prompt — only when this
           engagement's setup actually drifted from its series. Fixed
@@ -1023,8 +1019,23 @@ export default async function EngagementDetailPage({
         />
       )}
 
+      {/* ── HEADER ROW, IN CANOPY'S ORIENTATION ──────────────────────────
+          Founder: "you dont need to do the header row with the download ·
+          duplicate. But i like how the header row is oriented visually with
+          the title and stuff."
+
+          So ONE line carries what identifies this job — back · title · client
+          — and closes with the action cluster and the kebab. DOWNLOAD AND
+          DUPLICATE ARE DELIBERATELY ABSENT: the founder dropped both by name,
+          and download already lives inside the "..." menu.
+
+          The rows below are unchanged in content and deliberately so: the
+          badges keep the exceptions, and the stage stepper + Assigned-to keep
+          their own rows. Canopy has no counterpart for either, which makes
+          them easy to lose while copying its shape — they are live Vylan
+          controls and the founder asked for the ORIENTATION, not a cull. */}
       <header className="flex flex-wrap items-start justify-between gap-3 animate-in-up">
-        <div>
+        <div className="min-w-0">
           {/* Title and the live "who else is here" row are SIBLINGS in a flex
               row, not nested. The facepile used to live inside the <h1>, where
               it inherited the heading's 3xl line-height and font metrics and so
@@ -1032,10 +1043,41 @@ export default async function EngagementDetailPage({
               circle cannot share a baseline with 30px type and look deliberate.
               items-center + gap-3 lets the row centre the avatars against the
               title's optical middle instead. */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {/* Back sits INSIDE the title row rather than on a line of its own
+                (which is where the client profile puts its own BackLink). That
+                is the whole of what the founder liked about Canopy's header:
+                one line that says where you are and how to leave. -ml-2 hangs
+                the arrow into the page gutter so the TITLE stays optically
+                aligned with the cards beneath it. */}
+            <BackLink
+              variant="inline"
+              href={viewHref(view)}
+              label={t("back_to_list", { list: t(viewLabelKey(view)) })}
+              className="-ml-2"
+            />
             <h1 className="text-3xl font-semibold tracking-tight">
               {engagement.title}
             </h1>
+            {/* The client, lifted out of the badge row below onto the title
+                line — Canopy puts "whose job is this" beside the job's name,
+                and it was the one thing down there that was an ANSWER rather
+                than an exception. A hairline separates it from the title so a
+                two-word client name does not read as part of it. */}
+            {client && (
+              <span className="flex items-center gap-3 text-sm">
+                <span
+                  aria-hidden
+                  className="h-4 w-px bg-border max-sm:hidden"
+                />
+                <Link
+                  href={`/clients/${client.id}`}
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {client.display_name}
+                </Link>
+              </span>
+            )}
             {/* Team-mode only: a solo firm has nobody to be present. Renders
                 nothing when you are the only one looking, which is most of the
                 time — so this usually costs the row no height at all. */}
@@ -1065,14 +1107,9 @@ export default async function EngagementDetailPage({
             {engagement.series_id && (
               <RecurringBadge label={t("repeat_badge")} />
             )}
-            {client && (
-              <Link
-                href={`/clients/${client.id}`}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                {client.display_name}
-              </Link>
-            )}
+            {/* The client link MOVED UP to the title row. It is not gone —
+                deleting it would strand the one link off this page to the
+                person the work is for. */}
             {/* Relationships, read-only (spec §3): "Owned by X · 100%" or
                 "N linked clients", pointing at the profile's Relationships
                 card. Detail lives there, not here. */}
