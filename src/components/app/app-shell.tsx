@@ -302,14 +302,16 @@ export function AppShell({
             // and collapsing them into "Templates" would hide the new one
             // behind a word that already meant the old one.
             {
-              // Anchored so each row lands on its own section — and so the
-              // two rows have distinct keys in the panel's list.
-              href: "/templates#services",
+              // These two CREATE one rather than going to look at the list —
+              // founder: "the whole function is to create one not just bring
+              // you to the page". Service opens its dialog; document request
+              // clones the blank template and drops you in its editor.
+              href: "/templates?new=service",
               label: tHome("create_service"),
               description: tHome("create_service_hint"),
             },
             {
-              href: "/templates#document-requests",
+              href: "/templates?new=document",
               label: tHome("create_template"),
               description: tHome("create_template_hint"),
             },
