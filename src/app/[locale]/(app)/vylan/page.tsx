@@ -34,7 +34,7 @@ import { listActiveFirmUsers } from "@/lib/db/users";
 // forwards rather than 404s.
 export const dynamic = "force-dynamic";
 
-type VylanTab = "jobs" | "automations" | "ai";
+type VylanTab = "jobs" | "ai";
 
 function parseRange(value: string | undefined): PerformanceRange {
   return value === "this_month" || value === "all_time"
@@ -59,32 +59,21 @@ export default async function VylanHubPage({
   setRequestLocale(locale);
   const t = await getTranslations("VylanHub");
 
-  // The automations library rides the Part A switch (1510): a firm that
-  // hasn't been turned on sees the hub exactly as before — no tab, and a
-  // stale ?tab=automations link falls back to Automated jobs.
+  // The automations library lives INSIDE Automated jobs — the founder's call,
+  // and the right one: that tab was built as the scaffold for exactly this
+  // feature, so the library replaces its "coming soon" promise rather than
+  // moving in next door. It rides the Part A switch (1510): a firm that
+  // hasn't been turned on sees the hub exactly as before. A stale
+  // ?tab=automations link (the brief separate-tab build) lands here too.
   const firm = await getCurrentFirm();
   const workflowsOn =
     (firm as { workflows_enabled?: boolean } | null)?.workflows_enabled ===
     true;
 
-  const tab: VylanTab =
-    sp.tab === "ai"
-      ? "ai"
-      : sp.tab === "automations" && workflowsOn
-        ? "automations"
-        : "jobs";
+  const tab: VylanTab = sp.tab === "ai" ? "ai" : "jobs";
 
   const tabs = [
     { id: "jobs" as const, label: t("tab_jobs"), href: "/vylan" },
-    ...(workflowsOn
-      ? [
-          {
-            id: "automations" as const,
-            label: t("tab_automations"),
-            href: "/vylan?tab=automations",
-          },
-        ]
-      : []),
     { id: "ai" as const, label: t("tab_ai"), href: "/vylan?tab=ai" },
   ];
 
@@ -125,10 +114,13 @@ export default async function VylanHubPage({
 
       {tab === "ai" ? (
         <AiPerformancePanel locale={locale} rangeParam={sp.range} />
-      ) : tab === "automations" ? (
-        <AutomationsSection />
       ) : (
-        <AutomatedJobsPanel />
+        <>
+          {workflowsOn && <AutomationsSection />}
+          {/* With the library present, the scaffold's "coming soon" promise
+              is fulfilled — hide it rather than promising what's above it. */}
+          <AutomatedJobsPanel hideSoon={workflowsOn} />
+        </>
       )}
     </div>
   );

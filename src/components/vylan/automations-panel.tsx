@@ -133,8 +133,14 @@ export function AutomationsPanel({
   };
 
   return (
-    <section aria-label={t("panel_title")}>
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section aria-labelledby="automations-lib" className="mb-10">
+      <h2
+        id="automations-lib"
+        className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+      >
+        {t("panel_title")}
+      </h2>
+      <div className="mb-4 mt-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{t("panel_intro")}</p>
         <Button
           size="sm"

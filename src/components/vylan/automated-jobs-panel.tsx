@@ -7,7 +7,17 @@ import { Link } from "@/i18n/navigation";
 // soon" box: until the builder exists, this orients the accountant by naming
 // what Vylan already automates and linking straight to each control, so the tab
 // is useful on day one instead of a dead end.
-export async function AutomatedJobsPanel() {
+//
+// `hideSoon`: the automations library (1510) now renders ABOVE this panel on
+// the same tab once a firm's switch is on — at which point the "coming soon"
+// blurb would be promising the thing sitting right above it. The links below
+// stay: they point at automations the library doesn't own (reminders cadence,
+// filing, recurrence).
+export async function AutomatedJobsPanel({
+  hideSoon = false,
+}: {
+  hideSoon?: boolean;
+} = {}) {
   const t = await getTranslations("VylanHub");
 
   const today: {
@@ -49,7 +59,9 @@ export async function AutomatedJobsPanel() {
 
   return (
     <>
-      {/* What's coming. Honest about not being built yet — no fake controls. */}
+      {/* What's coming. Honest about not being built yet — no fake controls.
+          Hidden the moment the automations library above fulfils the promise. */}
+      {!hideSoon && (
       <section
         aria-labelledby="jobs-soon"
         className="rounded-xl border border-accent/30 bg-accent-subtle p-5"
@@ -65,6 +77,7 @@ export async function AutomatedJobsPanel() {
           {t("soon_body")}
         </p>
       </section>
+      )}
 
       {/* What already works, with a direct link to each control. */}
       <section aria-labelledby="jobs-today" className="mt-10">
