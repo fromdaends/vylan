@@ -1,5 +1,19 @@
 -- Quick links on the Overview (design 2a).
 --
+-- ⚠️ RENUMBERED 1390 → 1410, and the file is otherwise untouched.
+--
+-- It shipped in #1234 as 1390 while another session shipped 1390_task_priority
+-- in #1235. Both merged; the priority one applied first and took the version
+-- number in supabase_migrations. Supabase's ledger keys on the VERSION, so the
+-- second file of a pair can never be recorded — this migration was unappliable
+-- and would have stayed that way silently, exactly the failure #1137 spent a
+-- session repairing across eight pairs.
+--
+-- Renumbered rather than deleted (deleting a migration is a hard no in
+-- CLAUDE.md), and THIS one moved rather than the other because the other is
+-- already applied and recorded: renaming an applied migration would only make
+-- the ledger try to run it again under a new number.
+--
 -- Four lines of text with URLs — the tabs an accountant already keeps open all
 -- day (CRA, Revenu Québec, Stripe, the firm's Drive), pinned to the left column
 -- of the dashboard so they stop living in browser bookmarks nobody can share.
@@ -65,7 +79,7 @@ cross join (
 where not exists (select 1 from firm_links fl where fl.firm_id = f.id);
 
 comment on table firm_links is
-  'Firm-level quick links shown on the Overview dashboard — label + URL rows any member can add or remove. Seeded once with the four defaults from the 2a design for firms that existed before 1390.';
+  'Firm-level quick links shown on the Overview dashboard — label + URL rows any member can add or remove. Seeded once with the four defaults from the 2a design for firms that existed before it.';
 
 -- Verify after applying:
 --

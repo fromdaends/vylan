@@ -37,14 +37,32 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
  * page showing one line.
  */
 export const TASK_KINDS = [
+  // STRUCTURAL — each POINTS AT a collection keyed by engagement_id, opens its
+  // own screen, and is one-per-job because a second would drive the same rows.
   "document_collection",
   "signatures",
   "deliverables",
+  // LABELS — ordinary tasks with a name and an icon. No screen, no collection,
+  // no limit. Named from the work a firm actually files under, and from
+  // Canopy's own Task type column where the two overlap.
+  "tax_return",
+  "bookkeeping",
+  "notice",
+  "review",
+  "meeting",
+  "filing",
   "task",
 ] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 
-/** The kinds that open a screen. A plain task does not. */
+/**
+ * The kinds that open a screen — and therefore the only ones limited to one
+ * per job (1370's partial unique index).
+ *
+ * ⚠️ ADDING A NAME HERE IS NOT ENOUGH. This list is what tells the UI a row is
+ * clickable and the database which kinds to keep unique; the SCREEN has to
+ * exist first, or a row leads somewhere blank.
+ */
 export const KINDS_WITH_SCREENS: readonly TaskKind[] = [
   "document_collection",
   "signatures",
