@@ -2772,7 +2772,8 @@
     "save_template_needs_migration": "Your database needs a quick update before templates can be saved.",
     "task_progress_label": "Progress",
     "access_menu": "Let someone see just this job",
-    "access_dialog_title": "Who can see this job"
+    "access_dialog_title": "Who can see this job",
+    "details_recurring": "Recurring agreement"
   },
   "Attention": {
     "metric_active": "Active",
