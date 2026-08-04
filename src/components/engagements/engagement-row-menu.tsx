@@ -120,10 +120,18 @@ export function useEngagementRowMenu(args: {
   const tStage = useTranslations("Stage");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // "Delete forever" warning: non-null = open, carrying how many documents in
-  // this engagement were never filed to the firm's storage.
-  const [foreverUnfiled, setForeverUnfiled] = useState<number | null>(null);
-  const [foreverBusy, setForeverBusy] = useState(false);
+  // "Delete forever" dialog state. Non-null = open: "checking" while the
+  // server decides whether anything would be lost, a number when it found that
+  // many documents never filed to the firm's storage, "deleting" while the
+  // confirmed purge runs. The dialog opens SYNCHRONOUSLY from onSelect — the
+  // same beat as the soft-delete confirm above, which is the one
+  // menu-into-dialog sequence this codebase knows survives Radix's focus
+  // return (see document-actions-menu's onCloseAutoFocus note). Opening it
+  // only after the server round-trip looked cleaner but the late open lands
+  // mid menu-close and the dialog can dismiss itself instantly.
+  const [forever, setForever] = useState<null | "checking" | "deleting" | number>(
+    null,
+  );
   const { setStage } = useStageOverride(engagementId);
 
   // Optimistic path: drop the row now + toast now, the server catches up.
@@ -206,20 +214,27 @@ export function useEngagementRowMenu(args: {
   // "Delete forever" — only offered on a row that is ALREADY in the bin, and
   // it asks first only when there is something to lose. The server decides:
   // if every document was filed to the firm's storage while the engagement was
-  // live (or it has none), the first call purges immediately, no dialog; if
-  // some were never filed, the call comes back with the count and the warning
-  // dialog opens, and only an explicit confirm retries with force.
-  const finishForever = (res: Awaited<ReturnType<typeof deleteEngagementForeverAction>>) => {
-    setForeverBusy(false);
+  // live (or it has none), the first call purges outright and the dialog just
+  // closes; if some never were, the call comes back with the count, the dialog
+  // becomes the warning, and only an explicit confirm retries with force.
+  const finishForever = (
+    res: Awaited<ReturnType<typeof deleteEngagementForeverAction>>,
+  ) => {
     if (!res.ok) {
+      setForever(null);
       toast.error(t("forever_failed"));
       return;
     }
     if (res.purged) {
+      setForever(null);
       toast(t("toast_deleted_forever"), { description: title });
       router.refresh();
     } else {
-      setForeverUnfiled(res.unfiledCount);
+      // Only morph into the warning if the dialog is still up — the person may
+      // have dismissed it while the check was in flight, and a dialog that
+      // reopens itself after being closed is exactly the kind of ghost this
+      // state machine exists to prevent.
+      setForever((prev) => (prev === "checking" ? res.unfiledCount : prev));
     }
   };
 
@@ -229,20 +244,25 @@ export function useEngagementRowMenu(args: {
     icon: Trash2,
     variant: "destructive",
     onSelect: () => {
-      setForeverBusy(true);
+      setForever("checking");
       void deleteEngagementForeverAction({ id: engagementId }).then(
         finishForever,
-        () => setForeverBusy(false),
+        () => {
+          setForever(null);
+          toast.error(t("forever_failed"));
+        },
       );
     },
   };
 
   const confirmForever = () => {
-    setForeverUnfiled(null);
-    setForeverBusy(true);
+    setForever("deleting");
     void deleteEngagementForeverAction({ id: engagementId, force: true }).then(
       finishForever,
-      () => setForeverBusy(false),
+      () => {
+        setForever(null);
+        toast.error(t("forever_failed"));
+      },
     );
   };
 
@@ -410,29 +430,33 @@ export function useEngagementRowMenu(args: {
         </DialogContent>
       </Dialog>
 
-      {/* The unfiled-documents warning. Only ever opens when the probe found
-          documents that exist nowhere but Vylan — this delete has no undo. */}
-      <Dialog
-        open={foreverUnfiled != null}
-        onOpenChange={(o) => !o && setForeverUnfiled(null)}
-      >
+      {/* Delete forever. Opens in a "checking" beat, then either closes itself
+          (everything was filed — purged, no question asked) or becomes the
+          unfiled-documents warning — this delete has no undo. */}
+      <Dialog open={forever != null} onOpenChange={(o) => !o && setForever(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("forever_title")}</DialogTitle>
             <DialogDescription>
-              {t("forever_desc", { count: foreverUnfiled ?? 0 })}
+              {typeof forever === "number"
+                ? t("forever_desc", { count: forever })
+                : t("forever_checking")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={foreverBusy}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={forever === "deleting"}
+              >
                 {t("delete_cancel")}
               </Button>
             </DialogClose>
             <Button
               type="button"
               variant="destructive"
-              disabled={foreverBusy}
+              disabled={typeof forever !== "number"}
               onClick={confirmForever}
             >
               <Trash2 className="size-4" />
