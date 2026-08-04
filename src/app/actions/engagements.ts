@@ -25,6 +25,7 @@ import {
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
 import { listRequestItems } from "@/lib/db/request-items";
+import { createEngagementTask, toTaskKind } from "@/lib/db/engagement-tasks";
 import { logUserActivity } from "@/lib/db/activity";
 import {
   scheduleEngagementReminders,
@@ -187,6 +188,25 @@ const CreateSchema = z
       )
       .max(50)
       .optional(),
+    // What the work consists of (migration 1370's engagement_tasks). Optional
+    // for the same deploy-skew reason as service_items: a tab loaded from the
+    // previous deployment does not send this field, and creation must not start
+    // returning "invalid" to everyone with a stale tab open.
+    //
+    // `kind` is a loose string, not the enum. A kind from a NEWER build must not
+    // fail the whole create — toTaskKind() downgrades anything unrecognised to a
+    // plain task on the way in, which is the same fail-soft rule the read side
+    // already uses.
+    tasks: z
+      .array(
+        z.object({
+          title: z.string().trim().min(1).max(200),
+          kind: z.string().max(60).optional(),
+          assignee_ids: z.array(z.string().uuid()).max(20).optional(),
+        }),
+      )
+      .max(50)
+      .optional(),
     reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
       normalizeReminderSettings(value),
     ),
@@ -280,6 +300,12 @@ export async function createEngagementAction(
       billing_frequency: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
       tax_pct: number | null;
     }[];
+    /** What the work consists of. Optional — a stale tab does not send it. */
+    tasks?: {
+      title: string;
+      kind?: string;
+      assignee_ids?: string[];
+    }[];
     reminder_settings?: ReminderSettings;
     repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly" | "custom";
     repeat_interval_months?: number | null;
@@ -314,6 +340,7 @@ export async function createEngagementAction(
     start_date: payload.start_date,
     intro_message: payload.intro_message,
     service_items: payload.service_items,
+    tasks: payload.tasks,
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,
     repeat_interval_months: payload.repeat_interval_months,
@@ -453,6 +480,40 @@ export async function createEngagementAction(
     };
     const created = await createEngagementWithItems(input);
     engagementId = created.id;
+
+    // The work itself. DELIBERATELY NOT FATAL, and outside the caller's control
+    // flow: an engagement that exists with no task rows is one click from being
+    // fixed, and one that failed to exist because a task insert did is not. The
+    // same reasoning createEngagementTask already applies to its assignees.
+    //
+    // This also degrades cleanly on a database without 1370 — createEngagementTask
+    // raises EngagementTasksUnsupportedError there, which lands here and is
+    // logged rather than breaking creation.
+    if (parsed.data.tasks && parsed.data.tasks.length > 0) {
+      // Request-cached — createEngagementWithItems already resolved it on this
+      // request, so this is not a second round trip.
+      const creator = await getCurrentUser();
+      for (const [index, task] of parsed.data.tasks.entries()) {
+        try {
+          await createEngagementTask({
+            clientId: parsed.data.client_id,
+            engagementId,
+            firmId: created.firm_id,
+            title: task.title,
+            // Anything unrecognised becomes a plain task rather than refusing
+            // the row — a kind from a newer bundle must not lose the task.
+            kind: toTaskKind(task.kind),
+            assigneeIds: task.assignee_ids ?? [],
+            createdBy: creator?.id ?? null,
+            // The order they were typed in is the order the work is meant to
+            // happen in.
+            orderIndex: index,
+          });
+        } catch (taskErr) {
+          console.error("[engagements] task-on-create failed:", taskErr);
+        }
+      }
+    }
     if (invoiceAttachment && invoiceAttachment.size > 0) {
       const stored = await storeInvoiceAttachment(
         engagementId,
