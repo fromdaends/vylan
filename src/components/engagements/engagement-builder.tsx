@@ -42,6 +42,8 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
+import { EngagementItemsEditor } from "@/components/engagements/engagement-items-editor";
+import type { EngagementItemDraft } from "@/lib/engagements/items";
 import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
@@ -104,13 +106,25 @@ export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
 
 // The rail's order IS the order of the decision: who it is for, what you are
 // asking them for, what it costs, how hard you chase.
-const WIZARD_STEPS = ["details", "documents", "billing", "reminders"] as const;
+// Services sits SECOND, right after who it is for. It is the scope — what you
+// are doing and for how much — and everything after it depends on it: the
+// invoice is built from these lines, and tasks will hang off them. Documents
+// follows, because what you need FROM the client is decided once you know what
+// you are doing for them.
+const WIZARD_STEPS = [
+  "details",
+  "services",
+  "documents",
+  "billing",
+  "reminders",
+] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 // Spelled out so a typo in the template literal is a compile error rather than
 // a `Engagements.wizard_step_detials` rendering on screen — this repo has been
 // bitten twice by next-intl failing silently on a bad key.
 type WizardStepKey =
   | "wizard_step_details"
+  | "wizard_step_services"
   | "wizard_step_documents"
   | "wizard_step_billing"
   | "wizard_step_reminders";
@@ -263,6 +277,9 @@ export function EngagementBuilder({
   // has neither yet, and a step that opens on an empty panel is worse than a
   // step that is not offered: it reads as broken rather than as unbuilt. The
   // rail grows as they land.
+  // The priced scope (migration 1450). Starts empty — an engagement without one
+  // is still perfectly valid, and is what every engagement was until now.
+  const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>([]);
   const [step, setStep] = useState<WizardStep>("details");
 
   // A tick means "this step has what it NEEDS", not "you have been here".
@@ -270,6 +287,10 @@ export function EngagementBuilder({
   // one thing that actually blocks sending.
   const stepComplete: Record<WizardStep, boolean> = {
     details: clientId != null && title.trim().length > 0,
+    // Optional on purpose. An engagement with no priced scope is exactly what
+    // every engagement in Vylan was until now, and refusing to send one would
+    // break the existing flow for a field nobody has filled in yet.
+    services: true,
     documents: items.length > 0,
     // Money and chasing are genuinely optional — a draft with neither is a
     // valid engagement — so they are complete by definition. They still get a
@@ -511,6 +532,19 @@ export function EngagementBuilder({
             invoice_description: invoiceActive
               ? invoiceDescription.trim() || null
               : null,
+            // Only lines the accountant actually filled in. A row added by a
+            // stray "+ Add service" click must not reach the client's proposal
+            // as a nameless $0 line.
+            service_items: serviceItems
+              .filter((i) => i.name.trim().length > 0)
+              .map((i) => ({
+                name: i.name.trim(),
+                description: i.description,
+                rate_cents: i.rateCents,
+                rate_type: i.rateType,
+                billing_frequency: i.billingFrequency,
+                tax_pct: i.taxPct,
+              })),
             reminder_settings: reminderSettings,
             repeat_frequency: repeatFrequency,
             // Custom schedule only; null keeps a fixed-frequency series
@@ -772,7 +806,29 @@ export function EngagementBuilder({
         </>
       )}
 
-      {/* STEP 2 — what you are asking the client for. This card used to be LAST on the page, below invoicing and reminders, which buried the one part of an engagement the client actually sees. */}
+      {/* STEP 2 — the SCOPE. What you are doing for them and what it costs.
+          Not the document checklist: that answers "what do I need FROM the
+          client", this answers "what am I DOING for them". They were the same
+          thing only because one of them had no table (migration 1450). */}
+      {step === "services" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("section_services")}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {t("section_services_hint")}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <EngagementItemsEditor
+              items={serviceItems}
+              onChange={setServiceItems}
+              locale={locale}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* STEP 3 — what you are asking the client for. This card used to be LAST on the page, below invoicing and reminders, which buried the one part of an engagement the client actually sees. */}
       {step === "documents" && (
         <>
           <Card
