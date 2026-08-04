@@ -167,13 +167,9 @@ import {
   deriveEngagementStatus,
 } from "@/lib/attention";
 import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
-import {
-  applicableStages,
-  parseStageHistory,
-  stageEnteredAt,
-} from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { StageStepper } from "@/components/engagements/stage-stepper";
+import { AgreementStepper } from "@/components/engagements/agreement-stepper";
+import { resolveAgreementStatus } from "@/lib/engagements/agreement";
 import { BackLink } from "@/components/ui/back-link";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { listClientMembers } from "@/lib/db/client-members";
@@ -964,24 +960,32 @@ export default async function EngagementDetailPage({
   // draft / cancelled engagement, in which case the header keeps its status pill
   // and no stepper renders.
   const stage = engagement.stage ?? null;
+
+  // THE SAME RESOLVER the engagements list and the detail panel use, so the
+  // header, the card's pill and the list row cannot disagree about one job.
+  const agreementStatus = resolveAgreementStatus({
+    status: engagement.status,
+    sentAt: engagement.sent_at ?? null,
+    completedAt: engagement.completed_at ?? null,
+    // No acceptance step exists yet, so a missing acceptedAt must read as NOT
+    // accepted — the other default would silently mark every historical
+    // engagement as agreed to by a client who was never asked.
+    acceptedAt: null,
+    // "The client has done something since we sent it" is the honest stand-in
+    // for live until acceptance draws that line properly.
+    clientHasEngaged: attention.daysSinceClientActivity != null,
+  });
   // Which nodes the stepper draws: the skip logic. An engagement with no
   // signature items never shows Awaiting signature; one with no live invoice
   // never shows Awaiting payment. A cancelled (waived) invoice doesn't count —
   // nothing is owed, so that stage will never be reached. `stage` is passed so a
   // manual override to a stage this engagement has no structural claim to still
   // draws the node it's standing on.
-  const stepperStages = applicableStages(
-    {
-      hasSignatureItems: items.some((i) => i.kind === "signature"),
-      hasInvoice: latestPayment != null && latestPayment.status !== "canceled",
-    },
-    stage,
-  );
-  // When each stage was entered, for the stepper's hover tooltips. Sparse: an
-  // engagement backfilled by 0690 only knows its current stage.
-  const stageEntered = stageEnteredAt(
-    parseStageHistory(engagement.stage_history),
-  );
+  // ⚠️ stepperStages / stageEntered were DELETED WITH THE STAGE STEPPER, not
+  // lost: `stage`, stage_history, applicableStages() and stageEnteredAt() all
+  // still exist and are still correct. They get recomputed wherever the
+  // pipeline lands on the document-collection TASK. Recomputing them here for
+  // nothing was two reads and a parse on every engagement page load.
 
   const isLive =
     engagement.status === "sent" || engagement.status === "in_progress";
@@ -1202,21 +1206,29 @@ export default async function EngagementDetailPage({
               {scopeWarningText}
             </p>
           )}
-          {/* Workflow stage. Its own row rather than inline above: six nodes
-              need horizontal room, and crowding them against the client link +
-              due date would squeeze both. No card around it — thin line, open
-              layout, per the house style. */}
-          {stage && (
-            <div className="mt-3">
-              <StageStepper
-                engagementId={engagement.id}
-                stages={stepperStages}
-                current={stage}
-                enteredAt={stageEntered}
-                locale={locale}
-              />
-            </div>
-          )}
+          {/* ⚠️ THIS WAS THE WORKFLOW-STAGE STEPPER AND IS NOW THE AGREEMENT.
+              Founder: "the old engagement statuses still exist on the full
+              engagement view. I wanted them to only exist for document
+              collection. Keep the same ui just rename it to match engagements."
+
+              Same rail, same dots, same spacing — six workflow stages replaced
+              by the agreement's own progression, which is the thing an
+              ENGAGEMENT actually has. It is READ-ONLY where the old one was a
+              dropdown, and that is deliberate: an agreement status is derived
+              from facts that already exist (was it sent, has the client done
+              anything, is it complete), so there is nothing to set. Offering to
+              set "Accepted" on an engagement no client accepted is the dead
+              control this codebase keeps deleting.
+
+              `stage` is UNTOUCHED in the database and still resolved above —
+              nothing here deletes it. Its home becomes the document-collection
+              TASK, which is where the founder always wanted the pipeline; note
+              their constraint when building that: an engagement can hold
+              SEVERAL tasks of the same kind, so the pipeline belongs to each
+              task individually, never to "the" doc-collection task. */}
+          <div className="mt-3">
+            <AgreementStepper status={agreementStatus} />
+          </div>
           {/* Assigned to — accountability control (reassign to any active member). */}
           {teamEnabled && (
             <div className="mt-3">

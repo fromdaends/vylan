@@ -2807,7 +2807,8 @@
     "assignee_primary": "{name} — responsable de ce mandat",
     "assignee_nobody": "Aucun coéquipier à assigner pour l'instant.",
     "assignee_needs_migration": "Les assignations multiples nécessitent une mise à jour de la base de données.",
-    "assignee_failed": "Impossible de modifier qui travaille sur ce mandat. Réessayez."
+    "assignee_failed": "Impossible de modifier qui travaille sur ce mandat. Réessayez.",
+    "agreement_stepper_label": "Progression de l'entente"
   },
   "Attention": {
     "metric_active": "Actifs",
