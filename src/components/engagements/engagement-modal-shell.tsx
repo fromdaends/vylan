@@ -30,6 +30,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
@@ -40,6 +41,7 @@ export function EngagementModalShell({
   labels,
   onSaveDraft,
   onSaveAndSend,
+  onSaveAsTemplate,
   busy = false,
   children,
 }: {
@@ -51,10 +53,16 @@ export function EngagementModalShell({
     save: string;
     saveDraft: string;
     saveAndSend: string;
+    saveAsTemplate: string;
     saving: string;
   };
   onSaveDraft: () => void;
   onSaveAndSend: () => void;
+  /**
+   * Absent while the start chooser is showing — there is nothing to save yet,
+   * and an enabled Save above an unanswered question is a trap.
+   */
+  onSaveAsTemplate?: () => void;
   busy?: boolean;
   children: React.ReactNode;
 }) {
@@ -106,6 +114,20 @@ export function EngagementModalShell({
                 <DropdownMenuItem onSelect={() => onSaveDraft()}>
                   {labels.saveDraft}
                 </DropdownMenuItem>
+                {/* Canopy does NOT have this — their flow ends at Save as
+                    draft / Save and send, and templates are only built from
+                    scratch under Templates. The founder asked for it anyway:
+                    "Create the save as template button why not. 1 step at a
+                    time getting better than canopy". Separated by a rule
+                    because it saves a SHAPE rather than this engagement. */}
+                {onSaveAsTemplate && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onSaveAsTemplate()}>
+                      {labels.saveAsTemplate}
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 

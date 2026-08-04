@@ -48,6 +48,12 @@ import {
 } from "@/components/engagements/engagement-items-editor";
 import type { EngagementItemDraft } from "@/lib/engagements/items";
 import { EngagementModalShell } from "@/components/engagements/engagement-modal-shell";
+import { EngagementStartChooser } from "@/components/engagements/engagement-start-chooser";
+import { SaveAsTemplateDialog } from "@/components/engagements/save-as-template-dialog";
+import {
+  readPayload,
+  type EngagementTemplatePayload,
+} from "@/lib/engagements/template-payload";
 import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
@@ -142,6 +148,7 @@ export function EngagementBuilder({
   includeQuebecForms = true,
   servicePrices = {},
   services = [],
+  engagementTemplates = [],
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -171,6 +178,13 @@ export function EngagementBuilder({
   servicePrices?: Record<string, number>;
   /** The firm's service catalogue (migration 1480). Empty until it is applied. */
   services?: CatalogueService[];
+  /** Saved whole-engagement templates (migration 1500). */
+  engagementTemplates?: {
+    id: string;
+    name: string;
+    access: "team" | "private";
+    payload: EngagementTemplatePayload;
+  }[];
   // Whether the firm can receive payments (Stripe Connect charges enabled).
   // Invoice automation is only offered when true.
   connectReady?: boolean;
@@ -288,6 +302,49 @@ export function EngagementBuilder({
   // is still perfectly valid, and is what every engagement was until now.
   const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>([]);
   const [step, setStep] = useState<WizardStep>("details");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Load a saved engagement template into the form. Everything it carries is
+  // applied; everything it does not is left exactly as it was. Notably it does
+  // NOT touch the client — a template is a kind of work, not a kind of work for
+  // one person, so the client stays whatever the caller set.
+  function applyEngagementTemplate(id: string) {
+    const tpl = engagementTemplates.find((x) => x.id === id);
+    if (!tpl) return;
+    const p = tpl.payload;
+    if (p.title.trim() !== "") {
+      setTitle(p.title);
+      // Marked touched so the auto-title does not overwrite what the template
+      // just supplied the moment a client is picked.
+      setTitleTouched(true);
+    }
+    if (p.items.length > 0) setServiceItems(p.items);
+    if (p.checklist.length > 0) {
+      setItems(
+        p.checklist.map((c) => ({
+          label_en: c.label_en,
+          label_fr: c.label_fr,
+          description_en: c.description_en ?? "",
+          description_fr: c.description_fr ?? "",
+          doc_type: c.doc_type ?? null,
+          required: c.required,
+        })) as TemplateItem[],
+      );
+    }
+  }
+
+  // The start chooser (Canopy's opening question) shows FIRST and the builder
+  // is not rendered behind it. Skipped entirely when the firm has no engagement
+  // templates and the caller did not deep-link a client — asking "template or
+  // scratch?" with nothing to pick is a question with one answer.
+  //
+  // Also skipped when arriving from a client page with ?client= or ?template=,
+  // because that link already answered it.
+  const [started, setStarted] = useState(
+    engagementTemplates.length === 0 ||
+      initialClientId != null ||
+      initialTemplateId != null,
+  );
 
   // A tick means "this step has what it NEEDS", not "you have been here".
   // Rewarding a visit would put a tick on an empty Documents step, which is the
@@ -611,6 +668,53 @@ export function EngagementBuilder({
     });
   }
 
+  // Built on demand rather than kept in state: it must reflect the form as it
+  // is RIGHT NOW, not as it was when something last re-rendered.
+  function currentTemplatePayload(): EngagementTemplatePayload {
+    return readPayload({
+      title,
+      type: selectedTemplate?.type ?? null,
+      items: serviceItems,
+      checklist: items,
+      // The opaque steps go in whole. This component does not need to know
+      // their shape, and the reader does not inspect them.
+      invoice: { mode: invoiceMode },
+      reminders: reminderSettings as unknown as Record<string, unknown>,
+      repeat: null,
+    });
+  }
+
+  if (!started) {
+    return (
+      <EngagementModalShell
+        title={t("new_title")}
+        closeHref="/engagements"
+        labels={{
+          close: tc("cancel"),
+          save: t("wizard_save"),
+          saveDraft: t("save_draft"),
+          saveAndSend: t("create_and_send"),
+          saveAsTemplate: t("save_as_template"),
+          saving: tc("saving"),
+        }}
+        onSaveDraft={() => {}}
+        onSaveAndSend={() => {}}
+      >
+        <EngagementStartChooser
+          templates={engagementTemplates.map((x) => ({
+            id: x.id,
+            name: x.name,
+            access: x.access,
+          }))}
+          onStart={(id) => {
+            if (id) applyEngagementTemplate(id);
+            setStarted(true);
+          }}
+        />
+      </EngagementModalShell>
+    );
+  }
+
   return (
     <EngagementModalShell
       title={t("new_title")}
@@ -618,14 +722,23 @@ export function EngagementBuilder({
       busy={pending}
       onSaveDraft={() => submit(false)}
       onSaveAndSend={() => submit(true)}
+      onSaveAsTemplate={() => setSavingTemplate(true)}
       labels={{
         close: tc("cancel"),
         save: t("wizard_save"),
         saveDraft: t("save_draft"),
         saveAndSend: t("create_and_send"),
+        saveAsTemplate: t("save_as_template"),
         saving: tc("saving"),
       }}
     >
+    <SaveAsTemplateDialog
+      open={savingTemplate}
+      onOpenChange={setSavingTemplate}
+      payload={currentTemplatePayload()}
+      suggestedName={title.trim()}
+    />
+
     {/* Rail left, one step's worth of form right. The rail is sticky so it
         stays a table of contents on a long step rather than scrolling with it.
         The rail is a FIXED 17rem and the form takes everything else. A

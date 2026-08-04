@@ -1,0 +1,109 @@
+"use server";
+
+// Server actions for engagement templates (migration 1500).
+//
+// Only async exports live here — a `"use server"` module that exports anything
+// else fails the production build and nothing else in the toolchain catches it.
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/db/users";
+import {
+  archiveEngagementTemplate,
+  createEngagementTemplate,
+} from "@/lib/db/engagement-templates";
+import {
+  isWorthSaving,
+  readPayload,
+} from "@/lib/engagements/template-payload";
+
+const ItemSchema = z.object({
+  name: z.string().trim().max(200),
+  description: z.string().trim().max(2000).nullable().optional(),
+  rateCents: z.number().int().min(0).max(1_000_000_00).nullable().optional(),
+  rateType: z.enum(["item", "hour"]).optional(),
+  billingFrequency: z
+    .enum(["once", "weekly", "monthly", "quarterly", "yearly"])
+    .optional(),
+  taxPct: z.number().min(0).max(100).nullable().optional(),
+});
+
+const ChecklistSchema = z.object({
+  label_en: z.string().trim().max(300).optional(),
+  label_fr: z.string().trim().max(300).optional(),
+  description_en: z.string().trim().max(2000).nullable().optional(),
+  description_fr: z.string().trim().max(2000).nullable().optional(),
+  doc_type: z.string().trim().max(100).nullable().optional(),
+  required: z.boolean().optional(),
+});
+
+// The opaque steps are passed through unread. Bounded so a malformed client
+// cannot post an unbounded blob into the row, but deliberately not shaped —
+// this file must not need editing every time the invoice step grows a field.
+const OpaqueSchema = z.record(z.string(), z.unknown()).nullable().optional();
+
+const PayloadSchema = z.object({
+  title: z.string().trim().max(300).optional(),
+  type: z.string().trim().max(50).nullable().optional(),
+  items: z.array(ItemSchema).max(50).optional(),
+  checklist: z.array(ChecklistSchema).max(200).optional(),
+  invoice: OpaqueSchema,
+  reminders: OpaqueSchema,
+  repeat: OpaqueSchema,
+});
+
+const SaveSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  access: z.enum(["team", "private"]),
+  payload: PayloadSchema,
+});
+
+type Result = {
+  ok: boolean;
+  needsMigration?: boolean;
+  error?: "unauthenticated" | "invalid" | "empty" | "failed";
+};
+
+export async function saveEngagementAsTemplateAction(
+  input: z.input<typeof SaveSchema>,
+): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+
+  const parsed = SaveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+
+  // Normalised through the SAME reader the picker uses, so what gets stored is
+  // exactly what will come back out. Storing the raw post instead would let a
+  // template save fields that silently vanish on load.
+  const payload = readPayload(parsed.data.payload);
+  if (!isWorthSaving(payload)) return { ok: false, error: "empty" };
+
+  const res = await createEngagementTemplate({
+    name: parsed.data.name,
+    access: parsed.data.access,
+    payload,
+  });
+  if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
+
+  revalidatePath("/engagements/new");
+  revalidatePath("/templates");
+  return { ok: true };
+}
+
+export async function archiveEngagementTemplateAction(
+  id: string,
+): Promise<Result> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+  if (!z.string().uuid().safeParse(id).success) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const res = await archiveEngagementTemplate(id);
+  if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
+
+  revalidatePath("/engagements/new");
+  revalidatePath("/templates");
+  return { ok: true };
+}
