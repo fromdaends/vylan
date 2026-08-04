@@ -10,6 +10,8 @@ import {
   type EngagementTasksPanelData,
 } from "@/components/engagements/engagement-tasks-dialog";
 import { loadEngagementTasksPanelAction } from "@/app/actions/engagement-tasks";
+import { reassignEngagementAction } from "@/app/actions/engagements";
+import { EngagementDetailPanel } from "@/components/engagements/engagement-detail-panel";
 import { useFirmPresence } from "@/lib/engagements/use-firm-presence";
 import {
   groupPresenceByEngagement,
@@ -21,6 +23,7 @@ import {
   Clock,
   FileWarning,
   MoreHorizontal,
+  PanelRight,
   Search,
 } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -479,6 +482,30 @@ export function WorklistTable({
       else next.add(id);
       return next;
     });
+
+  // ── THE DETAIL SIDEBAR ────────────────────────────────────────────────────
+  // Founder: "you see this sidebar view for tasks. do the same thing for
+  // engagements. its lacking." The row NAME opens it and the panel's first
+  // control opens the full screen — the same mapping the tasks table uses, so
+  // the two lists behave identically rather than each having its own idea of
+  // what clicking a name means.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Whoever this table was given for assignment. The main engagements list
+  // passes assignMembers; a teammate profile passes reassignMembers. With
+  // neither, the panel still OPENS — it just cannot reassign, which is the
+  // honest state for a caller that never supplied a roster.
+  const detailMembers = assignMembers ?? reassignMembers ?? [];
+  // Optimistic assignee, keyed by engagement. Rolled back if the write fails,
+  // so the panel never keeps showing a hand-off the server refused.
+  const [assignOverride, setAssignOverride] = useState<
+    Record<string, { id: string | null; name: string | null }>
+  >({});
+  const detailRow = useMemo(() => {
+    const r = rows.find((x) => x.id === detailId);
+    if (!r) return null;
+    const o = assignOverride[r.id];
+    return o ? { ...r, assigneeUserId: o.id, assigneeName: o.name } : r;
+  }, [rows, detailId, assignOverride]);
 
   // One firm-wide presence subscription for the entire table. onEngagementId is
   // null: a list is not "on" any single job, it only listens. Hooks cannot be
@@ -979,6 +1006,7 @@ export function WorklistTable({
               canDelete={canDelete}
               countdownText={countdownFor?.(r) ?? null}
               onOpenTasks={openTasks}
+              onOpenDetail={setDetailId}
               teamEnabled={teamEnabled}
             />
           ))}
@@ -1014,6 +1042,37 @@ export function WorklistTable({
           if (!next) setTasksFor(null);
         }}
       />
+
+      {/* ONE panel for the whole table, fed by whichever row was clicked —
+          the same shape as the tasks dialog above it. */}
+      <EngagementDetailPanel
+        row={detailRow}
+        members={detailMembers}
+        canEdit={detailMembers.length > 0}
+        locale={locale}
+        onClose={() => setDetailId(null)}
+        onReassign={(assigneeId) => {
+          if (!detailRow) return;
+          const id = detailRow.id;
+          const name = assigneeId
+            ? (detailMembers.find((m) => m.id === assigneeId)?.name ?? null)
+            : null;
+          setAssignOverride((p) => ({ ...p, [id]: { id: assigneeId, name } }));
+          void reassignEngagementAction(id, assigneeId).then((res) => {
+            if (res.ok) {
+              router.refresh();
+              return;
+            }
+            // Roll the optimistic value back. A panel that keeps showing a
+            // hand-off the server refused is worse than one that never moved.
+            setAssignOverride((p) => {
+              const next = { ...p };
+              delete next[id];
+              return next;
+            });
+          });
+        }}
+      />
     </div>
   );
 }
@@ -1030,6 +1089,7 @@ function WorklistRowView({
   canDelete,
   countdownText,
   onOpenTasks,
+  onOpenDetail,
   onOptimisticRemoval,
   teamEnabled,
   reassignMembers,
@@ -1053,6 +1113,10 @@ function WorklistRowView({
   countdownText: string | null;
   /** Opens this job's tasks in a panel. Absent ⇒ the count is inert. */
   onOpenTasks?: (row: WorklistRow) => void;
+  /** Opens the detail sidebar for this row. Absent = the name stays a plain
+   *  link to the engagement, so a caller that never wired the panel does not
+   *  end up with a name that clicks and does nothing. */
+  onOpenDetail?: (id: string) => void;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
   teamEnabled: boolean;
   reassignMembers?: { id: string; name: string }[];
@@ -1178,6 +1242,33 @@ function WorklistRowView({
                 >
                   {row.title}
                 </Link>
+                {/* ⚠️ THE PANEL GETS ITS OWN CONTROL — the NAME KEEPS NAVIGATING.
+                    The tasks table maps name→panel, chevron→screen, and copying
+                    that here looked right until the tests said otherwise: on
+                    THIS list the whole ROW already opens the engagement
+                    ("clicking anywhere on a row opens that engagement"). Making
+                    the title open a drawer would mean clicking the title and
+                    clicking two pixels to the right of it did different things
+                    — the row would be arguing with itself.
+                    So the mapping inverts relative to tasks, for a reason that
+                    only exists here, and every existing navigation path is
+                    untouched. Hover-revealed, like the row's tick-box: the
+                    founder's standing preference is that a control which is not
+                    always needed is not always shown. */}
+                {onOpenDetail && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetail(row.id)}
+                    aria-label={tEng("open_engagement")}
+                    title={tEng("open_engagement")}
+                    className={cn(
+                      "rounded-[5px] p-0.5 text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground",
+                      "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+                    )}
+                  >
+                    <PanelRight className="size-3.5" aria-hidden />
+                  </button>
+                )}
                 {row.seriesId && (
                   <RecurringBadge label={tEng("repeat_badge")} compact />
                 )}

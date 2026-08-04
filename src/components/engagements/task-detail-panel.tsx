@@ -36,12 +36,9 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { Check, ExternalLink, UserPlus } from "lucide-react";
-import { cn } from "@/lib/cn";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { ExternalLink, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
@@ -50,6 +47,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Field,
+  OptionButton,
+  PersonCheckRow,
+} from "@/components/engagements/detail-panel-bits";
 import { TaskProgressRing } from "@/components/engagements/task-progress-ring";
 import { SubtaskList } from "@/components/engagements/subtask-list";
 
@@ -269,28 +271,17 @@ function DetailBody({
                       ? s.id === task.statusId
                       : s.bucket === task.status;
                     return (
-                      <button
+                      <OptionButton
                         key={s.id}
-                        type="button"
+                        on={on}
                         disabled={!canEdit}
+                        dotColor={s.color}
                         onClick={() =>
                           onPatch({ status: s.bucket, statusId: s.id }, {})
                         }
-                        aria-pressed={on}
-                        className={cn(
-                          "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors disabled:opacity-50",
-                          on
-                            ? "border-foreground/30 bg-secondary font-medium text-foreground"
-                            : "border-border text-muted-foreground hover:bg-muted",
-                        )}
                       >
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: s.color }}
-                          aria-hidden
-                        />
                         {s.name}
-                      </button>
+                      </OptionButton>
                     );
                   })}
                 </div>
@@ -301,9 +292,10 @@ function DetailBody({
                   {members.map((m) => {
                     const on = task.assigneeIds.includes(m.id);
                     return (
-                      <button
+                      <PersonCheckRow
                         key={m.id}
-                        type="button"
+                        name={m.name}
+                        on={on}
                         disabled={!canEdit}
                         onClick={() =>
                           onPatch(
@@ -315,21 +307,7 @@ function DetailBody({
                             { assigneeId: m.id, on: !on },
                           )
                         }
-                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <span
-                          className={cn(
-                            "flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
-                            on
-                              ? "border-foreground bg-foreground text-background"
-                              : "border-border",
-                          )}
-                        >
-                          {on && <Check className="size-3" aria-hidden />}
-                        </span>
-                        <AvatarInitials name={m.name} size={20} />
-                        <span className="truncate">{m.name}</span>
-                      </button>
+                      />
                     );
                   })}
                   {assignees.length === 0 && (
@@ -344,21 +322,15 @@ function DetailBody({
               <Field label={t("col_priority")}>
                 <div className="flex gap-1">
                   {PRIORITIES.map((p) => (
-                    <button
+                    <OptionButton
                       key={p}
-                      type="button"
+                      grow
+                      on={task.priority === p}
                       disabled={!canEdit}
                       onClick={() => onPatch({ priority: p }, {})}
-                      aria-pressed={task.priority === p}
-                      className={cn(
-                        "flex-1 rounded-lg border px-2 py-1.5 text-xs transition-colors disabled:opacity-50",
-                        task.priority === p
-                          ? "border-foreground/30 bg-secondary font-medium text-foreground"
-                          : "border-border text-muted-foreground hover:bg-muted",
-                      )}
                     >
                       {t(`priority_${p}` as "priority_none")}
-                    </button>
+                    </OptionButton>
                   ))}
                 </div>
               </Field>
@@ -407,22 +379,5 @@ function DetailBody({
               </Field>
             </div>
           </>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label className="text-xs font-medium text-muted-foreground">
-        {label}
-      </Label>
-      {children}
-    </div>
   );
 }
