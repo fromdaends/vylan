@@ -151,7 +151,6 @@ export function EngagementBuilder({
   services = [],
   engagementTemplates = [],
   members = [],
-  overlay = false,
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -181,8 +180,6 @@ export function EngagementBuilder({
   servicePrices?: Record<string, number>;
   /** The firm's service catalogue (migration 1480). Empty until it is applied. */
   services?: CatalogueService[];
-  /** Render as an overlay over the page behind, rather than as a full page. */
-  overlay?: boolean;
   /** Active firm members, for the assignee picker. Empty in a solo firm, which
    *  hides the control entirely — there is nobody else to hand it to. */
   members?: { id: string; name: string }[];
@@ -712,7 +709,6 @@ export function EngagementBuilder({
       <EngagementModalShell
         title={t("new_title")}
         closeHref="/engagements"
-        overlay={overlay}
         labels={{
           close: tc("cancel"),
           save: t("wizard_save"),
@@ -741,7 +737,6 @@ export function EngagementBuilder({
     <EngagementModalShell
       title={t("new_title")}
       closeHref="/engagements"
-      overlay={overlay}
       busy={pending}
       onSaveDraft={() => submit(false)}
       onSaveAndSend={() => submit(true)}

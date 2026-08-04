@@ -53,13 +53,6 @@ export function EngagementModalShell({
   onSaveDraft,
   onSaveAndSend,
   onSaveAsTemplate,
-  /**
-   * Float over the page behind, blurring it.
-   *
-   * False on a direct load or refresh, where there is genuinely nothing behind
-   * and a panel over blankness would be worse than a page.
-   */
-  overlay = false,
   busy = false,
   children,
 }: {
@@ -82,7 +75,6 @@ export function EngagementModalShell({
   onSaveDraft?: () => void;
   onSaveAndSend?: () => void;
   onSaveAsTemplate?: () => void;
-  overlay?: boolean;
   busy?: boolean;
   children: React.ReactNode;
 }) {
@@ -93,38 +85,39 @@ export function EngagementModalShell({
   // against the viewport so it never overflows a laptop screen.
   const sheet = cn(
     "flex w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
-    // LIGHTER than the page, not merely bordered. Measured on the live site,
-    // the app background is pure black and bg-card is oklch 0.14 — near enough
-    // identical that the sheet read as another region of the page. A dimming
-    // backdrop cannot fix that (you cannot darken black); on a dark theme the
-    // only move is to RAISE the surface, which --surface-elevated is for.
+    "pointer-events-auto h-[min(86vh,54rem)]",
+    // LIGHTER than the page, not merely bordered. The app background is pure
+    // black and bg-card is oklch 0.14 — near enough identical that the sheet
+    // read as another region of the page. On a dark theme the only move is to
+    // RAISE the surface, which --surface-elevated is for.
     "shadow-[0_24px_60px_-30px_rgb(0_0_0_/_0.55)]",
-    overlay ? "pointer-events-auto h-[min(86vh,54rem)]" : "min-h-[38rem]",
   );
 
   return (
     <>
-      {/* The backdrop, as its OWN static layer — see note 1 at the top. Stops
-          at the rail so the rail stays live and un-dimmed. */}
-      {overlay && (
-        <div
-          aria-hidden
-          className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm sm:left-[var(--rail-width)]"
-        />
-      )}
-
+      {/* A STATIC field, not a live page.
+          
+          Founder, after three rounds of symptoms: "maybe just create the
+          thought... it looks like it's overlapping over real UI, but it's not,
+          in the sense that it's just like a screenshot of it. And it's actually
+          a new screen... because the screen behind it shouldn't be able to
+          move. I think that's the source of all the issues."
+          
+          Exactly right, and it was. This used to be a Next intercepting route
+          that kept the page you came from MOUNTED underneath — which meant two
+          live React trees, a backdrop-filter over a scrolling tree, and a ✕
+          that could not decide whether it closed a dialog or navigated a page.
+          All three symptoms had that one cause.
+          
+          It is a plain page again. It LOOKS overlaid and nothing behind it is
+          real, so nothing behind it can move, repaint, or steal a click. */}
       <div
-        className={cn(
-          "animate-in-fade",
-          overlay
-            ? // Full viewport so the box centres on the SCREEN.
-              // pointer-events-none lets clicks reach the rail; the sheet takes
-              // its own back.
-              "pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-            : "w-full px-4 pb-14 pt-5 sm:px-6 lg:px-8",
-        )}
-      >
-        <div className={overlay ? sheet : cn(sheet, "mx-auto")}>
+        aria-hidden
+        className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm sm:left-[var(--rail-width)]"
+      />
+
+      <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div className={sheet}>
           {/* ── The bar ───────────────────────────────────────────────────
               Title left, actions right, exactly Canopy's arrangement. It never
               scrolls away: on a long step the actions have to stay reachable,
