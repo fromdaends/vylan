@@ -33,8 +33,7 @@ import { listEngagementItems } from "@/lib/db/engagements";
 import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
 import { EngagementClientViewPanel } from "@/components/engagements/engagement-client-view-panel";
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
-import { StageChip } from "@/components/engagements/stage-chip";
-import { engagementStatusVariant } from "@/lib/engagements/status-pill";
+import { AgreementChip } from "@/components/engagements/agreement-chip";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { CommentThread } from "@/components/engagements/comment-thread";
@@ -1528,15 +1527,15 @@ export default async function EngagementDetailPage({
         agreementNote={
           repeatSeries ? t("details_recurring") : null
         }
-        statusChip={
-          engagement.stage ? (
-            <StageChip stage={engagement.stage} />
-          ) : (
-            <Badge variant={engagementStatusVariant(engagement.status)}>
-              {tStatus(engagement.status)}
-            </Badge>
-          )
-        }
+        // ⚠️ THE AGREEMENT, not the workflow stage. This pill was the LAST
+        // place the old stage words survived on this page — the founder found
+        // it reading "Awaiting payment" two inches from a stepper that already
+        // said "Active", which is the two-vocabularies problem the whole
+        // agreement remodel exists to end. Same chip and same resolver as the
+        // engagements list, so a job cannot describe itself differently in two
+        // places. The old branch also disagreed with ITSELF: a stage chip when
+        // a stage resolved and a raw status badge otherwise.
+        statusChip={<AgreementChip status={agreementStatus} />}
       />
 
       {/* Billing → New invoice arrives as ?panel=invoice. Mounted HERE, at page
