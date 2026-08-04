@@ -42,6 +42,13 @@ export function EngagementModalShell({
   onSaveDraft,
   onSaveAndSend,
   onSaveAsTemplate,
+  /**
+   * Narrow the sheet. The opening question needs a fraction of the builder's
+   * width, and Canopy's own flow reflects that — a compact dialog first, the
+   * wide modal only after you answer it. At full width the question sits in
+   * roughly 800px of empty sheet, which reads as a page that failed to load.
+   */
+  compact = false,
   busy = false,
   children,
 }: {
@@ -56,13 +63,20 @@ export function EngagementModalShell({
     saveAsTemplate: string;
     saving: string;
   };
-  onSaveDraft: () => void;
-  onSaveAndSend: () => void;
+  /**
+   * Both absent on the opening question, which hides the Save control entirely.
+   * There is nothing to save before you have answered it, and an enabled
+   * button that does nothing is worse than no button — the same reason
+   * Canopy's Preview and Accept are not drawn here yet.
+   */
+  onSaveDraft?: () => void;
+  onSaveAndSend?: () => void;
   /**
    * Absent while the start chooser is showing — there is nothing to save yet,
    * and an enabled Save above an unanswered question is a trap.
    */
   onSaveAsTemplate?: () => void;
+  compact?: boolean;
   busy?: boolean;
   children: React.ReactNode;
 }) {
@@ -72,7 +86,8 @@ export function EngagementModalShell({
     <div className="w-full animate-in-fade px-4 pb-14 pt-5 sm:px-6 lg:px-8">
       <div
         className={cn(
-          "mx-auto flex max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
+          "mx-auto flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
+          compact ? "max-w-2xl" : "max-w-[1400px]",
           // LIGHTER than the page, not merely bordered. Measured on the live
           // site, the app background is pure black and `bg-card` is oklch 0.14
           // — near enough identical that the sheet read as another region of
@@ -100,6 +115,7 @@ export function EngagementModalShell({
             {/* Split control: the primary action is one click, the alternative
                 is one more. Canopy's Save ▾ opens onto "Save and send" and
                 "Save as draft", and sending is the common ending. */}
+            {onSaveDraft && onSaveAndSend && (
             <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" disabled={busy} className="gap-1.5">
@@ -130,6 +146,7 @@ export function EngagementModalShell({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
 
             <Link
               href={closeHref}
