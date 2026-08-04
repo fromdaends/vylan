@@ -195,6 +195,12 @@ export function AddTaskDialog({
     );
   }, [kind, effectiveClientId, engagements]);
 
+  // Does this client have ANY job, regardless of what it already holds? The
+  // difference between "make a job first" and "those jobs are all spoken for".
+  const clientHasJobs = engagements.some(
+    (e) => e.clientId === effectiveClientId,
+  );
+
   // A collection kind chosen away from a job needs one picked.
   // Only a kind that OWNS a collection needs a job. A labelled task —
   // Notice, Meeting, Review — belongs to a client and may have no job at all.
@@ -265,7 +271,12 @@ export function AddTaskDialog({
     >
       <PopoverTrigger asChild>
         {trigger ?? (
-          <Button type="button" size="sm" variant="secondary">
+          // ⚠️ VYLAN'S BLUE (--accent), and this is the SECOND time it has been
+          // set: #1242 changed it and a merge quietly took it back when another
+          // branch rewrote this same block. If it is grey again, that is what
+          // happened — the button is the one call-to-action on this screen and
+          // it should match "+ New engagement" in the rail.
+          <Button type="button" size="sm" variant="accent">
             <Plus className="size-4" aria-hidden />
             {t("add_task")}
           </Button>
@@ -369,12 +380,20 @@ export function AddTaskDialog({
                 >
                   <SelectTrigger id={`${uid}-job`} className="w-full">
                     <SelectValue
+                      // THREE different situations, said apart. "No job can
+                      // take this yet" covered all of them and explained none:
+                      // a client with no jobs and a client whose every job
+                      // already has one need opposite things done about them,
+                      // and the second is the common case because the backfill
+                      // gave every existing job a document request.
                       placeholder={
                         !effectiveClientId
                           ? t("add_task_pick_client_first")
-                          : jobOptions.length === 0
-                            ? t("add_task_no_jobs")
-                            : t("add_task_pick_job")
+                          : jobOptions.length > 0
+                            ? t("add_task_pick_job")
+                            : clientHasJobs
+                              ? t("add_task_all_jobs_taken")
+                              : t("add_task_no_jobs")
                       }
                     />
                   </SelectTrigger>

@@ -9,9 +9,16 @@ vi.mock("@/i18n/navigation", () => ({
   ),
   useRouter: () => ({ refresh: vi.fn() }),
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+const toastSuccess = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: (...a: unknown[]) => toastSuccess(...(a as [])),
+  },
+}));
+const updateTaskAction = vi.fn(async () => ({ ok: true }));
 vi.mock("@/app/actions/engagement-tasks", () => ({
-  updateTaskAction: vi.fn(async () => ({ ok: true })),
+  updateTaskAction: (...a: unknown[]) => updateTaskAction(...(a as [])),
   deleteTaskAction: vi.fn(async () => ({ ok: true })),
   setTaskAssigneeAction: vi.fn(async () => ({ ok: true })),
 }));
@@ -105,7 +112,12 @@ beforeAll(() => {
   }
 });
 
-beforeEach(() => cleanup());
+beforeEach(() => {
+  cleanup();
+  toastSuccess.mockClear();
+  updateTaskAction.mockClear();
+  updateTaskAction.mockResolvedValue({ ok: true });
+});
 afterEach(() => cleanup());
 
 /** Radix opens on POINTER-DOWN, not click. Every column header is a menu now. */
@@ -346,5 +358,72 @@ describe("TasksTable — the two screens", () => {
     expect(within(doneRow).getByText("01/01/21").className).not.toContain(
       "text-destructive",
     );
+  });
+});
+
+// Founder: "it's too fast, and there's no actual check mark. It just disappears
+// instantly... there should be a little pop up from the bottom that says undo."
+describe("TasksTable — finishing a task is a moment, not a disappearance", () => {
+  it("keeps the row in place after it is ticked, so the check can be seen", () => {
+    renderTable();
+    expect(names()).toContain("Mike soon");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Mark Mike soon done/ }),
+    );
+
+    // Still there, even though "Active work" no longer describes it. A row that
+    // vanishes on the same frame as the click reads as "something happened, no
+    // idea what" — and leaves nothing to undo from.
+    expect(names()).toContain("Mike soon");
+  });
+
+  it("offers Undo for exactly as long as the row lingers", () => {
+    renderTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Mark Mike soon done/ }),
+    );
+
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    const [message, opts] = toastSuccess.mock.calls[0] as [
+      string,
+      { duration: number; action: { label: string; onClick: () => void } },
+    ];
+    expect(message).toContain("Mike soon");
+    expect(opts.action.label).toBe(en.Engagements.undo);
+    // The SAME length as the linger on purpose: an undo that outlives the row
+    // it refers to points at nothing.
+    expect(opts.duration).toBe(5000);
+  });
+
+  it("puts a task back where it WAS, not to a generic To do", () => {
+    // "Alpha no date" sits in the firm's "Needs review". Undoing its completion
+    // must return it there — coming back as untouched would lose a state
+    // somebody deliberately set.
+    renderTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Mark Alpha no date done/ }),
+    );
+    const [, opts] = toastSuccess.mock.calls.at(-1) as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+    opts.action.onClick();
+
+    expect(updateTaskAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({ taskId: "t-nodate", statusId: "s-review" }),
+    );
+  });
+
+  it("un-ticking needs no toast — the row coming back IS the confirmation", () => {
+    renderTable();
+    fireEvent.click(
+      within(screen.getByRole("tablist")).getByRole("button", { name: /All work/ }),
+    );
+    toastSuccess.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Mark Delta finished done/ }),
+    );
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });
