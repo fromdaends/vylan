@@ -340,6 +340,24 @@ async function applyStageAssignee(
     return null;
   }
 
+  // 1540: an assignee implies access, so mirror the manual path by also
+  // putting the person in the assignee set (the column above stays the
+  // "who is answerable" pointer). Best-effort — pre-1540 environments and
+  // hiccups keep the primary assignment, which is what accountability reads.
+  try {
+    const { addEngagementAssignee } = await import(
+      "@/lib/db/engagement-assignees"
+    );
+    await addEngagementAssignee({
+      engagementId: input.engagementId,
+      userId: assigneeId,
+      firmId: input.firmId,
+      actorId: null,
+    });
+  } catch {
+    // Unsupported (pre-1540) or transient — the primary write already landed.
+  }
+
   await logServiceRoleActivity(
     input.firmId,
     input.engagementId,

@@ -9,6 +9,15 @@ import { loadAutomation } from "@/lib/performance/automation";
 import type { PerformanceRange } from "@/lib/performance/types";
 import { AutomatedJobsPanel } from "@/components/vylan/automated-jobs-panel";
 import { AiPerformanceTab } from "@/components/vylan/ai-performance-tab";
+import {
+  AutomationsPanel,
+  type AutomationRow,
+} from "@/components/vylan/automations-panel";
+import {
+  listAutomations,
+  listAutomationTemplateUseCounts,
+} from "@/lib/db/automations";
+import { listActiveFirmUsers } from "@/lib/db/users";
 
 // The "Vylan" hub: the firm's own automation surface, reached from the rail's
 // Sparkles tab.
@@ -49,6 +58,18 @@ export default async function VylanHubPage({
 
   setRequestLocale(locale);
   const t = await getTranslations("VylanHub");
+
+  // The automations library lives INSIDE Automated jobs — the founder's call,
+  // and the right one: that tab was built as the scaffold for exactly this
+  // feature, so the library replaces its "coming soon" promise rather than
+  // moving in next door. It rides the Part A switch (1510): a firm that
+  // hasn't been turned on sees the hub exactly as before. A stale
+  // ?tab=automations link (the brief separate-tab build) lands here too.
+  const firm = await getCurrentFirm();
+  const workflowsOn =
+    (firm as { workflows_enabled?: boolean } | null)?.workflows_enabled ===
+    true;
+
   const tab: VylanTab = sp.tab === "ai" ? "ai" : "jobs";
 
   const tabs = [
@@ -94,9 +115,46 @@ export default async function VylanHubPage({
       {tab === "ai" ? (
         <AiPerformancePanel locale={locale} rangeParam={sp.range} />
       ) : (
-        <AutomatedJobsPanel />
+        <>
+          {workflowsOn && <AutomationsSection />}
+          {/* With the library present, the scaffold's "coming soon" promise
+              is fulfilled — hide it rather than promising what's above it. */}
+          <AutomatedJobsPanel hideSoon={workflowsOn} />
+        </>
       )}
     </div>
+  );
+}
+
+async function AutomationsSection() {
+  // Same signed-out guard as the AI panel below: the layout's redirect races
+  // this render, and firing RLS'd reads as `anon` fills the log with denials
+  // for a page that will never be shown.
+  const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
+  if (!firm || !user) return null;
+
+  const [automations, useCounts, members] = await Promise.all([
+    listAutomations(),
+    listAutomationTemplateUseCounts(),
+    listActiveFirmUsers(),
+  ]);
+
+  const rows: AutomationRow[] = automations.map((a) => ({
+    id: a.id,
+    firmId: a.firmId,
+    name: a.name,
+    definition: a.definition,
+    usedBy: useCounts[a.id] ?? 0,
+  }));
+
+  return (
+    <AutomationsPanel
+      automations={rows}
+      members={members.map((m) => ({
+        id: m.id,
+        name: m.display_name ?? m.name,
+      }))}
+    />
   );
 }
 
