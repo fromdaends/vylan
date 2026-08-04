@@ -46,7 +46,7 @@
 
 import { useOptimistic, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
   ChevronRight,

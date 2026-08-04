@@ -77,6 +77,8 @@ describe("AddTaskDialog — firm-wide mode", () => {
       // The only kind possible without a job: the other three point at
       // collections keyed by engagement_id.
       kind: "task",
+      // The due field was left empty, which is a real choice, not an omission.
+      dueDate: null,
     });
   });
 
@@ -173,6 +175,9 @@ describe("AddTaskDialog — on a job", () => {
       engagementId: "e-1",
       title: "2025 engagement letter",
       kind: "signatures",
+      // Job mode has no due field (the quick-add's date is a firm-list
+      // affordance), so it always sends null.
+      dueDate: null,
     });
   });
 });
