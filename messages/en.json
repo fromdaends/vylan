@@ -2769,7 +2769,8 @@
     "save_template_saved": "Template saved.",
     "save_template_empty": "Fill something in first — an empty template is what \"start from scratch\" already does.",
     "save_template_failed": "Couldn't save that template. Try again.",
-    "save_template_needs_migration": "Your database needs a quick update before templates can be saved."
+    "save_template_needs_migration": "Your database needs a quick update before templates can be saved.",
+    "task_progress_label": "Progress"
   },
   "Attention": {
     "metric_active": "Active",

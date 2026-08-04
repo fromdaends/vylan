@@ -2769,7 +2769,8 @@
     "save_template_saved": "Modèle enregistré.",
     "save_template_empty": "Remplissez d’abord quelque chose — un modèle vide, c’est déjà « partir de zéro ».",
     "save_template_failed": "Impossible d’enregistrer ce modèle. Réessayez.",
-    "save_template_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des modèles."
+    "save_template_needs_migration": "Votre base de données doit être mise à jour avant de pouvoir enregistrer des modèles.",
+    "task_progress_label": "Progression"
   },
   "Attention": {
     "metric_active": "Actifs",
