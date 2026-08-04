@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
+import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { listFirmLinks } from "@/lib/db/firm-links";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
@@ -51,6 +52,7 @@ export default async function DashboardPage({
     firm,
     members,
     tasks,
+    taskStatuses,
     clients,
     engagements,
     links,
@@ -60,6 +62,10 @@ export default async function DashboardPage({
       getCurrentFirm(),
       listFirmUsers(),
       listFirmTasks(),
+      // The firm's own statuses, so a row here wears the same coloured label it
+      // wears on the Tasks page. Request-cached, so it is free if anything else
+      // on this page already asked.
+      listTaskStatuses(),
       // For the quick-add's client picker — the same reason /work loads them.
       listClients(),
       // And the jobs, so the quick-add can start a collection kind too.
@@ -149,10 +155,12 @@ export default async function DashboardPage({
         </div>
 
         <TasksOverviewCard
+          statuses={taskStatuses}
           tasks={tasks.map((t) => ({
             id: t.id,
             title: t.title,
             status: t.status,
+            statusId: t.statusId,
             assigneeIds: t.assigneeIds,
             clientId: t.clientId,
             engagementId: t.engagementId,

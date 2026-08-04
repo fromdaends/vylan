@@ -40,10 +40,19 @@ import {
 } from "@/app/actions/engagement-tasks";
 import { groupTasks, type TaskGroups } from "@/lib/tasks/dates";
 
+/** A status the firm named (1420), as this card needs it. */
+export type DashboardStatus = {
+  id: string;
+  name: string;
+  color: string;
+  bucket: TaskStatus;
+};
+
 export type DashboardTask = {
   id: string;
   title: string;
   status: TaskStatus;
+  statusId?: string | null;
   assigneeIds: string[];
   clientId: string;
   engagementId: string | null;
@@ -52,6 +61,31 @@ export type DashboardTask = {
   dueDate: string | null;
   completedAt: string | null;
 };
+
+/** The firm's label and colour for a row, falling back to nothing when the
+ *  firm has no statuses of its own — a dot with no meaning is worse than none. */
+function StatusDot({
+  task,
+  statuses,
+}: {
+  task: DashboardTask;
+  statuses: DashboardStatus[];
+}) {
+  const status =
+    statuses.find((s) => s.id === task.statusId) ??
+    statuses.find((s) => s.bucket === task.status);
+  if (!status) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
+      <span
+        className="size-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: status.color }}
+        aria-hidden
+      />
+      {status.name}
+    </span>
+  );
+}
 
 type Tab = "all" | "mine" | "done";
 
@@ -62,6 +96,7 @@ export function TasksOverviewCard({
   members,
   clients,
   engagements,
+  statuses,
   viewerId,
   today,
   timeZone,
@@ -71,6 +106,9 @@ export function TasksOverviewCard({
   clients: ComboboxClient[];
   /** For the quick-add's popover: a collection kind needs a job to hang off. */
   engagements: AddTaskEngagement[];
+  /** The firm's own statuses, so a row here wears the same coloured label it
+   *  wears on the Tasks page rather than a second vocabulary. */
+  statuses: DashboardStatus[];
   viewerId: string;
   /** YYYY-MM-DD in the firm's timezone — the anchor every group hangs off. */
   today: string;
@@ -209,14 +247,21 @@ export function TasksOverviewCard({
                 ariaLabel={tWork("work_toggle", { title: task.title })}
               />
               <span className="min-w-0 flex-1">
-                <span
-                  className={cn(
-                    "block truncate text-sm font-medium",
-                    task.status === "done" &&
-                      "text-muted-foreground line-through decoration-border",
-                  )}
-                >
-                  {task.title}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "truncate text-sm font-medium",
+                      task.status === "done" &&
+                        "text-muted-foreground line-through decoration-border",
+                    )}
+                  >
+                    {task.title}
+                  </span>
+                  {/* THE SAME PILL as the Tasks page. This card used to show
+                      only a checkbox, so a task sitting in the firm's own
+                      "Needs review" read here as indistinguishable from one
+                      nobody had touched. */}
+                  <StatusDot task={task} statuses={statuses} />
                 </span>
                 <TaskWhoFor
                   clientId={task.clientId}
