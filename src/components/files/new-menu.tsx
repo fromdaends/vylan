@@ -102,11 +102,14 @@ export function NewMenu({
       <QuickUpload
         clients={clients}
         defaultClientId={clientId}
+        targetFolderId={folderParentId}
         externalOpen={dialog === "upload"}
         onExternalOpenChange={(o) => setDialog(o ? "upload" : null)}
       />
       <ImportWizard
         clients={clients}
+        lockedClientId={clientId}
+        lockedFolderId={folderParentId}
         externalOpen={dialog === "import"}
         onExternalOpenChange={(o) => setDialog(o ? "import" : null)}
       />

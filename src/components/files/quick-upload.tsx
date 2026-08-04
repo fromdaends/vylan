@@ -44,13 +44,18 @@ import {
 export function QuickUpload({
   clients,
   defaultClientId,
+  targetFolderId,
   externalOpen,
   onExternalOpenChange,
   initialFiles,
 }: {
   clients: { id: string; name: string }[];
-  /** Browsing inside a client pre-answers the only question this asks. */
+  /** Browsing inside a client ANSWERS the only question this asks — the
+   * client dropdown is not rendered at all then (founder: nothing should ask
+   * for a client when you are standing inside one). */
   defaultClientId: string | null;
+  /** The folder being browsed — uploads land in it, like Drive. */
+  targetFolderId?: string | null;
   externalOpen: boolean;
   onExternalOpenChange: (open: boolean) => void;
   /**
@@ -143,6 +148,9 @@ export function QuickUpload({
           mimeType: file.type,
           sizeBytes: file.size,
           contentHash: await computeContentHashWeb(bytes),
+          // Standing inside a folder = uploading into it (only meaningful
+          // with the client context that folder belongs to).
+          folderId: defaultClientId ? (targetFolderId ?? null) : null,
         });
         if (!rec.ok) throw new Error(rec.error);
         if (rec.skipped === "duplicate") skipped++;
@@ -222,18 +230,23 @@ export function QuickUpload({
                 {t("import_skipping", { count: oversize })}
               </p>
             )}
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("import_choose_client")} />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Only the ROOT (no client context) asks. Inside a client the
+                answer is where you are standing — asking again read as absurd
+                in review, and it was. */}
+            {!defaultClientId && (
+              <Select value={clientId} onValueChange={setClientId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("import_choose_client")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {busy && (
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div

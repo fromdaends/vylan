@@ -122,6 +122,51 @@ export async function createFolderAction(input: {
   return { ok: true, id: data.id as string };
 }
 
+/**
+ * Find-or-create, for the import wizard's Drive semantics: importing a folder
+ * while standing inside a client creates that folder RIGHT THERE (or fills
+ * the one already named that) — nobody is asked to pick a client they are
+ * already looking at. Same reuse-by-name rule as dropping onto a bucket.
+ */
+export async function createOrGetFolderAction(input: {
+  clientId: string;
+  parentId: string | null;
+  name: string;
+}): Promise<{ ok: boolean; folderId: string | null }> {
+  const firm = await getCurrentFirm();
+  if (!firm || !input.clientId) return { ok: false, folderId: null };
+  const sb = await getServerSupabase();
+
+  // The client read is the permission check (RLS), same as createFolderAction.
+  const { data: client } = await sb
+    .from("clients")
+    .select("id")
+    .eq("id", input.clientId)
+    .maybeSingle();
+  if (!client) return { ok: false, folderId: null };
+
+  // A parent from the URL must actually be this client's folder.
+  if (input.parentId) {
+    const { data: parent } = await sb
+      .from("document_folders")
+      .select("id")
+      .eq("id", input.parentId)
+      .eq("client_id", input.clientId)
+      .maybeSingle();
+    if (!parent) return { ok: false, folderId: null };
+  }
+
+  const id = await findOrCreateFolder(
+    sb,
+    firm.id,
+    input.clientId,
+    input.parentId ?? null,
+    input.name,
+  );
+  if (id) revalidatePath("/files");
+  return { ok: !!id, folderId: id };
+}
+
 export async function renameFolderAction(input: {
   clientId: string;
   folderId: string;
