@@ -19,7 +19,6 @@ import {
   ClientTeamEditor,
   type TeamRow,
 } from "@/components/clients/client-team-editor";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -446,13 +445,23 @@ export function ClientFormDialog({
               </div>
             )}
 
-            <Label htmlFor="notes">{t("field_notes")}</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              defaultValue={client?.notes ?? ""}
-              rows={3}
-            />
+            {/* THE "NOTES" FIELD IS GONE (1540). Two reasons, and the second
+                is the worse one:
+
+                (1) Notes and comments must not co-exist — founder's ruling
+                    after seeing a Notes box sitting directly above a Comments
+                    thread: "its one or the other. get rid of notes."
+
+                (2) THIS FIELD WAS A TRAP. It wrote clients.notes, the original
+                    0001 single blob, and NO SCREEN RENDERED IT — not the
+                    profile, not the list, nowhere. You could type a paragraph
+                    about a client, save, and never see it again. The visible
+                    Notes card on the client profile is a different thing
+                    entirely (client_notes, now the comment thread).
+
+                Existing blob text was copied into each client's comment thread
+                by 1540. The column is kept, unread, so the copy is reversible.
+                Notes about a client go in the Notes card on their profile. */}
           </div>
           <DialogFooter>
             <Button

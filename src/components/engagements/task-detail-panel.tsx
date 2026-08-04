@@ -39,7 +39,6 @@ import { Link } from "@/i18n/navigation";
 import { ExternalLink, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -80,6 +79,12 @@ export type DetailTask = {
   engagementId: string | null;
   clientName?: string | null;
   engagementTitle?: string | null;
+  /** DEPRECATED (1540). The task's old Notes box is gone — notes and comments
+   *  were two boxes for one job sitting inches apart, and the founder ruled:
+   *  "Notes and comments shouldnt co-exist its one or the other. get rid of
+   *  notes." Existing text was copied into the task's COMMENT thread by 1540.
+   *  Still on the type because the row shape comes from the table and the
+   *  column is deliberately not dropped — do NOT render it again. */
   notes?: string | null;
   dueDate?: string | null;
   meta?: string;
@@ -99,6 +104,9 @@ const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
 export type TaskDetailPanelPatch = (
   patch: {
     title?: string;
+    /** DEPRECATED (1540) — nothing in this panel sends it any more. Kept on the
+     *  type so a tab loaded BEFORE this shipped can still post its pending note
+     *  to a newer server without a 503 (the repo's deploy-skew rule). */
     notes?: string | null;
     status?: TaskStatus;
     statusId?: string | null;
@@ -138,7 +146,7 @@ export function TaskDetailPanel({
     <Sheet open={Boolean(task)} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
         {task && (
-          // KEYED BY THE TASK. The name and notes fields keep a local draft
+          // KEYED BY THE TASK. The name field keeps a local draft
           // while you type, and a draft has to be re-seeded when a different
           // task is opened. Remounting on the id does that for free — doing it
           // in an effect means a render with the previous task's text in it,
@@ -182,7 +190,6 @@ function DetailBody({
   const t = useTranslations("Engagements");
 
   const [title, setTitle] = useState(task.title);
-  const [notes, setNotes] = useState(task.notes ?? "");
 
   const label = kindLabel(task.kind);
   const assignees = task.assigneeIds
@@ -362,22 +369,6 @@ function DetailBody({
                 statuses={statuses}
                 canEdit={canEdit}
               />
-
-              <Field label={t("task_notes")}>
-                <Textarea
-                  rows={5}
-                  disabled={!canEdit}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={() => {
-                    const next = notes.trim();
-                    if (next !== (task.notes ?? "")) {
-                      onPatch({ notes: next || null }, {});
-                    }
-                  }}
-                  placeholder={t("task_notes_placeholder")}
-                />
-              </Field>
 
               {/* Comments on THIS task — the same thread as a checklist item,
                   a file and an engagement, because the founder asked for one
