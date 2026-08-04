@@ -7,7 +7,6 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { can } from "@/lib/auth/capabilities";
 import { listFirmServices } from "@/lib/db/firm-services";
@@ -54,8 +53,6 @@ export default async function NewEngagementPage({
   }
 
   const t = await getTranslations("Engagements");
-  const tApp = await getTranslations("App");
-  const tCommon = await getTranslations("Common");
 
   return (
     // FULL WIDTH, like Clients and Work. It was max-w-3xl — 768px — which was
@@ -65,23 +62,10 @@ export default async function NewEngagementPage({
     //
     // Capped at 1400px rather than truly edge-to-edge so the rail and the form
     // stay a readable distance apart on an ultrawide monitor.
-    <div className="w-full animate-in-fade px-6 pt-7 pb-18 lg:px-11">
-      <div className="mx-auto max-w-[1400px] space-y-6">
-      <Breadcrumb
-        label={tCommon("breadcrumb")}
-        items={[
-          { label: tApp("nav_engagements"), href: "/engagements" },
-          { label: t("new_title") },
-        ]}
-      />
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {t("new_title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("new_subtitle")}
-        </p>
-      </header>
+    // No page header or breadcrumb any more: the shell draws its own title bar
+    // with the actions in it, the way Canopy's modal does. A page heading above
+    // a modal-looking card would name the same thing twice.
+    <>
       <EngagementBuilder
         clients={clients.map((c) => ({
           id: c.id,
@@ -103,7 +87,6 @@ export default async function NewEngagementPage({
         canManageReminderDefaults={can(user, "firm.settings")}
         authorizedContacts={authorizedContacts}
       />
-      </div>
-    </div>
+    </>
   );
 }

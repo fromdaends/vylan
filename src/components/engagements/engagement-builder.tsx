@@ -47,6 +47,7 @@ import {
   type CatalogueService,
 } from "@/components/engagements/engagement-items-editor";
 import type { EngagementItemDraft } from "@/lib/engagements/items";
+import { EngagementModalShell } from "@/components/engagements/engagement-modal-shell";
 import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
@@ -611,12 +612,26 @@ export function EngagementBuilder({
   }
 
   return (
-    // Rail left, one step's worth of form right. The rail is sticky so it stays
-    // a table of contents on a long step rather than scrolling away with it.
-    // The rail is a FIXED 17rem and the form takes everything else. A
-    // fractional rail (1fr_3fr) would grow the table of contents on a wide
-    // monitor, which is the one thing on this page that gains nothing from
-    // extra width — the form is where the room is needed.
+    <EngagementModalShell
+      title={t("new_title")}
+      closeHref="/engagements"
+      busy={pending}
+      onSaveDraft={() => submit(false)}
+      onSaveAndSend={() => submit(true)}
+      labels={{
+        close: tc("cancel"),
+        save: t("wizard_save"),
+        saveDraft: t("save_draft"),
+        saveAndSend: t("create_and_send"),
+        saving: tc("saving"),
+      }}
+    >
+    {/* Rail left, one step's worth of form right. The rail is sticky so it
+        stays a table of contents on a long step rather than scrolling with it.
+        The rail is a FIXED 17rem and the form takes everything else. A
+        A fractional rail (1fr_3fr) would grow the table of contents on a wide
+        monitor, which is the one thing here that gains nothing from extra
+        width — the form is where the room is needed. */}
     <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
       <div className="lg:sticky lg:top-6">
         <EngagementWizardRail
@@ -1519,6 +1534,8 @@ export function EngagementBuilder({
       )}
 
 
+      {/* Step navigation ONLY. Saving moved into the bar above, where it stays
+          reachable on a long step instead of hiding under the form. */}
       <div className="flex flex-wrap items-center gap-3 pt-2">
         {stepIndex > 0 && (
           <Button
@@ -1530,35 +1547,19 @@ export function EngagementBuilder({
             {t("wizard_back")}
           </Button>
         )}
-
-        {/* Save draft stays on EVERY step, not just the last. An engagement you
-            have half-filled is worth keeping, and a wizard that only lets you
-            save at the end punishes you for being interrupted. */}
-        <Button
-          type="button"
-          variant="outline"
-          className="ml-auto"
-          onClick={() => submit(false)}
-          disabled={pending}
-        >
-          {pending ? tc("saving") : t("save_draft")}
-        </Button>
-
-        {stepIndex < WIZARD_STEPS.length - 1 ? (
+        {stepIndex < WIZARD_STEPS.length - 1 && (
           <Button
             type="button"
+            className="ml-auto"
             onClick={() => setStep(WIZARD_STEPS[stepIndex + 1])}
             disabled={pending}
           >
             {t("wizard_next")}
           </Button>
-        ) : (
-          <Button type="button" onClick={() => submit(true)} disabled={pending}>
-            {pending ? tc("saving") : t("create_and_send")}
-          </Button>
         )}
       </div>
       </div>
     </div>
+    </EngagementModalShell>
   );
 }

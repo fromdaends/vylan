@@ -2722,7 +2722,8 @@
     "details_due": "Due",
     "details_on_acceptance": "On acceptance",
     "details_services": "Services",
-    "details_no_services": "No services on this engagement yet."
+    "details_no_services": "No services on this engagement yet.",
+    "wizard_save": "Save"
   },
   "Attention": {
     "metric_active": "Active",
