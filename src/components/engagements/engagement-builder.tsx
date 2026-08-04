@@ -42,7 +42,18 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
+import {
+  PLACEHOLDERS,
+  placeholderText,
+  resolvePlaceholders,
+} from "@/lib/engagements/placeholders";
 import {
   EngagementItemsEditor,
   type CatalogueService,
@@ -133,6 +144,13 @@ type WizardStep = (typeof WIZARD_STEPS)[number];
 // Spelled out so a typo in the template literal is a compile error rather than
 // a `Engagements.wizard_step_detials` rendering on screen — this repo has been
 // bitten twice by next-intl failing silently on a bad key.
+type PlaceholderKey =
+  | "placeholder_clientname"
+  | "placeholder_taxyear"
+  | "placeholder_currentyear"
+  | "placeholder_currentmonth"
+  | "placeholder_firmname";
+
 type WizardStepKey =
   | "wizard_step_details"
   | "wizard_step_services"
@@ -600,7 +618,20 @@ export function EngagementBuilder({
         const result = await createEngagementAction(
           {
             client_id: clientId,
-            title: effectiveTitle.trim(),
+            // Resolved at SAVE, not as you type. Typing must leave the token
+            // visible so it is obvious the name is dynamic; a name that
+            // silently rewrote itself mid-keystroke would be unusable. An
+            // unknown value leaves its token, so a saved name is never a
+            // half-finished sentence.
+            title: resolvePlaceholders(
+              effectiveTitle.trim(),
+              {
+                clientName: selectedClient?.display_name ?? null,
+                taxYear: taxYear ? Number(taxYear) : null,
+              },
+              new Date(),
+              locale,
+            ),
             type: selectedTemplate.type,
             due_date: dueDate || null,
             start_date: startDate || null,
@@ -852,7 +883,47 @@ export function EngagementBuilder({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="title">{t("field_title")}</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="title">{t("field_title")}</Label>
+                  {/* Canopy's + on the name field. Inserts a token rather than
+                      a value, so the same name works for every client the
+                      template is later used on — which is the whole reason a
+                      saved template can carry a name at all. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Plus className="size-3" aria-hidden />
+                        {t("placeholder_add")}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      {PLACEHOLDERS.map((token) => (
+                        <DropdownMenuItem
+                          key={token}
+                          onSelect={() => {
+                            // Appended, not inserted at the caret: reading the
+                            // caret out of a controlled input reliably is more
+                            // machinery than this earns, and appending is what
+                            // you want when naming something anyway.
+                            setTitle(
+                              (prev) =>
+                                `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${placeholderText(token)}`,
+                            );
+                            setTitleTouched(true);
+                          }}
+                        >
+                          {t(`placeholder_${token}` as PlaceholderKey)}
+                          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                            {placeholderText(token)}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 <Input
                   id="title"
                   value={effectiveTitle}

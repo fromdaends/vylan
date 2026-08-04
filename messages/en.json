@@ -2796,7 +2796,13 @@
     "intro_message_placeholder": "A short note that appears at the top of what your client sees.",
     "intro_message_hint": "Optional. The client reads this first.",
     "field_assignee": "Assigned to",
-    "assignee_me": "Me"
+    "assignee_me": "Me",
+    "placeholder_add": "Add placeholder",
+    "placeholder_clientname": "Client name",
+    "placeholder_taxyear": "Tax year",
+    "placeholder_currentyear": "This year",
+    "placeholder_currentmonth": "This month",
+    "placeholder_firmname": "Your firm"
   },
   "Attention": {
     "metric_active": "Active",

@@ -2796,7 +2796,13 @@
     "intro_message_placeholder": "Une courte note affichée en haut de ce que votre client voit.",
     "intro_message_hint": "Optionnel. Le client le lit en premier.",
     "field_assignee": "Assigné à",
-    "assignee_me": "Moi"
+    "assignee_me": "Moi",
+    "placeholder_add": "Ajouter un champ",
+    "placeholder_clientname": "Nom du client",
+    "placeholder_taxyear": "Année d’imposition",
+    "placeholder_currentyear": "Année en cours",
+    "placeholder_currentmonth": "Mois en cours",
+    "placeholder_firmname": "Votre cabinet"
   },
   "Attention": {
     "metric_active": "Actifs",
