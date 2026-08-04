@@ -1118,9 +1118,22 @@ export default async function EngagementDetailPage({
               </Badge>
             )}
           </div>
-          {/* Who has been let into THIS job only. Quiet, under the badges,
-              because it is a rare deliberate act rather than a daily control. */}
-          {canGrantJobAccess && (
+          {/* Who has been let into THIS job only.
+              Founder: "hide this somewhere more subtle. it doesnt deserve to be
+              on the main page" — and they are right; it is a rare deliberate
+              act wearing the clothes of a daily control.
+
+              ⚠️ HIDDEN WHEN THERE ARE NO GUESTS, NOT DELETED. Anyone who HAS
+              been let into this job still shows, because this is a privacy
+              control: a grant you cannot see is a grant you cannot revoke, and
+              making existing access invisible is a strictly worse bug than the
+              clutter being removed.
+
+              What is temporarily unreachable is GRANTING new access on a job
+              with none. That is deliberate and on the record (.active-sessions
+              .md): the entry point moves into the "..." menu next, which is
+              where the other rare per-engagement controls already live. */}
+          {canGrantJobAccess && jobGuests.length > 0 && (
             <div className="mt-2">
               <EngagementAccess
                 engagementId={id}
