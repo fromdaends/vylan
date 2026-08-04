@@ -2807,7 +2807,8 @@
     "assignee_primary": "{name} — owns this job",
     "assignee_nobody": "No teammates to assign yet.",
     "assignee_needs_migration": "Multiple assignees need a database update before this saves.",
-    "assignee_failed": "Could not change who is on this job. Try again."
+    "assignee_failed": "Could not change who is on this job. Try again.",
+    "agreement_stepper_label": "Agreement progress"
   },
   "Attention": {
     "metric_active": "Active",
