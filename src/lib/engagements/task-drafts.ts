@@ -117,3 +117,61 @@ export function documentCollectionIndex(tasks: readonly TaskDraft[]): number {
 export function collectsDocuments(tasks: readonly TaskDraft[]): boolean {
   return documentCollectionIndex(tasks) !== -1;
 }
+
+export type AppendResult = {
+  tasks: TaskDraft[];
+  /**
+   * Titles whose kind had to change on the way in, because the engagement
+   * already holds that one-per-engagement kind.
+   *
+   * Returned rather than swallowed so the UI can SAY so. A silent downgrade is
+   * the worst of the three options: the row is there, it looks right, and the
+   * one thing that made it special is gone with no indication.
+   */
+  downgraded: string[];
+};
+
+/**
+ * Add a task template's rows to the tasks an engagement is being created with.
+ *
+ * ── THE RULE THIS EXISTS FOR ───────────────────────────────────────────────
+ *
+ * A task template may legitimately contain `document_collection`, `signatures`
+ * or `deliverables` — the template builder offers every kind, because a
+ * template is not an engagement. But an ENGAGEMENT may hold only one of each
+ * (1370's partial unique index), and tasks are written fail-soft: a refused
+ * insert is logged and swallowed, so a second one would simply never appear
+ * and nothing would say why.
+ *
+ * So a clashing row is DOWNGRADED to a plain task rather than dropped. Dropping
+ * loses the step the firm wrote down; downgrading loses only its screen, keeps
+ * it visible, and leaves it one dropdown away from being fixed by hand.
+ *
+ * Checked against the ACCUMULATING list, not just the existing one — a template
+ * carrying two document-collection rows has to be handled too, and it is
+ * exactly the case a check against `existing` alone would miss.
+ */
+export function appendTemplateTasks(
+  existing: readonly TaskDraft[],
+  incoming: readonly { title: string; kind: TaskKind }[],
+): AppendResult {
+  const tasks: TaskDraft[] = [...existing];
+  const downgraded: string[] = [];
+
+  for (const row of incoming) {
+    const title = row.title.trim();
+    // A template should never contain one of these — readTaskTemplatePayload
+    // drops untitled rows — but this function must not depend on that to be
+    // correct, because it also serves whatever calls it next.
+    if (title.length === 0) continue;
+
+    if (kindTaken(tasks, row.kind)) {
+      tasks.push({ title, kind: "task", assigneeIds: [] });
+      downgraded.push(title);
+    } else {
+      tasks.push({ title, kind: row.kind, assigneeIds: [] });
+    }
+  }
+
+  return { tasks, downgraded };
+}

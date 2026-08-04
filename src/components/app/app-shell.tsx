@@ -172,7 +172,56 @@ export function AppShell({
     // redirects there rather than 404ing.
     { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
     { href: "/clients", label: labels.clients, icon: Users },
-    { href: "/templates", label: labels.templates, icon: FileText },
+    // TEMPLATES OPENS rather than navigates — the second rail item to do so,
+    // for the same reason Work does: it holds four different lists and none of
+    // them is the obvious default. Landing somebody on Engagement templates
+    // when they came to edit a service is a scroll to undo.
+    //
+    // Canopy's own Templates panel is what this mirrors, and it is a plain row
+    // list — no button strip. Its eleven rows are eleven template TYPES; ours
+    // are four, because four is how many Vylan actually has. Canopy's other
+    // seven (Folder, Email, Letter, eSign, Client Record, Boilerplate Letter
+    // Text, Client Portal Invitation, Resolution Case) have no counterpart
+    // here, and a row that opens nothing is worse than a shorter list.
+    //
+    // THE NAMES ARE CANOPY'S WHERE THE CONCEPT MATCHES. Canopy calls a priced
+    // line an "Engagement Item" and a document ask a "Client Request"; Vylan
+    // called them Service and Document request. Where the founder is
+    // replicating Canopy, the word should be Canopy's — but renaming the
+    // SECTIONS is a visible change to a page they use, so the panel uses the
+    // page's own headings for now and the rename is noted for them to call.
+    {
+      href: "/templates",
+      label: labels.templates,
+      icon: FileText,
+      panel: {
+        title: labels.templates,
+        // Ordered biggest-to-smallest, matching the page itself: a whole job,
+        // then the steps inside one, then the two building blocks.
+        items: [
+          {
+            href: "/templates#engagement-templates",
+            label: tHome("templates_engagement"),
+            description: tHome("templates_engagement_hint"),
+          },
+          {
+            href: "/templates#task-templates",
+            label: tHome("templates_task"),
+            description: tHome("templates_task_hint"),
+          },
+          {
+            href: "/templates#document-requests",
+            label: tHome("templates_request"),
+            description: tHome("templates_request_hint"),
+          },
+          {
+            href: "/templates#services",
+            label: tHome("templates_service"),
+            description: tHome("templates_service_hint"),
+          },
+        ],
+      },
+    },
     // Files — every client document in one place, plus the filing settings that
     // decide where copies land in the firm's cloud storage.
     { href: "/files", label: labels.files, icon: FolderOpen },

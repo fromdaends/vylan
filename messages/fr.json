@@ -1549,7 +1549,15 @@
     "create_template": "Modèle de demande de documents",
     "create_template_hint": "Enregistrez un ensemble de demandes de documents réutilisable pour chaque client.",
     "create_service": "Modèle de service",
-    "create_service_hint": "Enregistrez ce que vous vendez, avec son prix, pour cesser de le retaper."
+    "create_service_hint": "Enregistrez ce que vous vendez, avec son prix, pour cesser de le retaper.",
+    "templates_engagement": "Mandat",
+    "templates_engagement_hint": "Un mandat complet enregistré pour être réutilisé — sa portée, ses tarifs et ce que vous demandez au client.",
+    "templates_task": "Tâches",
+    "templates_task_hint": "Les étapes d'un travail, ajoutées à n'importe quel mandat.",
+    "templates_request": "Demande au client",
+    "templates_request_hint": "Une liste de ce que le client doit vous envoyer.",
+    "templates_service": "Service",
+    "templates_service_hint": "Une ligne tarifée que votre cabinet vend."
   },
   "Dashboard": {
     "greeting_morning": "Bonjour",
@@ -2678,6 +2686,8 @@
     "task_assignee_none": "Non assignée",
     "task_documents_count": "Documents demandés",
     "task_seed_documents": "Collecte de documents",
+    "apply_task_template": "Appliquer un modèle de tâches",
+    "task_template_downgraded": "Un mandat ne peut avoir qu'une seule demande de documents, une seule étape de signature et un seul ensemble de livrables. Celles-ci sont ajoutées comme tâches ordinaires : {titles}",
     "wizard_step_billing": "Facturation et paiement",
     "wizard_step_reminders": "Rappels",
     "wizard_back": "Retour",
