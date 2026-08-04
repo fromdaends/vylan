@@ -15,6 +15,7 @@ import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { can } from "@/lib/auth/capabilities";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
+import { listTaskTemplates } from "@/lib/db/task-templates";
 
 /**
  * The new-engagement screen, rendered by BOTH entry points:
@@ -55,6 +56,7 @@ export default async function NewEngagementPage({
     firmRelationships,
     services,
     engagementTemplates,
+    taskTemplates,
     members,
   ] =
     await Promise.all([
@@ -69,6 +71,9 @@ export default async function NewEngagementPage({
       // Saved whole-engagement templates (migration 1500). Empty before it is
       // applied, which makes the start chooser skip itself.
       listEngagementTemplates(),
+      // Saved sets of tasks (migration 1570), for the Tasks step's picker.
+      // Empty before it is applied, which hides the picker.
+      listTaskTemplates(),
       // Who the work can be handed to at creation. The save path has accepted
       // assigned_user_id since 0001 — the form simply never offered it, which
       // is why assigning was always a SECOND step after creating.
@@ -136,6 +141,14 @@ export default async function NewEngagementPage({
           name: x.name,
           access: x.access,
           payload: x.payload,
+        }))}
+        // Saved sets of tasks (1570). Without this the Tasks step's template
+        // picker never appears — the exact class of never-wired prop that
+        // shipped three inert features on this page before.
+        taskTemplates={taskTemplates.map((x) => ({
+          id: x.id,
+          name: x.name,
+          tasks: x.payload.tasks,
         }))}
         // Active firm members, for the assignee picker.
         members={members

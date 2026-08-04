@@ -2686,6 +2686,8 @@
     "task_assignee_none": "Unassigned",
     "task_documents_count": "Documents requested",
     "task_seed_documents": "Collect documents",
+    "apply_task_template": "Apply a task template",
+    "task_template_downgraded": "An engagement can only have one document request, one signature step and one set of deliverables. These came in as ordinary tasks: {titles}",
     "wizard_step_billing": "Billing and payment",
     "wizard_step_reminders": "Reminders",
     "wizard_back": "Back",

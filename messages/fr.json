@@ -2686,6 +2686,8 @@
     "task_assignee_none": "Non assignée",
     "task_documents_count": "Documents demandés",
     "task_seed_documents": "Collecte de documents",
+    "apply_task_template": "Appliquer un modèle de tâches",
+    "task_template_downgraded": "Un mandat ne peut avoir qu'une seule demande de documents, une seule étape de signature et un seul ensemble de livrables. Celles-ci sont ajoutées comme tâches ordinaires : {titles}",
     "wizard_step_billing": "Facturation et paiement",
     "wizard_step_reminders": "Rappels",
     "wizard_back": "Retour",

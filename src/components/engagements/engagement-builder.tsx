@@ -64,6 +64,7 @@ import {
   meaningfulTasks,
   availableKinds,
   documentCollectionIndex,
+  appendTemplateTasks,
   type TaskDraft,
 } from "@/lib/engagements/task-drafts";
 import { taskKindLabelKey } from "@/lib/tasks/kinds";
@@ -184,6 +185,7 @@ export function EngagementBuilder({
   servicePrices = {},
   services = [],
   engagementTemplates = [],
+  taskTemplates = [],
   members = [],
   connectReady = false,
   invoiceDefaultMode = "off",
@@ -221,6 +223,13 @@ export function EngagementBuilder({
   /** Active firm members, for the assignee picker. Empty in a solo firm, which
    *  hides the control entirely — there is nobody else to hand it to. */
   members?: { id: string; name: string }[];
+  /** Saved sets of tasks (migration 1570). Empty before it is applied, which
+   *  hides the picker entirely — there is nothing to pick. */
+  taskTemplates?: {
+    id: string;
+    name: string;
+    tasks: { title: string; kind: TaskKind }[];
+  }[];
   /** Saved whole-engagement templates (migration 1500). */
   engagementTemplates?: {
     id: string;
@@ -412,6 +421,16 @@ export function EngagementBuilder({
   }
   function removeTask(idx: number) {
     setTasks((prev) => prev.filter((_, i) => i !== idx));
+  }
+  // Which rows a just-applied template had to change, so the step can say so.
+  // Cleared on the next apply — it describes ONE action, not a running tally.
+  const [downgradedTasks, setDowngradedTasks] = useState<string[]>([]);
+  function applyTaskTemplate(id: string) {
+    const tpl = taskTemplates.find((x) => x.id === id);
+    if (!tpl) return;
+    const res = appendTemplateTasks(tasks, tpl.tasks);
+    setTasks(res.tasks);
+    setDowngradedTasks(res.downgraded);
   }
   function moveTask(idx: number, delta: number) {
     setTasks((prev) => {
@@ -1212,12 +1231,49 @@ export function EngagementBuilder({
                 ({tasks.length})
               </span>
             </CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={addTask}>
-              <Plus className="size-4" />
-              {t("add_task")}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Hidden when the firm has none — a dropdown whose only entry is
+                  its own placeholder is a control that does nothing. */}
+              {taskTemplates.length > 0 && (
+                <select
+                  // Reset to "" after every apply, so applying the SAME template
+                  // twice works. A <select> whose value already equals the
+                  // chosen option fires no change event, which would read as
+                  // the second click doing nothing.
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) applyTaskTemplate(e.target.value);
+                  }}
+                  aria-label={t("apply_task_template")}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  <option value="">{t("apply_task_template")}</option>
+                  {taskTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={addTask}>
+                <Plus className="size-4" />
+                {t("add_task")}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
+            {/* Says what the template could not bring across, rather than
+                letting a row quietly arrive as the wrong kind. An engagement
+                holds one document request, one signature step and one set of
+                deliverables (1370), so a template carrying a second lands as a
+                plain task — visible, and one dropdown away from being fixed. */}
+            {downgradedTasks.length > 0 && (
+              <p className="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {t("task_template_downgraded", {
+                  titles: downgradedTasks.join(", "),
+                })}
+              </p>
+            )}
             {tasks.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 {t("tasks_empty")}
