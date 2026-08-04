@@ -36,7 +36,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { Check, ExternalLink, Minus, UserPlus } from "lucide-react";
+import { Check, ExternalLink, UserPlus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { SubtaskList } from "@/components/engagements/subtask-list";
 
 type TaskStatus = "todo" | "doing" | "done";
 type TaskPriority = "none" | "low" | "medium" | "high";
@@ -78,6 +79,15 @@ export type DetailTask = {
   notes?: string | null;
   dueDate?: string | null;
   meta?: string;
+  /** The steps inside this task (1430). Empty for a task with none. */
+  subtasks?: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    statusId?: string | null;
+    assigneeIds: string[];
+    dueDate?: string | null;
+  }[];
 };
 
 const PRIORITIES: TaskPriority[] = ["none", "low", "medium", "high"];
@@ -166,10 +176,6 @@ function DetailBody({
   onPatch: TaskDetailPanelPatch;
 }) {
   const t = useTranslations("Engagements");
-  // The three status words already exist under Clients, in both locales, with
-  // exactly this meaning. Reused rather than copied — two namespaces holding
-  // the same string is how one of them ends up stale.
-  const tStatus = useTranslations("Clients");
 
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
@@ -356,6 +362,19 @@ function DetailBody({
                   className="w-full"
                 />
               </Field>
+
+              {/* The steps inside this task. In the PANEL, not the table: a
+                  task list is scanned, and nesting rows in it means sorting by
+                  due date shuffles children away from their parents. */}
+              <SubtaskList
+                parentId={task.id}
+                parentClientId={task.clientId}
+                parentEngagementId={task.engagementId}
+                subtasks={task.subtasks ?? []}
+                members={members}
+                statuses={statuses}
+                canEdit={canEdit}
+              />
 
               <Field label={t("task_notes")}>
                 <Textarea

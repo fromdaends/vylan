@@ -94,6 +94,9 @@ export async function addTaskAction(input: {
   dueDate?: string | null;
   priority?: TaskPriority;
   assigneeIds?: string[];
+  /** Makes this a SUBTASK. The client and job are copied FROM the parent by a
+   *  database trigger, so they cannot be set to something else from here. */
+  parentId?: string | null;
 }): Promise<TaskActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -123,6 +126,7 @@ export async function addTaskAction(input: {
       dueDate,
       priority: input.priority ?? "none",
       assigneeIds: input.assigneeIds,
+      parentId: input.parentId ?? null,
       createdBy: g.user.id,
       orderIndex: existing.length,
     });
