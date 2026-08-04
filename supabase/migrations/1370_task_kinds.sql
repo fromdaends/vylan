@@ -78,7 +78,14 @@ create unique index if not exists engagement_tasks_one_per_kind_idx
 insert into public.engagement_tasks
   (engagement_id, client_id, firm_id, title, kind, status, order_index)
 select e.id, e.client_id, e.firm_id, 'Document collection', 'document_collection',
-       case
+       -- ⚠️ THE CAST IS LOAD-BEARING. status is engagement_task_status (an enum,
+       -- from 1340), and a CASE resolves to TEXT — which Postgres will not
+       -- implicitly coerce into an enum column. Without it the whole migration
+       -- aborts on this statement with 42804. A bare literal like 'doing' below
+       -- gets away with it because an untyped literal is `unknown` and coerces
+       -- fine; a CASE does not. Found by running it against the real database,
+       -- which is the only place this repo's SQL ever runs before production.
+       (case
          -- Already finished collecting: mark it done rather than leaving a
          -- completed job showing an open task. 'complete' and 'cancelled' are
          -- the two terminal values of engagement_status — checked against the
@@ -87,7 +94,7 @@ select e.id, e.client_id, e.firm_id, 'Document collection', 'document_collection
          -- in progress.
          when e.status in ('complete', 'cancelled') then 'done'
          else 'doing'
-       end,
+       end)::engagement_task_status,
        0
   from public.engagements e
  where not exists (
@@ -99,7 +106,8 @@ on conflict do nothing;
 -- Signatures: only where signature items exist.
 insert into public.engagement_tasks
   (engagement_id, client_id, firm_id, title, kind, status, order_index)
-select e.id, e.client_id, e.firm_id, 'Signatures', 'signatures', 'doing', 1
+select e.id, e.client_id, e.firm_id, 'Signatures', 'signatures',
+       'doing'::engagement_task_status, 1
   from public.engagements e
  where exists (
    select 1 from public.request_items ri
@@ -114,7 +122,8 @@ on conflict do nothing;
 -- Deliverables: only where something has actually been delivered.
 insert into public.engagement_tasks
   (engagement_id, client_id, firm_id, title, kind, status, order_index)
-select e.id, e.client_id, e.firm_id, 'Deliverables', 'deliverables', 'doing', 2
+select e.id, e.client_id, e.firm_id, 'Deliverables', 'deliverables',
+       'doing'::engagement_task_status, 2
   from public.engagements e
  where exists (
    select 1 from public.final_documents fd where fd.engagement_id = e.id
