@@ -54,9 +54,14 @@ export async function renderEngagementsView({
           {t(viewTitleKey(view))}
         </h1>
         {/* Primary action: start a new engagement straight from the list,
-            instead of routing through Templates. Same control as the dashboard
-            header. */}
-        <Button asChild className="shrink-0 self-start sm:self-auto">
+            instead of routing through Templates. VYLAN'S BLUE (--accent), the
+            same one "+ Add task" now uses — the product should have one
+            call-to-action colour, not a navy on this page and a blue on that. */}
+        <Button
+          asChild
+          variant="accent"
+          className="shrink-0 self-start sm:self-auto"
+        >
           <Link href="/engagements/new">
             <Plus className="h-4 w-4" />
             {t("new")}

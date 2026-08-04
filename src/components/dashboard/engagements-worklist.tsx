@@ -904,7 +904,7 @@ function WorklistRowView({
                     aria-valuemax={100}
                     aria-label={pctLabel(pct)}
                   >
-                    {/* Solid = approved; dim = submitted, awaiting review. */}
+                    {/* Solid = tasks DONE; dim = tasks under way (#1239). */}
                     <div
                       className="h-full bg-primary transition-all"
                       style={{ width: `${pct}%` }}
@@ -914,8 +914,15 @@ function WorklistRowView({
                       style={{ width: `${awaitingPctValue}%` }}
                     />
                   </div>
+                  {/* The COUNT, not just a share. The bar now measures tasks
+                      (#1239), and "2 of 5" says what a percentage cannot: how
+                      much work is actually left. It also makes this column
+                      speak the same language as the Tasks page, where every
+                      parent row carries the same figure. */}
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {pct}%
+                    {row.tasksTotal > 0
+                      ? `${row.tasksDone}/${row.tasksTotal}`
+                      : `${pct}%`}
                   </span>
                 </div>
               )}
