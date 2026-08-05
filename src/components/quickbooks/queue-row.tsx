@@ -120,12 +120,12 @@ export async function QueueRow({
       </td>
 
       {/* 4. Amount, right-aligned and tabular so the column reads as money. */}
-      <td className="py-2 pr-3 text-right align-middle text-sm font-medium tabular-nums text-foreground">
+      <td className="w-[88px] py-2 pr-3 text-right align-middle text-sm font-medium tabular-nums text-foreground">
         {amountLabel}
       </td>
 
       {/* 5. Status pill. */}
-      <td className="py-2 pr-3 align-middle">
+      <td className="w-[126px] py-2 pr-3 align-middle">
         <span
           className={cn(
             "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -143,7 +143,7 @@ export async function QueueRow({
              is a lot of shouting on a long queue; now they surface on hover
              (and on keyboard focus). Always visible on touch, where there is
              no hover to reveal them. */}
-      <td className="py-2 pr-2 align-middle">
+      <td className="w-[82px] py-2 pr-2 align-middle">
         <div className="flex items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
           <DraftStatusControls
             fileId={row.fileId}

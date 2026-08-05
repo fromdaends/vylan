@@ -219,10 +219,10 @@ export function ReceiptGaps(props: {
                     }
                   />
                 </th>
-                <th className="py-2 font-medium">{t("gaps_col_date")}</th>
+                <th className="w-12 py-2 font-medium">{t("gaps_col_date")}</th>
                 <th className="py-2 font-medium">{t("gaps_col_supplier")}</th>
                 <th className="py-2 font-medium">{t("gaps_col_account")}</th>
-                <th className="py-2 text-right font-medium">
+                <th className="w-[88px] py-2 text-right font-medium">
                   {t("gaps_col_amount")}
                 </th>
               </tr>

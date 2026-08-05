@@ -260,15 +260,17 @@ export function DraftsQueue({
                   sort={sort}
                   onSort={toggleSort}
                   align="right"
+                  className="w-[88px]"
                 />
                 <SortHeader
                   label={t("queue_col_status")}
                   sortKey="status"
                   sort={sort}
                   onSort={toggleSort}
+                  className="w-[126px]"
                 />
                 {/* Hover actions + the expand chevron. */}
-                <th scope="col" className="pb-2" />
+                <th scope="col" className="w-[82px] pb-2" />
                 <th scope="col" className="w-9 pb-2 pr-2" />
               </tr>
             </thead>

@@ -320,13 +320,13 @@ export function UncategorizedList(props: {
                     }
                   />
                 </th>
-                <th className="py-2 font-medium">{t("gaps_col_date")}</th>
+                <th className="w-12 py-2 font-medium">{t("gaps_col_date")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_what")}</th>
                 <th className="py-2 font-medium">{t("uncat_col_parked")}</th>
                 {/* pr-4 on the amount, because it is right-aligned and the
                     next heading is left-aligned: with no gap between them the
                     two run together and the header reads "AMOUNTCATEGORY". */}
-                <th className="py-2 pr-4 text-right font-medium">
+                <th className="w-[88px] py-2 pr-4 text-right font-medium">
                   {t("gaps_col_amount")}
                 </th>
                 <th className="py-2 font-medium">{t("uncat_col_category")}</th>
