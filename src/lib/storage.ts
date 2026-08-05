@@ -170,6 +170,21 @@ export function signingDocPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/signing/${parts.uuid}-${safeName}`;
 }
 
+// The firm's ENGAGEMENT LETTER (migration 1580) — firm-level, not engagement
+// level: one file per language, set up once and sent by every automation that
+// asks for it. Sits beside branding for the same reason (firm-owned config),
+// and keeps the uuid so replacing a letter writes a new object rather than
+// overwriting one that in-flight signature requests may still be reading.
+export function engagementLetterPath(parts: {
+  firmId: string;
+  locale: "en" | "fr";
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = safeStorageName(parts.filename);
+  return `firms/${parts.firmId}/letters/${parts.locale}/${parts.uuid}-${safeName}`;
+}
+
 // The completed, signed PDF (with SignWell's audit page) returned after the
 // client signs. Keyed by the SignWell document id so re-processing the same
 // document overwrites the same object (idempotent upsert).

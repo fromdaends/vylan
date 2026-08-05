@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth-user";
 import { setAllFilesReviewForItem } from "./file-review";
@@ -173,6 +174,18 @@ export type NewSignatureItemInput = {
   signing_doc_path: string;
   signing_doc_name: string;
   signing_doc_mime: string;
+  /**
+   * Write with this client instead of the caller's session (1580).
+   *
+   * The automated engagement letter is created by the workflow engine, which
+   * runs from webhooks and stage syncs where no accountant session exists —
+   * so it passes the service-role client. A PARAMETER rather than a second
+   * copy of this function: two ways to create a signature item is exactly how
+   * the two drift, and this one already owns the order_index rule.
+   *
+   * The engagement id always comes from trusted server state on that path.
+   */
+  sb?: SupabaseClient;
 };
 
 // Create a SIGNATURE item: the accountant supplies a document and the client
@@ -188,7 +201,7 @@ export type NewSignatureItemInput = {
 export async function addSignatureItemToEngagement(
   input: NewSignatureItemInput,
 ): Promise<RequestItem> {
-  const supabase = await getServerSupabase();
+  const supabase = input.sb ?? (await getServerSupabase());
   const { data: last } = await supabase
     .from("request_items")
     .select("order_index")

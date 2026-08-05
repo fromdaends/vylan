@@ -279,10 +279,34 @@ async function loadWorkflowFacts(
   // expired) did — which is what signature_request_sent asks about.
   const NOT_SENT = new Set(["pending", "canceled", "error"]);
 
+  // ⚠️ THE ENGAGEMENT LETTER IS NOT "THE RETURN WENT OUT FOR SIGNATURE".
+  //
+  // The return flow sends the letter on entering COLLECTING and later leaves
+  // in_preparation on `signature_request_sent`. Counting every signature
+  // request would let the letter — sent days earlier, while documents were
+  // still arriving — satisfy that condition the instant preparation began,
+  // skipping the whole stage. The legacy resolver carries the same warning
+  // about authorizations for exactly this reason.
+  //
+  // letter_key is non-null ONLY on an automated engagement letter (1580), so
+  // excluding those rows asks the honest question. Queried separately and
+  // tolerantly: on a pre-1580 database the column is absent, the query
+  // errors, and we fall back to counting every request — today's behaviour,
+  // and a firm without 1580 has no automated letters to confuse it with.
+  let sentRows: { status: string }[] = raws.sigs;
+  {
+    const { data, error } = await sb
+      .from("signature_requests")
+      .select("status")
+      .eq("engagement_id", row.id)
+      .is("letter_key", null);
+    if (!error) sentRows = (data ?? []) as { status: string }[];
+  }
+
   return {
     ...base,
     gates: parseStageGates(row.stage_gates),
-    signatureEverSent: raws.sigs.some((s) => !NOT_SENT.has(s.status)),
+    signatureEverSent: sentRows.some((s) => !NOT_SENT.has(s.status)),
     completedSignatureCount: raws.sigs.filter((s) => s.status === "completed")
       .length,
     signatureItemsUnsettled: raws.items.filter(
