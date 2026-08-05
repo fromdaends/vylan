@@ -461,16 +461,33 @@ export function EngagementBuilder({
 
   // What the work CONSISTS OF (1370's engagement_tasks).
   //
-  // Seeded with a document-collection row rather than an empty list, because
-  // that is what every engagement in Vylan did before this step existed: it
-  // always had a checklist. Starting empty would have silently removed the
-  // client-facing half of engagement creation for anyone who didn't discover
-  // that they now had to add a row for it. It is an ordinary row — retitle it,
-  // change its kind, or delete it.
+  // ── STARTS EMPTY ────────────────────────────────────────────────────────
+  //
+  // The founder: "everytime you create an engagement automatically on the tasks
+  // tab it already has document request pre selected. IT SHOULDNT. It should
+  // just be empty (for engagements starting from scratch obviously)."
+  //
+  // It used to seed a document-collection row on every engagement, on the
+  // reasoning that every engagement in Vylan had a checklist before this step
+  // existed. That reasoning aged out: an engagement is a proposal now, and
+  // plenty of them ask the client for nothing at all. A row nobody asked for is
+  // a row somebody has to notice and delete.
+  //
+  // A TEMPLATE still brings whatever it carries — that is the whole point of
+  // picking one, and the founder's "obviously" is doing that work in their
+  // sentence.
   const [tasks, setTasks] = useState<TaskDraft[]>(() => {
-    const seed: TaskDraft[] = [
-      { ...emptyTask("document_collection"), title: t("task_seed_documents") },
-    ];
+    let next: TaskDraft[] = [];
+
+    // A template that asks the client for documents needs somewhere to put
+    // them: the checklist hangs off a document-collection task. Added only
+    // when the template actually carries requests, never speculatively.
+    if ((initialEngagementTemplate?.payload.checklist.length ?? 0) > 0) {
+      next = [
+        { ...emptyTask("document_collection"), title: t("task_seed_documents") },
+      ];
+    }
+
     // ── THE TEMPLATE'S WORK ─────────────────────────────────────────────
     //
     // An engagement built from a template used to arrive with the priced lines
@@ -482,7 +499,6 @@ export function EngagementBuilder({
     // called setTasks would render the empty list first and correct it a frame
     // later, which reads as the page losing your work. React Compiler rejects
     // it too.
-    let next = seed;
     for (const id of initialEngagementTemplate?.payload.taskTemplateIds ?? []) {
       const tt = taskTemplates.find((x) => x.id === id);
       if (!tt) continue; // A deleted template simply produces no tasks.
@@ -1509,6 +1525,32 @@ export function EngagementBuilder({
                     </option>
                   ))}
                 </select>
+              )}
+              {/* An OFFER, not a row. The list starts empty now (founder:
+                  "IT SHOULDNT. It should just be empty"), and the documents
+                  section only exists while a document-collection task does — so
+                  without this, a from-scratch engagement has no visible way to
+                  ask the client for anything, and "Create and send" refuses
+                  with "no documents" and no path out. Disappears the moment
+                  such a task exists. */}
+              {docTaskIndex === -1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setTasks((prev) => [
+                      ...prev,
+                      {
+                        ...emptyTask("document_collection"),
+                        title: t("task_seed_documents"),
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="size-4" />
+                  {t("add_document_request_task")}
+                </Button>
               )}
               <Button type="button" variant="outline" size="sm" onClick={addTask}>
                 <Plus className="size-4" />

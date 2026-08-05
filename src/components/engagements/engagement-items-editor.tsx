@@ -18,6 +18,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -187,7 +188,20 @@ export function EngagementItemsEditor({
                   </div>
 
 
-                  {services.length > 0 && (
+                  {services.length === 0 ? (
+                    // An empty catalogue used to render NOTHING here, so the
+                    // link looked like a missing feature rather than an empty
+                    // cupboard. Say it, and say where to fill it.
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {t("item_service_empty")}{" "}
+                      <Link
+                        href="/templates/services/new"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        {t("item_service_empty_link")}
+                      </Link>
+                    </p>
+                  ) : (
                     <div>
                       <Label htmlFor={`item-service-${idx}`} className="text-xs">
                         {t("item_service")}
