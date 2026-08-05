@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { listFirmServices } from "@/lib/db/firm-services";
+import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { EngagementTemplateBuilder } from "@/components/templates/engagement-template-builder";
 
@@ -25,17 +26,23 @@ export default async function NewEngagementTemplatePage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [services, firm] = await Promise.all([
+  const [services, firm, members] = await Promise.all([
     // The firm's service catalogue (1480). Empty before it is applied, which
     // the items editor treats as an ordinary state.
     listFirmServices(),
     getCurrentFirm(),
+    // Who an engagement from this template lands on. Empty in a solo firm,
+    // which hides the picker — there is nobody else to hand it to.
+    listFirmUsers(),
   ]);
 
   return (
     <EngagementTemplateBuilder
       locale={locale}
       services={services}
+      members={members
+        .filter((m) => !m.deactivated_at)
+        .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
       fallbackTaxPct={
         (firm as { default_tax_pct?: number | null } | null)?.default_tax_pct ??
         null

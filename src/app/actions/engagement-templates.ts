@@ -50,6 +50,22 @@ const PayloadSchema = z.object({
   periodStartsOn: z.enum(["acceptance", "custom"]).optional(),
   periodMonths: z.number().int().min(1).max(120).nullable().optional(),
   introMessage: z.string().trim().max(5000).optional(),
+  isDraft: z.boolean().optional(),
+  // Canopy's three Introduction rows.
+  welcomeEnabled: z.boolean().optional(),
+  videoEnabled: z.boolean().optional(),
+  videoUrl: z.string().trim().max(500).optional(),
+  documentEnabled: z.boolean().optional(),
+  documentName: z.string().trim().max(300).optional(),
+  assigneeIds: z.array(z.string()).max(20).optional(),
+  // Terms.
+  termsEnabled: z.boolean().optional(),
+  termsText: z.string().trim().max(20000).optional(),
+  // Signatures. A template names ROLES, not people — see the payload reader.
+  clientSigns: z.boolean().optional(),
+  additionalSignerLabels: z.array(z.string().trim().max(120)).max(10).optional(),
+  firmCountersigns: z.boolean().optional(),
+  depositCents: z.number().int().min(0).max(99_999_999).nullable().optional(),
   items: z.array(ItemSchema).max(50).optional(),
   checklist: z.array(ChecklistSchema).max(200).optional(),
   invoice: OpaqueSchema,
@@ -61,6 +77,16 @@ const SaveSchema = z.object({
   name: z.string().trim().min(1).max(200),
   access: z.enum(["team", "private"]),
   payload: PayloadSchema,
+  /**
+   * Canopy's "Save draft" — store incomplete work.
+   *
+   * Skips the worth-saving check, which exists to stop an EMPTY finished
+   * template sitting in the picker forever. A draft is allowed to be empty;
+   * being half-written is the whole point. It still needs a name, because a
+   * draft you cannot find again is not saved in any useful sense — and the
+   * schema above already requires one.
+   */
+  allowIncomplete: z.boolean().optional(),
 });
 
 type Result = {
@@ -82,7 +108,9 @@ export async function saveEngagementAsTemplateAction(
   // exactly what will come back out. Storing the raw post instead would let a
   // template save fields that silently vanish on load.
   const payload = readPayload(parsed.data.payload);
-  if (!isWorthSaving(payload)) return { ok: false, error: "empty" };
+  if (!parsed.data.allowIncomplete && !isWorthSaving(payload)) {
+    return { ok: false, error: "empty" };
+  }
 
   const res = await createEngagementTemplate({
     name: parsed.data.name,

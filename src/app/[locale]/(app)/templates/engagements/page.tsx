@@ -89,7 +89,13 @@ export default async function EngagementTemplatesPage({
                     : it.label_en || it.label_fr,
                 )}
               badge={
-                tmpl.access === "private" ? (
+                // A DRAFT is called out first: reaching for a half-written
+                // template is the mistake this badge exists to prevent.
+                tmpl.payload.isDraft ? (
+                  <span className="shrink-0 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                    {t("draft_badge")}
+                  </span>
+                ) : tmpl.access === "private" ? (
                   <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {t("access_private")}
                   </span>

@@ -218,3 +218,143 @@ describe("readPayload — Canopy's engagement period", () => {
     expect(readPayload({ introMessage: 42 }).introMessage).toBe("");
   });
 });
+
+describe("readPayload — Canopy's Introduction rows", () => {
+  it("all three toggles default off", () => {
+    const p = readPayload({});
+    expect(p.welcomeEnabled).toBe(false);
+    expect(p.videoEnabled).toBe(false);
+    expect(p.documentEnabled).toBe(false);
+  });
+
+  it("only literal true turns a row on", () => {
+    expect(readPayload({ videoEnabled: "true" }).videoEnabled).toBe(false);
+    expect(readPayload({ videoEnabled: 1 }).videoEnabled).toBe(false);
+    expect(readPayload({ videoEnabled: true }).videoEnabled).toBe(true);
+  });
+
+  it("keeps the video link even while the row is off", () => {
+    // Turning a row off must not lose what you already pasted — that is the
+    // difference between a toggle and a delete.
+    const p = readPayload({ videoEnabled: false, videoUrl: "https://vimeo/1" });
+    expect(p.videoEnabled).toBe(false);
+    expect(p.videoUrl).toBe("https://vimeo/1");
+  });
+
+  it("treats a non-string link as absent", () => {
+    expect(readPayload({ videoUrl: 42 }).videoUrl).toBe("");
+  });
+});
+
+describe("readPayload — assignees", () => {
+  it("defaults to nobody", () => {
+    expect(readPayload({}).assigneeIds).toEqual([]);
+  });
+
+  it("keeps order and drops duplicates", () => {
+    expect(readPayload({ assigneeIds: ["a", "b", "a"] }).assigneeIds).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("drops non-strings and blanks rather than writing them to a uuid column", () => {
+    expect(
+      readPayload({ assigneeIds: ["a", 7, null, "", "b"] }).assigneeIds,
+    ).toEqual(["a", "b"]);
+  });
+
+  it("survives assigneeIds not being an array", () => {
+    expect(readPayload({ assigneeIds: "nope" }).assigneeIds).toEqual([]);
+  });
+});
+
+describe("readPayload — Terms and Signatures", () => {
+  it("terms default off and empty", () => {
+    const p = readPayload({});
+    expect(p.termsEnabled).toBe(false);
+    expect(p.termsText).toBe("");
+  });
+
+  it("keeps the terms text with the toggle off", () => {
+    const p = readPayload({ termsEnabled: false, termsText: "Our terms" });
+    expect(p.termsText).toBe("Our terms");
+  });
+
+  it("deposit defaults to not required and not set", () => {
+    const p = readPayload({});
+    expect(p.depositRequired).toBe(false);
+    expect(p.depositCents).toBeNull();
+  });
+
+  it("keeps whole cents", () => {
+    expect(readPayload({ depositCents: 50000 }).depositCents).toBe(50000);
+  });
+
+  it("null is NOT zero — a deposit of nothing is not a deposit of $0", () => {
+    expect(readPayload({}).depositCents).toBeNull();
+    expect(readPayload({ depositCents: 0 }).depositCents).toBe(0);
+  });
+
+  it("refuses fractional, negative and stringified cents", () => {
+    expect(readPayload({ depositCents: 10.5 }).depositCents).toBeNull();
+    expect(readPayload({ depositCents: -100 }).depositCents).toBeNull();
+    expect(readPayload({ depositCents: "5000" }).depositCents).toBeNull();
+  });
+});
+
+describe("readPayload — the draft flag", () => {
+  it("defaults to finished, not draft", () => {
+    expect(readPayload({}).isDraft).toBe(false);
+  });
+
+  it("only literal true is a draft", () => {
+    // The safe direction: a draft treated as finished is one somebody sends to
+    // a client half-written.
+    expect(readPayload({ isDraft: "true" }).isDraft).toBe(false);
+    expect(readPayload({ isDraft: 1 }).isDraft).toBe(false);
+    expect(readPayload({ isDraft: true }).isDraft).toBe(true);
+  });
+});
+
+describe("readPayload — who signs", () => {
+  it("the client signs by default, including on templates written before the field existed", () => {
+    // The safe direction: an engagement letter nobody signs would only be
+    // discovered once the paperwork was already out.
+    expect(readPayload({}).clientSigns).toBe(true);
+    expect(readPayload({ title: "x" }).clientSigns).toBe(true);
+  });
+
+  it("only literal false turns the client's signature off", () => {
+    expect(readPayload({ clientSigns: false }).clientSigns).toBe(false);
+    expect(readPayload({ clientSigns: "false" }).clientSigns).toBe(true);
+    expect(readPayload({ clientSigns: 0 }).clientSigns).toBe(true);
+  });
+
+  it("keeps extra signer slots as labels, trimmed", () => {
+    const p = readPayload({ additionalSignerLabels: ["  Spouse  ", "Director"] });
+    expect(p.additionalSignerLabels).toEqual(["Spouse", "Director"]);
+  });
+
+  it("drops blank and non-string slots", () => {
+    const p = readPayload({ additionalSignerLabels: ["Spouse", "  ", 7, null] });
+    expect(p.additionalSignerLabels).toEqual(["Spouse"]);
+  });
+
+  it("caps the slots rather than storing an unbounded list", () => {
+    const many = Array.from({ length: 25 }, (_, i) => `Signer ${i}`);
+    expect(readPayload({ additionalSignerLabels: many }).additionalSignerLabels)
+      .toHaveLength(10);
+  });
+
+  it("survives the slots not being an array", () => {
+    expect(readPayload({ additionalSignerLabels: "nope" }).additionalSignerLabels)
+      .toEqual([]);
+  });
+
+  it("the firm does not counter-sign unless it says so", () => {
+    expect(readPayload({}).firmCountersigns).toBe(false);
+    expect(readPayload({ firmCountersigns: true }).firmCountersigns).toBe(true);
+    expect(readPayload({ firmCountersigns: "yes" }).firmCountersigns).toBe(false);
+  });
+});
