@@ -50,6 +50,14 @@ none — see `feedback_keep-roadmap-artifact-live`.
 | 12 | **A task template carries its client request** | #1347 | Per A2: copied at edit time, not referenced |
 | 13 | **One Templates page per type** | #1350 | `/templates` redirects; the sidebar is the divider |
 | 14 | **Task templates take Canopy's parent shape** | #1351 | One parent + steps, not N siblings |
+| 15 | **Every engagement is a proposal** | 1660 | Not only template-derived ones — the founder's call |
+| 16 | **Client-facing proposal viewer** | 1640 / 1650 | Accept marks it active and starts the work |
+| 17 | **ONE builder chrome for every template type** | — | `TemplateBuilderShell`: title bar, tabs, preview, Back/Next |
+| 18 | **Task templates get their own route** | — | `/templates/tasks/new` + `/<id>`; the inline card is gone |
+| 19 | **Services get their own route** | — | `/templates/services/new` + `/<id>`; the modal dialog is gone |
+| 20 | **A template carries the work its services imply** | — | `taskTemplateIds` on the payload; the engagement seeds its tasks from it |
+| 21 | **The proposal shows what each service buys** | — | The task steps under the priced line |
+| 22 | **Engagement creation gets a Proposal step** | — | Terms, period, signers and deposit are editable per engagement |
 
 ---
 
@@ -127,10 +135,9 @@ be unlinked exactly once. Vylan has recurring ENGAGEMENTS (0770/0890) but
 nothing equivalent on tasks. **Do not build against the beta article without
 asking** — a beta is a moving target.
 
-### 6. Standalone task-template editing
-Today a task template can be created and removed but not EDITED. Canopy's A2
-flow starts with *Options icon → Edit* on an existing task template. Until that
-exists, changing one means deleting and rebuilding it.
+### 6. ~~Standalone task-template editing~~ — SHIPPED
+`/templates/tasks/<id>` is the same builder that creates one, seeded. Clicking a
+row opens it, which is the founder's rule: viewing and editing are one thing.
 
 ### 7. Recurrence on task templates
 A3 documents a recurrence scheduler (beta). Not started; confirm it is wanted
@@ -155,6 +162,28 @@ Folder, Email, Letter, eSign, Client Record, Boilerplate Letter Text, Client
 Portal Invitation, Resolution Case — have no counterpart, and a row that opens
 nothing is worse than a shorter list. Revisit only when the underlying feature
 exists.
+
+---
+
+## The one builder NOT converted — stated out loud
+
+The founder: "ALL THE UIS FOR BUILDING EVERYTHING TEMPLATES SHOULD ALL BE THE
+SAME. STOP BUILDING INCONSISTENT THINGS."
+
+Three of the four now share `TemplateBuilderShell` — engagement templates, task
+templates and services. The **document-request template detail page**
+(`template-detail-shell.tsx`) does NOT, and that is a deliberate hold rather
+than an oversight:
+
+- Its layout is the founder's OWN sketch — a boxed sidebar with Documents ·
+  Automation · Tasks · Assignees — asked for by name and built to it.
+- It is not only an authoring screen. It carries the workflow editor, the
+  copy-on-use save-back to a firm automation, and a read-only mode for
+  built-ins with "Clone to customize".
+
+Converting it is a small job (its four sections map onto tabs) but it changes a
+layout the founder chose personally, so it needs their word first. **Ask before
+converting.** Everything else that authors a template already shares the frame.
 
 ---
 
