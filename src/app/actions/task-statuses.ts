@@ -41,12 +41,26 @@ export type StatusActionResult = {
     name: string;
     color: string;
     bucket: StatusBucket;
+    description: string | null;
+    isBuiltin: boolean;
   };
 };
 
 // Long enough for "Waiting on client signature", short enough to fit a pill in
 // a table column without the column deciding the layout.
 const NAME_MAX = 32;
+
+// One line, not a paragraph. It sits under the name in a settings row and in a
+// tooltip on a task board; anything longer stops being read.
+const DESCRIPTION_MAX = 160;
+
+/** Empty, whitespace or absent all mean "no explanation offered" — stored as
+ *  NULL rather than "", so the reader has one falsy case instead of two. */
+function cleanDescription(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim().replace(/\s+/g, " ").slice(0, DESCRIPTION_MAX);
+  return text || null;
+}
 
 function cleanName(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -86,6 +100,7 @@ export async function createStatusAction(input: {
   name: string;
   color: string;
   bucket: string;
+  description?: string;
 }): Promise<StatusActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -94,11 +109,13 @@ export async function createStatusAction(input: {
 
   const color = cleanColor(input.color);
   const bucket = cleanBucket(input.bucket);
+  const description = cleanDescription(input.description);
   const res = await createTaskStatus({
     firmId: g.firm.id,
     name,
     color,
     bucket,
+    description,
     createdBy: g.user.id,
   });
   if ("error" in res) return { ok: false, error: res.error };
@@ -106,7 +123,12 @@ export async function createStatusAction(input: {
   // Hand the row back so the editor can put it on screen immediately. The
   // CLEANED values, not the raw input — the list must show what was actually
   // stored, or the first reload would silently "change" what you just typed.
-  return { ok: true, created: { id: res.id, name, color, bucket } };
+  // isBuiltin is false by construction: anything created HERE is the firm's,
+  // and only 1420's seed is a preset.
+  return {
+    ok: true,
+    created: { id: res.id, name, color, bucket, description, isBuiltin: false },
+  };
 }
 
 export async function updateStatusAction(input: {
@@ -114,11 +136,18 @@ export async function updateStatusAction(input: {
   name?: string;
   color?: string;
   bucket?: string;
+  /** null CLEARS it; undefined leaves it alone. */
+  description?: string | null;
 }): Promise<StatusActionResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
 
-  const patch: { name?: string; color?: string; bucket?: StatusBucket } = {};
+  const patch: {
+    name?: string;
+    color?: string;
+    bucket?: StatusBucket;
+    description?: string | null;
+  } = {};
   if (input.name !== undefined) {
     const name = cleanName(input.name);
     if (!name) return { ok: false, error: "bad_name" };
@@ -130,6 +159,12 @@ export async function updateStatusAction(input: {
   // intended behaviour ("With client" turning out to mean done, not doing) and
   // it is why the UI says so before it lets you.
   if (input.bucket !== undefined) patch.bucket = cleanBucket(input.bucket);
+  // A preset's description is editable like any other — the firm may rename or
+  // explain "In progress" however they like. `is_builtin` only decides the
+  // badge, never what can be changed.
+  if (input.description !== undefined) {
+    patch.description = cleanDescription(input.description);
+  }
 
   const res = await updateTaskStatus({
     id: input.id,

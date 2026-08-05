@@ -59,9 +59,19 @@ export type EditableStatus = {
   name: string;
   color: string;
   bucket: Bucket;
+  /** One line saying what this status MEANS (1590). */
+  description?: string | null;
+  /** One of the three every firm starts with — badged "Preset" so the product
+   *  does not pass its own defaults off as the firm's work. Everything about a
+   *  preset is still editable; the badge says where it CAME FROM. */
+  isBuiltin?: boolean;
 };
 
 const BUCKETS: Bucket[] = ["todo", "doing", "done"];
+
+// Mirrors the server's ceiling (actions/task-statuses). Enforced here only so
+// the field stops accepting characters it would silently drop on save.
+const DESCRIPTION_MAX = 160;
 
 // Enough range to tell a dozen statuses apart at a glance, and every one of
 // them legible as a dot on a row. Free-typed hex is accepted by the server;
@@ -127,6 +137,7 @@ export function TaskStatusesEditor({
   const [draftName, setDraftName] = useState("");
   const [draftColor, setDraftColor] = useState(SWATCHES[0]);
   const [draftBucket, setDraftBucket] = useState<Bucket>("todo");
+  const [draftDescription, setDraftDescription] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   function report(res: StatusActionResult): boolean {
@@ -159,10 +170,12 @@ export function TaskStatusesEditor({
         name: draftName.trim(),
         color: draftColor,
         bucket: draftBucket,
+        description: draftDescription.trim(),
       });
       if (report(res)) {
         if (res.created) setRows((prev) => [...prev, res.created!]);
         setDraftName("");
+        setDraftDescription("");
         setAdding(false);
       }
     } finally {
@@ -267,6 +280,23 @@ export function TaskStatusesEditor({
               </p>
             </div>
 
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="new-status-description" className="text-xs">
+                {t("statuses_description")}
+              </Label>
+              <Input
+                id="new-status-description"
+                value={draftDescription}
+                maxLength={DESCRIPTION_MAX}
+                onChange={(e) => setDraftDescription(e.target.value)}
+                placeholder={t("statuses_description_placeholder")}
+              />
+              {/* The ambiguity this exists to settle, named outright. */}
+              <p className="text-xs text-muted-foreground">
+                {t("statuses_description_hint")}
+              </p>
+            </div>
+
             <ColorPicker value={draftColor} onChange={setDraftColor} t={t} />
 
             <div className="flex items-center justify-end gap-2">
@@ -332,6 +362,7 @@ function StatusRow({
   t: ReturnType<typeof useTranslations<"Settings">>;
 }) {
   const [name, setName] = useState(status.name);
+  const [description, setDescription] = useState(status.description ?? "");
   const [busy, setBusy] = useState(false);
   // Where its tasks go. Anything in the firm except this one — including
   // another bucket, which is a real choice: "this stage turned out to be done".
@@ -339,7 +370,11 @@ function StatusRow({
     statuses.find((s) => s.id !== status.id)?.id ?? "",
   );
 
-  async function save(patch: { name?: string; color?: string }) {
+  async function save(patch: {
+    name?: string;
+    color?: string;
+    description?: string | null;
+  }) {
     setBusy(true);
     try {
       // Patch the list the moment the server accepts it. Without this the row
@@ -378,6 +413,15 @@ function StatusRow({
           <span className="flex-1 text-sm">{status.name}</span>
         )}
 
+        {/* Where it CAME FROM, not what can be done to it — a preset renames,
+            recolours and re-describes like any other. Canopy labels its shipped
+            statuses the same way rather than presenting them as the firm's. */}
+        {status.isBuiltin && (
+          <span className="shrink-0 rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("statuses_preset")}
+          </span>
+        )}
+
         {canEdit && (
           <>
             <ColorDots
@@ -406,6 +450,33 @@ function StatusRow({
           </>
         )}
       </div>
+
+      {/* Under the name, indented to the dot, because it explains the thing
+          above it. Committed on blur like the name — a write per keystroke is
+          the lag this repo keeps removing. */}
+      {canEdit ? (
+        <Input
+          value={description}
+          disabled={busy}
+          maxLength={DESCRIPTION_MAX}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={() => {
+            const next = description.trim();
+            if (next !== (status.description ?? "")) {
+              save({ description: next || null });
+            }
+          }}
+          aria-label={t("statuses_description_for", { name: status.name })}
+          placeholder={t("statuses_description_placeholder")}
+          className="ml-[22px] h-7 border-0 bg-transparent px-0 text-xs text-muted-foreground shadow-none focus-visible:ring-0 dark:bg-transparent"
+        />
+      ) : (
+        status.description && (
+          <p className="ml-[22px] text-xs text-muted-foreground">
+            {status.description}
+          </p>
+        )
+      )}
 
       {confirming && canEdit && (
         <div className="flex flex-col gap-2 rounded-md bg-muted/60 p-2.5">
