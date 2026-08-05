@@ -94,6 +94,38 @@ export async function createTaskTemplate(input: {
 }
 
 /**
+ * Save changes to an existing template.
+ *
+ * Separate from create because Canopy's own flow is Options -> Edit on a
+ * template that already exists, and because overwriting through the create path
+ * would leave the old row behind as a duplicate every time somebody fixed a
+ * typo.
+ */
+export async function updateTaskTemplate(input: {
+  id: string;
+  name: string;
+  access: TaskTemplateAccess;
+  payload: TaskTemplatePayload;
+}): Promise<{ ok: boolean; needsMigration?: boolean }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("task_templates")
+    .update({
+      name: input.name,
+      access: input.access,
+      payload: input.payload,
+    })
+    .eq("id", input.id);
+
+  if (error) {
+    if (isMissingSchema(error)) return { ok: false, needsMigration: true };
+    console.error("[task-templates] update failed:", error);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
+/**
  * Retire a template. NOT a delete — the same reasoning as the engagement
  * templates and the service catalogue: it may be the reason a past piece of
  * work looks the way it does.

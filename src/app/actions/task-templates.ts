@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/db/users";
 import {
   archiveTaskTemplate,
   createTaskTemplate,
+  updateTaskTemplate,
 } from "@/lib/db/task-templates";
 import {
   isWorthSavingTaskTemplate,
@@ -42,6 +43,8 @@ const SubtaskSchema = z.object({
 // create-engagement action — a kind from a newer bundle must not fail the save,
 // and readTaskTemplatePayload downgrades anything unrecognised.
 const SaveSchema = z.object({
+  /** Present when editing one that already exists; absent when creating. */
+  id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(200),
   access: z.enum(["team", "private"]),
   kind: z.string().max(60).optional(),
@@ -76,11 +79,18 @@ export async function saveTaskTemplateAction(
   });
   if (!isWorthSavingTaskTemplate(payload)) return { ok: false, error: "empty" };
 
-  const res = await createTaskTemplate({
-    name: parsed.data.name,
-    access: parsed.data.access,
-    payload,
-  });
+  const res = parsed.data.id
+    ? await updateTaskTemplate({
+        id: parsed.data.id,
+        name: parsed.data.name,
+        access: parsed.data.access,
+        payload,
+      })
+    : await createTaskTemplate({
+        name: parsed.data.name,
+        access: parsed.data.access,
+        payload,
+      });
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
   revalidatePath("/templates/tasks");

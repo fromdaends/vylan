@@ -3,13 +3,20 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
-import {
-  CardGrid,
-  TemplatesPageHeader,
-  TemplatesSection,
-} from "./templates-chrome";
+import { TemplatesPageHeader, TemplatesSection } from "./templates-chrome";
+import { TemplateRowList } from "./template-row";
 
-// Search over a Templates page's cards.
+// Search over a Templates page — the ONE list every template type renders in.
+//
+// It was built for the document-request CARDS. The founder then asked for the
+// whole Templates surface to be consistent — "what the UI looks like when you
+// click on an engagement template and a task template is not the same. So it
+// should be" — and this component was already the right shape for it: it takes
+// already-rendered nodes and a string to match them by, and knows nothing about
+// what a template is. Only its CONTAINER was card-specific.
+//
+// So the container became TemplateRowList and every Templates page now renders
+// through here: same header, same search, same rows.
 //
 // It has to own the HEADER as well as the grid: the input lives in the header
 // per the handoff, and it filters an already-loaded list on every keystroke, so
@@ -18,7 +25,7 @@ import {
 // so a client component can render them directly — which is why this needs no
 // second copy of the header.
 //
-// Cards arrive as ALREADY-RENDERED nodes with a `terms` string beside each.
+// Rows arrive as ALREADY-RENDERED nodes with a `terms` string beside each.
 // The server builds them, keeping its server actions inside real <form>s, and
 // this component never has to know what a template is.
 
@@ -107,7 +114,7 @@ export function SearchableTemplates({
               {s.cards.length === 0 && s.empty ? (
                 s.empty
               ) : (
-                <CardGrid>{s.cards.map((c) => c.node)}</CardGrid>
+                <TemplateRowList>{s.cards.map((c) => c.node)}</TemplateRowList>
               )}
             </TemplatesSection>
           );
