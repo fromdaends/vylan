@@ -118,6 +118,11 @@ import { engagementMatchesSeries } from "@/lib/recurring/sync";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
+import { EngagementAssigneesControl } from "@/components/engagements/engagement-assignees-control";
+import {
+  listEngagementAssignees,
+  resolveAssignees,
+} from "@/lib/db/engagement-assignees";
 import { EngagementAccess } from "@/components/engagements/engagement-access";
 import { AddTaskDialog } from "@/components/engagements/add-task-dialog";
 import { EngagementPresence } from "@/components/engagements/engagement-presence";
@@ -534,14 +539,12 @@ export default async function EngagementDetailPage({
       ])
     : [[], []];
 
-  // WHO IS ON THIS JOB (1540) is NOT read here while the faces control is
-  // unwired — a query on every page load for something nothing renders. To
-  // bring it back, restore:
-  //   const assigneeIds = resolveAssignees(
-  //     engagement.assigned_user_id,
-  //     (await listEngagementAssignees(id)).map((a) => a.userId),
-  //   );
-  // and pass it to <EngagementAssigneesControl> in the details card below.
+  // WHO IS ON THIS JOB (1540). The union of the primary and the extra rows —
+  // resolveAssignees owns that rule so the card and the list cannot disagree.
+  const assigneeIds = resolveAssignees(
+    engagement.assigned_user_id,
+    (await listEngagementAssignees(id)).map((a: { userId: string }) => a.userId),
+  );
 
   // The FIRM's own steps (1340). Read for everybody who can open the page —
   // unlike the access control above, this is the work itself, not a permission
@@ -1462,27 +1465,32 @@ export default async function EngagementDetailPage({
           // circles for presence and for the assignee control. The card was
           // the one place that printed a string instead.
           <div className="flex items-center gap-2">
-            {/* ⚠️ THE FACES + "+" CONTROL IS UNWIRED, NOT DELETED (#1325).
-                On production its ADD silently failed while its REMOVE wrote
-                correctly — the combination that can LOSE an assignee, and it
-                did lose one during testing.
+            {/* RE-WIRED (#1325 unwired it). The previous session left an exact
+                recipe and one warning worth keeping: an add is only trusted
+                once it SURVIVES A RELOAD, because seeing the face appear is the
+                optimistic preview, not evidence.
 
-                WHAT IS PROVEN GOOD and deliberately kept: engagement_assignees
-                (1540, applied), lib/db/engagement-assignees.ts (the union rule
-                + 6 tests) and the server action. The exact upsert the action
-                performs was run against PRODUCTION with the service role and
-                SUCCEEDED, and the table's foreign keys are fine — so the schema
-                and the write path are not the problem. The failure is in the
-                CLICK PATH: the popover trigger measures 0x0 on the deployed
-                page, so the handler is very likely never reached.
+                WHAT THE BUG TURNED OUT TO BE, since the note guessed otherwise:
+                not the click path and not the write. On success the control
+                called setOptimistic(null), which means "render the PROP again"
+                — and the prop is still the pre-add list until router.refresh()
+                lands new props. So the face appeared and then VANISHED, which
+                reads exactly like a silent failure even though the row was
+                written. Its remove looked fine because removing the PRIMARY
+                also writes engagements.assigned_user_id, which the same refresh
+                brings back. Same shape as the statuses editor: the write was
+                never the problem, the screen was.
 
-                To re-wire: put <EngagementAssigneesControl> back here, and only
-                trust it once an add SURVIVES A RELOAD. Seeing the face appear
-                is NOT evidence — that is the optimistic preview, and it is
-                exactly what fooled me into calling this shipped. */}
-            <AvatarInitials
-              name={assignee ? userDisplayLabel(assignee) : "?"}
-              size={32}
+                The service-role upsert the note proved against production could
+                never have caught it — service role bypasses RLS, and so does
+                this table's writer by design (its policy grants SELECT only and
+                the actions layer is the gate). */}
+            <EngagementAssigneesControl
+              engagementId={engagement.id}
+              assigneeIds={assigneeIds}
+              primaryId={engagement.assigned_user_id}
+              members={activeMembers}
+              canEdit={teamEnabled}
             />
             <div className="min-w-0 text-sm">
               <div className="truncate font-medium text-foreground">
