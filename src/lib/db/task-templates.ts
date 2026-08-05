@@ -73,6 +73,42 @@ export async function listTaskTemplates(): Promise<TaskTemplate[]> {
   }));
 }
 
+/**
+ * One task template, for the edit route.
+ *
+ * The same shape listTaskTemplates returns, so the builder cannot tell whether
+ * it was seeded from the list or from here. Degrades to null before 1570 is
+ * applied, which the route turns into a 404 rather than an error page.
+ */
+export async function getTaskTemplate(id: string): Promise<TaskTemplate | null> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("task_templates")
+    .select("id, name, access, payload, created_by_user_id, updated_at, updated_by_user_id")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[task-templates] get failed:", error);
+    }
+    return null;
+  }
+  if (!data) return null;
+
+  const r = data as Row;
+  return {
+    id: r.id,
+    name: r.name,
+    access: r.access === "private" ? "private" : "team",
+    payload: readTaskTemplatePayload(r.payload),
+    createdByUserId: r.created_by_user_id,
+    updatedAt: r.updated_at ?? null,
+    updatedByUserId: r.updated_by_user_id ?? null,
+  };
+}
+
 export async function createTaskTemplate(input: {
   name: string;
   access: TaskTemplateAccess;

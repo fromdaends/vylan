@@ -3152,7 +3152,18 @@
     "field_name": "Template name",
     "search_placeholder": "Search templates…",
     "no_matches": "Nothing matches “{query}”",
-    "no_matches_hint": "Try a different name, or clear the search."
+    "no_matches_hint": "Try a different name, or clear the search.",
+    "edit_task_template": "Edit task template",
+    "create_task_template": "Create task template",
+    "task_template_builder_explainer": "A task template is the work itself — one job with the steps it takes underneath it. Link it to a service and it comes in automatically whenever that service is added to an engagement.",
+    "tab_task_details": "Task",
+    "tab_task_steps": "Steps",
+    "tab_task_documents": "Documents",
+    "task_template_description_label": "Description",
+    "task_template_steps_hint": "The steps inside this job. They land as sub-tasks under the parent, so your Work list shows one row you can expand rather than five.",
+    "task_template_client_request_hint": "The documents this job needs from the client. Applying a request template copies its lines in — they stay with this task template even if the request template changes later.",
+    "task_template_no_request": "This task doesn't ask the client for anything yet.",
+    "task_template_preview_label": "How this lands on an engagement"
   },
   "Status": {
     "pending": "Pending",
