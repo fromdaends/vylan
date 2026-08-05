@@ -600,32 +600,38 @@ export function TasksTable({
           whose two tasks were both finished, printing "Nothing planned on your
           side yet" underneath a count of two. */}
       {variant === "firm" && (
-        <div className="flex items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <ViewTabs
-              activeKey={activeViewId ?? view}
-              onSelect={(key) => {
-                const saved = savedViews.find((v) => v.id === key);
-                if (saved) {
-                  applySavedView(saved);
-                  return;
-                }
-                setActiveViewId(null);
-                setView(key as TaskView);
-              }}
-              tabs={[
-                ...VIEWS.map((v) => ({
-                  key: v,
-                  label: t(`view_${v}` as "view_active"),
-                  count: counts[v],
-                })),
-                // Saved views sit AFTER the built-ins, which is where Canopy
-                // puts them — their strip reads "Active Clients | ... | Ben's
-                // Clients", everything past the defaults being somebody's own.
-                ...savedViews.map((v) => ({ key: v.id, label: v.name })),
-              ]}
-            />
-          </div>
+        <ViewTabs
+          activeKey={activeViewId ?? view}
+          onSelect={(key) => {
+            const saved = savedViews.find((v) => v.id === key);
+            if (saved) {
+              applySavedView(saved);
+              return;
+            }
+            setActiveViewId(null);
+            setView(key as TaskView);
+          }}
+          tabs={[
+            ...VIEWS.map((v) => ({
+              key: v,
+              label: t(`view_${v}` as "view_active"),
+              count: counts[v],
+            })),
+            // Saved views sit AFTER the built-ins, which is where Canopy
+            // puts them — their strip reads "Active Clients | ... | Ben's
+            // Clients", everything past the defaults being somebody's own.
+            ...savedViews.map((v) => ({ key: v.id, label: v.name })),
+          ]}
+        />
+      )}
+
+      {/* THE ⋯ SITS ON ITS OWN ROW ABOVE THE TABLE, right-aligned — the same
+          place the engagements list puts it (founder: "place the three dots
+          from the tasks page in the same place it exists on the engagement
+          page"). It used to ride the end of the tab strip, which put it in a
+          different spot on each of the two lists that now share the menu. */}
+      {variant === "firm" && (
+        <div className="flex items-center justify-end px-4 py-1.5">
           {/* The ⋯ tasks never had. It exists now because there is finally
               something to put in it: your saved views. */}
           <ListViewsMenu
