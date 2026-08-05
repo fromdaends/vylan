@@ -41,6 +41,9 @@ export function TaskTemplateRow({
       icon={ListChecks}
       name={name}
       meta={meta}
+      // Clicking the row IS editing it — the founder's rule: viewing and
+      // editing are the same thing.
+      onSelect={onEdit}
       badges={
         isPrivate ? (
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">

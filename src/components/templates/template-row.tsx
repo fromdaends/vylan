@@ -51,6 +51,7 @@ export function TemplateRow({
   meta,
   badges,
   href,
+  onSelect,
   actions = [],
   dimmed = false,
 }: {
@@ -61,10 +62,20 @@ export function TemplateRow({
   /** Small pills beside the name — Draft, Private, Built-in. */
   badges?: ReactNode;
   /**
-   * Where the row goes when clicked. Omitted for a template with no screen of
-   * its own yet, which then renders as a plain row rather than a dead link.
+   * Where the row goes when clicked — for a template with its own route.
    */
   href?: string;
+  /**
+   * What clicking the row DOES, for a template edited in place rather than on
+   * its own route (task templates open a form on the same page).
+   *
+   * The founder: "editing and, like, viewing should be, like, the same thing...
+   * you just make clickable, and it opens the edit view." So the row is the
+   * primary way in everywhere, and the ⋮ menu's Edit is the second way for
+   * anyone who goes looking for it. Ignored when `href` is set — a row cannot
+   * mean two destinations.
+   */
+  onSelect?: () => void;
   /** The ⋮ menu. No menu is drawn when this is empty. */
   actions?: TemplateRowAction[];
   /** Archived or otherwise inactive — same row, quieter. */
@@ -98,6 +109,9 @@ export function TemplateRow({
       className={cn(
         "group flex items-center gap-3 rounded-xl border border-border/70 bg-card px-[18px] py-3 transition-all duration-200",
         "hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)]",
+        // Only when the row actually goes somewhere — a pointer on a row that
+        // does nothing is a promise it cannot keep.
+        (href || onSelect) && "cursor-pointer",
         dimmed && "opacity-60",
       )}
     >
@@ -108,6 +122,16 @@ export function TemplateRow({
         <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
           {body}
         </Link>
+      ) : onSelect ? (
+        // A real <button>, not a div with onClick: it has to be reachable by
+        // keyboard and announced as something you can activate.
+        <button
+          type="button"
+          onClick={onSelect}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        >
+          {body}
+        </button>
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>
       )}
