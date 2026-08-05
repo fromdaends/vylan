@@ -3087,7 +3087,10 @@
     "section_items": "Items",
     "items_empty": "No items. Click \"Add item\".",
     "add_item": "Add item",
-    "field_name": "Template name"
+    "field_name": "Template name",
+    "search_placeholder": "Search templates…",
+    "no_matches": "Nothing matches “{query}”",
+    "no_matches_hint": "Try a different name, or clear the search."
   },
   "Status": {
     "pending": "Pending",

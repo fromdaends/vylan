@@ -13,6 +13,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { buildWorkflowSummaryLine } from "@/lib/workflow/summary";
 import { parseWorkflowDefinition } from "@/lib/workflow/definition";
 import { TemplateCard } from "@/components/templates/template-card";
+import { SearchableTemplates } from "@/components/templates/searchable-templates";
 import { AutoNewTemplate } from "@/components/templates/auto-new-template";
 import {
   cloneTemplateAction,
@@ -21,9 +22,6 @@ import {
 } from "@/app/actions/templates";
 import {
   TemplatesPageShell,
-  TemplatesPageHeader,
-  TemplatesSection,
-  CardGrid,
   EmptyState,
 } from "@/components/templates/templates-chrome";
 
@@ -90,106 +88,125 @@ export default async function RequestTemplatesPage({
     };
   };
 
-  return (
-    <TemplatesPageShell>
-      <TemplatesPageHeader
-        title={t("section_document_requests")}
-        subtitle={t("document_requests_subtitle")}
-        action={
-          <form action={createBlankTemplateAction}>
-            <input type="hidden" name="__app_locale" value={locale} />
-            <Button type="submit" className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">
-              <Plus className="size-[18px]" />
-              {t("templates_new")}
-            </Button>
-          </form>
+  // Cards are BUILT HERE (server actions must live in real <form>s) and handed
+  // to the search component as nodes plus the words each card should be
+  // findable by — its name and what it asks the client for.
+  const terms = (tmpl: Template) =>
+    [
+      localizedTemplateName(tmpl, locale),
+      ...tmpl.items.map((it) => (locale === "fr" ? it.label_fr : it.label_en)),
+    ].join(" ");
+
+  const yoursCards = firm.map((tmpl) => ({
+    id: tmpl.id,
+    terms: terms(tmpl),
+    node: (
+      <TemplateCard
+        key={tmpl.id}
+        {...cardData(tmpl)}
+        href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
+        footer={
+          <>
+            <form action={deleteTemplateAction}>
+              <input type="hidden" name="id" value={tmpl.id} />
+              <Button
+                type="submit"
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                {t("delete")}
+              </Button>
+            </form>
+            <Link href={`/templates/${tmpl.id}`}>
+              <Button size="sm" variant="secondary">
+                {t("edit")}
+              </Button>
+            </Link>
+          </>
         }
       />
+    ),
+  }));
 
+  const builtInCards = builtIn.map((tmpl) => ({
+    id: tmpl.id,
+    terms: terms(tmpl),
+    node: (
+      <TemplateCard
+        key={tmpl.id}
+        {...cardData(tmpl)}
+        href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
+        footer={
+          <>
+            <form action={cloneTemplateAction}>
+              <input type="hidden" name="id" value={tmpl.id} />
+              <Button type="submit" size="sm" variant="ghost">
+                {t("clone")}
+              </Button>
+            </form>
+            <Link href={`/engagements/new?template=${tmpl.id}`}>
+              <Button size="sm" variant="secondary">
+                {t("use_in_new")}
+              </Button>
+            </Link>
+          </>
+        }
+      />
+    ),
+  }));
+
+  return (
+    <TemplatesPageShell>
       {/* Fires the same server action the "New template" button uses, then
           redirects into the new template's editor. See auto-new-template.tsx
           for why this is a client effect rather than a server redirect. */}
       {sp.new != null && <AutoNewTemplate locale={locale} />}
 
-      <TemplatesSection title={t("section_firm")} count={firm.length}>
-        {firm.length === 0 ? (
-          <EmptyState>
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-              <FilePlus2 className="h-5 w-5" />
-            </span>
-            <p className="text-sm font-medium text-foreground">
-              {t("firm_empty")}
-            </p>
-            <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
-              {t("templates_new_hint")}
-            </p>
-            <form action={createBlankTemplateAction}>
-              <input type="hidden" name="__app_locale" value={locale} />
-              <Button type="submit" size="sm">
-                <Plus className="h-3.5 w-3.5" />
-                {t("templates_new")}
-              </Button>
-            </form>
-          </EmptyState>
-        ) : (
-          <CardGrid>
-            {firm.map((tmpl) => (
-              <TemplateCard
-                key={tmpl.id}
-                {...cardData(tmpl)}
-                href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
-                footer={
-                  <>
-                    <form action={deleteTemplateAction}>
-                      <input type="hidden" name="id" value={tmpl.id} />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        {t("delete")}
-                      </Button>
-                    </form>
-                    <Link href={`/templates/${tmpl.id}`}>
-                      <Button size="sm" variant="secondary">
-                        {t("edit")}
-                      </Button>
-                    </Link>
-                  </>
-                }
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TemplatesSection>
-
-      <TemplatesSection title={t("section_builtin")} count={builtIn.length}>
-        <CardGrid>
-          {builtIn.map((tmpl) => (
-            <TemplateCard
-              key={tmpl.id}
-              {...cardData(tmpl)}
-              href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
-              footer={
-                <>
-                  <form action={cloneTemplateAction}>
-                    <input type="hidden" name="id" value={tmpl.id} />
-                    <Button type="submit" size="sm" variant="ghost">
-                      {t("clone")}
-                    </Button>
-                  </form>
-                  <Link href={`/engagements/new?template=${tmpl.id}`}>
-                    <Button size="sm" variant="secondary">
-                      {t("use_in_new")}
-                    </Button>
-                  </Link>
-                </>
-              }
-            />
-          ))}
-        </CardGrid>
-      </TemplatesSection>
+      <SearchableTemplates
+        title={t("section_document_requests")}
+        subtitle={t("document_requests_subtitle")}
+        action={
+          <form action={createBlankTemplateAction}>
+            <input type="hidden" name="__app_locale" value={locale} />
+            <Button
+              type="submit"
+              className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]"
+            >
+              <Plus className="size-[18px]" />
+              {t("templates_new")}
+            </Button>
+          </form>
+        }
+        sections={[
+          {
+            key: "firm",
+            title: t("section_firm"),
+            cards: yoursCards,
+            empty: (
+              <EmptyState>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <FilePlus2 className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-medium text-foreground">
+                  {t("firm_empty")}
+                </p>
+                <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+                  {t("templates_new_hint")}
+                </p>
+                <form action={createBlankTemplateAction}>
+                  <input type="hidden" name="__app_locale" value={locale} />
+                  <Button type="submit" size="sm">
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("templates_new")}
+                  </Button>
+                </form>
+              </EmptyState>
+            ),
+          },
+          { key: "builtin", title: t("section_builtin"), cards: builtInCards },
+        ]}
+      />
     </TemplatesPageShell>
   );
 }
