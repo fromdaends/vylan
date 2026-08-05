@@ -35,6 +35,7 @@ import { CornerDownRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   TemplateBuilderShell,
@@ -129,13 +130,6 @@ export function ServiceBuilder({
 
   // Rate reads in dollars and stores in cents. Blank stays NULL — "priced per
   // engagement" is a real service, and $0.00 would offer the work for free.
-  function setRate(raw: string) {
-    const trimmed = raw.trim();
-    if (trimmed === "") return setRateCents(null);
-    const dollars = Number(trimmed.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(dollars)) setRateCents(Math.round(dollars * 100));
-  }
-
   function priceLabel(): string {
     if (rateCents == null) return t("services_price_tbd");
     const money = formatCurrency(rateCents / 100, locale);
@@ -296,11 +290,13 @@ export function ServiceBuilder({
         <Fieldset title={tT("tab_service_pricing")}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("item_rate")} htmlFor="svc-rate">
-              <Input
+              {/* MoneyInput, not a raw Input: rendering cents back into the
+                  box on every keystroke made it impossible to type "400" —
+                  every digit after the first was eaten by the reformat. */}
+              <MoneyInput
                 id="svc-rate"
-                inputMode="decimal"
-                value={rateCents == null ? "" : (rateCents / 100).toFixed(2)}
-                onChange={(e) => setRate(e.target.value)}
+                valueCents={rateCents}
+                onChangeCents={setRateCents}
                 placeholder={t("services_rate_placeholder")}
               />
             </Field>
