@@ -3180,7 +3180,8 @@
     "template_work_title": "Work this creates",
     "template_work_hint": "These came in with the services above. Every engagement made from this template starts with this work already on it — you can change it on the engagement itself.",
     "preview_unnamed_service": "Unnamed service",
-    "preview_unnamed_task": "Unnamed task"
+    "preview_unnamed_task": "Unnamed task",
+    "creating_request_template": "Setting up your template…"
   },
   "Status": {
     "pending": "Pending",

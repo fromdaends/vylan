@@ -3180,7 +3180,8 @@
     "template_work_title": "Le travail que ça crée",
     "template_work_hint": "Ceci est venu avec les services ci-dessus. Chaque engagement créé à partir de ce modèle démarre avec ce travail déjà en place — vous pouvez le modifier sur l'engagement lui-même.",
     "preview_unnamed_service": "Service sans nom",
-    "preview_unnamed_task": "Tâche sans nom"
+    "preview_unnamed_task": "Tâche sans nom",
+    "creating_request_template": "Préparation de votre modèle…"
   },
   "Status": {
     "pending": "En attente",

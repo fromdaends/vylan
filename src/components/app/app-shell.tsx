@@ -364,7 +364,7 @@ export function AppShell({
               description: tHome("create_service_hint"),
             },
             {
-              href: "/templates/requests?new=1",
+              href: "/templates/requests/new",
               label: tHome("create_template"),
               description: tHome("create_template_hint"),
             },

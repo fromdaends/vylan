@@ -13,7 +13,6 @@ import { buildWorkflowSummaryLine } from "@/lib/workflow/summary";
 import { parseWorkflowDefinition } from "@/lib/workflow/definition";
 import { RequestTemplateRow } from "@/components/templates/request-template-row";
 import { SearchableTemplates } from "@/components/templates/searchable-templates";
-import { AutoNewTemplate } from "@/components/templates/auto-new-template";
 import { createBlankTemplateAction } from "@/app/actions/templates";
 import {
   TemplatesPageShell,
@@ -31,16 +30,12 @@ import {
  */
 export default async function RequestTemplatesPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  /** `?new=1` from the + Create panel clones the blank and opens its editor. */
-  searchParams: Promise<{ new?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
-  const sp = await searchParams;
 
   const [templates, currentFirm] = await Promise.all([
     listTemplates(),
@@ -116,11 +111,6 @@ export default async function RequestTemplatesPage({
 
   return (
     <TemplatesPageShell>
-      {/* Fires the same server action the "New template" button uses, then
-          redirects into the new template's editor. See auto-new-template.tsx
-          for why this is a client effect rather than a server redirect. */}
-      {sp.new != null && <AutoNewTemplate locale={locale} />}
-
       <SearchableTemplates
         title={t("section_document_requests")}
         subtitle={t("document_requests_subtitle")}
