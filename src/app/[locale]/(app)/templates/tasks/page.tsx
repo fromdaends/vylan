@@ -1,13 +1,10 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { listTaskTemplates } from "@/lib/db/task-templates";
 import { listTemplates } from "@/lib/db/templates";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { TaskTemplateCatalogue } from "@/components/templates/task-template-catalogue";
-import {
-  TemplatesPageShell,
-  TemplatesPageHeader,
-} from "@/components/templates/templates-chrome";
+import { TemplatesPageShell } from "@/components/templates/templates-chrome";
 
 /**
  * Task templates — the steps a piece of work takes.
@@ -33,14 +30,9 @@ export default async function TaskTemplatesPage({
     listTaskTemplates(),
     listTemplates(),
   ]);
-  const t = await getTranslations("Templates");
 
   return (
     <TemplatesPageShell>
-      <TemplatesPageHeader
-        title={t("section_task_templates")}
-        subtitle={t("task_templates_subtitle")}
-      />
       <TaskTemplateCatalogue
         templates={taskTemplates}
         locale={locale}
