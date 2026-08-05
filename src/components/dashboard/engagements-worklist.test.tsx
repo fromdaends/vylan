@@ -34,6 +34,22 @@ vi.mock("@/app/actions/engagements", () => ({
   restoreEngagementAction: async () => {},
 }));
 
+// The row now opens the DETAIL PANEL, which carries the engagement's comment
+// thread — and that fetches its own rows on mount. Unmocked it reaches cookies()
+// outside a request scope and surfaces as an unhandled error even though every
+// assertion passes.
+vi.mock("@/app/actions/comments", () => ({
+  loadCommentThreadAction: vi.fn(async () => ({
+    comments: [],
+    members: [],
+    currentUserId: "me",
+    legacy: false,
+  })),
+  loadCommentCountsAction: vi.fn(async () => ({})),
+  addCommentAction: vi.fn(async () => ({ ok: false, error: "failed" })),
+  deleteCommentAction: vi.fn(async () => ({ ok: true })),
+}));
+
 // Radix DropdownMenu (the row "..." menu) leans on a few DOM APIs happy-dom
 // doesn't implement. Plain assignments survive vi.restoreAllMocks.
 beforeAll(() => {
@@ -329,14 +345,23 @@ describe("EngagementsWorklist", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("clicking anywhere on a row opens that engagement", () => {
+  // ⚠️ THIS CONTRACT INVERTED, deliberately. #1311 had the row NAVIGATE and hid
+  // the side panel behind a 14px hover-revealed icon. The founder: "make opening
+  // the sidebar for engagements the same as tasks. Instead of having to click
+  // that tiny ass button." The row is the big target, so it gets the common
+  // action — and the title link below still covers navigation.
+  it("clicking anywhere on a row opens the side panel, not the page", async () => {
     const q = renderWorklist();
     const smithRow = q
       .getByRole("link", { name: /Smith T1/i })
       .closest("tr") as HTMLElement;
     // Click the row itself, not the title link or the "..." menu button.
     fireEvent.click(smithRow);
-    expect(push).toHaveBeenCalledWith("/engagements/a");
+    // The panel opened (Radix mounts it asynchronously)...
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Smith T1");
+    // ...and the row did NOT also navigate. Doing both would open a panel on a
+    // page that is already leaving.
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("clicking the engagement title navigates via the link, not a second router push", () => {
