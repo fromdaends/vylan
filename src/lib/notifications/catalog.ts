@@ -322,6 +322,32 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
     bundle: false,
     sortOrder: 40,
   },
+  {
+    // A KPI alert somebody set on the Work overview (1690). Founder: "built
+    // the bell alert thing", after Canopy's — "Create thresholds and indicate
+    // whether you want to be notified if it increases, decreases, or changes
+    // by a certain percentage."
+    //
+    // NOT ownerOnly: anybody may watch a number, and a Junior asking to be
+    // told when overdue work passes ten is exactly the use for this.
+    //
+    // NOT bundled: two different alerts crossing on the same morning are two
+    // separate facts, and collapsing them would hide which rule spoke. The
+    // anti-nag lives in the RULE instead (lib/dashboard/alert-eval.ts fires on
+    // the crossing, not on the state) which is a better place for it — it
+    // stops the notification being written at all rather than merging it after
+    // the fact.
+    key: "firm.kpi_alert",
+    category: "firm",
+    defaultInApp: true,
+    defaultEmail: true,
+    ownerOnly: false,
+    // You opted in by creating the alert; you opt out by deleting it. A second
+    // switch that silences a thing you explicitly asked for is a trap.
+    canDisable: false,
+    bundle: false,
+    sortOrder: 50,
+  },
 ] as const;
 
 export type NotificationEventKey = (typeof NOTIFICATION_EVENTS)[number]["key"];

@@ -56,9 +56,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useRouter } from "@/i18n/navigation";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { KpiAlertBell } from "@/components/dashboard/kpi-alert-dialog";
 import { ChartCard, KpiCard, seriesColor } from "@/components/dashboard/dashboard-cards";
 import { taskKindLabelKey } from "@/lib/tasks/kinds";
+import type { AlertMetric } from "@/lib/dashboard/alert-eval";
 import {
   completedYearOverYear,
   kindsPresent,
@@ -103,14 +106,18 @@ export function WorkDashboard({
   engagements,
   statuses,
   today,
+  alerts = [],
 }: {
   tasks: MetricTask[];
   engagements: DashboardEngagement[];
   statuses: DashboardStatus[];
+  /** My KPI alerts, so a watched card shows a lit bell at rest. */
+  alerts?: { id: string; name: string; surface: string; metric: string }[];
   /** Resolved in the FIRM's timezone by the page — never `new Date()` here. */
   today: string;
 }) {
   const t = useTranslations("Dashboard");
+  const router = useRouter();
   const tEng = useTranslations("Engagements");
   const locale = useLocale();
   const [tab, setTab] = useState<Tab>("tasks");
@@ -229,6 +236,20 @@ export function WorkDashboard({
     ...p.byYear,
   }));
 
+  // Which card already carries a bell.
+  const alertFor = (metric: string) =>
+    alerts.find((a) => a.surface === tab && a.metric === metric);
+  const bellFor = (metric: AlertMetric, label: string, value: number) => (
+    <KpiAlertBell
+      surface={tab}
+      metric={metric}
+      metricLabel={label}
+      currentValue={value}
+      existing={alertFor(metric)}
+      onChanged={() => router.refresh()}
+    />
+  );
+
   const explore = t("dash_explore");
   const menu = t("dash_card_menu");
   const axis = "var(--muted-foreground)";
@@ -252,6 +273,7 @@ export function WorkDashboard({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title={isTasks ? t("dash_kpi_open") : t("dash_kpi_open_eng")}
+          bell={bellFor("open", isTasks ? t("dash_kpi_open") : t("dash_kpi_open_eng"), k.open)}
           value={k.open.toLocaleString(locale)}
           exploreHref={listHref}
           exploreLabel={explore}
@@ -259,6 +281,7 @@ export function WorkDashboard({
         />
         <KpiCard
           title={isTasks ? t("dash_kpi_overdue") : t("dash_kpi_overdue_eng")}
+          bell={bellFor("overdue", isTasks ? t("dash_kpi_overdue") : t("dash_kpi_overdue_eng"), k.overdue)}
           value={k.overdue.toLocaleString(locale)}
           // The only number here that means something is wrong. Everything
           // else on the strip is neutral by design.
@@ -269,6 +292,7 @@ export function WorkDashboard({
         />
         <KpiCard
           title={isTasks ? t("dash_kpi_completed") : t("dash_kpi_completed_eng")}
+          bell={bellFor("completed", isTasks ? t("dash_kpi_completed") : t("dash_kpi_completed_eng"), k.completed)}
           value={k.completed.toLocaleString(locale)}
           exploreHref={listHref}
           exploreLabel={explore}
@@ -276,6 +300,7 @@ export function WorkDashboard({
         />
         <KpiCard
           title={t("dash_kpi_percent")}
+          bell={bellFor("percent_complete", t("dash_kpi_percent"), k.percentComplete)}
           value={`${k.percentComplete.toLocaleString(locale, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,

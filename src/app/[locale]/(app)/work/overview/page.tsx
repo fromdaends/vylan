@@ -23,6 +23,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { listEngagements } from "@/lib/db/engagements";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
+import { listMyKpiAlerts } from "@/lib/db/kpi-alerts";
 import { todayInTimeZone } from "@/lib/tasks/dates";
 import { isEngagementStage } from "@/lib/engagements/stage";
 import {
@@ -42,11 +43,14 @@ export default async function WorkDashboardPage({
   const user = await getCurrentUser();
   if (!user) redirect(`/${locale}/login`);
 
-  const [firm, tasks, engagements, statuses, t, tStage] = await Promise.all([
+  const [firm, tasks, engagements, statuses, alerts, t, tStage] =
+    await Promise.all([
     getCurrentFirm(),
     listFirmTasks(),
     listEngagements(),
     listTaskStatuses(),
+    // [] before 1690 is applied — the bells just render unlit.
+    listMyKpiAlerts(),
     getTranslations("Dashboard"),
     // ⚠️ "Stage", NOT "Engagements". The stage labels live in their own
     // namespace, and asking the wrong one is invisible to tsc, to eslint and
@@ -98,6 +102,12 @@ export default async function WorkDashboardPage({
         engagements={engagementRows}
         statuses={statuses}
         today={today}
+        alerts={alerts.map((a) => ({
+          id: a.id,
+          name: a.name,
+          surface: a.surface,
+          metric: a.metric,
+        }))}
       />
     </div>
   );

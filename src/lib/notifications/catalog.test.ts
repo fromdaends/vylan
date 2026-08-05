@@ -85,9 +85,16 @@ describe("notification catalog", () => {
       "payments",
       "messages",
       "clients",
+      // 'firm' USED to be entirely owner-only, so staff never saw the heading.
+      // firm.kpi_alert (1690) changed that on purpose: anybody may watch a
+      // number, and a Junior asking to be told when overdue work passes ten is
+      // exactly what the feature is for. The other four firm events stay
+      // owner-only, so this heading holds one row for staff and five for an
+      // owner.
+      "firm",
     ]);
-    // 'firm' is entirely owner-only, so staff never see the heading at all.
-    expect(groups.some((g) => g.category === "firm")).toBe(false);
+    const firmForStaff = groups.find((g) => g.category === "firm");
+    expect(firmForStaff?.events.map((e) => e.key)).toEqual(["firm.kpi_alert"]);
     for (const g of groups) {
       const orders = g.events.map((e) => e.sortOrder);
       expect(orders).toEqual([...orders].sort((a, b) => a - b));
