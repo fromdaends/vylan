@@ -30,7 +30,11 @@ import {
   Upload,
   UserPlus,
   AlertTriangle,
+  FileSignature,
+  ScrollText,
 } from "lucide-react";
+import { ProposalPreview } from "@/components/engagements/proposal-preview";
+import { cn } from "@/lib/cn";
 import {
   findScopeWarning,
   type ScopeWarningContact,
@@ -150,12 +154,21 @@ export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
 // live inside that task's row rather than occupying a fifth of the wizard.
 // The founder: "the templates for document collection exist purely for that
 // task... it's not a whole section. It exists within that task."
+/** Same list the template builder offers, so a template's period survives the
+ *  trip into an engagement without landing on a value the dropdown lacks. */
+const PERIOD_OPTIONS: (number | null)[] = [null, 1, 3, 6, 12, 24];
+
 const WIZARD_STEPS = [
   "details",
   "services",
   "tasks",
   "billing",
   "reminders",
+  // LAST, and last on purpose: it is what the CLIENT sees, and you can only
+  // review that once the work, the money and the chasing are settled. It is
+  // also the step that turns an engagement into an agreement — everything
+  // above it describes the job, this describes what they are agreeing to.
+  "proposal",
 ] as const;
 type WizardStep = (typeof WIZARD_STEPS)[number];
 // Spelled out so a typo in the template literal is a compile error rather than
@@ -173,7 +186,8 @@ type WizardStepKey =
   | "wizard_step_services"
   | "wizard_step_tasks"
   | "wizard_step_billing"
-  | "wizard_step_reminders";
+  | "wizard_step_reminders"
+  | "wizard_step_proposal";
 
 export function EngagementBuilder({
   clients,
@@ -270,6 +284,11 @@ export function EngagementBuilder({
   const tc = useTranslations("Common");
   // Scope names live in the Clients namespace, shared with the profile card.
   const tClients = useTranslations("Clients");
+  // The Proposal step's labels — period, terms, who signs, deposit — already
+  // exist in the Templates namespace, written for the template builder. They
+  // are read from there rather than copied here: one label per concept, so the
+  // engagement and the template that produced it can never word it differently.
+  const tTpl = useTranslations("Templates");
 
   // The blank "Empty" template leads the list and is the default when the user
   // didn't arrive via a specific template ("Use" on a card). Everything else
@@ -395,26 +414,42 @@ export function EngagementBuilder({
   // back when there isn't one.
   const tpl = initialEngagementTemplate?.payload;
 
-  // ── The wizard ────────────────────────────────────────────────────────────
+  // ── THE PROPOSAL, EDITABLE ON THE ENGAGEMENT ITSELF ─────────────────────
   //
-  // Founder's reference is Canopy's Create Engagement modal: a left rail of
-  // steps, each ticked once it has what it needs, with one step's worth of form
-  // on the right.
+  // These were template-only, so an engagement built from scratch got defaults
+  // it could not change. The founder: "now engagement creation is lacking."
   //
-  // This is a REGROUPING, not a rewrite. Every card below is the same card it
-  // was on the single-page form, with the same state and the same handlers —
-  // they are only shown one group at a time and put in an order that follows
-  // the decision rather than the order they happened to be built in.
-  //
-  // FOUR steps, not Canopy's five. Terms and Tasks are not here because Vylan
-  // has neither yet, and a step that opens on an empty panel is worse than a
-  // step that is not offered: it reads as broken rather than as unbuilt. The
-  // rail grows as they land.
-  // The priced scope (migration 1450). Starts empty — an engagement without one
-  // is still perfectly valid, and is what every engagement was until now.
-  // COPIED, not shared. The editor mutates this list; handing it the prop's own
-  // array would let editing a draft engagement reach back into the template
-  // object the page loaded.
+  // Seeded from the template when there is one, from the firm's standard terms
+  // when there is not — so the common case is already filled in and the step is
+  // a review rather than a form.
+  const [proposalTerms, setProposalTerms] = useState(
+    tpl?.termsEnabled ? tpl.termsText : firmDefaultTerms,
+  );
+  const [proposalPeriodStartsOn, setProposalPeriodStartsOn] = useState<
+    "acceptance" | "custom"
+  >(tpl?.periodStartsOn ?? "acceptance");
+  const [proposalPeriodMonths, setProposalPeriodMonths] = useState<number | null>(
+    tpl?.periodMonths ?? null,
+  );
+  const [proposalClientSigns, setProposalClientSigns] = useState(
+    tpl?.clientSigns ?? true,
+  );
+  const [proposalSigners, setProposalSigners] = useState<string[]>(
+    tpl?.additionalSignerLabels ?? [],
+  );
+  const [proposalFirmCountersigns, setProposalFirmCountersigns] = useState(
+    tpl?.firmCountersigns ?? false,
+  );
+  const [proposalDeposit, setProposalDeposit] = useState(
+    tpl?.depositCents != null ? String(tpl.depositCents / 100) : "",
+  );
+
+  const proposalDepositCents = useMemo(() => {
+    const n = Number(proposalDeposit.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.round(n * 100);
+  }, [proposalDeposit]);
+
   const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>(() => [
     ...(initialEngagementTemplate?.payload.items ?? []),
   ]);
@@ -427,9 +462,35 @@ export function EngagementBuilder({
   // client-facing half of engagement creation for anyone who didn't discover
   // that they now had to add a row for it. It is an ordinary row — retitle it,
   // change its kind, or delete it.
-  const [tasks, setTasks] = useState<TaskDraft[]>([
-    { ...emptyTask("document_collection"), title: t("task_seed_documents") },
-  ]);
+  const [tasks, setTasks] = useState<TaskDraft[]>(() => {
+    const seed: TaskDraft[] = [
+      { ...emptyTask("document_collection"), title: t("task_seed_documents") },
+    ];
+    // ── THE TEMPLATE'S WORK ─────────────────────────────────────────────
+    //
+    // An engagement built from a template used to arrive with the priced lines
+    // and the document requests, and NO tasks — the template stored which work
+    // its services implied (1620) and nothing read it back. So the whole point
+    // of linking a service to a task template stopped at the template.
+    //
+    // Seeded in the initial state rather than by an effect: a mount effect that
+    // called setTasks would render the empty list first and correct it a frame
+    // later, which reads as the page losing your work. React Compiler rejects
+    // it too.
+    let next = seed;
+    for (const id of initialEngagementTemplate?.payload.taskTemplateIds ?? []) {
+      const tt = taskTemplates.find((x) => x.id === id);
+      if (!tt) continue; // A deleted template simply produces no tasks.
+      next = appendTaskTemplate(
+        next,
+        { name: tt.name, kind: tt.kind, subtasks: tt.subtasks },
+        // No source label: the template brought this, not a service picked on
+        // this screen. Labelling it with a service name would be a lie, and
+        // pullServiceWork uses that label to avoid adding the same work twice.
+      ).tasks;
+    }
+    return next;
+  });
   const docTaskIndex = documentCollectionIndex(tasks);
 
   function updateTask(idx: number, patch: Partial<TaskDraft>) {
@@ -598,6 +659,10 @@ export function EngagementBuilder({
     // never required to fill reads as an error.
     billing: true,
     reminders: true,
+    // Always ticked: an engagement with no terms and nobody signing is still a
+    // valid engagement — plenty of firms send work without a formal agreement,
+    // and refusing to let them would break the existing flow.
+    proposal: true,
   };
   const stepIndex = WIZARD_STEPS.indexOf(step);
   // How many times "Create and send" was pressed with an empty checklist.
@@ -668,6 +733,79 @@ export function EngagementBuilder({
     return `${localizedTemplateName(selectedTemplate, locale)} — ${year}`;
   }, [selectedTemplate, locale]);
   const effectiveTitle = titleTouched ? title : defaultTitle;
+
+  /** What the client will see, from the form as it stands. ONE builder for it,
+   *  used by both the preview on this step and the snapshot written on save —
+   *  two copies would drift and the preview would start lying. */
+  //
+  // Computed plainly, NOT memoized: React Compiler refuses to preserve a manual
+  // memo whose deps it thinks may be mutated, and one already exists in this
+  // component — a second would add an error without changing the outcome. It is
+  // a handful of maps over a list that is never long.
+  const proposalData = {
+    clientName: selectedClient?.display_name ?? t("preview_no_client"),
+    engagementName: resolvePlaceholders(
+      effectiveTitle.trim(),
+      {
+        clientName: selectedClient?.display_name ?? null,
+        taxYear: taxYear ? Number(taxYear) : null,
+      },
+      new Date(),
+      locale,
+    ),
+    periodStartsOn: proposalPeriodStartsOn,
+    periodMonths: proposalPeriodMonths,
+    welcome: introMessage.trim() || null,
+    videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
+    documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
+    // Each priced line carries the work it brings, so the client reads what
+    // they are buying rather than only what it costs. Matched by SERVICE, which
+    // is the link the catalogue actually stores (1620) — the tasks on the Tasks
+    // step may since have been edited, and the contract should describe the
+    // offer, not somebody's in-progress checklist.
+    services: serviceItems
+      .filter((i) => i.name.trim().length > 0)
+      .map((i) => {
+        const svc = i.serviceId
+          ? services.find((x) => x.id === i.serviceId)
+          : undefined;
+        const tt = svc?.work
+          ? taskTemplates.find((x) => x.id === svc.work!.templateId)
+          : undefined;
+        return {
+          name: i.name.trim(),
+          rateCents: i.rateCents,
+          work: tt?.subtasks.map((x) => x.title),
+        };
+      }),
+    terms: proposalTerms.trim() || null,
+    clientSigns: proposalClientSigns,
+    additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
+    firmCountersigns: proposalFirmCountersigns,
+    depositCents: proposalDepositCents,
+  };
+
+  // ── The wizard ────────────────────────────────────────────────────────────
+  //
+  // Founder's reference is Canopy's Create Engagement modal: a left rail of
+  // steps, each ticked once it has what it needs, with one step's worth of form
+  // on the right.
+  //
+  // This is a REGROUPING, not a rewrite. Every card below is the same card it
+  // was on the single-page form, with the same state and the same handlers —
+  // they are only shown one group at a time and put in an order that follows
+  // the decision rather than the order they happened to be built in.
+  //
+  // FOUR steps, not Canopy's five. Terms and Tasks are not here because Vylan
+  // has neither yet, and a step that opens on an empty panel is worse than a
+  // step that is not offered: it reads as broken rather than as unbuilt. The
+  // rail grows as they land.
+  // The priced scope (migration 1450). Starts empty — an engagement without one
+  // is still perfectly valid, and is what every engagement was until now.
+  // COPIED, not shared. The editor mutates this list; handing it the prop's own
+  // array would let editing a draft engagement reach back into the template
+  // object the page loaded.
+
 
   // After a 2nd failed "Create and send" on an empty checklist, ring the
   // checklist section. The top-of-form error is easy to miss when the Send
@@ -879,45 +1017,18 @@ export function EngagementBuilder({
             // Absent when the engagement did not come from a template — there
             // is nothing to show, and the portal falls back to its normal view
             // rather than presenting a blank page with an Accept button.
+            // The SAME object the preview on the Proposal step renders, so
+            // what the accountant reviewed is exactly what gets frozen. The
+            // client's name is dropped: the snapshot reader takes it from the
+            // engagement's own client, so a renamed client still reads
+            // correctly on their own document.
             proposal: {
-              engagementName: resolvePlaceholders(
-                effectiveTitle.trim(),
-                {
-                  clientName: selectedClient?.display_name ?? null,
-                  taxYear: taxYear ? Number(taxYear) : null,
-                },
-                new Date(),
-                locale,
-              ),
-              // A template supplies the richer content; without one, the
-              // sensible defaults ARE the proposal — which is the point: a
-              // from-scratch engagement is still an agreement.
-              periodStartsOn: tpl?.periodStartsOn ?? "acceptance",
-              periodMonths: tpl?.periodMonths ?? null,
-              welcome:
-                tpl?.welcomeEnabled && tpl.introMessage
-                  ? tpl.introMessage
-                  : // The builder's own intro field, which every engagement has
-                    // (1510), so a from-scratch proposal still opens with a note
-                    // if one was written.
-                    introMessage.trim() || null,
-              videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
-              documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
-              services: serviceItems
-                .filter((i) => i.name.trim().length > 0)
-                .map((i) => ({ name: i.name.trim(), rateCents: i.rateCents })),
-              // The firm's standard terms when the template has none. This is
-              // what makes a from-scratch engagement a real agreement rather
-              // than a price list.
-              terms: tpl?.termsEnabled
-                ? tpl.termsText || null
-                : firmDefaultTerms.trim() || null,
-              // Absent template => the ordinary case: the client signs, nobody
-              // else does, no deposit.
-              clientSigns: tpl?.clientSigns ?? true,
-              additionalSignerLabels: tpl?.additionalSignerLabels ?? [],
-              firmCountersigns: tpl?.firmCountersigns ?? false,
-              depositCents: tpl?.depositCents ?? null,
+              ...proposalData,
+              // The snapshot reader takes the client's name from the
+              // engagement's own client, so a renamed client still reads
+              // correctly on their own document. Storing it here would freeze
+              // yesterday's name onto the contract.
+              clientName: undefined,
             },
             tasks: meaningfulTasks(tasks).map((task) => ({
               title: task.title,
@@ -2284,6 +2395,234 @@ export function EngagementBuilder({
         </>
       )}
 
+
+      {/* STEP 5 — THE AGREEMENT ITSELF.
+          Every engagement carries a proposal now, not just the ones built from
+          a template — the founder: "make it so all engagements are a proposal
+          wtf not only templates". These fields used to exist ONLY on a
+          template, which meant an engagement built from scratch got defaults it
+          could not see, let alone change. */}
+      {step === "proposal" && (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+          <div className="space-y-6">
+            {/* ── WHEN IT RUNS ─────────────────────────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {tTpl("period_label")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(["acceptance", "custom"] as const).map((value) => (
+                    <label
+                      key={value}
+                      className={cn(
+                        "cursor-pointer rounded-lg border px-3 py-2.5 transition-colors",
+                        proposalPeriodStartsOn === value
+                          ? "border-accent bg-accent/5"
+                          : "border-border hover:border-accent/50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="engagement-period-start"
+                        className="sr-only"
+                        checked={proposalPeriodStartsOn === value}
+                        onChange={() => setProposalPeriodStartsOn(value)}
+                      />
+                      <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
+                        {tTpl("period_begins_on")}
+                      </span>
+                      <span className="block text-sm font-medium">
+                        {value === "acceptance"
+                          ? tTpl("period_acceptance")
+                          : tTpl("period_custom_date")}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid gap-1.5 sm:grid-cols-[10rem_1fr] sm:items-center">
+                  <Label
+                    htmlFor="engagement-period"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {tTpl("period_label")}
+                  </Label>
+                  <select
+                    id="engagement-period"
+                    value={
+                      proposalPeriodMonths == null
+                        ? ""
+                        : String(proposalPeriodMonths)
+                    }
+                    onChange={(e) =>
+                      setProposalPeriodMonths(
+                        e.target.value === "" ? null : Number(e.target.value),
+                      )
+                    }
+                    className="h-9 max-w-sm rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    {PERIOD_OPTIONS.map((months) => (
+                      <option
+                        key={months ?? "ongoing"}
+                        value={months == null ? "" : String(months)}
+                      >
+                        {months == null
+                          ? tTpl("period_ongoing")
+                          : tTpl("period_months", { count: months })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ── THE TERMS ────────────────────────────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  <ScrollText
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {tTpl("general_terms")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {tTpl("general_terms_hint")}
+                </p>
+                <Textarea
+                  value={proposalTerms}
+                  onChange={(e) => setProposalTerms(e.target.value)}
+                  placeholder={tTpl("general_terms_placeholder")}
+                  rows={10}
+                />
+                {/* Offered only when it would change something — the box is
+                    already seeded with these, so this is for an engagement
+                    whose terms were edited and want putting back. */}
+                {firmDefaultTerms.trim() &&
+                  proposalTerms.trim() !== firmDefaultTerms.trim() && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setProposalTerms(firmDefaultTerms)}
+                    >
+                      {tTpl("use_firm_terms")}
+                    </Button>
+                  )}
+              </CardContent>
+            </Card>
+
+            {/* ── WHO SIGNS ────────────────────────────────────────────── */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  <FileSignature
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {tTpl("who_signs")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {tTpl("who_signs_hint")}
+                </p>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={proposalClientSigns}
+                    onChange={(e) => setProposalClientSigns(e.target.checked)}
+                  />
+                  {tTpl("signer_client")}
+                </label>
+
+                {proposalSigners.map((label, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={label}
+                      onChange={(e) =>
+                        setProposalSigners((prev) =>
+                          prev.map((x, i) => (i === idx ? e.target.value : x)),
+                        )
+                      }
+                      placeholder={tTpl("signer_slot_placeholder")}
+                      aria-label={tTpl("signer_slot_placeholder")}
+                      className="max-w-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProposalSigners((prev) =>
+                          prev.filter((_, i) => i !== idx),
+                        )
+                      }
+                      aria-label={tTpl("remove")}
+                      className="text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setProposalSigners((prev) => [...prev, ""])}
+                >
+                  <Plus className="size-3.5" />
+                  {tTpl("add_signer")}
+                </Button>
+
+                <label className="flex cursor-pointer items-center gap-2 border-t border-border/60 pt-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={proposalFirmCountersigns}
+                    onChange={(e) =>
+                      setProposalFirmCountersigns(e.target.checked)
+                    }
+                  />
+                  {tTpl("signer_firm")}
+                </label>
+
+                <div className="space-y-1.5 border-t border-border/60 pt-3">
+                  <Label
+                    htmlFor="engagement-deposit"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {tTpl("require_deposit")}
+                  </Label>
+                  <Input
+                    id="engagement-deposit"
+                    value={proposalDeposit}
+                    onChange={(e) => setProposalDeposit(e.target.value)}
+                    placeholder={tTpl("deposit_placeholder")}
+                    inputMode="decimal"
+                    className="max-w-[12rem]"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {tTpl("require_deposit_hint")}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* THE SAME COMPONENT the client opens, and the same one the template
+              builder previews. Not a mock-up of it — if this drifted from what
+              is actually sent, previewing would be worse than not previewing. */}
+          <div className="xl:sticky xl:top-6">
+            <ProposalPreview
+              data={proposalData}
+              locale={locale}
+              activeStep="sign"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Step navigation ONLY. Saving moved into the bar above, where it stays
           reachable on a long step instead of hiding under the form. */}

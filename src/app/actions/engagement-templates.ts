@@ -74,6 +74,9 @@ const PayloadSchema = z.object({
   depositCents: z.number().int().min(0).max(99_999_999).nullable().optional(),
   items: z.array(ItemSchema).max(50).optional(),
   checklist: z.array(ChecklistSchema).max(200).optional(),
+  // The work this template implies (1570 task template ids). Ids only — the
+  // reader de-duplicates and caps, so this just stops an unbounded blob.
+  taskTemplateIds: z.array(z.string().trim().max(64)).max(50).optional(),
   // Canopy's billing blocks. Bounded, but deliberately loose about the enum
   // values — readPayload repairs a type/timing mismatch rather than dropping
   // the block, and this schema exists to stop an unbounded blob, not to be a

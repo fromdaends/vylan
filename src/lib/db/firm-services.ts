@@ -95,6 +95,31 @@ export async function listFirmServices(
   return (data as Row[]).map(toService);
 }
 
+/**
+ * One service, for the edit route.
+ *
+ * Includes archived ones on purpose: an archived service is still readable and
+ * restorable, and a 404 on something you can see in the list would be a lie.
+ */
+export async function getFirmService(id: string): Promise<FirmService | null> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("firm_services")
+    .select(
+      "id, name, description, rate_cents, rate_type, billing_frequency, tax_pct, task_template_id, archived_at",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[firm-services] get failed:", error);
+    }
+    return null;
+  }
+  return data ? toService(data as Row) : null;
+}
+
 export type FirmServiceInput = {
   name: string;
   description: string | null;

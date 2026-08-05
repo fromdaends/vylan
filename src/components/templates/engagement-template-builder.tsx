@@ -33,22 +33,21 @@
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import {
-  X,
-  Eye,
-  EyeOff,
-  ArrowLeft,
-  ArrowRight,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/cn";
 import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
+// ONE chrome for every builder — see the note at the top of that file.
+import {
+  TemplateBuilderShell,
+  Fieldset,
+  Field,
+  RadioCard,
+  ToggleRow,
+} from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import {
@@ -95,6 +94,7 @@ const PERIOD_OPTIONS: (number | null)[] = [null, 1, 3, 6, 12, 24];
 export function EngagementTemplateBuilder({
   locale,
   services = [],
+  taskTemplates = [],
   members = [],
   fallbackTaxPct = null,
   initial,
@@ -116,6 +116,9 @@ export function EngagementTemplateBuilder({
     payload: EngagementTemplatePayload;
   };
   services?: CatalogueService[];
+  /** The firm's task templates (1570), so the Services tab can show the work a
+   *  picked service brings — and so an edited template can name it back. */
+  taskTemplates?: { id: string; name: string; steps: string[] }[];
   /** Active firm members, for the assignee picker. */
   members?: { id: string; name: string }[];
   fallbackTaxPct?: number | null;
@@ -210,7 +213,6 @@ export function EngagementTemplateBuilder({
   // find again is not saved in any useful sense.
   const canSaveDraft = name.trim().length > 0;
 
-  const tabIndex = TABS.indexOf(tab);
 
   const depositCents = useMemo(() => {
     if (!depositRequired) return null;
@@ -218,6 +220,40 @@ export function EngagementTemplateBuilder({
     if (!Number.isFinite(n) || n <= 0) return null;
     return Math.round(n * 100);
   }, [depositRequired, depositAmount]);
+
+  // ── THE WORK THE SERVICES BRING (1620) ──────────────────────────────────
+  //
+  // The founder: "when creating an engagement template on the services tab you
+  // didnt change it to accomodate for the new service and tasks link."
+  //
+  // Right — a service knows which task template it implies, and the engagement
+  // builder already pulls that in automatically. A TEMPLATE did not, so a
+  // template built out of services produced priced lines and no work.
+  //
+  // IDS, not copies: task templates are a catalogue and a catalogue stays live.
+  // The tasks are frozen when an engagement is actually created from this.
+  const [taskTemplateIds, setTaskTemplateIds] = useState<string[]>(
+    initial?.payload.taskTemplateIds ?? [],
+  );
+
+  /** Picking a service on the Services tab brings its work with it — no prompt.
+   *  The founder: "there should be no prompt. It should happen automatically
+   *  when the tasks get pulled in." */
+  function pullServiceWork(service: CatalogueService) {
+    const id = service.work?.templateId;
+    if (!id) return;
+    setTaskTemplateIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+
+  /** The work, resolved for display. An id whose template has since been
+   *  deleted simply drops out — nothing here may assume it resolves. */
+  const linkedWork = useMemo(
+    () =>
+      taskTemplateIds
+        .map((id) => taskTemplates.find((x) => x.id === id))
+        .filter((x): x is NonNullable<typeof x> => x != null),
+    [taskTemplateIds, taskTemplates],
+  );
 
   // What the client would see. Placeholders resolve against a SAMPLE client,
   // because a template has none — showing raw {{clientname}} in a panel meant
@@ -271,6 +307,9 @@ export function EngagementTemplateBuilder({
           items: flattenBlocks(blocks),
           billingBlocks: blocks,
           priceVisibility: visibility,
+          // Only ids that still resolve. Saving a dangling one would keep a
+          // deleted template's ghost alive in every template that named it.
+          taskTemplateIds: linkedWork.map((x) => x.id),
         },
         // A draft skips the "is this worth saving" check — half-written IS the
         // point of a draft.
@@ -294,119 +333,92 @@ export function EngagementTemplateBuilder({
     months == null ? t("period_ongoing") : t("period_months", { count: months });
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] min-h-[38rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated">
-      {/* ── TITLE BAR ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-        <h1 className="text-lg font-semibold tracking-tight">
-          {initial ? t("edit_engagement_template") : t("create_engagement_template")}
-        </h1>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!canSaveDraft || pending}
-            onClick={() => save(true)}
-          >
-            {t("save_draft")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={!canSaveTemplate || pending}
-            onClick={() => save(false)}
-          >
-            {t("save_template")}
-          </Button>
-          <button
-            type="button"
-            onClick={() => router.push("/templates/engagements")}
-            aria-label={t("cancel")}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
+    <TemplateBuilderShell
+      title={
+        initial
+          ? t("edit_engagement_template")
+          : t("create_engagement_template")
+      }
+      // The founder: "when i try and create an engagement template its just the
+      // same as creating an engagement normally. It should be its own defined
+      // thing thats seperate from creating an engagement." What actually
+      // differs is not the fields, it is the OBJECT — so the screen says so.
+      explainer={t("template_builder_explainer")}
+      tabs={TABS.map((key) => ({
+        key,
+        label: t(`tab_${key}` as TabKey),
+        incomplete: key === "introduction" && introIncomplete,
+      }))}
+      activeTab={tab}
+      onTabChange={(key) => setTab(key as Tab)}
+      actions={[
+        {
+          label: t("save_draft"),
+          variant: "outline" as const,
+          disabled: !canSaveDraft || pending,
+          onClick: () => save(true),
+        },
+        {
+          label: t("save_template"),
+          disabled: !canSaveTemplate || pending,
+          onClick: () => save(false),
+        },
+      ]}
+      onClose={() => router.push("/templates/engagements")}
+      previewOpen={previewOpen}
+      onPreviewToggle={() => setPreviewOpen((v) => !v)}
+      error={
+        error
+          ? error === "needs_migration"
+            ? t("task_templates_needs_migration")
+            : error === "empty"
+              ? t("template_empty_error")
+              : t("task_templates_save_failed")
+          : null
+      }
+      preview={
+        <div className="mx-auto flex max-w-md flex-col items-center">
+          {/* Labelled, because an unlabelled preview showing a client name
+              reads as a real engagement — the exact confusion this screen is
+              being made distinct from. */}
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("preview_sample_label")}
+          </p>
+          <ProposalPreview
+            locale={locale}
+            activeStep={TAB_TO_STEP[tab]}
+            data={{
+              clientName: t("preview_sample_client"),
+              engagementName: previewTitle,
+              periodStartsOn,
+              periodMonths,
+              welcome: welcomeEnabled ? introMessage : null,
+              videoUrl: videoEnabled ? videoUrl : null,
+              documentName: documentEnabled ? documentName : null,
+              // The work rides on the FIRST line only. It belongs to the
+              // template as a whole (services were picked across blocks and
+              // only their ids survive), and repeating the same six steps under
+              // every priced line would read as six jobs rather than one.
+              services: flattenBlocks(blocks).map((i, idx) => ({
+                name: i.name,
+                rateCents: i.rateCents,
+                work:
+                  idx === 0
+                    ? linkedWork.flatMap((w) => w.steps)
+                    : undefined,
+              })),
+              terms: termsEnabled ? termsText : null,
+              clientSigns,
+              additionalSignerLabels: additionalSignerLabels.filter((x) =>
+                x.trim(),
+              ),
+              firmCountersigns,
+              depositCents,
+            }}
+          />
         </div>
-      </div>
-
-      {/* ── WHAT THIS SCREEN IS ───────────────────────────────────────────
-          The founder: "when i try and create an engagement template its just
-          the same as creating an engagement normally. It should be its own
-          defined thing thats seperate from creating an engagement."
-
-          They are right, and the reason is that the two forms ask overlapping
-          questions. What actually differs is not the fields, it is the OBJECT:
-          this makes a reusable shape, not a job. Nothing on the screen said so.
-          Now the first thing on it does — and it names the two things a
-          template deliberately has no answer for, which is what makes it a
-          template rather than an engagement with the client left blank. */}
-      <p className="border-b border-border bg-accent-subtle/40 px-5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-        {t("template_builder_explainer")}
-      </p>
-
-      {/* ── TABS + PREVIEW TOGGLE ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5">
-        <div
-          role="tablist"
-          aria-label={t("create_engagement_template")}
-          className="flex items-center gap-1"
-        >
-          {TABS.map((key) => {
-            const active = tab === key;
-            const incomplete = key === "introduction" && introIncomplete;
-            return (
-              <button
-                key={key}
-                role="tab"
-                type="button"
-                aria-selected={active}
-                onClick={() => setTab(key)}
-                className={cn(
-                  "relative -mb-px border-b-2 px-4 py-2.5 text-sm transition-colors",
-                  active
-                    ? "border-accent font-semibold text-foreground"
-                    : "border-transparent font-medium text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(`tab_${key}` as TabKey)}
-                {/* Canopy's red mark on a tab whose required fields are empty.
-                    Said in TEXT too, not colour alone — a red dot is invisible
-                    to anyone who cannot see red. */}
-                {incomplete && (
-                  <span
-                    className="ml-1.5 inline-block size-1.5 rounded-full bg-destructive align-middle"
-                    aria-label={t("tab_incomplete")}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={() => setPreviewOpen((v) => !v)}
-          aria-pressed={previewOpen}
-          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label={previewOpen ? t("hide_preview") : t("show_preview")}
-          title={previewOpen ? t("hide_preview") : t("show_preview")}
-        >
-          {previewOpen ? (
-            <EyeOff className="size-4" aria-hidden />
-          ) : (
-            <Eye className="size-4" aria-hidden />
-          )}
-        </button>
-      </div>
-
-      {/* ── FORM (left) + PREVIEW (right) ─────────────────────────────── */}
-      <div
-        className={cn(
-          "grid min-h-0 flex-1 grid-cols-1",
-          previewOpen && "lg:grid-cols-2",
-        )}
-      >
-        <div className="flex min-h-0 flex-col border-border lg:border-r">
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+      }
+    >
             {tab === "introduction" && (
               <>
                 <Fieldset title={t("template_details")}>
@@ -621,7 +633,57 @@ export function EngagementTemplateBuilder({
                 locale={locale}
                 services={services}
                 fallbackTaxPct={fallbackTaxPct}
+                onServicePicked={pullServiceWork}
               />
+            )}
+
+            {/* ── THE WORK THESE SERVICES BRING (1620) ───────────────────
+                On the SAME tab as the services, because it is not a separate
+                decision — it is the other half of what a service is. The
+                founder: "I just wanna make sure that when you build a service
+                template that it's not separated from the task template because
+                that's confusing for the user... they're both connected."
+
+                It appears by itself when a service that carries work is
+                picked, and it is removable: the work came with the service,
+                but this template is allowed to disagree. */}
+            {tab === "services" && linkedWork.length > 0 && (
+              <Fieldset title={t("template_work_title")}>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {t("template_work_hint")}
+                </p>
+                <ul className="space-y-2">
+                  {linkedWork.map((work) => (
+                    <li
+                      key={work.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{work.name}</p>
+                        {work.steps.length > 0 && (
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {work.steps.slice(0, 6).join(" · ")}
+                            {work.steps.length > 6 &&
+                              ` +${work.steps.length - 6}`}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTaskTemplateIds((prev) =>
+                            prev.filter((x) => x !== work.id),
+                          )
+                        }
+                        aria-label={t("remove")}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </Fieldset>
             )}
 
             {tab === "terms" && (
@@ -764,203 +826,7 @@ export function EngagementTemplateBuilder({
                 </ToggleRow>
               </Fieldset>
             )}
-
-            {error && (
-              <p className="text-xs text-destructive">
-                {error === "needs_migration"
-                  ? t("task_templates_needs_migration")
-                  : error === "empty"
-                    ? t("template_empty_error")
-                    : t("task_templates_save_failed")}
-              </p>
-            )}
-          </div>
-
-          {/* ── BACK / NEXT ─────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between border-t border-border px-5 py-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={tabIndex === 0}
-              onClick={() => setTab(TABS[tabIndex - 1])}
-            >
-              <ArrowLeft className="size-3.5" />
-              {t("back")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={tabIndex === TABS.length - 1}
-              onClick={() => setTab(TABS[tabIndex + 1])}
-            >
-              {t("next")}
-              <ArrowRight className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {previewOpen && (
-          <div className="hidden min-h-0 justify-center overflow-y-auto bg-muted/30 p-5 lg:flex">
-            {/* Labelled, because an unlabelled preview showing a client name
-                reads as a real engagement — the exact confusion this screen is
-                being made distinct from. */}
-            <p className="mb-3 text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
-              {t("preview_sample_label")}
-            </p>
-            <ProposalPreview
-              locale={locale}
-              activeStep={TAB_TO_STEP[tab]}
-              data={{
-                clientName: t("preview_sample_client"),
-                engagementName: previewTitle,
-                periodStartsOn,
-                periodMonths,
-                welcome: welcomeEnabled ? introMessage : null,
-                videoUrl: videoEnabled ? videoUrl : null,
-                documentName: documentEnabled ? documentName : null,
-                services: flattenBlocks(blocks).map((i) => ({
-                  name: i.name,
-                  rateCents: i.rateCents,
-                })),
-                terms: termsEnabled ? termsText : null,
-                clientSigns,
-                additionalSignerLabels: additionalSignerLabels.filter((s) =>
-                  s.trim(),
-                ),
-                firmCountersigns,
-                depositCents,
-              }}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+    </TemplateBuilderShell>
   );
 }
 
-function Fieldset({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-3 border-b border-border/60 pb-4 last:border-0">
-      <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-xs font-medium text-foreground">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function RadioCard({
-  name,
-  checked,
-  onSelect,
-  caption,
-  label,
-}: {
-  name: string;
-  checked: boolean;
-  onSelect: () => void;
-  caption: string;
-  label: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors",
-        checked
-          ? "border-accent bg-accent/5"
-          : "border-border hover:border-border/80",
-      )}
-    >
-      <input
-        type="radio"
-        name={name}
-        className="mt-0.5"
-        checked={checked}
-        onChange={onSelect}
-      />
-      <span>
-        <span className="block text-xs text-muted-foreground">{caption}</span>
-        <span className="block text-sm font-medium">{label}</span>
-      </span>
-    </label>
-  );
-}
-
-/**
- * Canopy's Introduction rows: a label, a one-line hint, a switch — and the
- * field itself only once the switch is on.
- *
- * The content is HIDDEN when the switch goes off, not unmounted. Turning Video
- * off and back on must not lose the link you already pasted, which is the
- * difference between a toggle and a delete.
- */
-function ToggleRow({
-  label,
-  hint,
-  on,
-  onToggle,
-  children,
-}: {
-  label: string;
-  hint: string;
-  on: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-[11px] text-muted-foreground">{hint}</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          aria-label={label}
-          onClick={onToggle}
-          className={cn(
-            "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-            on ? "bg-accent" : "bg-muted",
-          )}
-        >
-          <span
-            className={cn(
-              "absolute top-0.5 size-4 rounded-full bg-background transition-[left]",
-              on ? "left-[1.125rem]" : "left-0.5",
-            )}
-          />
-        </button>
-      </div>
-      <div className={cn("pt-3", !on && "hidden")}>{children}</div>
-    </div>
-  );
-}

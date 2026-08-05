@@ -69,6 +69,7 @@ export function BillingBlocksEditor({
   locale,
   services = [],
   fallbackTaxPct = null,
+  onServicePicked,
 }: {
   blocks: BillingBlock[];
   onChange: (next: BillingBlock[]) => void;
@@ -77,6 +78,9 @@ export function BillingBlocksEditor({
   locale: "en" | "fr";
   services?: CatalogueService[];
   fallbackTaxPct?: number | null;
+  /** Fired when a picked service carries work (1620), so the caller can pull
+   *  the tasks in. Passed straight through — a block has no opinion about it. */
+  onServicePicked?: (service: CatalogueService) => void;
 }) {
   const t = useTranslations("Templates");
 
@@ -226,6 +230,7 @@ export function BillingBlocksEditor({
               onChange={(items) => patch(idx, { ...b, items })}
               locale={locale}
               services={services}
+              onServicePicked={onServicePicked}
               fallbackTaxPct={fallbackTaxPct}
               hideFrequency
             />

@@ -39,7 +39,18 @@ export type ProposalPreviewData = {
   welcome: string | null;
   videoUrl: string | null;
   documentName: string | null;
-  services: { name: string; rateCents: number | null }[];
+  /**
+   * The priced lines, each with the WORK it brings (1620).
+   *
+   * `work` is what the client is actually buying — "Monthly bookkeeping" means
+   * nothing until it says which six things get done. The founder, on the
+   * service→task link: "make them link sensably for the user", and then: this
+   * "also relates to the proposal the client sees."
+   *
+   * Optional, and empty is normal: plenty of services are a price and nothing
+   * else, and a proposal written before this existed has none.
+   */
+  services: { name: string; rateCents: number | null; work?: string[] }[];
   terms: string | null;
   clientSigns: boolean;
   additionalSignerLabels: string[];
@@ -197,11 +208,28 @@ export function ProposalPreview({
           {namedServices.length > 0 ? (
             <ul className="space-y-1.5 text-xs">
               {namedServices.map((item, idx) => (
-                <li key={idx} className="flex justify-between gap-3">
-                  <span className="truncate">{item.name}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {item.rateCents == null ? "—" : money(item.rateCents)}
-                  </span>
+                <li key={idx}>
+                  <div className="flex justify-between gap-3">
+                    <span className="truncate">{item.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {item.rateCents == null ? "—" : money(item.rateCents)}
+                    </span>
+                  </div>
+                  {/* What this line actually buys. Under the price, indented,
+                      in the muted size — it is detail, not another line item,
+                      and it must never read as something else to pay for. */}
+                  {item.work && item.work.length > 0 && (
+                    <ul className="mt-1 space-y-0.5 border-l border-border pl-2.5 text-left">
+                      {item.work.map((step, i) => (
+                        <li
+                          key={i}
+                          className="text-[11px] leading-relaxed text-muted-foreground"
+                        >
+                          {step}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

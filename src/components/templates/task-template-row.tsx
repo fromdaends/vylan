@@ -22,19 +22,16 @@ export function TaskTemplateRow({
   name,
   meta,
   isPrivate,
-  onEdit,
 }: {
   id: string;
   name: string;
   meta: string;
   isPrivate: boolean;
-  /** Opens the inline editor on this page. Task templates have no route of
-   *  their own yet — editing happens in place. */
-  onEdit: () => void;
 }) {
   const t = useTranslations("Templates");
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const href = `/templates/tasks/${id}`;
 
   return (
     <TemplateRow
@@ -42,8 +39,9 @@ export function TaskTemplateRow({
       name={name}
       meta={meta}
       // Clicking the row IS editing it — the founder's rule: viewing and
-      // editing are the same thing.
-      onSelect={onEdit}
+      // editing are the same thing. It opens the builder on its own route now,
+      // the same way an engagement template's row does.
+      href={href}
       badges={
         isPrivate ? (
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
@@ -52,7 +50,7 @@ export function TaskTemplateRow({
         ) : null
       }
       actions={[
-        { label: t("edit"), onSelect: onEdit },
+        { label: t("edit"), onSelect: () => router.push(href) },
         {
           label: t("remove"),
           destructive: true,

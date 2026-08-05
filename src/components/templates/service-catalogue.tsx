@@ -1,6 +1,6 @@
 "use client";
 
-// The firm's SERVICE CATALOGUE — what you sell, defined once.
+// The firm's SERVICE CATALOGUE — what you sell, defined once. LIST ONLY.
 //
 // The founder's framing, which is also the test for whether this is worth
 // having: "Monthly bookkeeping, $400/mo, creates these 6 tasks — defined once
@@ -12,37 +12,29 @@
 // touching the catalogue — the founder's call: picking a service SUGGESTS the
 // price, it does not lock it. That is also why editing a service here never
 // rewrites a proposal a client has already agreed to.
+//
+// ── WHY THE FORM LEFT THIS FILE ────────────────────────────────────────────
+//
+// It used to open a modal dialog — a third chrome for the same act, after the
+// engagement template's full screen and the task template's unfolding card.
+// The founder: "ALL THE UIS FOR BUILDING EVERYTHING TEMPLATES SHOULD ALL BE THE
+// SAME. STOP BUILDING INCONSISTENT THINGS."
+//
+// Authoring moved to /templates/services/new and /templates/services/<id> on
+// TemplateBuilderShell. What is left here is the list.
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Receipt, Trash2, CornerDownRight } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
+import { toast } from "sonner";
+import { Link, useRouter } from "@/i18n/navigation";
 import {
   TemplateRow,
   TemplateRowList,
 } from "@/components/templates/template-row";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  archiveFirmServiceAction,
-  createFirmServiceAction,
-  updateFirmServiceAction,
-} from "@/app/actions/firm-services";
-import {
-  BILLING_FREQUENCIES,
-  RATE_TYPES,
-  type BillingFrequency,
-  type RateType,
-} from "@/lib/engagements/items";
+import { archiveFirmServiceAction } from "@/app/actions/firm-services";
+import type { BillingFrequency, RateType } from "@/lib/engagements/items";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 
 export type ServiceRow = {
@@ -58,115 +50,35 @@ export type ServiceRow = {
   archivedAt: string | null;
 };
 
-/** Steps typed on this form instead of picking a template. Not part of the
- *  stored row — they become a real task template on save. */
-type DraftExtra = { newWorkSteps: string[] };
-
-type Draft = Omit<ServiceRow, "id" | "archivedAt"> & DraftExtra;
-
-const EMPTY: Draft = {
-  name: "",
-  description: null,
-  rateCents: null,
-  rateType: "item",
-  billingFrequency: "once",
-  taxPct: null,
-  taskTemplateId: null,
-  newWorkSteps: [],
-};
-
 type FreqKey =
   | "item_freq_once"
   | "item_freq_weekly"
   | "item_freq_monthly"
   | "item_freq_quarterly"
   | "item_freq_yearly";
-type RateKey = "item_rate_item" | "item_rate_hour";
 
 export function ServiceCatalogue({
   services,
   taskTemplates = [],
   locale,
   canManage,
-  /**
-   * Open the "add service" dialog on first render.
-   *
-   * The + Create panel's "Service template" row means CREATE ONE, not "go and
-   * look at the list" — the founder's correction: "the whole function is to
-   * create one not just bring you to the page". So it arrives with ?new=service
-   * and the form is already open.
-   */
-  openOnMount = false,
 }: {
   services: ServiceRow[];
-  /** The firm's task templates (1570), so a service can name the work it
-   *  implies. Empty hides the picker entirely. */
+  /** The firm's task templates (1570), so a row can say which work it brings. */
   taskTemplates?: { id: string; name: string; steps: string[] }[];
   locale: AppLocale;
   canManage: boolean;
-  openOnMount?: boolean;
 }) {
   const t = useTranslations("Engagements");
   // A SECOND translator, for this file's own Templates-namespace copy. The
-  // service form's field labels (item_rate, item_tax…) are shared with the
-  // engagement items editor and live under Engagements; the work-link copy is
-  // this screen's own and lives under Templates. Reading both from one
-  // translator is what printed `Engagements.service_does_work` on screen.
+  // service labels are shared with the engagement items editor and live under
+  // Engagements; the work-link copy is this screen's own and lives under
+  // Templates. Reading both from one translator is what printed
+  // `Engagements.service_does_work` on screen.
   const tT = useTranslations("Templates");
+  const router = useRouter();
   const [, startTransition] = useTransition();
-  const [editing, setEditing] = useState<ServiceRow | null>(null);
-  // Seeded, not forced: once you close it, it stays closed for this page view.
-  const [draft, setDraft] = useState<Draft | null>(
-    openOnMount && canManage ? { ...EMPTY } : null,
-  );
   const [busy, setBusy] = useState(false);
-
-  function open(service: ServiceRow | null) {
-    setEditing(service);
-    setDraft(
-      service
-        ? {
-            name: service.name,
-            description: service.description,
-            rateCents: service.rateCents,
-            rateType: service.rateType,
-            billingFrequency: service.billingFrequency,
-            taxPct: service.taxPct,
-            taskTemplateId: service.taskTemplateId,
-            newWorkSteps: [],
-          }
-        : { ...EMPTY },
-    );
-  }
-
-  function report(res: { ok: boolean; needsMigration?: boolean }) {
-    if (res.ok) return true;
-    toast.error(
-      res.needsMigration ? t("services_needs_migration") : t("services_failed"),
-    );
-    return false;
-  }
-
-  async function save() {
-    if (!draft || busy || draft.name.trim() === "") return;
-    setBusy(true);
-    try {
-      const payload = { ...draft, name: draft.name.trim() };
-      const res = editing
-        ? await updateFirmServiceAction(editing.id, payload)
-        : await createFirmServiceAction(payload);
-      if (report(res)) {
-        setDraft(null);
-        setEditing(null);
-        startTransition(() => {
-          // A server action revalidates /templates; this pulls the new list in.
-          window.location.reload();
-        });
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function toggleArchive(service: ServiceRow) {
     if (busy) return;
@@ -176,21 +88,16 @@ export function ServiceCatalogue({
         service.id,
         service.archivedAt == null,
       );
-      if (report(res)) window.location.reload();
+      if (res.ok) startTransition(() => router.refresh());
+      else
+        toast.error(
+          res.needsMigration
+            ? t("services_needs_migration")
+            : t("services_failed"),
+        );
     } finally {
       setBusy(false);
     }
-  }
-
-  // Rate reads in dollars and stores in cents. Blank stays NULL — "priced per
-  // engagement" is a real service, and $0.00 would offer the work for free.
-  function setRate(raw: string) {
-    if (!draft) return;
-    const trimmed = raw.trim();
-    if (trimmed === "") return setDraft({ ...draft, rateCents: null });
-    const dollars = Number(trimmed.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(dollars)) return;
-    setDraft({ ...draft, rateCents: Math.round(dollars * 100) });
   }
 
   function priceLabel(s: ServiceRow): string {
@@ -215,10 +122,12 @@ export function ServiceCatalogue({
               variant="outline"
               size="sm"
               className="mt-3"
-              onClick={() => open(null)}
+              asChild
             >
-              <Plus className="size-4" aria-hidden />
-              {t("services_add")}
+              <Link href="/templates/services/new">
+                <Plus className="size-4" aria-hidden />
+                {t("services_add")}
+              </Link>
             </Button>
           )}
         </div>
@@ -230,8 +139,6 @@ export function ServiceCatalogue({
                 key={s.id}
                 icon={Receipt}
                 name={s.name}
-                // Price first, then the description — the price is what you
-                // scan a service list for.
                 // Price, then the work it implies, then the description. The
                 // link has to read from BOTH ends: the catalogue says which
                 // work a service brings, and the engagement says which service
@@ -248,10 +155,10 @@ export function ServiceCatalogue({
                   s.description ?? "",
                 ]
                   .filter(Boolean)
-                  .join(" \u2014 ")}
+                  .join(" — ")}
                 dimmed={s.archivedAt != null}
                 // Clicking IS editing, the same as every other template type.
-                onSelect={canManage ? () => open(s) : undefined}
+                href={canManage ? `/templates/services/${s.id}` : undefined}
                 badges={
                   s.archivedAt ? (
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
@@ -262,7 +169,11 @@ export function ServiceCatalogue({
                 actions={
                   canManage
                     ? [
-                        { label: t("services_edit"), onSelect: () => open(s) },
+                        {
+                          label: t("services_edit"),
+                          onSelect: () =>
+                            router.push(`/templates/services/${s.id}`),
+                        },
                         {
                           label: s.archivedAt
                             ? t("services_restore")
@@ -277,288 +188,15 @@ export function ServiceCatalogue({
             ))}
           </TemplateRowList>
           {canManage && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => open(null)}
-            >
-              <Plus className="size-4" aria-hidden />
-              {t("services_add")}
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link href="/templates/services/new">
+                <Plus className="size-4" aria-hidden />
+                {t("services_add")}
+              </Link>
             </Button>
           )}
         </>
       )}
-
-      <Dialog
-        open={draft != null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setDraft(null);
-            setEditing(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? t("services_edit") : t("services_add")}
-            </DialogTitle>
-          </DialogHeader>
-
-          {draft && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="svc-name">{t("services_name")}</Label>
-                <Input
-                  id="svc-name"
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder={t("services_name_placeholder")}
-                  className="mt-1"
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="svc-rate">{t("item_rate")}</Label>
-                  <Input
-                    id="svc-rate"
-                    inputMode="decimal"
-                    value={
-                      draft.rateCents == null
-                        ? ""
-                        : (draft.rateCents / 100).toFixed(2)
-                    }
-                    onChange={(e) => setRate(e.target.value)}
-                    placeholder={t("services_rate_placeholder")}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="svc-ratetype">{t("item_rate_type")}</Label>
-                  <select
-                    id="svc-ratetype"
-                    value={draft.rateType}
-                    onChange={(e) =>
-                      setDraft({ ...draft, rateType: e.target.value as RateType })
-                    }
-                    className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {RATE_TYPES.map((r) => (
-                      <option key={r} value={r}>
-                        {t(`item_rate_${r}` as RateKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="svc-freq">{t("item_billing_frequency")}</Label>
-                  <select
-                    id="svc-freq"
-                    value={draft.billingFrequency}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        billingFrequency: e.target.value as BillingFrequency,
-                      })
-                    }
-                    className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {BILLING_FREQUENCIES.map((f) => (
-                      <option key={f} value={f}>
-                        {t(`item_freq_${f}` as FreqKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {/* ── THE WORK THIS SERVICE IMPLIES (1620) ──────────────────
-                    Canopy's Service Item carries "the tasks you'll perform".
-                    Selling a service and then separately remembering to apply
-                    the matching task template is the manual step this removes.
-
-                    The picker is only drawn when the firm HAS task templates —
-                    a dropdown whose only entry is "none" teaches nobody that
-                    the feature exists, it just adds a control that does
-                    nothing. */}
-                <div>
-                  <Label htmlFor="svc-tax">{t("item_tax")}</Label>
-                  <Input
-                    id="svc-tax"
-                    inputMode="decimal"
-                    value={draft.taxPct == null ? "" : String(draft.taxPct)}
-                    onChange={(e) => {
-                      const v = e.target.value.trim();
-                      setDraft({
-                        ...draft,
-                        taxPct: v === "" ? null : Number(v) || 0,
-                      });
-                    }}
-                    placeholder="—"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              {/* ── THE WORK THIS SERVICE IS ─────────────────────────────────
-                  Its own block, below the pricing, because it is not another
-                  pricing field. The founder: "the service is pretty much the
-                  action that's being done… And then within that action are a
-                  bunch of sub actions… they shouldn't be fully separated."
-
-                  Two ways in, one outcome: pick a task template you already
-                  have, or type the steps and Vylan makes one. Either way it is
-                  a REAL task template that shows on the Task templates page and
-                  any other service can reuse — the founder's call. */}
-              <div className="space-y-2 rounded-lg border border-border/70 p-3">
-                <Label>{tT("service_does_work")}</Label>
-
-                {taskTemplates.length > 0 && (
-                  <select
-                    value={draft.taskTemplateId ?? ""}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        taskTemplateId: e.target.value || null,
-                        // Picking an existing one clears anything half-typed,
-                        // so the two inputs can never both claim to be the work.
-                        newWorkSteps: [],
-                      })
-                    }
-                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">{tT("service_does_work_none")}</option>
-                    {taskTemplates.map((tt) => (
-                      <option key={tt.id} value={tt.id}>
-                        {tt.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* The steps of whatever is picked, so you can see what you
-                    attached rather than remember what is inside a name. */}
-                {(() => {
-                  const picked = taskTemplates.find(
-                    (tt) => tt.id === draft.taskTemplateId,
-                  );
-                  return picked && picked.steps.length > 0 ? (
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      {picked.steps.slice(0, 6).join(" \u00b7 ")}
-                      {picked.steps.length > 6 && ` +${picked.steps.length - 6}`}
-                    </p>
-                  ) : null;
-                })()}
-
-                {/* Type the steps instead. Shown when nothing is picked, so the
-                    form always offers a way forward even on a firm with no task
-                    templates at all — which is what the founder hit. */}
-                {!draft.taskTemplateId && (
-                  <div className="space-y-1.5">
-                    {draft.newWorkSteps.map((step, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <CornerDownRight
-                          className="size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <Input
-                          value={step}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              newWorkSteps: draft.newWorkSteps.map((x, j) =>
-                                j === i ? e.target.value : x,
-                              ),
-                            })
-                          }
-                          placeholder={tT("service_step_placeholder")}
-                          aria-label={tT("service_step_placeholder")}
-                          className="h-8 text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDraft({
-                              ...draft,
-                              newWorkSteps: draft.newWorkSteps.filter(
-                                (_, j) => j !== i,
-                              ),
-                            })
-                          }
-                          aria-label={tT("remove")}
-                          className="text-muted-foreground transition-colors hover:text-destructive"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        setDraft({
-                          ...draft,
-                          newWorkSteps: [...draft.newWorkSteps, ""],
-                        })
-                      }
-                    >
-                      <Plus className="size-3.5" />
-                      {draft.newWorkSteps.length === 0
-                        ? tT("service_define_work")
-                        : tT("service_add_step")}
-                    </Button>
-                    {draft.newWorkSteps.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground">
-                        {tT("service_new_template_note")}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="svc-desc">{t("item_description")}</Label>
-                <Textarea
-                  id="svc-desc"
-                  value={draft.description ?? ""}
-                  onChange={(e) =>
-                    setDraft({ ...draft, description: e.target.value || null })
-                  }
-                  rows={3}
-                  placeholder={t("services_description_placeholder")}
-                  className="mt-1 text-sm"
-                />
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                {t("services_copy_note")}
-              </p>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setDraft(null);
-                setEditing(null);
-              }}
-            >
-              {t("services_cancel")}
-            </Button>
-            <Button
-              type="button"
-              onClick={save}
-              disabled={busy || !draft || draft.name.trim() === ""}
-            >
-              {t("services_save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

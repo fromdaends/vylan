@@ -63,12 +63,38 @@ describe("readProposalSnapshot — money and services", () => {
         null,
       ],
     });
-    expect(p.services).toEqual([{ name: "Bookkeeping", rateCents: 50000 }]);
+    expect(p.services).toEqual([
+      { name: "Bookkeeping", rateCents: 50000, work: [] },
+    ]);
   });
 
   it("an unpriced service is null, never zero — that would offer it free", () => {
     const p = read({ services: [{ name: "Advice", rateCents: "lots" }] });
     expect(p.services[0].rateCents).toBeNull();
+  });
+
+  it("carries the work a service buys, trimmed and capped", () => {
+    // What the client is actually buying. "Monthly bookkeeping" means nothing
+    // until it says which things get done.
+    const p = read({
+      services: [
+        { name: "Bookkeeping", work: ["  Reconcile  ", "", 7, "Close"] },
+      ],
+    });
+    expect(p.services[0].work).toEqual(["Reconcile", "Close"]);
+
+    const many = read({
+      services: [
+        { name: "Bookkeeping", work: Array.from({ length: 60 }, (_, i) => `S${i}`) },
+      ],
+    });
+    // A snapshot from a newer build must not put sixty lines under one service
+    // on somebody's contract.
+    expect(many.services[0].work).toHaveLength(25);
+  });
+
+  it("a service with no work reads as an empty list, never undefined", () => {
+    expect(read({ services: [{ name: "Advice" }] }).services[0].work).toEqual([]);
   });
 
   it("refuses a fractional or negative deposit", () => {
