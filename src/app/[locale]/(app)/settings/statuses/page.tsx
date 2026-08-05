@@ -54,6 +54,8 @@ export default async function TaskStatusesPage({
         // Same gate the write actions use, so the UI cannot offer a control the
         // server will refuse.
         canEdit={can(user, "team.manage")}
+        // For the "Added by … on DATE" line on custom statuses.
+        locale={locale}
       />
     </div>
   );

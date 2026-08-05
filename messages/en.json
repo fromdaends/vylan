@@ -1243,7 +1243,11 @@
     "statuses_description": "Description",
     "statuses_description_placeholder": "What does this status mean?",
     "statuses_description_hint": "Optional. Worth writing for the ambiguous ones — does “With client” mean you're blocked, or that you've delivered?",
-    "statuses_description_for": "Description for {name}"
+    "statuses_description_for": "Description for {name}",
+    "statuses_move_up": "Move {name} up",
+    "statuses_move_down": "Move {name} down",
+    "statuses_added_by": "Added by {name} on {date}",
+    "statuses_at_edge": "That's already as far as it goes."
   },
   "Health": {
     "title": "System check",

@@ -1243,7 +1243,11 @@
     "statuses_description": "Description",
     "statuses_description_placeholder": "Que signifie ce statut ?",
     "statuses_description_hint": "Facultatif. Utile pour les statuts ambigus — « Chez le client » veut-il dire que vous êtes bloqué, ou que vous avez livré ?",
-    "statuses_description_for": "Description de {name}"
+    "statuses_description_for": "Description de {name}",
+    "statuses_move_up": "Déplacer {name} vers le haut",
+    "statuses_move_down": "Déplacer {name} vers le bas",
+    "statuses_added_by": "Ajouté par {name} le {date}",
+    "statuses_at_edge": "Il est déjà à cette extrémité."
   },
   "Health": {
     "title": "Vérification du système",

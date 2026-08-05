@@ -19,6 +19,7 @@ import {
   createTaskStatus,
   updateTaskStatus,
   deleteTaskStatus,
+  moveTaskStatus,
   type StatusBucket,
 } from "@/lib/db/task-statuses";
 import { revalidateAllLocales } from "@/lib/revalidate";
@@ -31,6 +32,7 @@ export type StatusActionResult = {
     | "bad_name"
     | "duplicate"
     | "last_in_bucket"
+    | "at_edge"
     | "failed";
   /** The row that was just created, so the list can show it WITHOUT waiting for
    *  a refresh to bring it back. See the editor's note on why that matters:
@@ -170,6 +172,25 @@ export async function updateStatusAction(input: {
     id: input.id,
     firmId: g.firm.id,
     patch,
+  });
+  if ("error" in res) return { ok: false, error: res.error };
+  revalidateStatuses();
+  return { ok: true };
+}
+
+// Reorder within a stage. Canopy's status manager lets a firm "create, edit,
+// delete, and reorder" — the order is the order people read them in, so it is
+// part of naming them, not a separate power.
+export async function moveStatusAction(input: {
+  id: string;
+  direction: "up" | "down";
+}): Promise<StatusActionResult> {
+  const g = await guard();
+  if ("error" in g) return { ok: false, error: g.error };
+  const res = await moveTaskStatus({
+    id: input.id,
+    firmId: g.firm.id,
+    direction: input.direction,
   });
   if ("error" in res) return { ok: false, error: res.error };
   revalidateStatuses();

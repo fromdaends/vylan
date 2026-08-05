@@ -6,6 +6,7 @@ import en from "../../../messages/en.json";
 const createStatusAction = vi.fn();
 const updateStatusAction = vi.fn();
 const deleteStatusAction = vi.fn();
+const moveStatusAction = vi.fn();
 const refresh = vi.fn();
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
@@ -14,6 +15,7 @@ vi.mock("@/app/actions/task-statuses", () => ({
   createStatusAction: (...a: unknown[]) => createStatusAction(...a),
   updateStatusAction: (...a: unknown[]) => updateStatusAction(...a),
   deleteStatusAction: (...a: unknown[]) => deleteStatusAction(...a),
+  moveStatusAction: (...a: unknown[]) => moveStatusAction(...a),
 }));
 
 import { TaskStatusesEditor, type EditableStatus } from "./task-statuses-editor";
@@ -52,6 +54,8 @@ beforeEach(() => {
   refresh.mockReset();
   updateStatusAction.mockResolvedValue({ ok: true });
   deleteStatusAction.mockResolvedValue({ ok: true });
+  moveStatusAction.mockReset();
+  moveStatusAction.mockResolvedValue({ ok: true });
 });
 afterEach(cleanup);
 
@@ -230,5 +234,64 @@ describe("TaskStatusesEditor — descriptions and presets", () => {
       name: "With client",
       description: "Sent out, waiting on them",
     });
+  });
+});
+
+// ── THE CANOPY GAP ──────────────────────────────────────────────────────────
+//
+// Canopy: "Custom statuses display the team member who created them and the
+// creation date", and its manager lets a firm "create, edit, delete, and
+// reorder". Vylan stored created_by and sort all along and surfaced neither.
+describe("TaskStatusesEditor — authorship and order", () => {
+  const CUSTOM = {
+    id: "s4",
+    name: "With client",
+    color: "#0891b2",
+    bucket: "doing" as const,
+    createdByName: "Zachary Thresh",
+    createdAt: "2026-07-21T10:00:00.000Z",
+  };
+
+  it("names who added a custom status, and when", () => {
+    renderEditor([...STATUSES, CUSTOM]);
+    expect(screen.getByText(/Added by Zachary Thresh on/)).toBeTruthy();
+  });
+
+  it("says nothing about authorship on a preset — nobody in the firm made it", () => {
+    renderEditor([{ ...STATUSES[0], createdByName: "Someone", createdAt: "2026-07-21T10:00:00.000Z" }]);
+    expect(screen.queryByText(/Added by/)).toBeNull();
+    expect(screen.getByText(en.Settings.statuses_preset)).toBeTruthy();
+  });
+
+  it("cannot move the first one up or the last one down", () => {
+    renderEditor([...STATUSES, CUSTOM]);
+    // "In progress" is first in its stage, "With client" last.
+    expect(
+      (screen.getByLabelText("Move In progress up") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Move With client down") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText("Move With client up") as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("reorders immediately, and puts it back if the server refuses", async () => {
+    moveStatusAction.mockResolvedValue({ ok: false, error: "failed" });
+    renderEditor([...STATUSES, CUSTOM]);
+    const order = () =>
+      screen.getAllByLabelText(/^Description for/).map((el) =>
+        el.getAttribute("aria-label"),
+      );
+    const before = order();
+    fireEvent.click(screen.getByLabelText("Move With client up"));
+    await waitFor(() => expect(moveStatusAction).toHaveBeenCalledWith({
+      id: "s4",
+      direction: "up",
+    }));
+    // Snapped back — an order that silently disagrees with the database is
+    // worse than one that visibly returns.
+    await waitFor(() => expect(order()).toEqual(before));
   });
 });

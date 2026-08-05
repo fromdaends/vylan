@@ -34,7 +34,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,8 +50,10 @@ import {
   createStatusAction,
   updateStatusAction,
   deleteStatusAction,
+  moveStatusAction,
   type StatusActionResult,
 } from "@/app/actions/task-statuses";
+import { formatDate, type AppLocale } from "@/lib/format";
 
 type Bucket = "todo" | "doing" | "done";
 export type EditableStatus = {
@@ -65,6 +67,10 @@ export type EditableStatus = {
    *  does not pass its own defaults off as the firm's work. Everything about a
    *  preset is still editable; the badge says where it CAME FROM. */
   isBuiltin?: boolean;
+  /** Who added it and when. Canopy shows the same on custom statuses; a preset
+   *  carries its badge instead, because nobody in the firm made it. */
+  createdByName?: string | null;
+  createdAt?: string | null;
 };
 
 const BUCKETS: Bucket[] = ["todo", "doing", "done"];
@@ -90,10 +96,12 @@ const SWATCHES = [
 export function TaskStatusesEditor({
   statuses,
   canEdit,
+  locale = "en",
 }: {
   statuses: EditableStatus[];
   /** Owner only. Everyone else reads the list — every task row renders one. */
   canEdit: boolean;
+  locale?: AppLocale;
 }) {
   const t = useTranslations("Settings");
   const router = useRouter();
@@ -149,7 +157,9 @@ export function TaskStatusesEditor({
       return true;
     }
     toast.error(
-      res.error === "duplicate"
+      res.error === "at_edge"
+        ? t("statuses_at_edge")
+        : res.error === "duplicate"
         ? t("statuses_duplicate")
         : res.error === "bad_name"
           ? t("statuses_bad_name")
@@ -192,6 +202,34 @@ export function TaskStatusesEditor({
   const removeRow = (id: string) =>
     setRows((prev) => prev.filter((r) => r.id !== id));
 
+  // Reorder optimistically for the same reason everything else here is
+  // optimistic: a list that only moves after a refresh reads as a list that
+  // does not move. Swaps inside the bucket, matching the server.
+  async function move(id: string, direction: "up" | "down") {
+    const row = rows.find((r) => r.id === id);
+    if (!row || busy) return;
+    const siblings = rows.filter((r) => r.bucket === row.bucket);
+    const i = siblings.findIndex((r) => r.id === id);
+    const j = direction === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= siblings.length) return;
+
+    const before = rows;
+    const swapped = [...siblings];
+    [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
+    setRows((prev) => [
+      ...prev.filter((r) => r.bucket !== row.bucket),
+      ...swapped,
+    ]);
+    setBusy(true);
+    try {
+      // Put it back if the server refuses — an order that silently disagrees
+      // with the database is worse than one that visibly snaps back.
+      if (!report(await moveStatusAction({ id, direction }))) setRows(before);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {BUCKETS.map((bucket) => (
@@ -219,6 +257,12 @@ export function TaskStatusesEditor({
                 lastInBucket={inBucket(bucket).length <= 1}
                 onPatched={patchRow}
                 onRemoved={removeRow}
+                onMove={move}
+                canMoveUp={inBucket(bucket)[0]?.id !== status.id}
+                canMoveDown={
+                  inBucket(bucket)[inBucket(bucket).length - 1]?.id !== status.id
+                }
+                locale={locale}
                 canEdit={canEdit && !busy}
                 confirming={confirmDelete === status.id}
                 onConfirm={() =>
@@ -344,6 +388,10 @@ function StatusRow({
   onSaved,
   onPatched,
   onRemoved,
+  onMove,
+  canMoveUp,
+  canMoveDown,
+  locale,
   t,
 }: {
   status: EditableStatus;
@@ -359,6 +407,10 @@ function StatusRow({
   onSaved: (res: StatusActionResult) => boolean;
   onPatched: (id: string, patch: Partial<EditableStatus>) => void;
   onRemoved: (id: string) => void;
+  onMove: (id: string, direction: "up" | "down") => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  locale: AppLocale;
   t: ReturnType<typeof useTranslations<"Settings">>;
 }) {
   const [name, setName] = useState(status.name);
@@ -429,6 +481,30 @@ function StatusRow({
               onChange={(color) => save({ color })}
               t={t}
             />
+            {/* Order is the order people READ them in, so reordering is part
+                of naming them rather than a separate power. Arrows, not drag:
+                a drag target this small is a coin toss, and the list is three
+                to eight rows. */}
+            <button
+              type="button"
+              onClick={() => onMove(status.id, "up")}
+              disabled={!canMoveUp || busy}
+              aria-label={t("statuses_move_up", { name: status.name })}
+              title={t("statuses_move_up", { name: status.name })}
+              className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronUp className="size-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(status.id, "down")}
+              disabled={!canMoveDown || busy}
+              aria-label={t("statuses_move_down", { name: status.name })}
+              title={t("statuses_move_down", { name: status.name })}
+              className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronDown className="size-3.5" aria-hidden />
+            </button>
             <button
               type="button"
               onClick={onConfirm}
@@ -476,6 +552,18 @@ function StatusRow({
             {status.description}
           </p>
         )
+      )}
+
+      {/* Canopy: "Custom statuses display the team member who created them and
+          the creation date." A preset shows its badge instead — nobody in the
+          firm made it, so there is nobody to name. */}
+      {!status.isBuiltin && status.createdByName && status.createdAt && (
+        <p className="ml-[22px] text-[11px] text-muted-foreground/80">
+          {t("statuses_added_by", {
+            name: status.createdByName,
+            date: formatDate(status.createdAt, locale),
+          })}
+        </p>
       )}
 
       {confirming && canEdit && (
