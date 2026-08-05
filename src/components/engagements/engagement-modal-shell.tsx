@@ -130,30 +130,43 @@ export function EngagementModalShell({
           overlay that looks like the background UI, but it's really not. And
           it's just a screenshot of it."
 
-          Exactly the right instinct, and it is what this is. Behind the glass
-          is the SHAPE of the engagements list and nothing else: no data, no
-          client components, no hydration, no scrolling, no animation. It is
-          scenery — closer to a photograph of the page than to the page.
+          Behind the glass is the SHAPE of the engagements list and nothing
+          else: no data, no client components, no hydration, no scrolling, no
+          animation. Scenery — closer to a photograph of the page than to the
+          page. That inertness is what keeps it cheap.
 
-          That inertness is the whole point. `backdrop-filter` recomputes every
-          frame the content beneath it CHANGES, so a live page under a blur is
-          a full-screen blur recomputed continuously — which is what made this
-          modal unusable in three earlier attempts ("its extremly laggy... cant
-          even X out of the screen"). Nothing under this blur can move, so the
-          blur paints once and stays painted. */}
+          ── WHY THE BLUR IS ON THE CONTENT, NOT ON A PANE ABOVE IT ──────
+
+          The obvious build is a `backdrop-filter` pane over a sibling layer.
+          It rendered, it was sized correctly, and it blurred nothing — the
+          skeleton stayed crisp through it, which is why the founder saw the
+          same page twice and said so twice. `backdrop-filter` samples a
+          "backdrop root", and what counts as one depends on the stacking
+          context it lands in; a fixed sibling is not reliably part of it.
+
+          So the blur is a plain `filter` on the scenery ITSELF, which has no
+          such caveat: it blurs its own pixels, always. The dim is then an
+          ordinary translucent layer on top. Two boring properties instead of
+          one clever one — and both paint once, because nothing underneath
+          them ever moves. */}
       <div
         aria-hidden
         // `inert` as well as pointer-events-none: nothing in here may take
         // focus from the dialog, including via the keyboard.
         inert
-        className="pointer-events-none fixed inset-0 z-30 overflow-hidden select-none px-6 pt-7 lg:px-11 sm:left-[var(--rail-width)]"
+        className="pointer-events-none fixed inset-0 z-30 select-none overflow-hidden sm:left-[var(--rail-width)]"
       >
-        <EngagementsListSkeleton animated={false} tone="contrast" />
+        {/* blur-md is filter: blur(12px) — on this element's own content.
+            scale-105 hides the soft, transparent edge a blur leaves behind. */}
+        <div className="scale-105 px-6 pt-7 blur-md lg:px-11">
+          <EngagementsListSkeleton animated={false} tone="contrast" />
+        </div>
       </div>
 
+      {/* The dim. A plain colour, no filter — the blur already happened. */}
       <div
         aria-hidden
-        className="fixed inset-0 z-40 bg-background/60 backdrop-blur-md sm:left-[var(--rail-width)]"
+        className="pointer-events-none fixed inset-0 z-40 bg-background/70 sm:left-[var(--rail-width)]"
       />
 
       <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
