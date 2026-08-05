@@ -61,6 +61,8 @@ export function readProposalSnapshot(
     welcome: textOrNull(o?.welcome),
     videoUrl: textOrNull(o?.videoUrl),
     documentName: textOrNull(o?.documentName),
+    videoPath: textOrNull(o?.videoPath),
+    documentPath: textOrNull(o?.documentPath),
     services: arr(o?.services)
       .map((x) => {
         const s = obj(x);

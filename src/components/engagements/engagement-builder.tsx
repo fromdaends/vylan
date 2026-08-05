@@ -41,13 +41,20 @@ import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import {
   BuilderChrome,
   RadioCard,
+  ToggleRow,
 } from "@/components/templates/template-builder-shell";
+import { AssetUpload } from "@/components/templates/asset-upload";
+import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
 import { computeBillingTotals } from "@/lib/engagements/billing-totals";
 import {
   defaultPriceVisibility,
+  emptyBlock,
+  flattenBlocks,
+  type BillingBlock,
   type PriceVisibility,
 } from "@/lib/engagements/billing-blocks";
+import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
 import {
   findScopeWarning,
   type ScopeWarningContact,
@@ -71,11 +78,9 @@ import {
   placeholderText,
   resolvePlaceholders,
 } from "@/lib/engagements/placeholders";
-import {
-  EngagementItemsEditor,
-  type CatalogueService,
-} from "@/components/engagements/engagement-items-editor";
-import type { EngagementItemDraft } from "@/lib/engagements/items";
+// The blocks editor renders the item rows now; only the catalogue type is still
+// needed here, and the flat draft type comes with flattenBlocks.
+import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import {
   emptyTask,
   meaningfulTasks,
@@ -236,6 +241,7 @@ export function EngagementBuilder({
   invoiceDefaultDelayDays = null,
   reminderDefaultSettings = null,
   canManageReminderDefaults = false,
+  canManageFirmTerms = false,
   firmDefaultTerms = "",
   authorizedContacts = {},
 }: {
@@ -297,6 +303,10 @@ export function EngagementBuilder({
   // so customizing this form never mutates the saved firm default.
   reminderDefaultSettings?: ReminderSettings | null;
   canManageReminderDefaults?: boolean;
+  /** Whether this person may CHANGE the firm's standard terms. Writing terms
+   *  onto one engagement is not the same act as changing what every future one
+   *  starts from — the same gate the template builder uses. */
+  canManageFirmTerms?: boolean;
   /**
    * The firm's standard terms (1610).
    *
@@ -451,6 +461,41 @@ export function EngagementBuilder({
   // Seeded from the template when there is one, from the firm's standard terms
   // when there is not — so the common case is already filled in and the step is
   // a review rather than a form.
+  // ── CANOPY'S THREE INTRODUCTION ROWS ────────────────────────────────────
+  //
+  // The founder: "even, like, the UI choices with, like, for example, like,
+  // introduction, like, that's not even a section that's in the engagement
+  // creation... There's so much that's in the template engagement creator
+  // versus the actual engagement creator. They should be the fucking exact
+  // same."
+  //
+  // They were right. A template could put a welcome note, a video and a
+  // brochure at the top of what the client reads; an engagement had a bare
+  // textarea and no way to attach either file. Same rows, same toggles, same
+  // uploader as the template — seeded from it when one was used.
+  //
+  // The toggle is kept SEPARATE from the content on purpose: turning Video off
+  // and back on must not lose the link you already pasted. That is the
+  // difference between a toggle and a delete.
+  const [welcomeEnabled, setWelcomeEnabled] = useState(
+    tpl?.welcomeEnabled ?? false,
+  );
+  const [videoEnabled, setVideoEnabled] = useState(tpl?.videoEnabled ?? false);
+  const [videoUrl, setVideoUrl] = useState(tpl?.videoUrl ?? "");
+  const [videoPath, setVideoPath] = useState(tpl?.videoPath ?? "");
+  const [videoFileName, setVideoFileName] = useState(tpl?.videoFileName ?? "");
+  const [documentEnabled, setDocumentEnabled] = useState(
+    tpl?.documentEnabled ?? false,
+  );
+  const [documentName, setDocumentName] = useState(tpl?.documentName ?? "");
+  const [documentPath, setDocumentPath] = useState(tpl?.documentPath ?? "");
+
+  /** Canopy's Terms tab has an on/off switch; an engagement always showed the
+   *  box. On means "this proposal carries terms", which is not the same as
+   *  "the box happens to be empty". */
+  const [termsEnabled, setTermsEnabled] = useState(tpl?.termsEnabled ?? true);
+  const [termsSaved, setTermsSaved] = useState(false);
+
   const [proposalTerms, setProposalTerms] = useState(
     tpl?.termsEnabled ? tpl.termsText : firmDefaultTerms,
   );
@@ -491,9 +536,35 @@ export function EngagementBuilder({
     return Math.round(n * 100);
   }, [proposalDeposit]);
 
-  const [serviceItems, setServiceItems] = useState<EngagementItemDraft[]>(() => [
-    ...(initialEngagementTemplate?.payload.items ?? []),
-  ]);
+  // ── THE SAME EDITOR THE TEMPLATE'S SERVICES TAB USES ──────────────────
+  //
+  // The founder: "the service page has alot more detail and understanding
+  // compared to the service page on the engagement creation too. Cmon i though
+  // you fixed that."
+  //
+  // Fair. Price visibility, payment settings and the totals came across; the
+  // BLOCKS did not, so a template could say "one-time, due on acceptance,
+  // shown to the client as one line" and an engagement could only say "here is
+  // a list of lines".
+  //
+  // Blocks are the AUTHORING shape and flatten into the flat `service_items`
+  // everything downstream already reads — so this changes what you can express,
+  // not what gets stored. This builder only ever CREATES (there is no edit
+  // route), which is why the blocks can live in state and flatten on save.
+  const [blocks, setBlocks] = useState<BillingBlock[]>(() => {
+    const fromTemplate = initialEngagementTemplate?.payload.billingBlocks ?? [];
+    if (fromTemplate.length > 0) return fromTemplate;
+    // A template written before blocks existed carries a flat list. It becomes
+    // ONE one-time block rather than nothing, so its prices survive.
+    const flat = initialEngagementTemplate?.payload.items ?? [];
+    return flat.length > 0
+      ? [{ ...emptyBlock("one_time"), items: flat }]
+      : [emptyBlock("one_time")];
+  });
+
+  /** What everything downstream reads: totals, the proposal, the save. Derived
+   *  so there is one source of truth and the two can never disagree. */
+  const serviceItems = useMemo(() => flattenBlocks(blocks), [blocks]);
 
   // What the work CONSISTS OF (1370's engagement_tasks).
   //
@@ -700,7 +771,16 @@ export function EngagementBuilder({
       // just supplied the moment a client is picked.
       setTitleTouched(true);
     }
-    if (p.items.length > 0) setServiceItems(p.items);
+    // Blocks when the template has them, otherwise its flat lines become one
+    // one-time block — the same upgrade the initial state does, because a
+    // template picked here and a template picked on arrival must land
+    // identically.
+    if (p.billingBlocks.length > 0) {
+      setBlocks(p.billingBlocks);
+    } else if (p.items.length > 0) {
+      setBlocks([{ ...emptyBlock("one_time"), items: p.items }]);
+    }
+    if (p.priceVisibility) setPriceVisibility(p.priceVisibility);
     if (p.checklist.length > 0) {
       setItems(
         p.checklist.map((c) => ({
@@ -859,9 +939,11 @@ export function EngagementBuilder({
     ),
     periodStartsOn: proposalPeriodStartsOn,
     periodMonths: proposalPeriodMonths,
-    welcome: introMessage.trim() || null,
-    videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
-    documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
+    welcome: welcomeEnabled ? introMessage.trim() || null : null,
+    videoUrl: videoEnabled ? videoUrl.trim() || null : null,
+    documentName: documentEnabled ? documentName.trim() || null : null,
+    videoPath: videoEnabled ? videoPath || null : null,
+    documentPath: documentEnabled ? documentPath || null : null,
     // Each priced line carries the work it brings, so the client reads what
     // they are buying rather than only what it costs. Matched by SERVICE, which
     // is the link the catalogue actually stores (1620) — the tasks on the Tasks
@@ -886,7 +968,7 @@ export function EngagementBuilder({
           taxPct: i.taxPct,
         };
       }),
-    terms: proposalTerms.trim() || null,
+    terms: termsEnabled ? proposalTerms.trim() || null : null,
     clientSigns: proposalClientSigns,
     additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
     firmCountersigns: proposalFirmCountersigns,
@@ -1217,6 +1299,8 @@ export function EngagementBuilder({
       title,
       type: selectedTemplate?.type ?? null,
       items: serviceItems,
+      billingBlocks: blocks,
+      priceVisibility,
       checklist: items,
       // The opaque steps go in whole. This component does not need to know
       // their shape, and the reader does not inspect them.
@@ -1563,24 +1647,81 @@ export function EngagementBuilder({
                 </div>
               )}
 
-              {/* The covering note at the top of the client's proposal.
-                  PLAIN TEXT for now: nothing in this repo has a rich-text
-                  editor, and adding one is its own decision that also affects
-                  the item descriptions and the terms. Storing text now and
-                  upgrading the EDITOR later is safe; storing HTML from an
+              {/* ── CANOPY'S THREE INTRODUCTION ROWS ─────────────────────
+                  Identical to the template builder's Introduction tab: the
+                  same ToggleRow, the same uploader, the same copy. It was a
+                  bare textarea with no video and no document at all.
+
+                  PLAIN TEXT for the note: nothing in this repo has a rich-text
+                  editor, and adding one is its own decision. Storing text now
+                  and upgrading the EDITOR later is safe; storing HTML from an
                   editor that does not exist is not. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="intro_message">{t("field_intro_message")}</Label>
-                <Textarea
-                  id="intro_message"
-                  value={introMessage}
-                  onChange={(e) => setIntroMessage(e.target.value)}
-                  rows={3}
-                  placeholder={t("intro_message_placeholder")}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("intro_message_hint")}
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  {tTpl("tab_introduction")}
                 </p>
+                <ToggleRow
+                  label={tTpl("welcome_message")}
+                  hint={tTpl("welcome_message_hint")}
+                  on={welcomeEnabled}
+                  onToggle={() => setWelcomeEnabled((v) => !v)}
+                >
+                  <Textarea
+                    id="intro_message"
+                    value={introMessage}
+                    onChange={(e) => setIntroMessage(e.target.value)}
+                    placeholder={t("intro_message_placeholder")}
+                    rows={4}
+                  />
+                </ToggleRow>
+                <ToggleRow
+                  label={tTpl("intro_video")}
+                  hint={tTpl("intro_video_hint")}
+                  on={videoEnabled}
+                  onToggle={() => setVideoEnabled((v) => !v)}
+                >
+                  <div className="space-y-2">
+                    <Input
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      placeholder={tTpl("intro_video_placeholder")}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      {tTpl("or_upload")}
+                    </p>
+                    <AssetUpload
+                      kind="video"
+                      fileName={videoFileName}
+                      onUploaded={(path, name) => {
+                        setVideoPath(path);
+                        setVideoFileName(name);
+                      }}
+                      onClear={() => {
+                        setVideoPath("");
+                        setVideoFileName("");
+                      }}
+                    />
+                  </div>
+                </ToggleRow>
+                <ToggleRow
+                  label={tTpl("intro_document")}
+                  hint={tTpl("intro_document_hint")}
+                  on={documentEnabled}
+                  onToggle={() => setDocumentEnabled((v) => !v)}
+                >
+                  <AssetUpload
+                    kind="document"
+                    fileName={documentName}
+                    onUploaded={(path, name) => {
+                      setDocumentPath(path);
+                      setDocumentName(name);
+                    }}
+                    onClear={() => {
+                      setDocumentPath("");
+                      setDocumentName("");
+                    }}
+                  />
+                </ToggleRow>
               </div>
 
               {/* "AI Analyze" toggle. On by default; turning it off means no
@@ -1624,9 +1765,11 @@ export function EngagementBuilder({
             </p>
           </CardHeader>
           <CardContent>
-            <EngagementItemsEditor
-              items={serviceItems}
-              onChange={setServiceItems}
+            <BillingBlocksEditor
+              blocks={blocks}
+              onChange={setBlocks}
+              visibility={priceVisibility}
+              onVisibilityChange={setPriceVisibility}
               // A service that carries work brings it. Automatic, per the
               // founder — no prompt; the tasks land in the Tasks step labelled
               // with the service that brought them, and are edited or deleted
@@ -1634,6 +1777,10 @@ export function EngagementBuilder({
               onServicePicked={pullServiceWork}
               locale={locale}
               services={services}
+              // No firm-wide default tax on this screen — the builder is given
+              // service PRICES, not a rate. Lines take their tax from the
+              // catalogue service or from what you type.
+              fallbackTaxPct={null}
             />
           </CardContent>
         </Card>
@@ -2054,36 +2201,9 @@ export function EngagementBuilder({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("price_visibility")}
-              </p>
-              {(
-                [
-                  ["itemizedPrice", "price_visibility_itemized"],
-                  ["blockTotals", "price_visibility_blocks"],
-                  ["total", "price_visibility_total"],
-                ] as const
-              ).map(([key, labelKey]) => (
-                <label
-                  key={key}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={priceVisibility[key]}
-                    onChange={(e) =>
-                      setPriceVisibility((prev) => ({
-                        ...prev,
-                        [key]: e.target.checked,
-                      }))
-                    }
-                  />
-                  {t(labelKey)}
-                </label>
-              ))}
-            </div>
-
+            {/* Price visibility is NOT here: it is the gear on the Service
+                items step, where the lines it hides actually live, and where
+                the template builder keeps it too. It was briefly in both. */}
             <div className="space-y-1.5 border-t border-border/60 pt-3">
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
@@ -2756,30 +2876,69 @@ export function EngagementBuilder({
                   {tTpl("general_terms")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  {tTpl("general_terms_hint")}
-                </p>
-                <Textarea
-                  value={proposalTerms}
-                  onChange={(e) => setProposalTerms(e.target.value)}
-                  placeholder={tTpl("general_terms_placeholder")}
-                  rows={10}
-                />
-                {/* Offered only when it would change something — the box is
-                    already seeded with these, so this is for an engagement
-                    whose terms were edited and want putting back. */}
-                {firmDefaultTerms.trim() &&
-                  proposalTerms.trim() !== firmDefaultTerms.trim() && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setProposalTerms(firmDefaultTerms)}
-                    >
-                      {tTpl("use_firm_terms")}
-                    </Button>
-                  )}
+              <CardContent>
+                {/* The SAME ToggleRow and the SAME two buttons as the template
+                    builder's Terms tab. The engagement had the textarea and
+                    neither the switch nor "save as my firm's standard terms",
+                    so a firm could write its terms once on an engagement and
+                    have no way to keep them. */}
+                <ToggleRow
+                  label={tTpl("general_terms")}
+                  hint={tTpl("general_terms_hint")}
+                  on={termsEnabled}
+                  onToggle={() => setTermsEnabled((v) => !v)}
+                >
+                  <div className="space-y-2">
+                    <Textarea
+                      value={proposalTerms}
+                      onChange={(e) => setProposalTerms(e.target.value)}
+                      placeholder={tTpl("general_terms_placeholder")}
+                      rows={10}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Offered only when it would change something — the box
+                          is already seeded with these. */}
+                      {firmDefaultTerms.trim() &&
+                        proposalTerms.trim() !== firmDefaultTerms.trim() && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setProposalTerms(firmDefaultTerms)}
+                          >
+                            {tTpl("use_firm_terms")}
+                          </Button>
+                        )}
+                      {/* Gated: writing terms on ONE engagement is not the same
+                          act as changing what every future one starts from. */}
+                      {canManageFirmTerms &&
+                        proposalTerms.trim() &&
+                        proposalTerms.trim() !== firmDefaultTerms.trim() && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() =>
+                              startTransition(async () => {
+                                const res = await saveFirmDefaultTermsAction({
+                                  terms: proposalTerms.trim(),
+                                });
+                                setTermsSaved(res.ok);
+                              })
+                            }
+                          >
+                            {tTpl("save_as_firm_terms")}
+                          </Button>
+                        )}
+                      {termsSaved && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {tTpl("firm_terms_saved")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </ToggleRow>
               </CardContent>
             </Card>
 
