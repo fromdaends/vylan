@@ -183,7 +183,7 @@ export function EngagementModalShell({
           </div>
           {/* The dim, inside the same element as the scenery it dims — so the
               two can never be separated by a stacking rule again. */}
-          <div className="absolute inset-0 bg-background/70" />
+          <div className="absolute inset-0 bg-background/30 dark:bg-background/35" />
         </div>
 
         <div className={sheet}>
