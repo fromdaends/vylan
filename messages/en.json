@@ -1247,7 +1247,13 @@
     "statuses_move_up": "Move {name} up",
     "statuses_move_down": "Move {name} down",
     "statuses_added_by": "Added by {name} on {date}",
-    "statuses_at_edge": "That's already as far as it goes."
+    "statuses_at_edge": "That's already as far as it goes.",
+    "nav_templates": "Templates",
+    "nav_letter": "Engagement letter",
+    "letter_title": "Engagement letter",
+    "letter_subtitle": "The document your automations send when a job starts. Set it up once and every workflow reuses it.",
+    "letter_link_hint": "The document your automations send when a job starts.",
+    "templates_link_hint": "How your engagements, tasks, document requests and services are shaped."
   },
   "Health": {
     "title": "System check",
