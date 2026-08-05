@@ -66,9 +66,23 @@ export function readProposalSnapshot(
         if (!s) return null;
         const name = str(s.name);
         if (name.length === 0) return null;
-        return { name, rateCents: cents(s.rateCents) };
+        return {
+          name,
+          rateCents: cents(s.rateCents),
+          // The work this line buys (1620). Strings only, trimmed, capped —
+          // a snapshot from a newer build must not be able to put a hundred
+          // lines of anything under one service on a client's contract.
+          work: arr(s.work)
+            .filter((x): x is string => typeof x === "string")
+            .map((x) => x.trim())
+            .filter((x) => x.length > 0)
+            .slice(0, 25),
+        };
       })
-      .filter((x): x is { name: string; rateCents: number | null } => x != null),
+      .filter(
+        (x): x is { name: string; rateCents: number | null; work: string[] } =>
+          x != null,
+      ),
     terms: textOrNull(o?.terms),
     // Absent reads as TRUE. A proposal whose signature block failed to read
     // should still ask the client to sign — the other default would present a

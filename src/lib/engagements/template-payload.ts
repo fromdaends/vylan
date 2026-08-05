@@ -58,6 +58,25 @@ export type EngagementTemplatePayload = {
   /** What the client is asked to send. */
   checklist: TemplateChecklistItem[];
   /**
+   * The WORK this template implies — task template ids (1570).
+   *
+   * Filled automatically when a service that carries work is picked on the
+   * Services tab, because that is what the link is FOR: the founder, on
+   * services and tasks, "they're both connected together" and "adding a service
+   * should automatically pull tasks in".
+   *
+   * IDS, not copies. Task templates are a catalogue, and a catalogue stays
+   * live: improving the month-end template improves what every future
+   * engagement gets. The tasks are frozen only when an engagement is actually
+   * created from this — which is the same copy-on-use rule the priced lines
+   * follow, one step later.
+   *
+   * An id whose template has since been deleted simply produces no tasks. That
+   * is the honest outcome and the reason nothing downstream may assume this
+   * resolves.
+   */
+  taskTemplateIds: string[];
+  /**
    * Canopy's "Engagement period begins on" — Acceptance, or a fixed date.
    *
    * On a TEMPLATE this is only ever the rule, never a resolved date: a template
@@ -181,6 +200,7 @@ export function emptyPayload(): EngagementTemplatePayload {
     billingBlocks: [],
     priceVisibility: defaultPriceVisibility(),
     checklist: [],
+    taskTemplateIds: [],
     invoice: null,
     reminders: null,
     repeat: null,
@@ -395,6 +415,16 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
     checklist: arr(o.checklist)
       .map(readChecklistItem)
       .filter((i): i is TemplateChecklistItem => i != null),
+    // Strings only, de-duplicated, and capped. A template that named the same
+    // work twice would create it twice on every engagement made from it.
+    taskTemplateIds: Array.from(
+      new Set(
+        arr(o.taskTemplateIds)
+          .filter((x): x is string => typeof x === "string")
+          .map((x) => x.trim())
+          .filter((x) => x.length > 0),
+      ),
+    ).slice(0, 50),
     invoice: obj(o.invoice),
     reminders: obj(o.reminders),
     repeat: obj(o.repeat),
@@ -411,6 +441,9 @@ export function isWorthSaving(p: EngagementTemplatePayload): boolean {
   return (
     p.items.length > 0 ||
     p.checklist.length > 0 ||
+    // Work counts. A template whose only content is "these six tasks" is a
+    // perfectly good template — it is what a service-led firm reaches for.
+    p.taskTemplateIds.length > 0 ||
     p.invoice != null ||
     p.reminders != null ||
     p.title.trim().length > 0

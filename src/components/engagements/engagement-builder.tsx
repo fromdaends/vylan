@@ -462,9 +462,35 @@ export function EngagementBuilder({
   // client-facing half of engagement creation for anyone who didn't discover
   // that they now had to add a row for it. It is an ordinary row — retitle it,
   // change its kind, or delete it.
-  const [tasks, setTasks] = useState<TaskDraft[]>([
-    { ...emptyTask("document_collection"), title: t("task_seed_documents") },
-  ]);
+  const [tasks, setTasks] = useState<TaskDraft[]>(() => {
+    const seed: TaskDraft[] = [
+      { ...emptyTask("document_collection"), title: t("task_seed_documents") },
+    ];
+    // ── THE TEMPLATE'S WORK ─────────────────────────────────────────────
+    //
+    // An engagement built from a template used to arrive with the priced lines
+    // and the document requests, and NO tasks — the template stored which work
+    // its services implied (1620) and nothing read it back. So the whole point
+    // of linking a service to a task template stopped at the template.
+    //
+    // Seeded in the initial state rather than by an effect: a mount effect that
+    // called setTasks would render the empty list first and correct it a frame
+    // later, which reads as the page losing your work. React Compiler rejects
+    // it too.
+    let next = seed;
+    for (const id of initialEngagementTemplate?.payload.taskTemplateIds ?? []) {
+      const tt = taskTemplates.find((x) => x.id === id);
+      if (!tt) continue; // A deleted template simply produces no tasks.
+      next = appendTaskTemplate(
+        next,
+        { name: tt.name, kind: tt.kind, subtasks: tt.subtasks },
+        // No source label: the template brought this, not a service picked on
+        // this screen. Labelling it with a service name would be a lie, and
+        // pullServiceWork uses that label to avoid adding the same work twice.
+      ).tasks;
+    }
+    return next;
+  });
   const docTaskIndex = documentCollectionIndex(tasks);
 
   function updateTask(idx: number, patch: Partial<TaskDraft>) {
@@ -711,41 +737,53 @@ export function EngagementBuilder({
   /** What the client will see, from the form as it stands. ONE builder for it,
    *  used by both the preview on this step and the snapshot written on save —
    *  two copies would drift and the preview would start lying. */
-  const proposalData = useMemo(
-    () => ({
-      clientName: selectedClient?.display_name ?? t("preview_no_client"),
-      engagementName: resolvePlaceholders(
-        effectiveTitle.trim(),
-        {
-          clientName: selectedClient?.display_name ?? null,
-          taxYear: taxYear ? Number(taxYear) : null,
-        },
-        new Date(),
-        locale,
-      ),
-      periodStartsOn: proposalPeriodStartsOn,
-      periodMonths: proposalPeriodMonths,
-      welcome: introMessage.trim() || null,
-      videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
-      documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
-      services: serviceItems
-        .filter((i) => i.name.trim().length > 0)
-        .map((i) => ({ name: i.name.trim(), rateCents: i.rateCents })),
-      terms: proposalTerms.trim() || null,
-      clientSigns: proposalClientSigns,
-      additionalSignerLabels: proposalSigners
-        .map((x) => x.trim())
-        .filter(Boolean),
-      firmCountersigns: proposalFirmCountersigns,
-      depositCents: proposalDepositCents,
-    }),
-    [
-      selectedClient, effectiveTitle, taxYear, locale, t, tpl,
-      proposalPeriodStartsOn, proposalPeriodMonths, introMessage, serviceItems,
-      proposalTerms, proposalClientSigns, proposalSigners,
-      proposalFirmCountersigns, proposalDepositCents,
-    ],
-  );
+  //
+  // Computed plainly, NOT memoized: React Compiler refuses to preserve a manual
+  // memo whose deps it thinks may be mutated, and one already exists in this
+  // component — a second would add an error without changing the outcome. It is
+  // a handful of maps over a list that is never long.
+  const proposalData = {
+    clientName: selectedClient?.display_name ?? t("preview_no_client"),
+    engagementName: resolvePlaceholders(
+      effectiveTitle.trim(),
+      {
+        clientName: selectedClient?.display_name ?? null,
+        taxYear: taxYear ? Number(taxYear) : null,
+      },
+      new Date(),
+      locale,
+    ),
+    periodStartsOn: proposalPeriodStartsOn,
+    periodMonths: proposalPeriodMonths,
+    welcome: introMessage.trim() || null,
+    videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
+    documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
+    // Each priced line carries the work it brings, so the client reads what
+    // they are buying rather than only what it costs. Matched by SERVICE, which
+    // is the link the catalogue actually stores (1620) — the tasks on the Tasks
+    // step may since have been edited, and the contract should describe the
+    // offer, not somebody's in-progress checklist.
+    services: serviceItems
+      .filter((i) => i.name.trim().length > 0)
+      .map((i) => {
+        const svc = i.serviceId
+          ? services.find((x) => x.id === i.serviceId)
+          : undefined;
+        const tt = svc?.work
+          ? taskTemplates.find((x) => x.id === svc.work!.templateId)
+          : undefined;
+        return {
+          name: i.name.trim(),
+          rateCents: i.rateCents,
+          work: tt?.subtasks.map((x) => x.title),
+        };
+      }),
+    terms: proposalTerms.trim() || null,
+    clientSigns: proposalClientSigns,
+    additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
+    firmCountersigns: proposalFirmCountersigns,
+    depositCents: proposalDepositCents,
+  };
 
   // ── The wizard ────────────────────────────────────────────────────────────
   //
@@ -984,10 +1022,14 @@ export function EngagementBuilder({
             // client's name is dropped: the snapshot reader takes it from the
             // engagement's own client, so a renamed client still reads
             // correctly on their own document.
-            proposal: (() => {
-              const { clientName: _drop, ...rest } = proposalData;
-              return rest;
-            })(),
+            proposal: {
+              ...proposalData,
+              // The snapshot reader takes the client's name from the
+              // engagement's own client, so a renamed client still reads
+              // correctly on their own document. Storing it here would freeze
+              // yesterday's name onto the contract.
+              clientName: undefined,
+            },
             tasks: meaningfulTasks(tasks).map((task) => ({
               title: task.title,
               kind: task.kind,

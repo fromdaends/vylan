@@ -355,9 +355,11 @@ export function AppShell({
             {
               // These two CREATE one rather than going to look at the list —
               // founder: "the whole function is to create one not just bring
-              // you to the page". Service opens its dialog; document request
-              // clones the blank template and drops you in its editor.
-              href: "/templates/services?new=1",
+              // you to the page". A service now has a real create ROUTE like
+              // every other builder, so it links straight to it; a document
+              // request still clones the blank template and drops you in its
+              // editor, because that is what creating one means.
+              href: "/templates/services/new",
               label: tHome("create_service"),
               description: tHome("create_service_hint"),
             },

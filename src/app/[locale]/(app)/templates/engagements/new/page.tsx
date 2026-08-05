@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { listFirmServices } from "@/lib/db/firm-services";
+import { listTaskTemplates } from "@/lib/db/task-templates";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -31,10 +32,13 @@ export default async function NewEngagementTemplatePage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [services, firm, members, viewer] = await Promise.all([
+  const [services, taskTemplates, firm, members, viewer] = await Promise.all([
     // The firm's service catalogue (1480). Empty before it is applied, which
     // the items editor treats as an ordinary state.
     listFirmServices(),
+    // The firm's task templates (1570) — a service names the work it
+    // implies, and the Services tab shows what a picked service brought.
+    listTaskTemplates(),
     getCurrentFirm(),
     // Who an engagement from this template lands on. Empty in a solo firm,
     // which hides the picker — there is nobody else to hand it to.
@@ -46,6 +50,14 @@ export default async function NewEngagementTemplatePage({
     <EngagementTemplateBuilder
       locale={locale}
       services={services}
+      // Without this the Services tab can never say which work a picked
+      // service brought — the exact never-wired-prop class of bug that
+      // shipped three inert features on the engagement page before.
+      taskTemplates={taskTemplates.map((tt) => ({
+        id: tt.id,
+        name: tt.name,
+        steps: tt.payload.subtasks.map((x) => x.title),
+      }))}
       members={members
         .filter((m) => !m.deactivated_at)
         .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}

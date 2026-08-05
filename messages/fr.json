@@ -2851,7 +2851,8 @@
     "bulk_select_all_clients": "Sélectionner tous les clients affichés",
     "bulk_select_client": "Sélectionner {name}",
     "bulk_select_task": "Sélectionner {title}",
-    "wizard_step_proposal": "Proposition"
+    "wizard_step_proposal": "Proposition",
+    "preview_no_client": "Votre client"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3163,7 +3164,14 @@
     "task_template_steps_hint": "Les étapes de ce mandat. Elles deviennent des sous-tâches sous la tâche principale : votre liste de travail affiche une seule ligne à déplier plutôt que cinq.",
     "task_template_client_request_hint": "Les documents que ce mandat demande au client. Appliquer un modèle de demande en copie les lignes — elles restent avec ce modèle de tâche même si le modèle de demande change ensuite.",
     "task_template_no_request": "Cette tâche ne demande encore rien au client.",
-    "task_template_preview_label": "Ce que ça donne sur un engagement"
+    "task_template_preview_label": "Ce que ça donne sur un engagement",
+    "service_builder_explainer": "Un service, c'est ce que vous vendez — une ligne, un prix, et le travail qui vient avec. Reliez-le à un modèle de tâche et ajouter ce service à un engagement amène ce travail automatiquement.",
+    "tab_service_service": "Service",
+    "tab_service_pricing": "Tarification",
+    "tab_service_work": "Travail",
+    "service_preview_label": "Ce que ça donne sur un engagement",
+    "template_work_title": "Le travail que ça crée",
+    "template_work_hint": "Ceci est venu avec les services ci-dessus. Chaque engagement créé à partir de ce modèle démarre avec ce travail déjà en place — vous pouvez le modifier sur l'engagement lui-même."
   },
   "Status": {
     "pending": "En attente",

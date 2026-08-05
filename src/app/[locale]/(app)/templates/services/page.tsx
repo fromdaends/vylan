@@ -16,16 +16,12 @@ import {
  */
 export default async function ServiceTemplatesPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  /** `?new=1` from the + Create panel opens the dialog on arrival. */
-  searchParams: Promise<{ new?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
-  const sp = await searchParams;
 
   const [services, user, taskTemplates] = await Promise.all([
     listFirmServices(),
@@ -57,7 +53,6 @@ export default async function ServiceTemplatesPage({
         }))}
         locale={locale}
         canManage={canManageServices}
-        openOnMount={sp.new != null}
       />
     </TemplatesPageShell>
   );

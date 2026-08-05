@@ -94,6 +94,7 @@ const PERIOD_OPTIONS: (number | null)[] = [null, 1, 3, 6, 12, 24];
 export function EngagementTemplateBuilder({
   locale,
   services = [],
+  taskTemplates = [],
   members = [],
   fallbackTaxPct = null,
   initial,
@@ -115,6 +116,9 @@ export function EngagementTemplateBuilder({
     payload: EngagementTemplatePayload;
   };
   services?: CatalogueService[];
+  /** The firm's task templates (1570), so the Services tab can show the work a
+   *  picked service brings — and so an edited template can name it back. */
+  taskTemplates?: { id: string; name: string; steps: string[] }[];
   /** Active firm members, for the assignee picker. */
   members?: { id: string; name: string }[];
   fallbackTaxPct?: number | null;
@@ -217,6 +221,40 @@ export function EngagementTemplateBuilder({
     return Math.round(n * 100);
   }, [depositRequired, depositAmount]);
 
+  // ── THE WORK THE SERVICES BRING (1620) ──────────────────────────────────
+  //
+  // The founder: "when creating an engagement template on the services tab you
+  // didnt change it to accomodate for the new service and tasks link."
+  //
+  // Right — a service knows which task template it implies, and the engagement
+  // builder already pulls that in automatically. A TEMPLATE did not, so a
+  // template built out of services produced priced lines and no work.
+  //
+  // IDS, not copies: task templates are a catalogue and a catalogue stays live.
+  // The tasks are frozen when an engagement is actually created from this.
+  const [taskTemplateIds, setTaskTemplateIds] = useState<string[]>(
+    initial?.payload.taskTemplateIds ?? [],
+  );
+
+  /** Picking a service on the Services tab brings its work with it — no prompt.
+   *  The founder: "there should be no prompt. It should happen automatically
+   *  when the tasks get pulled in." */
+  function pullServiceWork(service: CatalogueService) {
+    const id = service.work?.templateId;
+    if (!id) return;
+    setTaskTemplateIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+
+  /** The work, resolved for display. An id whose template has since been
+   *  deleted simply drops out — nothing here may assume it resolves. */
+  const linkedWork = useMemo(
+    () =>
+      taskTemplateIds
+        .map((id) => taskTemplates.find((x) => x.id === id))
+        .filter((x): x is NonNullable<typeof x> => x != null),
+    [taskTemplateIds, taskTemplates],
+  );
+
   // What the client would see. Placeholders resolve against a SAMPLE client,
   // because a template has none — showing raw {{clientname}} in a panel meant
   // to answer "what will this look like" answers the wrong question.
@@ -269,6 +307,9 @@ export function EngagementTemplateBuilder({
           items: flattenBlocks(blocks),
           billingBlocks: blocks,
           priceVisibility: visibility,
+          // Only ids that still resolve. Saving a dangling one would keep a
+          // deleted template's ghost alive in every template that named it.
+          taskTemplateIds: linkedWork.map((x) => x.id),
         },
         // A draft skips the "is this worth saving" check — half-written IS the
         // point of a draft.
@@ -354,9 +395,17 @@ export function EngagementTemplateBuilder({
               welcome: welcomeEnabled ? introMessage : null,
               videoUrl: videoEnabled ? videoUrl : null,
               documentName: documentEnabled ? documentName : null,
-              services: flattenBlocks(blocks).map((i) => ({
+              // The work rides on the FIRST line only. It belongs to the
+              // template as a whole (services were picked across blocks and
+              // only their ids survive), and repeating the same six steps under
+              // every priced line would read as six jobs rather than one.
+              services: flattenBlocks(blocks).map((i, idx) => ({
                 name: i.name,
                 rateCents: i.rateCents,
+                work:
+                  idx === 0
+                    ? linkedWork.flatMap((w) => w.steps)
+                    : undefined,
               })),
               terms: termsEnabled ? termsText : null,
               clientSigns,
@@ -584,7 +633,57 @@ export function EngagementTemplateBuilder({
                 locale={locale}
                 services={services}
                 fallbackTaxPct={fallbackTaxPct}
+                onServicePicked={pullServiceWork}
               />
+            )}
+
+            {/* ── THE WORK THESE SERVICES BRING (1620) ───────────────────
+                On the SAME tab as the services, because it is not a separate
+                decision — it is the other half of what a service is. The
+                founder: "I just wanna make sure that when you build a service
+                template that it's not separated from the task template because
+                that's confusing for the user... they're both connected."
+
+                It appears by itself when a service that carries work is
+                picked, and it is removable: the work came with the service,
+                but this template is allowed to disagree. */}
+            {tab === "services" && linkedWork.length > 0 && (
+              <Fieldset title={t("template_work_title")}>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {t("template_work_hint")}
+                </p>
+                <ul className="space-y-2">
+                  {linkedWork.map((work) => (
+                    <li
+                      key={work.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{work.name}</p>
+                        {work.steps.length > 0 && (
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {work.steps.slice(0, 6).join(" · ")}
+                            {work.steps.length > 6 &&
+                              ` +${work.steps.length - 6}`}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTaskTemplateIds((prev) =>
+                            prev.filter((x) => x !== work.id),
+                          )
+                        }
+                        aria-label={t("remove")}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </Fieldset>
             )}
 
             {tab === "terms" && (

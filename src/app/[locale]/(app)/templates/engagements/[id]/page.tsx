@@ -2,6 +2,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { assertLocale } from "@/lib/locale";
 import { listFirmServices } from "@/lib/db/firm-services";
+import { listTaskTemplates } from "@/lib/db/task-templates";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { can } from "@/lib/auth/capabilities";
 import {
@@ -31,9 +32,10 @@ export default async function EditEngagementTemplatePage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [template, services, firm, members, viewer] = await Promise.all([
+  const [template, services, taskTemplates, firm, members, viewer] = await Promise.all([
     getEngagementTemplate(id),
     listFirmServices(),
+    listTaskTemplates(),
     getCurrentFirm(),
     listFirmUsers(),
     getCurrentUser(),
@@ -48,6 +50,14 @@ export default async function EditEngagementTemplatePage({
     <EngagementTemplateBuilder
       locale={locale}
       services={services}
+      // Without this the Services tab can never say which work a picked
+      // service brought — the exact never-wired-prop class of bug that
+      // shipped three inert features on the engagement page before.
+      taskTemplates={taskTemplates.map((tt) => ({
+        id: tt.id,
+        name: tt.name,
+        steps: tt.payload.subtasks.map((x) => x.title),
+      }))}
       members={members
         .filter((m) => !m.deactivated_at)
         .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}

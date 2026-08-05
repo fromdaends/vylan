@@ -451,3 +451,40 @@ describe("readPayload — price visibility", () => {
     expect(readPayload({ priceVisibility: "nope" }).priceVisibility.total).toBe(true);
   });
 });
+
+describe("readPayload — the work a template implies (1620)", () => {
+  it("is empty on a template written before the link existed", () => {
+    // Every template already in the database. It must read as "no work", not
+    // throw and not guess.
+    expect(readPayload({}).taskTemplateIds).toEqual([]);
+  });
+
+  it("keeps ids, drops anything that is not one, and de-duplicates", () => {
+    // A template that named the same work twice would create it twice on every
+    // engagement made from it.
+    const p = readPayload({
+      taskTemplateIds: ["a", "a", "  b  ", "", 7, null, "c"],
+    });
+    expect(p.taskTemplateIds).toEqual(["a", "b", "c"]);
+  });
+
+  it("caps the list", () => {
+    const p = readPayload({
+      taskTemplateIds: Array.from({ length: 80 }, (_, i) => `t${i}`),
+    });
+    expect(p.taskTemplateIds).toHaveLength(50);
+  });
+
+  it("survives the field being the wrong type entirely", () => {
+    expect(readPayload({ taskTemplateIds: "nope" }).taskTemplateIds).toEqual([]);
+    expect(readPayload({ taskTemplateIds: 42 }).taskTemplateIds).toEqual([]);
+  });
+
+  it("work alone makes a template worth saving", () => {
+    // A template whose only content is "these six tasks" is a perfectly good
+    // template — it is what a service-led firm reaches for.
+    const p = readPayload({ taskTemplateIds: ["a"] });
+    expect(isWorthSaving(p)).toBe(true);
+    expect(isWorthSaving(readPayload({}))).toBe(false);
+  });
+});
