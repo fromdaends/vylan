@@ -165,3 +165,56 @@ describe("isWorthSaving", () => {
     ).toBe(true);
   });
 });
+
+describe("readPayload — Canopy's engagement period", () => {
+  it("defaults to acceptance when nothing is stored", () => {
+    expect(readPayload({}).periodStartsOn).toBe("acceptance");
+  });
+
+  it("keeps a custom start rule", () => {
+    expect(readPayload({ periodStartsOn: "custom" }).periodStartsOn).toBe(
+      "custom",
+    );
+  });
+
+  it("treats anything unrecognised as acceptance, not custom", () => {
+    // The safe default: a template whose start rule failed to read should begin
+    // when the client agrees, not on a date nobody chose.
+    expect(readPayload({ periodStartsOn: "whenever" }).periodStartsOn).toBe(
+      "acceptance",
+    );
+    expect(readPayload({ periodStartsOn: 7 }).periodStartsOn).toBe("acceptance");
+  });
+
+  it("keeps a whole number of months", () => {
+    expect(readPayload({ periodMonths: 12 }).periodMonths).toBe(12);
+  });
+
+  it("null is Ongoing, and is the default", () => {
+    expect(readPayload({}).periodMonths).toBeNull();
+    expect(readPayload({ periodMonths: null }).periodMonths).toBeNull();
+  });
+
+  it("refuses a fractional, zero or negative period", () => {
+    expect(readPayload({ periodMonths: 1.5 }).periodMonths).toBeNull();
+    expect(readPayload({ periodMonths: 0 }).periodMonths).toBeNull();
+    expect(readPayload({ periodMonths: -3 }).periodMonths).toBeNull();
+  });
+
+  it("refuses an absurd period — past ten years it IS ongoing", () => {
+    expect(readPayload({ periodMonths: 121 }).periodMonths).toBeNull();
+    expect(readPayload({ periodMonths: 120 }).periodMonths).toBe(120);
+  });
+
+  it("refuses a stringified number", () => {
+    expect(readPayload({ periodMonths: "12" }).periodMonths).toBeNull();
+  });
+
+  it("carries the intro message, and defaults it to empty", () => {
+    expect(readPayload({ introMessage: "Welcome" }).introMessage).toBe(
+      "Welcome",
+    );
+    expect(readPayload({}).introMessage).toBe("");
+    expect(readPayload({ introMessage: 42 }).introMessage).toBe("");
+  });
+});

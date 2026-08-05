@@ -37,6 +37,21 @@ export type EngagementTemplatePayload = {
   items: EngagementItemDraft[];
   /** What the client is asked to send. */
   checklist: TemplateChecklistItem[];
+  /**
+   * Canopy's "Engagement period begins on" — Acceptance, or a fixed date.
+   *
+   * On a TEMPLATE this is only ever the rule, never a resolved date: a template
+   * reused next season must not carry last season's start. "custom" here means
+   * "ask when the engagement is created".
+   */
+  periodStartsOn: "acceptance" | "custom";
+  /**
+   * Canopy's "Engagement period" — how long it runs, in months. Null is
+   * Canopy's "Ongoing", which is the honest default for bookkeeping.
+   */
+  periodMonths: number | null;
+  /** The covering note at the top of the client's proposal. */
+  introMessage: string;
   /** Whatever the invoice step captured. Opaque here on purpose. */
   invoice: Record<string, unknown> | null;
   /** Whatever the reminders step captured. Opaque here on purpose. */
@@ -48,6 +63,9 @@ export function emptyPayload(): EngagementTemplatePayload {
   return {
     title: "",
     type: null,
+    periodStartsOn: "acceptance",
+    periodMonths: null,
+    introMessage: "",
     items: [],
     checklist: [],
     invoice: null,
@@ -131,12 +149,31 @@ function readChecklistItem(raw: unknown): TemplateChecklistItem | null {
 }
 
 /** Read a stored payload. Never throws; unknown shapes degrade to defaults. */
+/**
+ * Months, or null for Canopy's "Ongoing".
+ *
+ * Refuses anything that is not a positive whole number of months — a fractional
+ * or negative period is not a period, and storing one would put nonsense in
+ * front of a client. 120 (ten years) is the ceiling; past that it IS ongoing.
+ */
+function readPeriodMonths(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isInteger(v)) return null;
+  if (v < 1 || v > 120) return null;
+  return v;
+}
+
 export function readPayload(raw: unknown): EngagementTemplatePayload {
   const o = obj(raw);
   if (!o) return emptyPayload();
   return {
     title: str(o.title),
     type: strOrNull(o.type),
+    // Anything that is not literally "custom" is acceptance — the safe default,
+    // because a template whose start rule failed to read should begin when the
+    // client agrees rather than on a date nobody chose.
+    periodStartsOn: o.periodStartsOn === "custom" ? "custom" : "acceptance",
+    periodMonths: readPeriodMonths(o.periodMonths),
+    introMessage: str(o.introMessage),
     items: arr(o.items)
       .map(readItem)
       .filter((i): i is EngagementItemDraft => i != null),

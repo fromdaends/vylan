@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { FilePlus2 } from "lucide-react";
+import { FilePlus2, Plus } from "lucide-react";
 import { assertLocale } from "@/lib/locale";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
 import { TemplateCard } from "@/components/templates/template-card";
@@ -37,6 +37,14 @@ export default async function EngagementTemplatesPage({
       <TemplatesPageHeader
         title={t("section_engagement_templates")}
         subtitle={t("engagement_templates_subtitle")}
+        action={
+          <Link href="/templates/engagements/new">
+            <Button size="sm">
+              <Plus className="h-3.5 w-3.5" />
+              {t("engagement_templates_new")}
+            </Button>
+          </Link>
+        }
       />
 
       {engagementTemplates.length === 0 ? (
@@ -54,8 +62,8 @@ export default async function EngagementTemplatesPage({
           <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
             {t("engagement_templates_empty_hint")}
           </p>
-          <Link href="/engagements/new">
-            <Button className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">{t("engagement_templates_start")}</Button>
+          <Link href="/templates/engagements/new">
+            <Button className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">{t("engagement_templates_new")}</Button>
           </Link>
         </EmptyState>
       ) : (
