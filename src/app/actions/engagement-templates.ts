@@ -45,6 +45,11 @@ const OpaqueSchema = z.record(z.string(), z.unknown()).nullable().optional();
 const PayloadSchema = z.object({
   title: z.string().trim().max(300).optional(),
   type: z.string().trim().max(50).nullable().optional(),
+  // Canopy's engagement period. A RULE, never a resolved date — a template
+  // reused next season must not carry last season's start.
+  periodStartsOn: z.enum(["acceptance", "custom"]).optional(),
+  periodMonths: z.number().int().min(1).max(120).nullable().optional(),
+  introMessage: z.string().trim().max(5000).optional(),
   items: z.array(ItemSchema).max(50).optional(),
   checklist: z.array(ChecklistSchema).max(200).optional(),
   invoice: OpaqueSchema,
