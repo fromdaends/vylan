@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { assertLocale } from "@/lib/locale";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { getEngagementTemplate } from "@/lib/db/engagement-templates";
 import { EngagementTemplateBuilder } from "@/components/templates/engagement-template-builder";
 
@@ -26,11 +31,12 @@ export default async function EditEngagementTemplatePage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [template, services, firm, members] = await Promise.all([
+  const [template, services, firm, members, viewer] = await Promise.all([
     getEngagementTemplate(id),
     listFirmServices(),
     getCurrentFirm(),
     listFirmUsers(),
+    getCurrentUser(),
   ]);
 
   // RLS decides visibility, so "not found" and "belongs to somebody else and is
@@ -45,6 +51,13 @@ export default async function EditEngagementTemplatePage({
       members={members
         .filter((m) => !m.deactivated_at)
         .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
+      // The firm's standard terms (1610), so a new template's Terms tab is not
+      // an empty box on every single one.
+      firmDefaultTerms={
+        (firm as { default_engagement_terms?: string | null } | null)
+          ?.default_engagement_terms ?? ""
+      }
+      canManageFirmTerms={can(viewer, "firm.settings")}
       fallbackTaxPct={
         (firm as { default_tax_pct?: number | null } | null)?.default_tax_pct ??
         null
