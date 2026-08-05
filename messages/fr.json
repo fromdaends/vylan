@@ -2852,7 +2852,13 @@
     "bulk_select_client": "Sélectionner {name}",
     "bulk_select_task": "Sélectionner {title}",
     "wizard_step_proposal": "Proposition",
-    "preview_no_client": "Votre client"
+    "preview_no_client": "Votre client",
+    "task_restore": "Restaurer",
+    "task_delete_forever": "Supprimer définitivement",
+    "deleted_tasks_title": "Supprimées récemment",
+    "deleted_tasks_hint": "Les tâches supprimées restent ici 30 jours, puis disparaissent définitivement.",
+    "deleted_tasks_empty": "Rien de supprimé depuis 30 jours.",
+    "back_to_work": "Retour aux tâches"
   },
   "Attention": {
     "metric_active": "Actifs",
