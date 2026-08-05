@@ -15,7 +15,11 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Archive, ArchiveRestore, Pencil, Plus } from "lucide-react";
+import { Plus, Receipt } from "lucide-react";
+import {
+  TemplateRow,
+  TemplateRowList,
+} from "@/components/templates/template-row";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,69 +204,44 @@ export function ServiceCatalogue({
         </div>
       ) : (
         <>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <TemplateRowList>
             {services.map((s) => (
-              <li
+              <TemplateRow
                 key={s.id}
-                className={
-                  "group rounded-xl border border-border/60 bg-card p-4 transition-colors" +
-                  (s.archivedAt ? " opacity-60" : "")
+                icon={Receipt}
+                name={s.name}
+                // Price first, then the description — the price is what you
+                // scan a service list for.
+                meta={[priceLabel(s), s.description ?? ""]
+                  .filter(Boolean)
+                  .join(" \u2014 ")}
+                dimmed={s.archivedAt != null}
+                // Clicking IS editing, the same as every other template type.
+                onSelect={canManage ? () => open(s) : undefined}
+                badges={
+                  s.archivedAt ? (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
+                      {t("services_archived_badge")}
+                    </span>
+                  ) : null
                 }
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{s.name}</p>
-                    <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                      {priceLabel(s)}
-                    </p>
-                  </div>
-                  {canManage && (
-                    // Hover-revealed, like the other cards on this page: a row
-                    // of controls parked on every card turns a list you read
-                    // into a control panel.
-                    <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                      <button
-                        type="button"
-                        onClick={() => open(s)}
-                        aria-label={t("services_edit")}
-                        title={t("services_edit")}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <Pencil className="size-3.5" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleArchive(s)}
-                        aria-label={
-                          s.archivedAt
+                actions={
+                  canManage
+                    ? [
+                        { label: t("services_edit"), onSelect: () => open(s) },
+                        {
+                          label: s.archivedAt
                             ? t("services_restore")
-                            : t("services_archive")
-                        }
-                        title={
-                          s.archivedAt
-                            ? t("services_restore")
-                            : t("services_archive")
-                        }
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {s.archivedAt ? (
-                          <ArchiveRestore className="size-3.5" aria-hidden />
-                        ) : (
-                          <Archive className="size-3.5" aria-hidden />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {s.description && (
-                  <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                    {s.description}
-                  </p>
-                )}
-              </li>
+                            : t("services_archive"),
+                          destructive: s.archivedAt == null,
+                          onSelect: () => toggleArchive(s),
+                        },
+                      ]
+                    : []
+                }
+              />
             ))}
-          </ul>
-
+          </TemplateRowList>
           {canManage && (
             <Button
               type="button"

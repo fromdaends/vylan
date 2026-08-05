@@ -5,21 +5,16 @@ import {
   type Template,
 } from "@/lib/db/templates";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
-import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus, FilePlus2 } from "lucide-react";
 import { assertLocale } from "@/lib/locale";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { buildWorkflowSummaryLine } from "@/lib/workflow/summary";
 import { parseWorkflowDefinition } from "@/lib/workflow/definition";
-import { TemplateCard } from "@/components/templates/template-card";
+import { RequestTemplateRow } from "@/components/templates/request-template-row";
 import { SearchableTemplates } from "@/components/templates/searchable-templates";
 import { AutoNewTemplate } from "@/components/templates/auto-new-template";
-import {
-  cloneTemplateAction,
-  createBlankTemplateAction,
-  deleteTemplateAction,
-} from "@/app/actions/templates";
+import { createBlankTemplateAction } from "@/app/actions/templates";
 import {
   TemplatesPageShell,
   EmptyState,
@@ -68,25 +63,6 @@ export default async function RequestTemplatesPage({
   const t = await getTranslations("Templates");
   const tAuto = await getTranslations("Automations");
 
-  const cardData = (tmpl: Template) => {
-    const preview = tmpl.items
-      .slice(0, 3)
-      .map((it) => (locale === "fr" ? it.label_fr : it.label_en));
-    const requiredCount = tmpl.items.filter((it) => it.required).length;
-    const workflowDef = workflowsOn
-      ? parseWorkflowDefinition(tmpl.workflow)
-      : null;
-    return {
-      name: localizedTemplateName(tmpl, locale),
-      type: tmpl.type,
-      itemCount: tmpl.items.length,
-      requiredCount,
-      preview,
-      workflowSummary: workflowDef
-        ? buildWorkflowSummaryLine(workflowDef, tAuto)
-        : null,
-    };
-  };
 
   // Cards are BUILT HERE (server actions must live in real <form>s) and handed
   // to the search component as nodes plus the words each card should be
@@ -97,64 +73,46 @@ export default async function RequestTemplatesPage({
       ...tmpl.items.map((it) => (locale === "fr" ? it.label_fr : it.label_en)),
     ].join(" ");
 
-  const yoursCards = firm.map((tmpl) => ({
-    id: tmpl.id,
-    terms: terms(tmpl),
-    node: (
-      <TemplateCard
-        key={tmpl.id}
-        {...cardData(tmpl)}
-        href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
-        footer={
-          <>
-            <form action={deleteTemplateAction}>
-              <input type="hidden" name="id" value={tmpl.id} />
-              <Button
-                type="submit"
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
-              >
-                {t("delete")}
-              </Button>
-            </form>
-            <Link href={`/templates/${tmpl.id}`}>
-              <Button size="sm" variant="secondary">
-                {t("edit")}
-              </Button>
-            </Link>
-          </>
-        }
-      />
-    ),
-  }));
+  // The one line under each name — what it asks for, and how many are
+  // required. Built here so the server does the counting.
+  const metaFor = (tmpl: Template) => {
+    const parts = [t("documents_count", { count: tmpl.items.length })];
+    const required = tmpl.items.filter((it) => it.required).length;
+    if (required > 0) parts.push(t("required_count", { count: required }));
+    const preview = tmpl.items
+      .slice(0, 3)
+      .map((it) => (locale === "fr" ? it.label_fr : it.label_en))
+      .filter(Boolean);
+    if (preview.length > 0) parts.push(preview.join(" \u00b7 "));
+    // The one-line automation summary from #1337. It used to sit on the card
+    // with its own icon; the row has one meta line, so it joins the end rather
+    // than being dropped — that feature is another session's and still live.
+    const workflowDef = workflowsOn ? parseWorkflowDefinition(tmpl.workflow) : null;
+    if (workflowDef) {
+      const summary = buildWorkflowSummaryLine(workflowDef, tAuto);
+      if (summary) parts.push(summary);
+    }
+    return parts.join(" \u2014 ");
+  };
 
-  const builtInCards = builtIn.map((tmpl) => ({
+  const rowFor = (tmpl: Template, builtin: boolean) => ({
     id: tmpl.id,
     terms: terms(tmpl),
     node: (
-      <TemplateCard
+      <RequestTemplateRow
         key={tmpl.id}
-        {...cardData(tmpl)}
-        href={workflowsOn ? `/templates/${tmpl.id}` : undefined}
-        footer={
-          <>
-            <form action={cloneTemplateAction}>
-              <input type="hidden" name="id" value={tmpl.id} />
-              <Button type="submit" size="sm" variant="ghost">
-                {t("clone")}
-              </Button>
-            </form>
-            <Link href={`/engagements/new?template=${tmpl.id}`}>
-              <Button size="sm" variant="secondary">
-                {t("use_in_new")}
-              </Button>
-            </Link>
-          </>
-        }
+        id={tmpl.id}
+        name={localizedTemplateName(tmpl, locale)}
+        type={tmpl.type}
+        meta={metaFor(tmpl)}
+        builtin={builtin}
+        locale={locale}
       />
     ),
-  }));
+  });
+
+  const yoursCards = firm.map((tmpl) => rowFor(tmpl, false));
+  const builtInCards = builtIn.map((tmpl) => rowFor(tmpl, true));
 
   return (
     <TemplatesPageShell>
