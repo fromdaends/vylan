@@ -25,9 +25,14 @@
 -- the tasks list gains a Recently deleted view — a bin nobody can open is not
 -- a recovery window.
 --
--- Migration number: 1640 is the highest and the duplicate check
+-- Migration number: RENUMBERED FROM 1650 — the FOURTH collision this session.
+-- 1640 was the highest when this was written; #1382 and #1384 merged 1650 and
+-- 1660 while it was in progress. The window that keeps catching people is
+-- between opening a PR and it merging, which is why the check has to run
+-- immediately before merge and not only at creation.
 --   ls supabase/migrations | sed 's/_.*//' | sort | uniq -d
--- prints nothing, so 1650 is next. RE-RUN IT IMMEDIATELY BEFORE MERGING.
+-- 1670 is next, and src/lib/db/migrations.test.ts fails the suite if this ever
+-- slips through again.
 
 alter table public.engagement_tasks
   add column if not exists deleted_at timestamptz,
@@ -40,7 +45,7 @@ create index if not exists engagement_tasks_deleted_at_idx
   on public.engagement_tasks (deleted_at) where deleted_at is not null;
 
 comment on column public.engagement_tasks.deleted_at is
-  'Soft delete (1650). Non-null means the task is in the 30-day recycle bin and must be excluded from every live read; the purge cron removes it permanently after that. Mirrors engagements.deleted_at (0139).';
+  'Soft delete (1670). Non-null means the task is in the 30-day recycle bin and must be excluded from every live read; the purge cron removes it permanently after that. Mirrors engagements.deleted_at (0139).';
 
 -- Verify after applying — expect 0 until something is deleted:
 --   select count(*) as in_the_bin from engagement_tasks where deleted_at is not null;

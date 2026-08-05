@@ -322,7 +322,7 @@ export async function bulkUpdateTasksAction(input: {
   /** Replaces the assignee set with this ONE person, or clears it with null. */
   assigneeId?: string | null;
   remove?: boolean;
-  /** Bring them back out of the recycle bin (1650). */
+  /** Bring them back out of the recycle bin (1670). */
   restore?: boolean;
 }): Promise<BulkTaskResult> {
   const g = await guard();
@@ -398,7 +398,7 @@ export async function bulkUpdateTasksAction(input: {
   return { ok: done > 0 || failed === 0, done, failed };
 }
 
-// ── THE RECYCLE BIN (1650) ───────────────────────────────────────────────────
+// ── THE RECYCLE BIN (1670) ───────────────────────────────────────────────────
 //
 // Deleting a task now moves it here for 30 days instead of destroying it. These
 // two are the ways back out: put it back, or finish the job early.

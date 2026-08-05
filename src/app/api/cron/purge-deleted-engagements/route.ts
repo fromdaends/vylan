@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   // platform's expired rows (RLS would otherwise scope to nobody).
   const sb = getServiceRoleSupabase();
 
-  // TASKS SHARE THE WINDOW AND THE CRON (1650). Their bin has the same 30 days
+  // TASKS SHARE THE WINDOW AND THE CRON (1670). Their bin has the same 30 days
   // as an engagement's, so it wants the same sweep — a second cron on a second
   // schedule is how the two retention promises start disagreeing.
   //

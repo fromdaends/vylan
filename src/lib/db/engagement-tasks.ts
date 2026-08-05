@@ -184,7 +184,7 @@ export async function countTasksByEngagement(): Promise<
   const { data, error } = await supabase
     .from("engagement_tasks")
     .select("engagement_id, status")
-    // The recycle bin (1650) is never part of a live read. A soft-delete
+    // The recycle bin (1670) is never part of a live read. A soft-delete
     // column the readers ignore is worse than a hard delete: the row comes
     // back on every list looking alive.
     .is("deleted_at", null)
@@ -228,7 +228,7 @@ export async function listSubtasksByParent(
   const { data, error } = await supabase
     .from("engagement_tasks")
     .select(SELECT)
-    // The recycle bin (1650) is never part of a live read. A soft-delete
+    // The recycle bin (1670) is never part of a live read. A soft-delete
     // column the readers ignore is worse than a hard delete: the row comes
     // back on every list looking alive.
     .is("deleted_at", null)
@@ -259,7 +259,7 @@ export async function listEngagementTasks(
   const { data, error } = await supabase
     .from("engagement_tasks")
     .select(SELECT)
-    // The recycle bin (1650) is never part of a live read. A soft-delete
+    // The recycle bin (1670) is never part of a live read. A soft-delete
     // column the readers ignore is worse than a hard delete: the row comes
     // back on every list looking alive.
     .is("deleted_at", null)
@@ -295,7 +295,7 @@ export async function listFirmTasks(): Promise<FirmTask[]> {
   const { data, error } = await supabase
     .from("engagement_tasks")
     .select(`${SELECT}, clients(display_name), engagements(title)`)
-    // The recycle bin (1650) is never part of a live read. A soft-delete
+    // The recycle bin (1670) is never part of a live read. A soft-delete
     // column the readers ignore is worse than a hard delete: the row comes
     // back on every list looking alive.
     .is("deleted_at", null)
@@ -490,14 +490,14 @@ export async function setTaskAssignee(input: {
 }
 
 /**
- * Put a task in the recycle bin (1650) — recoverable for 30 days.
+ * Put a task in the recycle bin (1670) — recoverable for 30 days.
  *
  * ⚠️ THIS USED TO BE A HARD DELETE, and bulk delete on the tasks list made that
  * a real hazard: tick twelve rows, hit Delete, gone with no undo. Engagements
  * have never worked that way (0139: "nothing is hard-deleted straight from the
  * UI") and a task carries the same evidence of what a firm did and when.
  *
- * FALLS BACK TO A HARD DELETE before 1650 is applied, rather than refusing:
+ * FALLS BACK TO A HARD DELETE before 1670 is applied, rather than refusing:
  * losing the ability to delete a task at all would be a worse regression than
  * the missing undo, and the column is what the bin needs — not the button.
  */
@@ -517,7 +517,7 @@ export async function deleteEngagementTask(input: {
     .eq("firm_id", input.firmId);
   if (!error) return;
 
-  // 42703 / PGRST204 = the column is not there yet (1650 unapplied).
+  // 42703 / PGRST204 = the column is not there yet (1670 unapplied).
   if (error.code === "42703" || error.code === "PGRST204") {
     const { error: hard } = await supabase
       .from("engagement_tasks")
@@ -569,7 +569,7 @@ export async function purgeEngagementTask(input: {
   }
 }
 
-/** What is in the bin, newest first. [] before 1650 — a bin that cannot exist
+/** What is in the bin, newest first. [] before 1670 — a bin that cannot exist
  *  yet is simply empty, not an error on a page that also shows live work. */
 export async function listDeletedFirmTasks(): Promise<FirmTask[]> {
   const supabase = await getServerSupabase();

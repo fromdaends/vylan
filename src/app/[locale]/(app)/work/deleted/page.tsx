@@ -1,4 +1,4 @@
-// The tasks recycle bin (1650) — 30 days, then the purge cron.
+// The tasks recycle bin (1670) — 30 days, then the purge cron.
 //
 // Founder, asked whether tasks should match engagements' recycle bin: "yeah do
 // #2". Bulk delete on the tasks list was immediate and permanent — tick twelve

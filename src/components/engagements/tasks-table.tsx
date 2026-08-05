@@ -221,7 +221,7 @@ export function TasksTable({
   initialView?: TaskView;
   /** This person's saved views for the tasks list (1630). */
   savedViews?: ListSavedView[];
-  /** Renders the RECYCLE BIN (1650): the same table, but every row offers
+  /** Renders the RECYCLE BIN (1670): the same table, but every row offers
    *  Restore and Delete forever instead of the live actions. Same component on
    *  purpose — a separate "deleted tasks" table would drift from this one the
    *  first time a column changed. */
