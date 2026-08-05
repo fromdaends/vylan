@@ -81,6 +81,103 @@ export function TemplateBuilderShell({
   error?: string | null;
   children: React.ReactNode;
 }) {
+  return (
+    <div className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-xl border border-border bg-card">
+      {/* ── TITLE BAR ──────────────────────────────────────────────────── */}
+      <BuilderTitleBar title={title} actions={actions} onClose={onClose} />
+
+      {explainer && (
+        <p className="border-b border-border bg-accent-subtle/40 px-5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
+          {explainer}
+        </p>
+      )}
+
+      <BuilderChrome
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        preview={preview}
+        previewOpen={previewOpen}
+        onPreviewToggle={onPreviewToggle}
+        error={error}
+      >
+        {children}
+      </BuilderChrome>
+    </div>
+  );
+}
+
+function BuilderTitleBar({
+  title,
+  actions,
+  onClose,
+}: {
+  title: string;
+  actions: BuilderAction[];
+  onClose: () => void;
+}) {
+  const t = useTranslations("Templates");
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
+      <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+      <div className="flex items-center gap-2">
+        {actions.map((a) => (
+          <Button
+            key={a.label}
+            type="button"
+            size="sm"
+            variant={a.variant ?? "default"}
+            disabled={a.disabled}
+            onClick={a.onClick}
+          >
+            {a.label}
+          </Button>
+        ))}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("cancel")}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="size-4" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Everything BELOW a builder's title bar: the tab rail, the preview toggle, the
+ * form-left / preview-right split, and the Back/Next footer.
+ *
+ * Its own component because engagement creation needs exactly this INSIDE its
+ * modal, where the modal already draws the outer box and the title bar. The
+ * founder: "the engagement creation ui is still lacking. IT still has that
+ * Vylan UI look not the canopy Ui look that you can see on the template
+ * builders. I want the same feel on engagement creation."
+ *
+ * Sharing the chrome rather than copying it is the whole point — a change to
+ * how tabs or Back/Next look now reaches all four builders at once.
+ */
+export function BuilderChrome({
+  tabs,
+  activeTab,
+  onTabChange,
+  preview,
+  previewOpen,
+  onPreviewToggle,
+  error,
+  children,
+}: {
+  tabs: BuilderTab[];
+  activeTab: string;
+  onTabChange: (key: string) => void;
+  preview?: React.ReactNode;
+  previewOpen?: boolean;
+  onPreviewToggle?: () => void;
+  error?: string | null;
+  children: React.ReactNode;
+}) {
   const t = useTranslations("Templates");
   const tabIndex = useMemo(
     () => Math.max(0, tabs.findIndex((x) => x.key === activeTab)),
@@ -89,43 +186,14 @@ export function TemplateBuilderShell({
   const showPreview = preview != null && previewOpen !== false;
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-xl border border-border bg-card">
-      {/* ── TITLE BAR ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
-        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-        <div className="flex items-center gap-2">
-          {actions.map((a) => (
-            <Button
-              key={a.label}
-              type="button"
-              size="sm"
-              variant={a.variant ?? "default"}
-              disabled={a.disabled}
-              onClick={a.onClick}
-            >
-              {a.label}
-            </Button>
-          ))}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("cancel")}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </div>
-      </div>
-
-      {explainer && (
-        <p className="border-b border-border bg-accent-subtle/40 px-5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
-          {explainer}
-        </p>
-      )}
-
+    <>
       {/* ── TABS + PREVIEW TOGGLE ──────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 border-b border-border px-5">
-        <div role="tablist" aria-label={title} className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5">
+        <div
+          role="tablist"
+          aria-label={t("tab_nav_label")}
+          className="flex items-center gap-1 overflow-x-auto"
+        >
           {tabs.map((tab) => {
             const active = tab.key === activeTab;
             return (
@@ -136,7 +204,7 @@ export function TemplateBuilderShell({
                 aria-selected={active}
                 onClick={() => onTabChange(tab.key)}
                 className={cn(
-                  "relative -mb-px border-b-2 px-4 py-2.5 text-sm transition-colors",
+                  "relative -mb-px shrink-0 border-b-2 px-4 py-2.5 text-sm transition-colors",
                   active
                     ? "border-accent font-semibold text-foreground"
                     : "border-transparent font-medium text-muted-foreground hover:text-foreground",
@@ -160,7 +228,7 @@ export function TemplateBuilderShell({
             type="button"
             onClick={onPreviewToggle}
             aria-pressed={showPreview}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={showPreview ? t("hide_preview") : t("show_preview")}
             title={showPreview ? t("hide_preview") : t("show_preview")}
           >
@@ -187,7 +255,7 @@ export function TemplateBuilderShell({
           </div>
 
           {/* ── BACK / NEXT ───────────────────────────────────────────── */}
-          <div className="flex items-center justify-between border-t border-border px-5 py-3">
+          <div className="flex shrink-0 items-center justify-between border-t border-border px-5 py-3">
             <Button
               type="button"
               size="sm"
@@ -215,7 +283,7 @@ export function TemplateBuilderShell({
           <div className="min-h-0 overflow-y-auto bg-muted/20 p-5">{preview}</div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 

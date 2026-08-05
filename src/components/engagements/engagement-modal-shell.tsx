@@ -54,6 +54,7 @@ export function EngagementModalShell({
   onSaveAndSend,
   onSaveAsTemplate,
   busy = false,
+  flushBody = false,
   children,
 }: {
   title: string;
@@ -76,6 +77,16 @@ export function EngagementModalShell({
   onSaveAndSend?: () => void;
   onSaveAsTemplate?: () => void;
   busy?: boolean;
+  /**
+   * The child draws its own scrolling regions, so the body must NOT scroll or
+   * pad — it just has to be a flex column that fills the sheet.
+   *
+   * Engagement creation uses this: BuilderChrome puts a tab rail at the top, a
+   * Back/Next footer at the bottom and scrolls only the middle, exactly like
+   * every template builder. Wrapping that in a padded scroller would give the
+   * sheet two scrollbars and float the footer.
+   */
+  flushBody?: boolean;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -173,8 +184,17 @@ export function EngagementModalShell({
           </div>
 
           {/* The BODY scrolls, not the sheet. That is what keeps the box the
-              same size on every step and the bar always reachable. */}
-          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+              same size on every step and the bar always reachable — unless the
+              child scrolls its own middle, in which case it takes the whole
+              body and does it itself. */}
+          <div
+            className={cn(
+              "min-h-0 flex-1",
+              flushBody
+                ? "flex flex-col overflow-hidden"
+                : "overflow-y-auto p-5 sm:p-6",
+            )}
+          >
             {children}
           </div>
         </div>
