@@ -43,8 +43,16 @@ function renderEditor(statuses = STATUSES, canEdit = true) {
 const dotOf = (name: string) => {
   const input = screen.getByDisplayValue(name);
   const li = input.closest("li")!;
-  return (li.querySelector("span[aria-hidden]") as HTMLElement).style
-    .backgroundColor;
+  // The row's preview pill wraps the coloured dot, and the dot inherits
+  // aria-hidden rather than carrying it — so look for the first span that
+  // actually has a background colour rather than relying on where it sits.
+  // Written this way so the markup can keep improving without the assertion
+  // going hunting. (The swatch picker's colours are on <button>, not <span>.)
+  return (
+    [...li.querySelectorAll<HTMLElement>("span")]
+      .map((el) => el.style.backgroundColor)
+      .find(Boolean) ?? ""
+  );
 };
 
 beforeEach(() => {
@@ -93,10 +101,45 @@ describe("TaskStatusesEditor — a change shows without waiting for a refresh", 
     expect(dotOf("To do")).toBe("#2563eb");
   });
 
-  it("still refreshes, so the server stays the source of truth", async () => {
+  it("does NOT refetch the page for a recolour", async () => {
+    // This asserted the opposite until the founder said "There was still a lot
+    // of latency on the statuses page. Like, bro, come on. It should be
+    // seamless."
+    //
+    // router.refresh() re-renders the Server Component route — three database
+    // reads — and hands the client a brand-new array. Firing it per accepted
+    // write meant a seven-letter rename fired seven, each racing the next and
+    // each re-seeding the list under the cursor. A recolour is patched locally
+    // and correctly, so re-reading the server tells nobody anything.
     renderEditor();
     fireEvent.click(screen.getAllByLabelText("Use #7c3aed")[0]);
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(updateStatusAction).toHaveBeenCalled());
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("paints the new colour BEFORE the server answers", async () => {
+    // The heart of the complaint. The old code awaited the round trip and only
+    // then patched the row, with the whole row disabled meanwhile.
+    let release: (v: unknown) => void = () => {};
+    updateStatusAction.mockImplementation(
+      () => new Promise((r) => { release = r; }),
+    );
+    renderEditor();
+    fireEvent.click(screen.getAllByLabelText("Use #7c3aed")[0]);
+    // Still in flight — nothing has resolved.
+    await waitFor(() => expect(dotOf("To do")).toBe("#7c3aed"));
+    release({ ok: true });
+  });
+
+  it("never disables the name field while a save is in flight", async () => {
+    // A field that goes dead under your fingers IS the latency, whether or not
+    // the request is fast.
+    updateStatusAction.mockImplementation(() => new Promise(() => {}));
+    renderEditor();
+    fireEvent.click(screen.getAllByLabelText("Use #7c3aed")[0]);
+    const field = screen.getAllByLabelText("Name")[0] as HTMLInputElement;
+    await waitFor(() => expect(updateStatusAction).toHaveBeenCalled());
+    expect(field.disabled).toBe(false);
   });
 
   it("shows a newly added status immediately", async () => {

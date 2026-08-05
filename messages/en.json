@@ -1247,7 +1247,9 @@
     "statuses_move_up": "Move {name} up",
     "statuses_move_down": "Move {name} down",
     "statuses_added_by": "Added by {name} on {date}",
-    "statuses_at_edge": "That's already as far as it goes."
+    "statuses_at_edge": "That's already as far as it goes.",
+    "statuses_saving": "Saving",
+    "statuses_saved": "Saved"
   },
   "Health": {
     "title": "System check",

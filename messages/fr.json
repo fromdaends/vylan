@@ -1247,7 +1247,9 @@
     "statuses_move_up": "Déplacer {name} vers le haut",
     "statuses_move_down": "Déplacer {name} vers le bas",
     "statuses_added_by": "Ajouté par {name} le {date}",
-    "statuses_at_edge": "Il est déjà à cette extrémité."
+    "statuses_at_edge": "Il est déjà à cette extrémité.",
+    "statuses_saving": "Enregistrement",
+    "statuses_saved": "Enregistré"
   },
   "Health": {
     "title": "Vérification du système",
