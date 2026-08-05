@@ -52,6 +52,7 @@ import {
   type RateType,
 } from "@/lib/engagements/items";
 import { formatCurrency, type AppLocale } from "@/lib/format";
+import { cn } from "@/lib/cn";
 
 const TABS = ["service", "pricing", "work"] as const;
 type Tab = (typeof TABS)[number];
@@ -205,8 +206,19 @@ export function ServiceBuilder({
               thing a service actually becomes. */}
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 text-sm font-medium">
-                {name.trim() || t("services_name_placeholder")}
+              {/* An unnamed service reads as ABSENT, not as a service called
+                  "Monthly bookkeeping" — the placeholder is a suggestion for
+                  the field, and echoing it here makes the preview look like it
+                  is already describing something real. */}
+              <p
+                className={cn(
+                  "min-w-0 text-sm",
+                  name.trim()
+                    ? "font-medium"
+                    : "italic text-muted-foreground",
+                )}
+              >
+                {name.trim() || tT("preview_unnamed_service")}
               </p>
               <p className="shrink-0 text-sm tabular-nums">{priceLabel()}</p>
             </div>
@@ -222,8 +234,16 @@ export function ServiceBuilder({
           {(picked || newWorkSteps.some((x) => x.trim())) && (
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs font-medium">{tT("service_does_work")}</p>
+              {/* The task template's name. When the steps were typed here
+                  rather than picked, the template Vylan creates is named after
+                  the service — so that is the honest label. It used to repeat
+                  the form's "Saving creates a task template…" instruction,
+                  which is guidance for the accountant, not something that
+                  belongs in a card headed "how this lands on an engagement". */}
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {picked ? picked.name : tT("service_new_template_note")}
+                {picked
+                  ? picked.name
+                  : name.trim() || tT("preview_unnamed_service")}
               </p>
               <ul className="mt-2 space-y-1.5 border-l-2 border-border pl-3">
                 {(picked
