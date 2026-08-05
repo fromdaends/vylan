@@ -1702,6 +1702,8 @@
     "nav_engagements": "Engagements",
     "nav_work": "Travail",
     "nav_work_tasks": "Tâches",
+    "nav_work_tasks_list": "Liste des tâches",
+    "nav_work_engagements_list": "Liste des mandats",
     "nav_work_tasks_hint": "La liste de tâches du cabinet",
     "nav_engagements_hint": "Mandats avec portail client",
     "nav_close_panel": "Fermer",

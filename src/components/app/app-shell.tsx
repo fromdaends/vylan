@@ -18,9 +18,7 @@ import {
   FileText,
   CircleCheckBig,
   FolderOpen,
-  Gauge,
   LayoutDashboard,
-  ListTodo,
   LogOut,
   Receipt,
   Settings,
@@ -249,29 +247,39 @@ export function AppShell({
       // lists and neither is the obvious default, so it asks which — landing
       // somebody on Tasks when they wanted Engagements is a click and a page
       // load to undo.
-      // Work's two destinations are the BUTTON STRIP, not rows.
+      // Work's two destinations are ROWS, which is Canopy's shape.
       //
-      // They were rows until the founder saw the Create panel and asked for
-      // "the same with the two blue icons". They are not ALSO rows: Work holds
-      // exactly these two places, so a row list underneath would be the same
-      // two links printed twice.
+      // ⚠️ THIS REVERSES AN EARLIER CALL, deliberately. They were rows, then
+      // became a round button strip when the founder saw the Create panel and
+      // asked for "the same with the two blue icons". Then, with Canopy's Work
+      // sidebar open beside ours: "change the work sidebar to replicate
+      // canopys. So its Task list, Engagement list". Canopy's is a list —
+      // Tasks List / Engagements List / Resolution Cases / Tax Organizers /
+      // Dashboard, every one a plain row with a chevron — so rows it is.
       //
-      // The one-line hints are the cost of the change (a round button carries a
-      // short label and nothing else) and it is an acceptable one here — unlike
-      // the Create panel, where every row makes a DIFFERENT kind of thing and
-      // the line under it is what tells them apart, these two are named plainly
-      // enough to stand alone.
+      // The two Canopy rows with no home here (Resolution Cases, Tax
+      // Organizers) are simply absent rather than stubbed. Dashboard is next
+      // and lands here when it exists.
+      //
+      // The one-line hints STAY. Bare rows are what this panel shipped with
+      // the first time and the founder's verdict was "it looks HORRIBLE... the
+      // text ui looks bad" — two words and a chevron in a 250px column is a
+      // list with nothing to look at. Canopy can afford bare rows because it
+      // has five of them; two need the second line.
       panel: {
         title: labels.work,
-        actions: [
-          { href: "/work", label: labels.workTasks, icon: ListTodo },
+        items: [
+          {
+            href: "/work",
+            label: labels.workTasks,
+            description: labels.workTasksHint,
+          },
           {
             href: "/engagements",
             label: labels.workEngagements,
-            icon: FileText,
+            description: labels.workEngagementsHint,
           },
         ],
-        items: [],
       },
     },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its

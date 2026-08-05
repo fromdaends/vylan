@@ -1695,6 +1695,8 @@
     "nav_engagements": "Engagements",
     "nav_work": "Work",
     "nav_work_tasks": "Tasks",
+    "nav_work_tasks_list": "Task list",
+    "nav_work_engagements_list": "Engagement list",
     "nav_work_tasks_hint": "Your firm's to-do list",
     "nav_engagements_hint": "Jobs with a client portal",
     "nav_close_panel": "Close",
