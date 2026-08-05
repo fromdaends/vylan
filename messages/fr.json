@@ -1675,7 +1675,27 @@
     "wl_col_client": "Client",
     "wl_col_service": "Services",
     "wl_col_items": "Tâches",
-    "wl_col_started": "Date de début"
+    "wl_col_started": "Date de début",
+    "dash_title": "Tableau de bord",
+    "dash_tab_tasks": "Tâches",
+    "dash_tab_engagements": "Engagements",
+    "dash_kpi_open": "Tâches ouvertes",
+    "dash_kpi_overdue": "Tâches en retard",
+    "dash_kpi_completed": "Tâches terminées",
+    "dash_kpi_percent": "Pourcentage terminé",
+    "dash_chart_completed": "Tâches terminées par mois et par type",
+    "dash_chart_completed_eng": "Engagements terminés par mois et par étape",
+    "dash_chart_created": "Tâches créées par mois et par type",
+    "dash_chart_created_eng": "Engagements créés par mois et par étape",
+    "dash_chart_yoy": "Terminées par mois, d'une année à l'autre",
+    "dash_chart_by_status": "Tâches ouvertes par statut",
+    "dash_chart_by_stage": "Engagements ouverts par étape",
+    "dash_empty_completed": "Rien n'a encore été terminé, il n'y a donc rien à afficher.",
+    "dash_empty_created": "Rien n'a encore été créé, il n'y a donc rien à afficher.",
+    "dash_empty_open": "Rien n'est ouvert en ce moment.",
+    "dash_explore": "Explorer",
+    "dash_card_menu": "Options de la carte",
+    "dash_stage_none": "Aucune étape"
   },
   "App": {
     "nav_primary_label": "Navigation principale",
@@ -1726,7 +1746,9 @@
     "nav_integrations_filing": "Classement",
     "nav_filing_short": "Classement",
     "nav_vylan": "Vylan",
-    "nav_files": "Fichiers"
+    "nav_files": "Fichiers",
+    "nav_work_dashboard": "Tableau de bord",
+    "nav_work_dashboard_hint": "Vos chiffres, en un coup d'œil"
   },
   "TeamChat": {
     "page_title": "Clavardage d'équipe",
