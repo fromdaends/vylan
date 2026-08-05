@@ -173,6 +173,61 @@ export function AppShell({
     // and the AI numbers moved onto the Vylan hub as a second tab. /performance
     // redirects there rather than 404ing.
     { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
+    // WORK — the firm's whole workload. Replaces the Engagements item rather
+    // than sitting beside it: two doors into one room is what the founder
+    // objected to on the firm menu, and it is the same mistake here. The
+    // engagements list is one tab inside it and keeps its own URL, so every
+    // existing link and bookmark still lands.
+    {
+      href: "/work",
+      label: labels.work,
+      icon: CircleCheckBig,
+      // The one rail item that OPENS rather than navigates. Work holds two
+      // lists and neither is the obvious default, so it asks which — landing
+      // somebody on Tasks when they wanted Engagements is a click and a page
+      // load to undo.
+      // Work's two destinations are ROWS, which is Canopy's shape.
+      //
+      // ⚠️ THIS REVERSES AN EARLIER CALL, deliberately. They were rows, then
+      // became a round button strip when the founder saw the Create panel and
+      // asked for "the same with the two blue icons". Then, with Canopy's Work
+      // sidebar open beside ours: "change the work sidebar to replicate
+      // canopys. So its Task list, Engagement list". Canopy's is a list —
+      // Tasks List / Engagements List / Resolution Cases / Tax Organizers /
+      // Dashboard, every one a plain row with a chevron — so rows it is.
+      //
+      // The two Canopy rows with no home here (Resolution Cases, Tax
+      // Organizers) are simply absent rather than stubbed. Dashboard is next
+      // and lands here when it exists.
+      //
+      // The one-line hints STAY. Bare rows are what this panel shipped with
+      // the first time and the founder's verdict was "it looks HORRIBLE... the
+      // text ui looks bad" — two words and a chevron in a 250px column is a
+      // list with nothing to look at. Canopy can afford bare rows because it
+      // has five of them; two need the second line.
+      panel: {
+        title: labels.work,
+        items: [
+          {
+            href: "/work",
+            label: labels.workTasks,
+            description: labels.workTasksHint,
+          },
+          {
+            href: "/engagements",
+            label: labels.workEngagements,
+            description: labels.workEngagementsHint,
+          },
+          // Canopy's fifth row, and the only one of their three we could
+          // build: Resolution Cases and Tax Organizers have no home here.
+          {
+            href: "/work/overview",
+            label: labels.workDashboard,
+            description: labels.workDashboardHint,
+          },
+        ],
+      },
+    },
     { href: "/clients", label: labels.clients, icon: Users },
     // TEMPLATES OPENS rather than navigates — the second rail item to do so,
     // for the same reason Work does: it holds four different lists and none of
@@ -228,69 +283,19 @@ export function AppShell({
     // decide where copies land in the firm's cloud storage.
     { href: "/files", label: labels.files, icon: FolderOpen },
     // Billing — every invoice the firm has raised, what is owed, and who is
-    // being chased. Sits between Files and Engagements because it follows the
-    // same mental model as the rest of the rail: the things you have (files),
-    // the money they turned into (billing), the work in flight (engagements).
+    // being chased. Last of the main five, because money is what the work
+    // turns into rather than a place you start your day.
+    //
+    // ⚠️ THE ORDER ABOVE IS THE FOUNDER'S, given as a list: "Vylan, Work,
+    // Clients, Templates, Files". It reads as a day rather than as a data
+    // model — what needs doing, who it is for, what you build it from, what
+    // came out. Work used to sit sixth, under Billing, which put the busiest
+    // destination in the rail below two you open weekly.
     //
     // NOTE: /billing is THIS section. The firm's own Vylan subscription lives
     // at /settings/billing — it moved there when this shipped, because two
     // things called Billing in one sidebar is how confusion starts.
     { href: "/billing", label: labels.billing, icon: Receipt },
-    // WORK — the firm's whole workload. Replaces the Engagements item rather
-    // than sitting beside it: two doors into one room is what the founder
-    // objected to on the firm menu, and it is the same mistake here. The
-    // engagements list is one tab inside it and keeps its own URL, so every
-    // existing link and bookmark still lands.
-    {
-      href: "/work",
-      label: labels.work,
-      icon: CircleCheckBig,
-      // The one rail item that OPENS rather than navigates. Work holds two
-      // lists and neither is the obvious default, so it asks which — landing
-      // somebody on Tasks when they wanted Engagements is a click and a page
-      // load to undo.
-      // Work's two destinations are ROWS, which is Canopy's shape.
-      //
-      // ⚠️ THIS REVERSES AN EARLIER CALL, deliberately. They were rows, then
-      // became a round button strip when the founder saw the Create panel and
-      // asked for "the same with the two blue icons". Then, with Canopy's Work
-      // sidebar open beside ours: "change the work sidebar to replicate
-      // canopys. So its Task list, Engagement list". Canopy's is a list —
-      // Tasks List / Engagements List / Resolution Cases / Tax Organizers /
-      // Dashboard, every one a plain row with a chevron — so rows it is.
-      //
-      // The two Canopy rows with no home here (Resolution Cases, Tax
-      // Organizers) are simply absent rather than stubbed. Dashboard is next
-      // and lands here when it exists.
-      //
-      // The one-line hints STAY. Bare rows are what this panel shipped with
-      // the first time and the founder's verdict was "it looks HORRIBLE... the
-      // text ui looks bad" — two words and a chevron in a 250px column is a
-      // list with nothing to look at. Canopy can afford bare rows because it
-      // has five of them; two need the second line.
-      panel: {
-        title: labels.work,
-        items: [
-          {
-            href: "/work",
-            label: labels.workTasks,
-            description: labels.workTasksHint,
-          },
-          {
-            href: "/engagements",
-            label: labels.workEngagements,
-            description: labels.workEngagementsHint,
-          },
-          // Canopy's fifth row, and the only one of their three we could
-          // build: Resolution Cases and Tax Organizers have no home here.
-          {
-            href: "/work/dashboard",
-            label: labels.workDashboard,
-            description: labels.workDashboardHint,
-          },
-        ],
-      },
-    },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
     // hiding it would be a regression for a connected firm. Absent until a

@@ -1676,7 +1676,7 @@
     "wl_col_service": "Services",
     "wl_col_items": "Tâches",
     "wl_col_started": "Date de début",
-    "dash_title": "Tableau de bord",
+    "dash_title": "Aperçu du travail",
     "dash_tab_tasks": "Tâches",
     "dash_tab_engagements": "Engagements",
     "dash_kpi_open": "Tâches ouvertes",
@@ -1695,7 +1695,10 @@
     "dash_empty_open": "Rien n'est ouvert en ce moment.",
     "dash_explore": "Explorer",
     "dash_card_menu": "Options de la carte",
-    "dash_stage_none": "Aucune étape"
+    "dash_stage_none": "Aucune étape",
+    "dash_kpi_open_eng": "Engagements ouverts",
+    "dash_kpi_overdue_eng": "Engagements en retard",
+    "dash_kpi_completed_eng": "Engagements terminés"
   },
   "App": {
     "nav_primary_label": "Navigation principale",
@@ -1747,7 +1750,7 @@
     "nav_filing_short": "Classement",
     "nav_vylan": "Vylan",
     "nav_files": "Fichiers",
-    "nav_work_dashboard": "Tableau de bord",
+    "nav_work_dashboard": "Aperçu du travail",
     "nav_work_dashboard_hint": "Vos chiffres, en un coup d'œil"
   },
   "TeamChat": {
