@@ -34,6 +34,7 @@ import {
   listSubtasksByParent,
 } from "@/lib/db/engagement-tasks";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
+import { listSavedViews } from "@/lib/db/saved-views";
 import {
   matchesDueFilter,
   toDueFilter,
@@ -60,7 +61,8 @@ export default async function WorkPage({
   const firm = await getCurrentFirm();
   if (!firm) redirect(`/${locale}/dashboard`);
 
-  const [tasks, members, clients, engagements, statuses] = await Promise.all([
+  const [tasks, members, clients, engagements, statuses, savedViews] =
+    await Promise.all([
     listFirmTasks(),
     listFirmUsers(),
     // For the "+ Add task" picker. The founder's own example is why this page
@@ -76,6 +78,8 @@ export default async function WorkPage({
     // The firm's own statuses. Request-cached, so the table, the create dialog
     // and anything else on this page share one read.
     listTaskStatuses(),
+    // This person's own saved filter sets for this list (1630).
+    listSavedViews("tasks"),
   ]);
 
   // The dashboard's stats strip links here as /work?due=overdue|today|week —
@@ -147,6 +151,7 @@ export default async function WorkPage({
       </header>
 
       <TasksTable
+        savedViews={savedViews}
         tasks={shown.map((task) => ({
           ...task,
           subtasks: (subtasksByParent.get(task.id) ?? []).map((x) => ({

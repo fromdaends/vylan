@@ -4891,5 +4891,26 @@
     "status_connected": "Connected",
     "empty_search_title": "Nothing matches “{query}”",
     "empty_search_hint": "Try a different name, or clear the search."
+  },
+  "Views": {
+    "saved_heading": "Your views",
+    "saved_empty": "None yet. Filter the list, then save it.",
+    "save_current": "Save this view…",
+    "resave": "Update this view to match",
+    "save_title": "Name this view",
+    "rename_title": "Rename view",
+    "name_label": "View name",
+    "name_placeholder": "e.g. Overdue, mine",
+    "save_confirm": "Save",
+    "rename_confirm": "Rename",
+    "cancel": "Cancel",
+    "rename_one": "Rename {name}",
+    "delete_one": "Delete {name}",
+    "error_duplicate": "You already have a view with that name.",
+    "error_too_many": "That's as many views as one list can hold.",
+    "error_bad_name": "Give the view a name first.",
+    "error_not_ready": "Saved views need a database update before they'll work.",
+    "error_failed": "Couldn't save that. Try again.",
+    "menu_label": "List views"
   }
 }
