@@ -57,6 +57,7 @@ import {
   YAxis,
 } from "recharts";
 import { useRouter } from "@/i18n/navigation";
+import { usePrefersReducedMotion } from "@/lib/motion/use-reduced-motion";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { KpiAlertBell } from "@/components/dashboard/kpi-alert-dialog";
 import { ChartCard, KpiCard, seriesColor } from "@/components/dashboard/dashboard-cards";
@@ -91,12 +92,24 @@ export type DashboardEngagement = {
 
 type Tab = "tasks" | "engagements";
 
-// EVERY SERIES SETS isAnimationActive={false}. Recharts grows bars from zero
-// on mount, so the first paint of this page is four empty plots — a dashboard
-// whose numbers wobble on arrival reads as one that is still loading. It also
-// made the page unverifiable: the first screenshot taken against production
+// ── THE CHART ANIMATION, AND WHY IT CAME BACK SHORTER ─────────────────────
+//
+// Recharts' default is to grow every bar from zero over 1500ms. That is long
+// enough that the first second and a half of this page is four empty plots,
+// which reads as "still loading" rather than as an entrance — and it made the
+// page genuinely unverifiable: the first screenshot taken against production
 // caught exactly that frame and looked like four broken charts.
 //
+// So it was switched off entirely. The founder noticed within the hour: "the
+// animations worked initially, but now I don't see any animation. Is that
+// normal?" Fair — killing it was an overcorrection. The problem was never that
+// it animated, it was that it animated for a second and a half.
+//
+// 450ms with an ease-out, and OFF for anyone who asked for reduced motion —
+// recharts animates in JavaScript and never sees the media query, so a CSS
+// rule cannot save them here.
+const CHART_ANIM_MS = 450;
+
 // How far back the monthly charts reach. Twelve is roughly what Canopy's shows
 // and it is also the span where "same month last year" is still on the page.
 const MONTHS = 12;
@@ -118,6 +131,7 @@ export function WorkDashboard({
 }) {
   const t = useTranslations("Dashboard");
   const router = useRouter();
+  const reducedMotion = usePrefersReducedMotion();
   const tEng = useTranslations("Engagements");
   const locale = useLocale();
   const [tab, setTab] = useState<Tab>("tasks");
@@ -353,7 +367,9 @@ export function WorkDashboard({
                   stackId="a"
                   fill={seriesColor(i)}
                   maxBarSize={44}
-                  isAnimationActive={false}
+                  isAnimationActive={!reducedMotion}
+                  animationDuration={CHART_ANIM_MS}
+                  animationEasing="ease-out"
                 />
               ))}
             </BarChart>
@@ -393,7 +409,9 @@ export function WorkDashboard({
                   stroke={seriesColor(i)}
                   strokeWidth={2}
                   dot={false}
-                  isAnimationActive={false}
+                  isAnimationActive={!reducedMotion}
+                  animationDuration={CHART_ANIM_MS}
+                  animationEasing="ease-out"
                 />
               ))}
             </LineChart>
@@ -440,7 +458,9 @@ export function WorkDashboard({
                   stackId="a"
                   fill={seriesColor(i)}
                   maxBarSize={44}
-                  isAnimationActive={false}
+                  isAnimationActive={!reducedMotion}
+                  animationDuration={CHART_ANIM_MS}
+                  animationEasing="ease-out"
                 />
               ))}
             </BarChart>
@@ -466,7 +486,9 @@ export function WorkDashboard({
                 innerRadius="52%"
                 outerRadius="78%"
                 paddingAngle={1}
-                isAnimationActive={false}
+                isAnimationActive={!reducedMotion}
+                  animationDuration={CHART_ANIM_MS}
+                  animationEasing="ease-out"
                 stroke="var(--card)"
                 strokeWidth={2}
               >
