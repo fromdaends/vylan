@@ -86,9 +86,9 @@ export function BulkActionBar({
                 disabled={disabled}
                 aria-label={t("bulk_more")}
                 title={t("bulk_more")}
-                className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                className="bulk-chip inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
-                <MoreHorizontal className="size-4" aria-hidden />
+                <MoreHorizontal className="bulk-chip-icon size-4" aria-hidden />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" side="top" className="w-56">
@@ -103,9 +103,9 @@ export function BulkActionBar({
           disabled={disabled}
           aria-label={t("bulk_clear")}
           title={t("bulk_clear")}
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="bulk-chip inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
-          <X className="size-4" aria-hidden />
+          <X className="bulk-chip-icon size-4" aria-hidden />
         </button>
       </div>
     </div>
@@ -121,11 +121,17 @@ function BarAction({
   disabled: boolean;
 }) {
   const Icon = action.icon;
+  // The chip's resting look, plus which colour it lights up in. Founder: "a
+  // color plus, like, a pop up or something when hovering... just for fun."
+  // The motion itself is .bulk-chip in globals.css — it is style, so it lives
+  // with the tokens and reaches tasks, clients and engagements at once.
   const cls = cn(
-    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-50",
+    "bulk-chip inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium focus-visible:outline-none disabled:opacity-50",
     action.variant === "destructive"
-      ? "bg-destructive text-white"
-      : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      ? "bulk-chip-destructive bg-destructive text-white"
+      : "bg-secondary text-secondary-foreground",
+    action.tone === "success" && "bulk-chip-success",
+    action.tone === "warning" && "bulk-chip-warning",
   );
 
   if (!action.submenu) {
@@ -136,7 +142,7 @@ function BarAction({
         onClick={action.onSelect}
         className={cls}
       >
-        <Icon className="size-3.5" aria-hidden />
+        <Icon className="bulk-chip-icon size-3.5" aria-hidden />
         {action.label}
       </button>
     );
@@ -146,7 +152,7 @@ function BarAction({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button type="button" disabled={disabled} className={cls}>
-          <Icon className="size-3.5" aria-hidden />
+          <Icon className="bulk-chip-icon size-3.5" aria-hidden />
           {action.label}
         </button>
       </DropdownMenuTrigger>

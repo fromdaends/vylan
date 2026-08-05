@@ -72,6 +72,12 @@ export type RowMenuItem = {
   // Absent on a submenu item — the parent only opens the child list.
   onSelect?: () => void;
   variant?: "default" | "destructive";
+  /** Which colour this action wears when it lights up on the bulk bar. Purely
+   *  presentational and OPTIONAL — the row menus ignore it entirely, and an
+   *  action that does not say defaults to accent. It exists so "Mark done"
+   *  goes green and "Priority" goes amber rather than the bar being one
+   *  uniform blue. See .bulk-chip in globals.css. */
+  tone?: "accent" | "success" | "warning";
   // When present the item is a SUBMENU (the Stage picker). Both renderers —
   // the "..." dropdown and the right-click context menu — branch on this, so
   // the two surfaces stay identical without either knowing what a stage is.

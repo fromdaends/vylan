@@ -1283,3 +1283,83 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── THE BULK BAR'S ACTION CHIPS ───────────────────────────────────────────
+   Founder: "There should be a cool animation, um, like, just like a color
+   animation... like, a color plus, like, a pop up or something when hovering
+   your mouse over the options at the bottom of the screen... just for fun."
+
+   So a chip does three things at once on hover: it takes on ITS OWN meaning's
+   colour (Mark done goes green, Priority goes amber, the rest go accent),
+   it lifts and overshoots slightly — the springy curve below is what makes it
+   read as a "pop" rather than a slide — and its icon pops a beat later, which
+   is the whole trick: two things moving on slightly different clocks feels
+   alive, two things moving together feels like one box scaling.
+
+   Lives here rather than in the component because it is style, and style
+   belongs to shared tokens — one edit ripples to tasks, clients and
+   engagements, all three of which draw this same bar. */
+.bulk-chip {
+  --bulk-tone: var(--accent);
+  --bulk-tone-fg: var(--accent-foreground);
+  transition:
+    background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    /* Overshoot — the pop. */
+    transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bulk-chip-success {
+  --bulk-tone: var(--success);
+  --bulk-tone-fg: var(--success-foreground);
+}
+.bulk-chip-warning {
+  --bulk-tone: var(--warning);
+  --bulk-tone-fg: var(--warning-foreground);
+}
+/* Already red at rest, so hover has to go somewhere — deeper, not sideways. */
+.bulk-chip-destructive {
+  --bulk-tone: color-mix(in oklab, var(--destructive) 84%, black);
+  --bulk-tone-fg: var(--destructive-foreground);
+}
+
+.bulk-chip:hover:not(:disabled),
+.bulk-chip:focus-visible:not(:disabled) {
+  background-color: var(--bulk-tone);
+  color: var(--bulk-tone-fg);
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 6px 18px -6px
+    color-mix(in oklab, var(--bulk-tone) 65%, transparent);
+}
+
+/* Pressed: straight back down and a hair under, so a click feels answered. */
+.bulk-chip:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 90ms;
+}
+
+.bulk-chip-icon {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1) 40ms;
+}
+.bulk-chip:hover:not(:disabled) .bulk-chip-icon,
+.bulk-chip:focus-visible:not(:disabled) .bulk-chip-icon {
+  transform: scale(1.18) rotate(-6deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* ⚠️ THE COLOUR STAYS. Reduced motion asks for no MOVEMENT, not no effect —
+     the hero learned this the expensive way (a stray reset there left every
+     reduced-motion visitor with a flat cut instead of the cross-dissolve).
+     A chip that changes colour and glows without travelling is not a
+     vestibular trigger, so only the transforms are dropped. */
+  .bulk-chip,
+  .bulk-chip:hover:not(:disabled),
+  .bulk-chip:focus-visible:not(:disabled),
+  .bulk-chip:active:not(:disabled),
+  .bulk-chip-icon,
+  .bulk-chip:hover:not(:disabled) .bulk-chip-icon,
+  .bulk-chip:focus-visible:not(:disabled) .bulk-chip-icon {
+    transform: none;
+  }
+}
