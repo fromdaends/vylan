@@ -220,6 +220,10 @@ const CreateSchema = z
       )
       .max(50)
       .optional(),
+    // The client-facing document, frozen (1660). Passed through UNREAD — this
+    // action must not need editing every time the proposal grows a field, and
+    // readProposalSnapshot is the one place that knows the shape.
+    proposal: z.record(z.string(), z.unknown()).nullable().optional(),
     reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
       normalizeReminderSettings(value),
     ),
@@ -304,6 +308,8 @@ export async function createEngagementAction(
     invoice_create_now?: boolean;
     invoice_locks_deliverables?: boolean;
     invoice_description?: string | null;
+    /** The client-facing document, frozen at creation. */
+    proposal?: Record<string, unknown> | null;
     service_items?: {
       name: string;
       service_id?: string | null;
@@ -353,6 +359,7 @@ export async function createEngagementAction(
     start_date: payload.start_date,
     intro_message: payload.intro_message,
     service_items: payload.service_items,
+    proposal: payload.proposal,
     tasks: payload.tasks,
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,

@@ -15,6 +15,11 @@ import type { RequestItem, RequestItemStatus } from "./request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
+import {
+  proposalIsPresentable,
+  readProposalSnapshot,
+} from "@/lib/engagements/proposal-snapshot";
+import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import type { EngagementStage } from "@/lib/engagements/stage";
 import { BUCKET } from "@/lib/storage";
@@ -73,6 +78,18 @@ export type PortalFile = {
 
 export type PortalContext = {
   engagement: Engagement;
+  /**
+   * The proposal awaiting this client's decision (1650/1660), or null.
+   *
+   * Null for every engagement that predates the proposal step — which is why
+   * `requires_acceptance` is an explicit column rather than derived from
+   * `accepted_at is null`. Deriving it would show a signing page to clients
+   * already mid-upload on work under way.
+   */
+  awaiting_proposal: {
+    data: ProposalPreviewData;
+    declinedAt: string | null;
+  } | null;
   client: Client;
   firm: Firm;
   items: RequestItem[];
@@ -519,6 +536,27 @@ export async function loadPortalContext(
 
   return {
     engagement: engagement as Engagement,
+    // ── IS THIS CLIENT BEING ASKED TO AGREE? ───────────────────────────────
+    // Four conditions, all required, and every one of them is a way this could
+    // wrongly interrupt somebody:
+    //   requires_acceptance — set only on work sent AS a proposal, so nothing
+    //     already in flight is affected.
+    //   accepted_at is null — they have not already agreed.
+    //   the snapshot is PRESENTABLE — never an Accept button on a blank page.
+    //   (declining does NOT hide it — a client who said no can still read it
+    //    and change their mind, which is why declined_at is passed through
+    //    rather than tested here.)
+    awaiting_proposal: (() => {
+      const e = engagement as Record<string, unknown>;
+      if (e.requires_acceptance !== true) return null;
+      if (e.accepted_at != null) return null;
+      const data = readProposalSnapshot(e.proposal, (client as Client).display_name);
+      if (!proposalIsPresentable(data)) return null;
+      return {
+        data,
+        declinedAt: typeof e.declined_at === "string" ? e.declined_at : null,
+      };
+    })(),
     client: clientSafe as Client,
     firm: firm as Firm,
     items: items as RequestItem[],

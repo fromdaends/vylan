@@ -1,0 +1,100 @@
+// Reading an engagement's frozen proposal (migration 1660).
+//
+// THE CONTRACT, and it matters more here than anywhere else in the codebase:
+// readProposalSnapshot is TOTAL. It is on the path that renders a page a CLIENT
+// opens from an emailed link, with no session and no way to retry anything
+// clever. A throw there is a blank screen at the exact moment a firm is asking
+// somebody to agree to pay them.
+//
+// So: anything at all can be handed to it — null, a string, a payload written
+// by a newer build — and it returns something a client can read.
+
+import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
+
+function obj(v: unknown): Record<string, unknown> | null {
+  return v != null && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+function arr(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+function str(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+/** Text the client SEES — kept only when it says something. */
+function textOrNull(v: unknown): string | null {
+  const s = str(v);
+  return s.length > 0 ? s : null;
+}
+function cents(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isInteger(v)) return null;
+  if (v < 0 || v > 99_999_999) return null;
+  return v;
+}
+
+/**
+ * What the firm freezes onto the engagement when it sends the proposal.
+ *
+ * Deliberately the SAME shape ProposalPreview already takes, minus the client
+ * name — which comes from the engagement's own client, not the snapshot, so a
+ * renamed client still reads correctly on their own document.
+ */
+export type ProposalSnapshot = Omit<ProposalPreviewData, "clientName">;
+
+export function readProposalSnapshot(
+  raw: unknown,
+  clientName: string,
+): ProposalPreviewData {
+  const o = obj(raw);
+  return {
+    clientName,
+    engagementName: str(o?.engagementName),
+    // Anything unrecognised reads as "begins on acceptance" — the safe answer,
+    // and the one that is true of most work.
+    periodStartsOn: o?.periodStartsOn === "custom" ? "custom" : "acceptance",
+    periodMonths:
+      typeof o?.periodMonths === "number" && Number.isInteger(o.periodMonths)
+        ? o.periodMonths
+        : null,
+    welcome: textOrNull(o?.welcome),
+    videoUrl: textOrNull(o?.videoUrl),
+    documentName: textOrNull(o?.documentName),
+    services: arr(o?.services)
+      .map((x) => {
+        const s = obj(x);
+        if (!s) return null;
+        const name = str(s.name);
+        if (name.length === 0) return null;
+        return { name, rateCents: cents(s.rateCents) };
+      })
+      .filter((x): x is { name: string; rateCents: number | null } => x != null),
+    terms: textOrNull(o?.terms),
+    // Absent reads as TRUE. A proposal whose signature block failed to read
+    // should still ask the client to sign — the other default would present a
+    // contract with no signature line and no explanation.
+    clientSigns: o?.clientSigns !== false,
+    additionalSignerLabels: arr(o?.additionalSignerLabels)
+      .filter((x): x is string => typeof x === "string")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0)
+      .slice(0, 10),
+    firmCountersigns: o?.firmCountersigns === true,
+    depositCents: cents(o?.depositCents),
+  };
+}
+
+/**
+ * Is there enough here to show a client?
+ *
+ * A proposal with no name, no services and no terms is a blank page with an
+ * Accept button on it — worse than not asking. The portal falls back to its
+ * normal view when this is false, which is the honest failure.
+ */
+export function proposalIsPresentable(p: ProposalPreviewData): boolean {
+  return (
+    p.engagementName.length > 0 ||
+    p.services.length > 0 ||
+    (p.terms?.length ?? 0) > 0
+  );
+}

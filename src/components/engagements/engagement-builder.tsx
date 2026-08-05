@@ -854,6 +854,52 @@ export function EngagementBuilder({
             // What the work consists of. Titled rows only — an untitled row
             // left over from a stray "+ Add task" click must not land on the
             // engagement as a nameless entry.
+            // ── THE PROPOSAL, FROZEN (1660) ──────────────────────────────
+            // Built from the engagement template this started from, because
+            // that is the only place terms, the welcome message and the
+            // signature block exist. Sent as a SNAPSHOT so a client who agrees
+            // in February keeps holding what they agreed to after the firm
+            // edits its standard terms in March.
+            //
+            // Absent when the engagement did not come from a template — there
+            // is nothing to show, and the portal falls back to its normal view
+            // rather than presenting a blank page with an Accept button.
+            proposal: initialEngagementTemplate
+              ? {
+                  engagementName: resolvePlaceholders(
+                    effectiveTitle.trim(),
+                    {
+                      clientName: selectedClient?.display_name ?? null,
+                      taxYear: taxYear ? Number(taxYear) : null,
+                    },
+                    new Date(),
+                    locale,
+                  ),
+                  periodStartsOn: initialEngagementTemplate.payload.periodStartsOn,
+                  periodMonths: initialEngagementTemplate.payload.periodMonths,
+                  welcome: initialEngagementTemplate.payload.welcomeEnabled
+                    ? initialEngagementTemplate.payload.introMessage
+                    : null,
+                  videoUrl: initialEngagementTemplate.payload.videoEnabled
+                    ? initialEngagementTemplate.payload.videoUrl
+                    : null,
+                  documentName: initialEngagementTemplate.payload.documentEnabled
+                    ? initialEngagementTemplate.payload.documentName
+                    : null,
+                  services: serviceItems
+                    .filter((i) => i.name.trim().length > 0)
+                    .map((i) => ({ name: i.name.trim(), rateCents: i.rateCents })),
+                  terms: initialEngagementTemplate.payload.termsEnabled
+                    ? initialEngagementTemplate.payload.termsText
+                    : null,
+                  clientSigns: initialEngagementTemplate.payload.clientSigns,
+                  additionalSignerLabels:
+                    initialEngagementTemplate.payload.additionalSignerLabels,
+                  firmCountersigns:
+                    initialEngagementTemplate.payload.firmCountersigns,
+                  depositCents: initialEngagementTemplate.payload.depositCents,
+                }
+              : undefined,
             tasks: meaningfulTasks(tasks).map((task) => ({
               title: task.title,
               kind: task.kind,
