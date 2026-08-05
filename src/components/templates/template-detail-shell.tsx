@@ -310,7 +310,11 @@ export function TemplateDetailShell({
 }
 
 // A built-in's document list, readable without the editor's machinery.
-function ReadOnlyItems({
+//
+// EXPORTED because the workflows-off route needs the identical rendering: a
+// built-in is read-only in both worlds, and two versions of "show me what is in
+// this template" would be two things to keep in step.
+export function ReadOnlyItems({
   template,
   locale,
 }: {
