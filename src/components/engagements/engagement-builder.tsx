@@ -35,6 +35,11 @@ import {
 } from "lucide-react";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import { cn } from "@/lib/cn";
+// The SAME radio card the template builders use. A hand-rolled copy here was
+// how this step ended up shouting "ENGAGEMENT PERIOD BEGINS ON" in caps over
+// two lines while the template builder said it quietly in one — the exact
+// drift the shared chrome exists to prevent.
+import { RadioCard } from "@/components/templates/template-builder-shell";
 import {
   findScopeWarning,
   type ScopeWarningContact,
@@ -2415,31 +2420,18 @@ export function EngagementBuilder({
               <CardContent className="space-y-3">
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(["acceptance", "custom"] as const).map((value) => (
-                    <label
+                    <RadioCard
                       key={value}
-                      className={cn(
-                        "cursor-pointer rounded-lg border px-3 py-2.5 transition-colors",
-                        proposalPeriodStartsOn === value
-                          ? "border-accent bg-accent/5"
-                          : "border-border hover:border-accent/50",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="engagement-period-start"
-                        className="sr-only"
-                        checked={proposalPeriodStartsOn === value}
-                        onChange={() => setProposalPeriodStartsOn(value)}
-                      />
-                      <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
-                        {tTpl("period_begins_on")}
-                      </span>
-                      <span className="block text-sm font-medium">
-                        {value === "acceptance"
+                      name="engagement-period-start"
+                      checked={proposalPeriodStartsOn === value}
+                      onSelect={() => setProposalPeriodStartsOn(value)}
+                      caption={tTpl("period_begins_on")}
+                      label={
+                        value === "acceptance"
                           ? tTpl("period_acceptance")
-                          : tTpl("period_custom_date")}
-                      </span>
-                    </label>
+                          : tTpl("period_custom_date")
+                      }
+                    />
                   ))}
                 </div>
                 <div className="grid gap-1.5 sm:grid-cols-[10rem_1fr] sm:items-center">
@@ -2528,8 +2520,11 @@ export function EngagementBuilder({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* NOT tTpl("who_signs_hint") — that one says "a template
+                    names the ROLES that sign, not the people", which is false
+                    on this screen. Here you are naming them for a real job. */}
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  {tTpl("who_signs_hint")}
+                  {t("proposal_who_signs_hint")}
                 </p>
                 <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <input

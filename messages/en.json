@@ -2858,7 +2858,8 @@
     "deleted_tasks_title": "Recently deleted",
     "deleted_tasks_hint": "Deleted tasks stay here for 30 days, then they're gone for good.",
     "deleted_tasks_empty": "Nothing deleted in the last 30 days.",
-    "back_to_work": "Back to tasks"
+    "back_to_work": "Back to tasks",
+    "proposal_who_signs_hint": "Who has to sign before this work is agreed. The client signs by default; add a slot for anyone else who needs to, like a spouse or a second director."
   },
   "Attention": {
     "metric_active": "Active",
@@ -3177,7 +3178,9 @@
     "tab_service_work": "Work",
     "service_preview_label": "How this lands on an engagement",
     "template_work_title": "Work this creates",
-    "template_work_hint": "These came in with the services above. Every engagement made from this template starts with this work already on it — you can change it on the engagement itself."
+    "template_work_hint": "These came in with the services above. Every engagement made from this template starts with this work already on it — you can change it on the engagement itself.",
+    "preview_unnamed_service": "Unnamed service",
+    "preview_unnamed_task": "Unnamed task"
   },
   "Status": {
     "pending": "Pending",

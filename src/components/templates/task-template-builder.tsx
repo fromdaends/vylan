@@ -30,6 +30,7 @@ import { CornerDownRight, FileText, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/cn";
 import {
   TemplateBuilderShell,
   Field,
@@ -166,8 +167,16 @@ export function TaskTemplateBuilder({
           </p>
           {/* The work as it will land on an engagement. */}
           <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-sm font-medium">
-              {name.trim() || t("task_templates_name_placeholder")}
+            {/* Absent, not "a task called Template name". Echoing the field's
+                placeholder here makes an empty builder look like it is already
+                previewing something real. */}
+            <p
+              className={cn(
+                "text-sm",
+                name.trim() ? "font-medium" : "italic text-muted-foreground",
+              )}
+            >
+              {name.trim() || t("preview_unnamed_task")}
             </p>
             <p className="mt-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
               {label(kind)}

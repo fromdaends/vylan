@@ -2858,7 +2858,8 @@
     "deleted_tasks_title": "Supprimées récemment",
     "deleted_tasks_hint": "Les tâches supprimées restent ici 30 jours, puis disparaissent définitivement.",
     "deleted_tasks_empty": "Rien de supprimé depuis 30 jours.",
-    "back_to_work": "Retour aux tâches"
+    "back_to_work": "Retour aux tâches",
+    "proposal_who_signs_hint": "Qui doit signer avant que ce travail soit accepté. Le client signe par défaut ; ajoutez une place pour toute autre personne qui doit signer, comme un conjoint ou un deuxième administrateur."
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3177,7 +3178,9 @@
     "tab_service_work": "Travail",
     "service_preview_label": "Ce que ça donne sur un engagement",
     "template_work_title": "Le travail que ça crée",
-    "template_work_hint": "Ceci est venu avec les services ci-dessus. Chaque engagement créé à partir de ce modèle démarre avec ce travail déjà en place — vous pouvez le modifier sur l'engagement lui-même."
+    "template_work_hint": "Ceci est venu avec les services ci-dessus. Chaque engagement créé à partir de ce modèle démarre avec ce travail déjà en place — vous pouvez le modifier sur l'engagement lui-même.",
+    "preview_unnamed_service": "Service sans nom",
+    "preview_unnamed_task": "Tâche sans nom"
   },
   "Status": {
     "pending": "En attente",
