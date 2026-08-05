@@ -150,6 +150,14 @@ const EN: Record<string, NotificationCopy> = {
     headline: () => "Your Vylan subscription payment did not go through",
     cta: "Update payment method",
   },
+  // The alert's own name rides in documentName — the generic string slot — so
+  // it is blanked by the same withhold rule as every other name rather than
+  // needing its own exemption.
+  "firm.kpi_alert": {
+    headline: (v) =>
+      `Alert: ${some(v.documentName, v, "a number you are watching")} crossed its limit`,
+    cta: "Open the Work overview",
+  },
 };
 
 const FR: Record<string, NotificationCopy> = {
@@ -263,6 +271,11 @@ const FR: Record<string, NotificationCopy> = {
   "billing.payment_failed": {
     headline: () => "Le paiement de votre abonnement Vylan n'a pas fonctionné",
     cta: "Mettre à jour le mode de paiement",
+  },
+  "firm.kpi_alert": {
+    headline: (v) =>
+      `Alerte : ${some(v.documentName, v, "un chiffre que vous surveillez")} a franchi votre seuil`,
+    cta: "Ouvrir l'aperçu du travail",
   },
 };
 

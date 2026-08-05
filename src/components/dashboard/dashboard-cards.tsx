@@ -32,14 +32,22 @@ function CardMenu({
   exploreHref,
   exploreLabel,
   menuLabel,
+  offset = false,
 }: {
   exploreHref?: string;
   exploreLabel: string;
   menuLabel: string;
+  /** A bell is parked at right-2.5, so shift out from under it. */
+  offset?: boolean;
 }) {
   if (!exploreHref) return null;
   return (
-    <div className="absolute right-2.5 top-2.5 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/card:opacity-100">
+    <div
+      className={cn(
+        "absolute top-2.5 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/card:opacity-100",
+        offset ? "right-11" : "right-2.5",
+      )}
+    >
       {/* Canopy's "Explore" opens ThoughtSpot's query builder. We have no query
           builder and will not pretend to — ours goes to the list the number is
           counting, filtered the same way, which is the question somebody
@@ -79,6 +87,7 @@ export function KpiCard({
   exploreHref,
   exploreLabel,
   menuLabel,
+  bell,
 }: {
   title: string;
   description?: string;
@@ -89,13 +98,20 @@ export function KpiCard({
   exploreHref?: string;
   exploreLabel: string;
   menuLabel: string;
+  /** Canopy's alert bell. Sits BEFORE Explore in the hover strip because it is
+   *  the only control here that changes anything. */
+  bell?: ReactNode;
 }) {
   return (
     <div className="group/card relative rounded-xl border border-border bg-card px-5 py-4">
+      {/* The bell lives OUTSIDE the hover strip: a card you already watch has
+          to say so at rest, or the whole point of glancing is lost. */}
+      {bell && <div className="absolute right-2.5 top-2.5 z-10">{bell}</div>}
       <CardMenu
         exploreHref={exploreHref}
         exploreLabel={exploreLabel}
         menuLabel={menuLabel}
+        offset={Boolean(bell)}
       />
       <p className="pr-20 text-[15px] font-semibold leading-tight tracking-tight">
         {title}

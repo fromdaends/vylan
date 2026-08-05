@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/engagement-attention",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/kpi-alerts",
+      "schedule": "0 6 * * *"
     }
   ]
 }

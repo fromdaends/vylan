@@ -127,10 +127,31 @@ describe("NotificationsSection", () => {
   // Owner-only events are HIDDEN from staff, not greyed out.
   it("hides owner-only events from staff entirely", () => {
     renderSection({ isOwner: false });
-    expect(screen.queryByText(en.Notifications.cat_firm)).toBeNull();
+    // Every owner-only firm event stays hidden — a staff member has no business
+    // seeing that the subscription card failed.
     expect(
       screen.queryByText(en.Notifications.event_billing_payment_failed_label),
     ).toBeNull();
+    expect(
+      screen.queryByText(en.Notifications.event_integration_sync_failed_label),
+    ).toBeNull();
+  });
+
+  it("shows staff the ONE firm event that is theirs — their own KPI alerts", () => {
+    // The "Your firm" heading used to be invisible to staff because every
+    // event under it was owner-only. firm.kpi_alert (1690) is deliberately
+    // not: anybody may watch a number, and a Junior asking to be told when
+    // overdue work passes ten is exactly what the bell is for.
+    renderSection({ isOwner: false });
+    // The heading is now visible to staff at all — it was not before.
+    const heading = screen.getByText(en.Notifications.cat_firm);
+    expect(heading).toBeTruthy();
+    // "Your firm" is collapsed by default (only Documents and Engagements
+    // open), so open it to see the row.
+    fireEvent.click(heading);
+    expect(
+      screen.getByText(en.Notifications.event_firm_kpi_alert_label),
+    ).toBeTruthy();
   });
 
   it("shows owner-only events to an owner", () => {
