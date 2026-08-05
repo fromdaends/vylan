@@ -77,6 +77,10 @@ import {
 } from "@/lib/reminder-settings";
 import { applyRepeatChoice } from "@/lib/recurring/enable";
 import { parseInvoiceSnapshot } from "@/lib/recurring/invoice-snapshot";
+import { guardBulkIds } from "@/lib/bulk/selection";
+import { isEngagementStage } from "@/lib/engagements/stage";
+import { setEngagementStageManually } from "@/lib/engagements/stage-sync";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export type CreateEngagementState = {
   ok?: boolean;
@@ -1463,4 +1467,75 @@ export async function deleteEngagementAction(formData: FormData) {
   await logUserActivity(user.firm_id, id, "engagement_deleted", {});
   revalidateEngagementPaths(id);
   redirect(getPathname({ locale, href: "/dashboard" }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BULK, BEYOND REASSIGNING
+//
+// bulkAssignEngagementsAction (#1082) did one thing. The founder: "expand upon
+// it so its not just reassigning." Stage and archive are the two other things
+// the engagements list already does one row at a time, so they are the two that
+// can go in bulk without inventing an unexercised writer.
+//
+// STAGE goes through setEngagementStageManually, the same call the row menu's
+// picker makes, so the manual-override semantics are identical whether you set
+// one or twelve — it is an OVERRIDE, and the next automatic event re-resolves
+// it from reality either way.
+//
+// Partial success is reported, not swallowed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type BulkEngagementResult = {
+  ok: boolean;
+  done?: number;
+  failed?: number;
+  error?: "no_session" | "too_many" | "failed";
+};
+
+export async function bulkUpdateEngagementsAction(input: {
+  engagementIds: string[];
+  stage?: string;
+  archive?: boolean;
+}): Promise<BulkEngagementResult> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+
+  const guarded = guardBulkIds(input.engagementIds);
+  if (!guarded.ok) return { ok: false, error: "too_many" };
+  if (guarded.ids.length === 0) return { ok: true, done: 0, failed: 0 };
+
+  const supabase = await getServerSupabase();
+  let done = 0;
+  let failed = 0;
+
+  for (const id of guarded.ids) {
+    try {
+      if (input.archive) {
+        await archiveEngagement(id, user.id);
+        // Archived work must stop nagging the client — the same follow-through
+        // the single-row archive does, and the reason this loops rather than
+        // firing one UPDATE over all the ids.
+        await cancelEngagementReminders(id);
+        await logUserActivity(firm.id, id, "engagement_archived", {});
+      } else if (input.stage && isEngagementStage(input.stage)) {
+        const ok = await setEngagementStageManually(
+          supabase,
+          id,
+          input.stage,
+          user.id,
+        );
+        if (!ok) throw new Error("stage_refused");
+      } else {
+        throw new Error("nothing_to_do");
+      }
+      done += 1;
+    } catch (err) {
+      console.error("[engagements] bulk row failed:", id, err);
+      failed += 1;
+    }
+  }
+
+  revalidateAllLocales("/engagements");
+  revalidateAllLocales("/dashboard");
+  return { ok: done > 0 || failed === 0, done, failed };
 }

@@ -2841,7 +2841,12 @@
     "assignee_nobody": "Aucun coéquipier à assigner pour l'instant.",
     "assignee_needs_migration": "Les assignations multiples nécessitent une mise à jour de la base de données.",
     "assignee_failed": "Impossible de modifier qui travaille sur ce mandat. Réessayez.",
-    "agreement_stepper_label": "Progression de l'entente"
+    "agreement_stepper_label": "Progression de l'entente",
+    "bulk_more": "Plus",
+    "bulk_partial": "{done} sur {total} mises à jour — le reste n'a pas fonctionné.",
+    "bulk_select_all_clients": "Sélectionner tous les clients affichés",
+    "bulk_select_client": "Sélectionner {name}",
+    "bulk_select_task": "Sélectionner {title}"
   },
   "Attention": {
     "metric_active": "Actifs",

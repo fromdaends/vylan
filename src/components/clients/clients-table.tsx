@@ -7,6 +7,12 @@ import { RowCommentBubble } from "@/components/engagements/row-comment-bubble";
 import { commentKeyForClient } from "@/components/engagements/comment-keys";
 import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 import { loadCommentCountsAction } from "@/app/actions/comments";
+import { bulkUpdateClientsAction } from "@/app/actions/clients";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { useRowSelection } from "@/lib/bulk/use-row-selection";
+import { BULK_MAX } from "@/lib/bulk/selection";
+import { Archive, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -93,6 +99,43 @@ export function ClientsTable({
 }) {
   const t = useTranslations("Clients");
 
+  const selection = useRowSelection(clients.map((c) => c.id));
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const router = useRouter();
+  const tEng = useTranslations("Engagements");
+
+  // One runner, so every action reports the same way — and says "8 of 10"
+  // rather than claiming a clean sweep when some rows refused.
+  const runBulk = (
+    patch: Parameters<typeof bulkUpdateClientsAction>[0],
+    label: string,
+  ) => {
+    if (bulkBusy || selection.count === 0) return;
+    setBulkBusy(true);
+    void bulkUpdateClientsAction({ ...patch, clientIds: selection.ids })
+      .then((res) => {
+        if (!res.ok && res.error === "too_many") {
+          toast.error(tEng("bulk_too_many", { max: BULK_MAX }));
+          return;
+        }
+        if (!res.ok) {
+          toast.error(tEng("bulk_failed"));
+          return;
+        }
+        toast.success(
+          res.failed
+            ? tEng("bulk_partial", {
+                done: res.done ?? 0,
+                total: selection.count,
+              })
+            : `${label} · ${tEng("bulk_moved", { count: res.done ?? 0 })}`,
+        );
+        selection.clear();
+        router.refresh();
+      })
+      .finally(() => setBulkBusy(false));
+  };
+
   // Which clients carry a comment — ONE request for the whole table, fired
   // after paint and never awaited, so the list renders exactly as fast as it
   // did before commenting existed. Declared BEFORE the empty-state early
@@ -128,6 +171,20 @@ export function ClientsTable({
   return (
     <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
       <div className={cn(HEADER_ROW, COL.gap)}>
+        {/* Covers the rows ON SCREEN after filtering, never the whole unseen
+            list — Canopy's rule, and the safe one. */}
+        <span className="flex w-5 shrink-0 items-center">
+          <input
+            type="checkbox"
+            checked={selection.header === "all"}
+            ref={(el) => {
+              if (el) el.indeterminate = selection.header === "some";
+            }}
+            onChange={selection.toggleHeader}
+            aria-label={tEng("bulk_select_all_clients")}
+            className="size-[15px] cursor-pointer accent-[var(--accent)]"
+          />
+        </span>
         <span className={COL.name}>{t("col_name")}</span>
         <span className={COL.type}>{t("col_type")}</span>
         <span className={COL.email}>{t("col_email")}</span>
@@ -136,12 +193,55 @@ export function ClientsTable({
         {teamEnabled && <span className={COL.owner}>{t("col_owner")}</span>}
         <span className={COL.actions} aria-hidden />
       </div>
+      {/* Canopy's client list carries its own bulk icons; these are the two
+          Vylan already does one row at a time. Archiving sits behind More —
+          it is the one that costs something. */}
+      <BulkActionBar
+        count={selection.count}
+        busy={bulkBusy}
+        onClear={selection.clear}
+        actions={
+          owners && Object.keys(owners).length > 0
+            ? [
+                {
+                  key: "owner",
+                  label: tEng("assign_to"),
+                  icon: UserRound,
+                  submenu: [
+                    ...Object.values(owners).map((o) => ({
+                      key: o.id,
+                      label: o.name,
+                      onSelect: () => runBulk({ clientIds: [], assigneeId: o.id }, o.name),
+                    })),
+                    {
+                      key: "__nobody",
+                      label: tEng("assign_nobody"),
+                      onSelect: () =>
+                        runBulk({ clientIds: [], assigneeId: null }, tEng("assign_nobody")),
+                    },
+                  ],
+                },
+              ]
+            : []
+        }
+        moreActions={[
+          {
+            key: "archive",
+            label: t("archive"),
+            icon: Archive,
+            variant: "destructive" as const,
+            onSelect: () => runBulk({ clientIds: [], archive: true }, t("archive")),
+          },
+        ]}
+      />
       {clients.map((c) => (
         <ClientRow
           key={c.id}
           client={c}
           avatarUrl={avatarUrls?.[c.id] ?? null}
           commentCount={commentCounts[c.id] ?? 0}
+          isSelected={selection.isSelected(c.id)}
+          onSelectToggle={() => selection.toggle(c.id)}
           summary={summaries[c.id]}
           relationshipBadge={relationships?.[c.id]}
           owner={c.assigned_user_id ? owners[c.assigned_user_id] : undefined}
@@ -192,6 +292,8 @@ function ClientRow({
   client,
   avatarUrl,
   commentCount,
+  isSelected,
+  onSelectToggle,
   summary,
   relationshipBadge,
   owner,
@@ -203,6 +305,8 @@ function ClientRow({
   avatarUrl?: string | null;
   /** From the table's one batched count. */
   commentCount: number;
+  isSelected: boolean;
+  onSelectToggle: () => void;
   summary: ClientEngagementSummary | undefined;
   relationshipBadge: ClientRelationshipBadge | undefined;
   owner: ClientOwner | undefined;
@@ -211,9 +315,9 @@ function ClientRow({
   teamEnabled: boolean;
 }) {
   const t = useTranslations("Clients");
+  const tEng = useTranslations("Engagements");
   // The comment entry's label lives in Engagements alongside every other
   // "Add a comment" in the app — one string, so the four menus cannot drift.
-  const tEng = useTranslations("Engagements");
   const comment = useCommentFromMenu();
   const router = useRouter();
   const href = `/clients/${client.id}`;
@@ -233,6 +337,20 @@ function ClientRow({
             COL.gap,
           )}
         >
+          <span
+            className="flex w-5 shrink-0 items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onSelectToggle()}
+              aria-label={tEng("bulk_select_client", {
+                name: client.display_name,
+              })}
+              className="size-[15px] cursor-pointer accent-[var(--accent)]"
+            />
+          </span>
           <span className={cn(COL.name, "flex items-center gap-[11px]")}>
             {/* The client's picture (1530) when there is one, the flat accent
                 circle when there is not.

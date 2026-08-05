@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { UserRound, X } from "lucide-react";
+import { Archive, Milestone, UserRound, X } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   DropdownMenu,
@@ -12,8 +12,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { bulkAssignEngagementsAction } from "@/app/actions/engagements";
+import {
+  bulkAssignEngagementsAction,
+  bulkUpdateEngagementsAction,
+} from "@/app/actions/engagements";
 import { BULK_ASSIGN_MAX } from "@/lib/engagements/bulk-assign";
+import {
+  ENGAGEMENT_STAGES,
+  STAGE_BG_CLASS,
+  stageLabelKey,
+} from "@/lib/engagements/stage";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 
 // The bar that appears once you tick rows. Karbon's shape, and the one thing
 // they have on assignment that Vylan didn't: filter a work list, tick the rows,
@@ -39,6 +48,7 @@ export function BulkAssignBar({
   onClear: () => void;
 }) {
   const t = useTranslations("Engagements");
+  const tStage = useTranslations("Stage");
   const [pending, start] = useTransition();
   const count = selectedIds.length;
   if (count === 0) return null;
@@ -62,58 +72,85 @@ export function BulkAssignBar({
     });
   };
 
+  // EXPANDED BEYOND REASSIGNING (founder: "expand upon it so its not just
+  // reassigning"). Stage and archive are the two other things the engagements
+  // list already does one row at a time, so they are the two that can go in
+  // bulk without inventing a writer nobody has exercised.
+  //
+  // Renders through the SHARED BulkActionBar now, the same one tasks and
+  // clients use — so "Assign to" is one control in this product, not three
+  // that resemble each other.
+  const runUpdate = (
+    patch: { stage?: string; archive?: boolean },
+    label: string,
+  ) => {
+    if (pending) return;
+    start(async () => {
+      const res = await bulkUpdateEngagementsAction({
+        engagementIds: selectedIds,
+        ...patch,
+      });
+      if (res.ok) {
+        toast.success(
+          res.failed
+            ? t("bulk_partial", { done: res.done ?? 0, total: count })
+            : `${label} · ${t("bulk_moved", { count: res.done ?? 0 })}`,
+        );
+        onDone();
+      } else if (res.error === "too_many") {
+        toast.error(t("bulk_too_many", { max: BULK_ASSIGN_MAX }));
+      } else {
+        toast.error(t("bulk_failed"));
+      }
+    });
+  };
+
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-border bg-popover/95 py-2 pl-4 pr-2 text-sm shadow-lg backdrop-blur supports-[backdrop-filter]:bg-popover/80">
-        <span className="font-medium tabular-nums">
-          {t("bulk_selected", { count })}
-        </span>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity disabled:opacity-50"
-            >
-              <UserRound className="size-3.5" aria-hidden />
-              {t("bulk_assign_to")}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="center" side="top" className="w-56">
-            {members.map((m) => (
-              <DropdownMenuItem
-                key={m.id}
-                onSelect={() => run(m.id, m.name)}
-                className="gap-2"
-              >
-                <AvatarInitials name={m.name} size={20} />
-                <span className="flex-1 truncate">{m.name}</span>
-              </DropdownMenuItem>
-            ))}
-            {/* Unassigning in bulk is a real need, not an edge case: it is how
-                you clear a leaver's plate before deciding where each file goes. */}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => run(null, "")} className="gap-2">
-              <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <UserRound className="size-3" aria-hidden />
-              </span>
-              <span className="flex-1 truncate">{t("assign_nobody")}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <button
-          type="button"
-          onClick={onClear}
-          disabled={pending}
-          aria-label={t("bulk_clear")}
-          title={t("bulk_clear")}
-          className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <X className="size-4" aria-hidden />
-        </button>
-      </div>
-    </div>
+    <BulkActionBar
+      count={count}
+      busy={pending}
+      onClear={onClear}
+      actions={[
+        {
+          key: "assign",
+          label: t("bulk_assign_to"),
+          icon: UserRound,
+          submenu: [
+            ...members.map((m) => ({
+              key: m.id,
+              label: m.name,
+              onSelect: () => run(m.id, m.name),
+            })),
+            // Unassigning in bulk is a real need, not an edge case: it is how
+            // you clear a leaver's plate before deciding where each file goes.
+            {
+              key: "__nobody",
+              label: t("assign_nobody"),
+              onSelect: () => run(null, ""),
+            },
+          ],
+        },
+        {
+          key: "stage",
+          label: tStage("change"),
+          icon: Milestone,
+          submenu: ENGAGEMENT_STAGES.map((st) => ({
+            key: st,
+            label: tStage(stageLabelKey(st)),
+            dotClass: STAGE_BG_CLASS[st],
+            onSelect: () => runUpdate({ stage: st }, tStage(stageLabelKey(st))),
+          })),
+        },
+      ]}
+      moreActions={[
+        {
+          key: "archive",
+          label: t("menu_archive"),
+          icon: Archive,
+          variant: "destructive" as const,
+          onSelect: () => runUpdate({ archive: true }, t("menu_archive")),
+        },
+      ]}
+    />
   );
 }

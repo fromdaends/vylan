@@ -37,7 +37,10 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { RowMenuItem } from "@/components/engagements/engagement-row-menu";
+import type {
+  RowMenuItem,
+  RowMenuSubItem,
+} from "@/components/engagements/engagement-row-menu";
 
 type MenuParts = {
   Item: React.ElementType;
@@ -85,21 +88,7 @@ export function RowMenuItems({
                 {it.label}
               </SubTrigger>
               <SubContent className="w-52">
-                {it.submenu.map((sub) => (
-                  <Item key={sub.key} onSelect={sub.onSelect} className="gap-2">
-                    <span
-                      aria-hidden
-                      className={cn("size-2 shrink-0 rounded-full", sub.dotClass)}
-                      style={
-                        sub.dotColor ? { backgroundColor: sub.dotColor } : undefined
-                      }
-                    />
-                    <span className="flex-1">{sub.label}</span>
-                    {sub.checked && (
-                      <Check className="size-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                  </Item>
-                ))}
+                <RowSubItems items={it.submenu} Item={Item} />
               </SubContent>
             </Sub>
           );
@@ -117,6 +106,41 @@ export function RowMenuItems({
           </Fragment>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * The CHILD list of a submenu, on its own.
+ *
+ * Exported because the bulk-action bar shows the same choices — pick a status,
+ * pick an assignee — from a flat dropdown rather than a nested submenu. Sharing
+ * this is what stops "pick a status" looking like two different controls
+ * depending on whether you got there by right-clicking one row or by ticking
+ * twelve.
+ */
+export function RowSubItems({
+  items,
+  Item,
+}: {
+  items: RowMenuSubItem[];
+  Item: React.ElementType;
+}) {
+  return (
+    <>
+      {items.map((sub) => (
+        <Item key={sub.key} onSelect={sub.onSelect} className="gap-2">
+          <span
+            aria-hidden
+            className={cn("size-2 shrink-0 rounded-full", sub.dotClass)}
+            style={sub.dotColor ? { backgroundColor: sub.dotColor } : undefined}
+          />
+          <span className="flex-1">{sub.label}</span>
+          {sub.checked && (
+            <Check className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+        </Item>
+      ))}
     </>
   );
 }
