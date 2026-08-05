@@ -123,53 +123,52 @@ export function EngagementModalShell({
           
           It is a plain page again. It LOOKS overlaid and nothing behind it is
           real, so nothing behind it can move, repaint, or steal a click. */}
-      {/* ── THE APP, BEHIND FROSTED GLASS ──────────────────────────────
-          The founder: "the engagement creation hovers over the existing UI,
-          but the background is just blurred out. But do not do it incorrectly.
-          Do it so it does not fuck with the UI, the latency... it uses an
-          overlay that looks like the background UI, but it's really not. And
-          it's just a screenshot of it."
+      {/* ── ONE CONTAINER, PAINTED IN DOM ORDER ────────────────────────
+          The founder, three times: the frosted glass is not working.
 
-          Behind the glass is the SHAPE of the engagements list and nothing
-          else: no data, no client components, no hydration, no scrolling, no
-          animation. Scenery — closer to a photograph of the page than to the
-          page. That inertness is what keeps it cheap.
+          It was not the blur. The scenery, the dim and the sheet were three
+          SEPARATE fixed layers ordered by z-30 / z-40 / z-50 — and z-index only
+          orders siblings within one stacking context. Under this app's shell
+          they were not reliably in one, so the dim painted over the sheet and
+          washed out the dialog itself, which is what "not working" looked like.
 
-          ── WHY THE BLUR IS ON THE CONTENT, NOT ON A PANE ABOVE IT ──────
+          They are children of ONE container now, and the sheet is last. Within
+          a single stacking context, later siblings paint on top — no z-index,
+          nothing to be outranked by a parent that happens to create a context.
+          There is no arrangement of ancestors that can reorder them.
 
-          The obvious build is a `backdrop-filter` pane over a sibling layer.
-          It rendered, it was sized correctly, and it blurred nothing — the
-          skeleton stayed crisp through it, which is why the founder saw the
-          same page twice and said so twice. `backdrop-filter` samples a
-          "backdrop root", and what counts as one depends on the stacking
-          context it lands in; a fixed sibling is not reliably part of it.
+          ── WHAT IS BEHIND THE GLASS ────────────────────────────────────
 
-          So the blur is a plain `filter` on the scenery ITSELF, which has no
-          such caveat: it blurs its own pixels, always. The dim is then an
-          ordinary translucent layer on top. Two boring properties instead of
-          one clever one — and both paint once, because nothing underneath
-          them ever moves. */}
-      <div
-        aria-hidden
-        // `inert` as well as pointer-events-none: nothing in here may take
-        // focus from the dialog, including via the keyboard.
-        inert
-        className="pointer-events-none fixed inset-0 z-30 select-none overflow-hidden sm:left-[var(--rail-width)]"
-      >
-        {/* blur-md is filter: blur(12px) — on this element's own content.
-            scale-105 hides the soft, transparent edge a blur leaves behind. */}
-        <div className="scale-105 px-6 pt-7 blur-md lg:px-11">
-          <EngagementsListSkeleton animated={false} tone="contrast" />
+          The SHAPE of the engagements list and nothing else: no data, no client
+          components, no hydration, no scrolling, no animation. Scenery — closer
+          to a photograph of the page than to the page, which is exactly what
+          the founder asked for and what keeps it free.
+
+          The blur is a plain `filter` on the scenery itself rather than a
+          `backdrop-filter` pane above it. backdrop-filter samples a "backdrop
+          root" whose membership depends on the same stacking rules that broke
+          the layering; a filter blurs its own pixels, always. */}
+      <div className="animate-in-fade fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none sm:p-6">
+        <div
+          aria-hidden
+          // `inert` as well as pointer-events-none: nothing in here may take
+          // focus from the dialog, including via the keyboard.
+          inert
+          className="absolute inset-0 select-none overflow-hidden sm:left-[var(--rail-width)]"
+        >
+          {/* blur-md is filter: blur(12px) on this element's own content.
+              scale-105 hides the soft transparent edge a blur leaves behind. */}
+          <div className="scale-105 px-6 pt-7 blur-md lg:px-11">
+            <EngagementsListSkeleton animated={false} tone="contrast" />
+          </div>
         </div>
-      </div>
 
-      {/* The dim. A plain colour, no filter — the blur already happened. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 z-40 bg-background/70 sm:left-[var(--rail-width)]"
-      />
+        {/* The dim, over the scenery and UNDER the sheet — by DOM order. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-background/70 sm:left-[var(--rail-width)]"
+        />
 
-      <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
         <div className={sheet}>
           {/* ── The bar ───────────────────────────────────────────────────
               Title left, actions right, exactly Canopy's arrangement. It never
