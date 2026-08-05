@@ -2850,7 +2850,8 @@
     "bulk_partial": "{done} of {total} updated — the rest didn't take.",
     "bulk_select_all_clients": "Select every client shown",
     "bulk_select_client": "Select {name}",
-    "bulk_select_task": "Select {title}"
+    "bulk_select_task": "Select {title}",
+    "wizard_step_proposal": "Proposal"
   },
   "Attention": {
     "metric_active": "Active",

@@ -2850,7 +2850,8 @@
     "bulk_partial": "{done} sur {total} mises à jour — le reste n'a pas fonctionné.",
     "bulk_select_all_clients": "Sélectionner tous les clients affichés",
     "bulk_select_client": "Sélectionner {name}",
-    "bulk_select_task": "Sélectionner {title}"
+    "bulk_select_task": "Sélectionner {title}",
+    "wizard_step_proposal": "Proposition"
   },
   "Attention": {
     "metric_active": "Actifs",
