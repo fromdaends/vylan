@@ -11,8 +11,6 @@ import {
   Check,
   ShieldCheck,
   CircleDot,
-  FileSignature,
-  LayoutTemplate,
   Download,
   Trash2,
   ChevronRight,
@@ -69,8 +67,6 @@ type SectionId =
   | "payments"
   | "automation"
   | "statuses"
-  | "templates"
-  | "letter"
   | "integrations"
   | "documents";
 type Translate = (k: string, values?: Record<string, string | number>) => string;
@@ -104,8 +100,6 @@ const SECTION_IDS: SectionId[] = [
   "payments",
   "automation",
   "statuses",
-  "templates",
-  "letter",
   "integrations",
   "documents",
 ];
@@ -116,16 +110,6 @@ const SECTION_IDS: SectionId[] = [
  */
 const SECTION_ROUTES: Partial<Record<SectionId, string>> = {
   statuses: "/settings/statuses",
-  // The firm's engagement letter — set up ONCE and reused by every automation
-  // (1580), which is a setting by any definition. It only ever appeared on the
-  // Vylan hub, so the place an owner goes looking for firm-wide setup did not
-  // have it. Same component in both places, never a copy.
-  letter: "/settings/engagement-letter",
-  // Templates are the firm's OWN definitions of how its work is shaped —
-  // engagement, task, document-request and services, all four at /templates.
-  // They keep their top-level nav (they are content you edit daily, not a knob
-  // you set once) and this is a pointer to them, not a second home.
-  templates: "/templates",
 };
 
 export function SettingsShell({
@@ -251,10 +235,7 @@ export function SettingsShell({
   const allGroups: { label: string; ids: SectionId[] }[] = [
     { label: t("nav_group_you"), ids: ["account", "security", "notifications"] },
     { label: t("nav_group_firm"), ids: ["general", "team", "payments"] },
-    {
-      label: t("nav_group_workflow"),
-      ids: ["automation", "statuses", "templates", "letter"],
-    },
+    { label: t("nav_group_workflow"), ids: ["automation", "statuses"] },
     { label: t("nav_group_product"), ids: ["integrations", "documents"] },
   ];
   const sectionLabel: Record<SectionId, string> = {
@@ -266,8 +247,6 @@ export function SettingsShell({
     payments: t("nav_payments"),
     automation: t("nav_automation"),
     statuses: t("nav_statuses"),
-    templates: t("nav_templates"),
-    letter: t("nav_letter"),
     integrations: t("nav_integrations"),
     documents: t("nav_documents"),
   };
@@ -1220,43 +1199,6 @@ function DataPrivacySection({
               </span>
               <span className="text-xs text-muted-foreground">
                 {t("statuses_link_hint")}
-              </span>
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </Link>
-        {/* The two firm-level setups the new work added. Both are POINTERS to
-            where each already lives — a second uploader or a second template
-            editor is exactly what the cohesion rule forbids. */}
-        <Link
-          href="/templates"
-          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-        >
-          <span className="flex items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-              <LayoutTemplate className="h-4 w-4" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-sm font-medium">{t("nav_templates")}</span>
-              <span className="text-xs text-muted-foreground">
-                {t("templates_link_hint")}
-              </span>
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </Link>
-        <Link
-          href="/settings/engagement-letter"
-          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-        >
-          <span className="flex items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-              <FileSignature className="h-4 w-4" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-sm font-medium">{t("nav_letter")}</span>
-              <span className="text-xs text-muted-foreground">
-                {t("letter_link_hint")}
               </span>
             </span>
           </span>
