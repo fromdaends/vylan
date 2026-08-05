@@ -1247,7 +1247,13 @@
     "statuses_move_up": "Déplacer {name} vers le haut",
     "statuses_move_down": "Déplacer {name} vers le bas",
     "statuses_added_by": "Ajouté par {name} le {date}",
-    "statuses_at_edge": "Il est déjà à cette extrémité."
+    "statuses_at_edge": "Il est déjà à cette extrémité.",
+    "nav_templates": "Modèles",
+    "nav_letter": "Lettre de mission",
+    "letter_title": "Lettre de mission",
+    "letter_subtitle": "Le document que vos automatisations envoient au démarrage d'un mandat. Configurez-la une fois et chaque flux la réutilise.",
+    "letter_link_hint": "Le document que vos automatisations envoient au démarrage d'un mandat.",
+    "templates_link_hint": "La forme de vos mandats, tâches, demandes de documents et services."
   },
   "Health": {
     "title": "Vérification du système",
