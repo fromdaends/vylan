@@ -17,8 +17,8 @@ import {
   viewTitleKey,
   type EngagementView,
 } from "@/lib/engagements/views";
-import { EngagementViewsMenu } from "@/components/engagements/engagement-views-menu";
 import { getEngagementBadges } from "@/lib/engagements/badges";
+import { listSavedViews } from "@/lib/db/saved-views";
 import { EngagementsView } from "@/components/engagements/engagements-view";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,15 @@ export async function renderEngagementsView({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [rows, user, firm, activeMembers, badges] = await Promise.all([
+  const [rows, user, firm, activeMembers, badges, savedViews] =
+    await Promise.all([
     loadEngagementWorklist(scopeForView(view)),
     getCurrentUser(),
     getCurrentFirm(),
     listActiveFirmUsers(),
     getEngagementBadges(),
+    // This person's own saved filter sets for this list (1630).
+    listSavedViews("engagements"),
   ]);
   const t = await getTranslations("Engagements");
   const canDelete = user ? canDeleteEngagements(user.role) : false;
@@ -68,25 +71,24 @@ export async function renderEngagementsView({
               {t("new")}
             </Link>
           </Button>
-          {/* The views that came off the tab strip. Canopy keeps its overflow
-              in the same place, beside Create engagement. */}
-          <EngagementViewsMenu
-            label={t("views_more")}
-            items={MENU_VIEWS.map((v) => ({
-              href: viewHref(v),
-              label: t(viewLabelKey(v)),
-              count:
-                v === "ready"
-                  ? badges.readyToReview
-                  : v === "deleted"
-                    ? badges.recentlyDeleted
-                    : undefined,
-            }))}
-          />
         </div>
       </header>
 
       <EngagementsView
+        savedViews={savedViews}
+        // The three overflow views travel WITH the saved ones now — one ⋯ on
+        // the page, beside the list it filters rather than up in the header
+        // where it could not reach the filters a view has to capture.
+        viewLinks={MENU_VIEWS.map((v) => ({
+          href: viewHref(v),
+          label: t(viewLabelKey(v)),
+          count:
+            v === "ready"
+              ? badges.readyToReview
+              : v === "deleted"
+                ? badges.recentlyDeleted
+                : undefined,
+        }))}
         view={view}
         rows={selectView(view, rows)}
         locale={locale}
