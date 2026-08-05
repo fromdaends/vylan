@@ -88,6 +88,12 @@ export type DashboardEngagement = {
 
 type Tab = "tasks" | "engagements";
 
+// EVERY SERIES SETS isAnimationActive={false}. Recharts grows bars from zero
+// on mount, so the first paint of this page is four empty plots — a dashboard
+// whose numbers wobble on arrival reads as one that is still loading. It also
+// made the page unverifiable: the first screenshot taken against production
+// caught exactly that frame and looked like four broken charts.
+//
 // How far back the monthly charts reach. Twelve is roughly what Canopy's shows
 // and it is also the span where "same month last year" is still on the page.
 const MONTHS = 12;
@@ -111,7 +117,17 @@ export function WorkDashboard({
 
   // Month labels in the reader's language: "Aug 2026" / "août 2026".
   const monthLabel = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" });
+    // ⚠️ timeZone: "UTC" IS LOAD-BEARING. Date.UTC(y, m-1, 1) is midnight UTC
+    // on the 1st, which in Toronto is 7pm on the LAST DAY OF THE MONTH BEFORE
+    // — and Intl formats in the reader's own zone unless told otherwise. The
+    // first version shipped without it and the year-over-year axis read
+    // "Dec Jan Feb ... Nov". The dates were right; only their names were a
+    // month early, for everyone west of Greenwich.
+    const fmt = new Intl.DateTimeFormat(locale, {
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
     return (ym: string) => {
       const [y, m] = ym.split("-").map(Number);
       return fmt.format(new Date(Date.UTC(y, m - 1, 1)));
@@ -119,7 +135,7 @@ export function WorkDashboard({
   }, [locale]);
 
   const monthOnly = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(locale, { month: "short" });
+    const fmt = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
     return (i: number) => fmt.format(new Date(Date.UTC(2000, i - 1, 1)));
   }, [locale]);
 
@@ -235,14 +251,14 @@ export function WorkDashboard({
       {/* THE KPI WATCHLIST — Canopy's phrase for it, and their exact four. */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          title={t("dash_kpi_open")}
+          title={isTasks ? t("dash_kpi_open") : t("dash_kpi_open_eng")}
           value={k.open.toLocaleString(locale)}
           exploreHref={listHref}
           exploreLabel={explore}
           menuLabel={menu}
         />
         <KpiCard
-          title={t("dash_kpi_overdue")}
+          title={isTasks ? t("dash_kpi_overdue") : t("dash_kpi_overdue_eng")}
           value={k.overdue.toLocaleString(locale)}
           // The only number here that means something is wrong. Everything
           // else on the strip is neutral by design.
@@ -252,7 +268,7 @@ export function WorkDashboard({
           menuLabel={menu}
         />
         <KpiCard
-          title={t("dash_kpi_completed")}
+          title={isTasks ? t("dash_kpi_completed") : t("dash_kpi_completed_eng")}
           value={k.completed.toLocaleString(locale)}
           exploreHref={listHref}
           exploreLabel={explore}
@@ -312,6 +328,7 @@ export function WorkDashboard({
                   stackId="a"
                   fill={seriesColor(i)}
                   maxBarSize={44}
+                  isAnimationActive={false}
                 />
               ))}
             </BarChart>
@@ -351,6 +368,7 @@ export function WorkDashboard({
                   stroke={seriesColor(i)}
                   strokeWidth={2}
                   dot={false}
+                  isAnimationActive={false}
                 />
               ))}
             </LineChart>
@@ -397,6 +415,7 @@ export function WorkDashboard({
                   stackId="a"
                   fill={seriesColor(i)}
                   maxBarSize={44}
+                  isAnimationActive={false}
                 />
               ))}
             </BarChart>
@@ -422,6 +441,7 @@ export function WorkDashboard({
                 innerRadius="52%"
                 outerRadius="78%"
                 paddingAngle={1}
+                isAnimationActive={false}
                 stroke="var(--card)"
                 strokeWidth={2}
               >
