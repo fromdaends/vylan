@@ -27,7 +27,7 @@
 
 import { nanoid } from "nanoid";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
-import { getLetterForClientSR } from "@/lib/db/engagement-letters";
+import { getLetterForServiceSR } from "@/lib/db/engagement-letters";
 import { addSignatureItemToEngagement } from "@/lib/db/request-items";
 import { createSignatureRequest } from "@/lib/db/signature-requests";
 import { logServiceRoleActivity } from "@/lib/db/activity";
@@ -55,7 +55,11 @@ export type LetterSendOutcome =
   | {
       ok: false;
       reason:
-        // The firm hasn't uploaded a letter — the ordinary "not set up yet".
+        // No service on the engagement to take a letter from. Since 1700 the
+        // letter belongs to a service, so an engagement with no priced line
+        // has no letter to send — stated plainly rather than guessed at.
+        | "no_service"
+        // The service has no letter uploaded — the ordinary "not set up yet".
         | "not_configured"
         // This client already signed one covering the same service + year.
         | "already_signed"
@@ -105,8 +109,21 @@ export async function sendEngagementLetter(input: {
   }
   if (!eng) return { ok: false, reason: "engagement_missing" };
 
+  // ── Which service's letter? ───────────────────────────────────────────────
+  // The engagement's priced lines carry service_id as provenance (1450/1487).
+  // Reading it through is correct HERE and nowhere else: the rule that a line
+  // must never read its PRICE through the FK protects an agreement the client
+  // already made, and this is the opposite moment — we are about to ask them
+  // to agree, so the CURRENT letter is the right one. Once sent, the PDF is
+  // copied onto the engagement and frozen.
+  //
+  // In proposal order, first line wins: that is the headline service, the
+  // same rule the engagements list uses when it truncates to "+2 more".
+  const serviceId = await resolveServiceId(sb, eng.id);
+  if (!serviceId) return { ok: false, reason: "no_service" };
+
   const letterKey = engagementLetterKey({
-    type: eng.type,
+    serviceId,
     taxYear: eng.tax_year,
     createdAt: eng.created_at,
   });
@@ -139,8 +156,8 @@ export async function sendEngagementLetter(input: {
     if (guard) return { ok: false, reason: guard };
   }
 
-  // ── The firm's letter ─────────────────────────────────────────────────────
-  const letter = await getLetterForClientSR(eng.firm_id, locale);
+  // ── The service's letter ──────────────────────────────────────────────────
+  const letter = await getLetterForServiceSR(serviceId, locale);
   if (!letter) return { ok: false, reason: "not_configured" };
 
   if (!isSignwellConfigured()) {
@@ -254,6 +271,27 @@ export async function sendEngagementLetter(input: {
   }
 
   return { ok: true, itemId, documentId, letterKey };
+}
+
+// The engagement's headline service: the first priced line, in proposal
+// order, that came from the catalogue. Lines typed by hand carry no
+// service_id and are skipped — they have no letter to offer.
+async function resolveServiceId(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  engagementId: string,
+): Promise<string | null> {
+  const { data, error } = await sb
+    .from("engagement_items")
+    .select("service_id, order_index")
+    .eq("engagement_id", engagementId)
+    .order("order_index", { ascending: true });
+  if (error) {
+    // Pre-1450 (no engagement_items) reads as "no service", which is the
+    // truth for that environment.
+    return null;
+  }
+  const rows = (data ?? []) as { service_id: string | null }[];
+  return rows.find((r) => r.service_id)?.service_id ?? null;
 }
 
 // Has this letter already been asked for? Two different "yes"es:

@@ -170,19 +170,21 @@ export function signingDocPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/signing/${parts.uuid}-${safeName}`;
 }
 
-// The firm's ENGAGEMENT LETTER (migration 1580) — firm-level, not engagement
-// level: one file per language, set up once and sent by every automation that
-// asks for it. Sits beside branding for the same reason (firm-owned config),
-// and keeps the uuid so replacing a letter writes a new object rather than
-// overwriting one that in-flight signature requests may still be reading.
+// The engagement letter for one SERVICE (1580, re-keyed by 1700) — one file
+// per language, set up on the service and sent by every automation that asks
+// for it. Firm-scoped like branding, then keyed by service because a firm
+// sends different terms for bookkeeping than for a tax return. Keeps the uuid
+// so replacing a letter writes a NEW object rather than overwriting one that
+// an in-flight signature request may still be reading.
 export function engagementLetterPath(parts: {
   firmId: string;
+  serviceId: string;
   locale: "en" | "fr";
   uuid: string;
   filename: string;
 }): string {
   const safeName = safeStorageName(parts.filename);
-  return `firms/${parts.firmId}/letters/${parts.locale}/${parts.uuid}-${safeName}`;
+  return `firms/${parts.firmId}/letters/${parts.serviceId}/${parts.locale}/${parts.uuid}-${safeName}`;
 }
 
 /**

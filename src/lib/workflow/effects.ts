@@ -211,7 +211,10 @@ export async function runWorkflowStageEffects(
                   status:
                     res.reason === "already_signed" ||
                     res.reason === "already_sent" ||
-                    res.reason === "not_configured"
+                    res.reason === "not_configured" ||
+                    // No priced service line means there is no letter to
+                    // send — a setup fact, not a failure.
+                    res.reason === "no_service"
                       ? "skipped"
                       : "failed",
                   detail: {

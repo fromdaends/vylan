@@ -6,6 +6,7 @@ import { listTaskTemplates } from "@/lib/db/task-templates";
 import { getCurrentUser } from "@/lib/db/users";
 import { can } from "@/lib/auth/capabilities";
 import { ServiceBuilder } from "@/components/templates/service-builder";
+import { getServiceLetterSummary } from "@/app/actions/engagement-letters";
 
 /**
  * Edit a service — the SAME builder that creates one, seeded.
@@ -22,10 +23,11 @@ export default async function EditServicePage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [service, user, taskTemplates] = await Promise.all([
+  const [service, user, taskTemplates, letters] = await Promise.all([
     getFirmService(id),
     getCurrentUser(),
     listTaskTemplates(),
+    getServiceLetterSummary(id),
   ]);
 
   if (user == null || !can(user, "firm.settings")) notFound();
@@ -39,6 +41,7 @@ export default async function EditServicePage({
         name: tt.name,
         steps: tt.payload.subtasks.map((x) => x.title),
       }))}
+      letters={letters}
       initial={{
         id: service.id,
         name: service.name,
