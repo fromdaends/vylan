@@ -41,6 +41,20 @@ export type TaskDraft = {
    * had `parent_id` since 1370; this is what finally fills it.
    */
   subtasks?: { title: string }[];
+  /**
+   * Where this task came from, if it was not typed by hand — "Monthly
+   * Bookkeeping" when a service pulled it in.
+   *
+   * Shown on the row so the link READS IN BOTH DIRECTIONS: the catalogue says
+   * which work a service implies, and the engagement says which service
+   * brought each task. The founder asked for exactly that — "make them link
+   * sensably for the user" — and a task that simply appears, with no way to
+   * tell why, is the opposite.
+   *
+   * Presentation only. It is never written to the database; it explains the
+   * row while you are looking at the form.
+   */
+  sourceLabel?: string;
   /** Everybody on it at creation. The founder asked for assignment to happen
    *  WHILE creating rather than as a second pass afterwards. */
   assigneeIds: string[];
@@ -181,6 +195,8 @@ export function appendTaskTemplate(
     kind: TaskKind;
     subtasks: readonly { title: string }[];
   },
+  /** What pulled it in, when something did — a service's name. */
+  sourceLabel?: string,
 ): AppendResult {
   const title = template.name.trim();
   // Nothing to add. Returning the list unchanged (rather than pushing a
@@ -199,6 +215,7 @@ export function appendTaskTemplate(
     // Omitted rather than stored as [] so a task with no steps and one whose
     // steps were all blank read identically.
     ...(subtasks.length > 0 ? { subtasks } : {}),
+    ...(sourceLabel ? { sourceLabel } : {}),
   };
 
   return {

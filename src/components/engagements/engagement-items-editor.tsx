@@ -37,6 +37,14 @@ import { formatCurrency, type AppLocale } from "@/lib/format";
 export type CatalogueService = {
   id: string;
   name: string;
+  /**
+   * The work this service implies (1620) — the task template it points at, with
+   * enough of it to describe the offer without a second query.
+   *
+   * Null when the service carries no work, which is normal: plenty of services
+   * are a price and nothing else.
+   */
+  work?: { templateId: string; name: string; kind: string; stepCount: number } | null;
   description: string | null;
   rateCents: number | null;
   rateType: RateType;
@@ -65,6 +73,16 @@ export function EngagementItemsEditor({
   /** The firm's default tax rate, used where a line does not set its own. */
   fallbackTaxPct = null,
   /**
+   * Called when a picked service carries WORK (1620), so the caller can pull
+   * that task template's tasks in.
+   *
+   * A callback rather than this component doing it: tasks are not this
+   * editor's business — it edits priced lines. The engagement builder owns the
+   * task list and is the only thing that can add to it without two components
+   * fighting over the same state.
+   */
+  onServicePicked,
+  /**
    * Hide the per-item billing frequency.
    *
    * TRUE inside a BILLING BLOCK, where the block decides how often its services
@@ -80,6 +98,7 @@ export function EngagementItemsEditor({
   services?: CatalogueService[];
   fallbackTaxPct?: number | null;
   hideFrequency?: boolean;
+  onServicePicked?: (service: CatalogueService) => void;
 }) {
   const t = useTranslations("Engagements");
   const total = totalForItems(items, fallbackTaxPct);
@@ -111,6 +130,10 @@ export function EngagementItemsEditor({
       billingFrequency: svc.billingFrequency,
       taxPct: item.taxPct ?? svc.taxPct,
     });
+    // The work comes with it, automatically — the founder's call: "there
+    // should be no prompt. It should happen automatically when the tasks get
+    // pulled in. just be able to edit the tasks afterwards."
+    if (svc.work) onServicePicked?.(svc);
   }
 
 
