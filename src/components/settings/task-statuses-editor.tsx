@@ -89,6 +89,40 @@ export function TaskStatusesEditor({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
+
+  // ── WHY THIS LIST IS LOCAL STATE AND NOT JUST THE PROP ────────────────────
+  //
+  // The founder: "its fully bugged". It was not. Every write SUCCEEDED — the
+  // colour they picked was in the database the whole time. Nothing on screen
+  // ever moved, because the only thing that redrew the list was
+  // router.refresh() bringing new props back from the server. So you click a
+  // colour, the page sits there, you click another, it sits there, and you
+  // conclude the page is dead. It took a manual reload to see any of it.
+  //
+  // An editor must show your own change the instant it is accepted. The server
+  // stays the source of truth — the refresh below still runs and reconciles —
+  // but the screen no longer waits on a round trip to admit what you just did.
+  const [rows, setRows] = useState<EditableStatus[]>(statuses);
+
+  // Re-seed when the server sends a genuinely different list (the refresh
+  // landing, or another owner editing in a second tab). Compared by VALUE, not
+  // identity: a Server Component hands its client children a new array on every
+  // payload, and an identity check here would throw away the optimistic row a
+  // moment after showing it — reintroducing the exact bug.
+  //
+  // Done DURING RENDER, not in an effect. React documents this as the way to
+  // adjust state when a prop changes, and it is the correct one here: an effect
+  // would paint the stale list first and then correct it, and it trips
+  // react-hooks/set-state-in-effect because that cascade is exactly what the
+  // rule exists to stop.
+  const seed = statuses
+    .map((s) => `${s.id}:${s.name}:${s.color}:${s.bucket}`)
+    .join("|");
+  const [prevSeed, setPrevSeed] = useState(seed);
+  if (seed !== prevSeed) {
+    setPrevSeed(seed);
+    setRows(statuses);
+  }
   const [adding, setAdding] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftColor, setDraftColor] = useState(SWATCHES[0]);
@@ -97,6 +131,9 @@ export function TaskStatusesEditor({
 
   function report(res: StatusActionResult): boolean {
     if (res.ok) {
+      // Still refresh: the server remains the source of truth, and this pulls
+      // back anything the optimistic patch could not know (sort order, another
+      // owner's concurrent edit). It is no longer what makes the change VISIBLE.
       startTransition(() => router.refresh());
       return true;
     }
@@ -118,15 +155,13 @@ export function TaskStatusesEditor({
     if (!draftName.trim() || busy) return;
     setBusy(true);
     try {
-      if (
-        report(
-          await createStatusAction({
-            name: draftName.trim(),
-            color: draftColor,
-            bucket: draftBucket,
-          }),
-        )
-      ) {
+      const res = await createStatusAction({
+        name: draftName.trim(),
+        color: draftColor,
+        bucket: draftBucket,
+      });
+      if (report(res)) {
+        if (res.created) setRows((prev) => [...prev, res.created!]);
         setDraftName("");
         setAdding(false);
       }
@@ -135,7 +170,14 @@ export function TaskStatusesEditor({
     }
   }
 
-  const inBucket = (b: Bucket) => statuses.filter((s) => s.bucket === b);
+  const inBucket = (b: Bucket) => rows.filter((s) => s.bucket === b);
+
+  // Applied the moment the server says yes, so the row redraws under your
+  // cursor instead of after a refresh you cannot see.
+  const patchRow = (id: string, patch: Partial<EditableStatus>) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const removeRow = (id: string) =>
+    setRows((prev) => prev.filter((r) => r.id !== id));
 
   return (
     <div className="flex flex-col gap-5">
@@ -157,7 +199,13 @@ export function TaskStatusesEditor({
               <StatusRow
                 key={status.id}
                 status={status}
-                statuses={statuses}
+                statuses={rows}
+                // A bucket with one status left cannot lose it — the server
+                // refuses, and the UI must say so BEFORE you pick a
+                // replacement rather than after.
+                lastInBucket={inBucket(bucket).length <= 1}
+                onPatched={patchRow}
+                onRemoved={removeRow}
                 canEdit={canEdit && !busy}
                 confirming={confirmDelete === status.id}
                 onConfirm={() =>
@@ -260,17 +308,27 @@ function StatusRow({
   status,
   statuses,
   canEdit,
+  lastInBucket,
   confirming,
   onConfirm,
   onSaved,
+  onPatched,
+  onRemoved,
   t,
 }: {
   status: EditableStatus;
   statuses: EditableStatus[];
   canEdit: boolean;
+  /** The only status left in its stage. The server refuses to delete it (a
+   *  stage with none is a state nothing could ever be set to), so the bin is
+   *  disabled and says why — rather than letting you choose where the tasks go
+   *  and only then refusing, which is what it used to do. */
+  lastInBucket: boolean;
   confirming: boolean;
   onConfirm: () => void;
   onSaved: (res: StatusActionResult) => boolean;
+  onPatched: (id: string, patch: Partial<EditableStatus>) => void;
+  onRemoved: (id: string) => void;
   t: ReturnType<typeof useTranslations<"Settings">>;
 }) {
   const [name, setName] = useState(status.name);
@@ -284,7 +342,12 @@ function StatusRow({
   async function save(patch: { name?: string; color?: string }) {
     setBusy(true);
     try {
-      onSaved(await updateStatusAction({ id: status.id, ...patch }));
+      // Patch the list the moment the server accepts it. Without this the row
+      // keeps rendering the OLD prop until a refresh lands, which is what made
+      // every colour click look like it did nothing.
+      if (onSaved(await updateStatusAction({ id: status.id, ...patch }))) {
+        onPatched(status.id, patch);
+      }
     } finally {
       setBusy(false);
     }
@@ -325,8 +388,18 @@ function StatusRow({
             <button
               type="button"
               onClick={onConfirm}
-              aria-label={t("statuses_delete", { name: status.name })}
-              className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={lastInBucket}
+              aria-label={
+                lastInBucket
+                  ? t("statuses_last_in_bucket")
+                  : t("statuses_delete", { name: status.name })
+              }
+              title={
+                lastInBucket
+                  ? t("statuses_last_in_bucket")
+                  : t("statuses_delete", { name: status.name })
+              }
+              className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground"
             >
               <Trash2 className="size-3.5" aria-hidden />
             </button>
@@ -368,12 +441,16 @@ function StatusRow({
               onClick={async () => {
                 setBusy(true);
                 try {
-                  onSaved(
-                    await deleteStatusAction({
-                      id: status.id,
-                      replacementId: replacement,
-                    }),
-                  );
+                  if (
+                    onSaved(
+                      await deleteStatusAction({
+                        id: status.id,
+                        replacementId: replacement,
+                      }),
+                    )
+                  ) {
+                    onRemoved(status.id);
+                  }
                 } finally {
                   setBusy(false);
                 }
