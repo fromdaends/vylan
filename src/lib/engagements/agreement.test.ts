@@ -163,3 +163,79 @@ describe("agreementStatusForRow", () => {
     expect(agreementStatusForRow(row({ status: "cancelled" }))).toBe("cancelled");
   });
 });
+
+describe("resolveAgreementStatus — explicit activation (1630)", () => {
+  const sent = {
+    status: "sent" as const,
+    sentAt: "2026-01-01T00:00:00Z",
+    completedAt: null,
+    clientHasEngaged: false,
+  };
+
+  it("accepted but not activated stays ACCEPTED — the firm's move, not the client's", () => {
+    expect(
+      resolveAgreementStatus({ ...sent, acceptedAt: "2026-01-02T00:00:00Z" }),
+    ).toBe("accepted");
+  });
+
+  it("activating makes it ACTIVE even with no client activity at all", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        acceptedAt: "2026-01-02T00:00:00Z",
+        activatedAt: "2026-01-03T00:00:00Z",
+      }),
+    ).toBe("active");
+  });
+
+  it("client activity still promotes an engagement accepted before Activate existed", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        acceptedAt: "2026-01-02T00:00:00Z",
+        clientHasEngaged: true,
+      }),
+    ).toBe("active");
+  });
+
+  it("activation NEVER skips acceptance — a stray value cannot promote an unaccepted engagement", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        acceptedAt: null,
+        activatedAt: "2026-01-03T00:00:00Z",
+      }),
+    ).toBe("sent");
+  });
+
+  it("activation cannot resurrect a cancelled or completed engagement", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        status: "cancelled",
+        acceptedAt: "2026-01-02T00:00:00Z",
+        activatedAt: "2026-01-03T00:00:00Z",
+      }),
+    ).toBe("cancelled");
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        completedAt: "2026-02-01T00:00:00Z",
+        acceptedAt: "2026-01-02T00:00:00Z",
+        activatedAt: "2026-01-03T00:00:00Z",
+      }),
+    ).toBe("complete");
+  });
+
+  it("an unsent engagement is a draft however much else is set", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sent,
+        status: "draft",
+        sentAt: null,
+        acceptedAt: "2026-01-02T00:00:00Z",
+        activatedAt: "2026-01-03T00:00:00Z",
+      }),
+    ).toBe("draft");
+  });
+});
