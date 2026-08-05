@@ -21,6 +21,14 @@ export type EngagementStatus =
 export type Engagement = {
   id: string;
   firm_id: string;
+  /** Acceptance (1640). Null = not accepted, or predates the accept step —
+   *  never read as agreement. */
+  accepted_at?: string | null;
+  /** 'client' = they signed it. 'firm' = somebody here recorded an agreement
+   *  reached elsewhere. Not interchangeable. */
+  accepted_by?: "client" | "firm" | null;
+  /** When work was allowed to begin — a separate decision from acceptance. */
+  activated_at?: string | null;
   client_id: string;
   title: string;
   type: EngagementType;
@@ -709,6 +717,89 @@ export async function reopenEngagement(id: string): Promise<void> {
   const { error } = await supabase
     .from("engagements")
     .update({ status: "in_progress", completed_at: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// --- ACCEPTANCE (migration 1640) ---------------------------------------------
+//
+// The step between "we sent it" and "we are doing it", which Vylan could not
+// express: `resolveAgreementStatus` has modelled `accepted` since the status
+// remodel and NOTHING could reach it.
+//
+// Three verbs, mirroring Karbon's documented lifecycle
+// (Draft -> Waiting for acceptance -> Accepted -> Active -> Ended), because it
+// is the most completely documented of the four products researched and the
+// only one that spells out what each transition does.
+
+/**
+ * Record that the client agreed.
+ *
+ * `by` is not decoration. 'client' means they signed it; 'firm' is Karbon's
+ * "Accept on behalf" — somebody here recording an agreement reached on the
+ * phone or on paper. If a dispute ever turns on it, "the client signed" and
+ * "we ticked a box saying they agreed" are different claims and must stay
+ * distinguishable.
+ *
+ * Does NOT set status. Acceptance is a fact about the agreement; whether work
+ * has begun is a separate fact, and conflating them is what activateEngagement
+ * exists to avoid.
+ */
+export async function acceptEngagement(
+  id: string,
+  by: "client" | "firm",
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ accepted_at: new Date().toISOString(), accepted_by: by })
+    // Accepting twice must not move the date — the first agreement is the one
+    // that happened.
+    .is("accepted_at", null)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Let the work begin. Karbon: Accepted -> Activate, "signalling that work can
+ * begin".
+ *
+ * Guarded on `accepted_at is not null` in the QUERY, not just the UI: activating
+ * something nobody agreed to would put an engagement into a state the resolver
+ * deliberately refuses to derive, and a guard that lives only in a button is
+ * one bad call away from being bypassed.
+ */
+export async function activateEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ activated_at: new Date().toISOString(), status: "in_progress" })
+    .not("accepted_at", "is", null)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Pull a sent engagement back so it can be edited. Karbon's "Revert to Draft",
+ * and their own docs are blunt that it is destructive: it "withdraws the
+ * engagement from all signatories".
+ *
+ * So this clears acceptance and activation as well as the send. An engagement
+ * that keeps its acceptance while being edited would let a firm change what a
+ * client agreed to, after they agreed to it, with the agreement still recorded.
+ * That is the one outcome this must make impossible.
+ */
+export async function revertEngagementToDraft(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({
+      status: "draft",
+      sent_at: null,
+      accepted_at: null,
+      accepted_by: null,
+      activated_at: null,
+    })
     .eq("id", id);
   if (error) throw error;
 }
