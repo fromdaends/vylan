@@ -1841,11 +1841,17 @@ export function EngagementBuilder({
                 <div
                   role="radiogroup"
                   aria-label={t("section_template")}
-                  className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                  // ONE column of rows, not a three-across grid. This picker
+                  // lives in a modal beside a live preview, so the grid gave
+                  // each card about 180px and every name arrived truncated —
+                  // "New ...", "Trust...", "T1 Pe...". Rows fit the column and
+                  // show the whole name.
+                  className="max-h-[22rem] space-y-2 overflow-y-auto pr-1"
                 >
                   {orderedTemplates.map((tmpl) => (
                     <SelectableTemplateCard
                       key={tmpl.id}
+                      layout="row"
                       groupName="template"
                       selected={templateId === tmpl.id}
                       onSelect={() => pickTemplate(tmpl.id)}

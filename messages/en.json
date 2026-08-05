@@ -2757,7 +2757,7 @@
     "tasks_panel_failed": "Couldn't load these tasks.",
     "tasks_panel_open_engagement": "Open the engagement instead",
     "tasks_panel_loading": "Loading tasks",
-    "item_service": "Service",
+    "item_service": "Service template",
     "item_service_none": "Not from your catalogue",
     "details_card_title": "Engagement details",
     "details_signatures": "{signed}/{total} Signatures",
@@ -3209,7 +3209,12 @@
     "preview_unnamed_service": "Unnamed service",
     "preview_unnamed_task": "Unnamed task",
     "creating_request_template": "Setting up your template…",
-    "tab_nav_label": "Builder sections"
+    "tab_nav_label": "Builder sections",
+    "tab_request_details": "Template",
+    "tab_request_documents": "Documents",
+    "request_builder_explainer": "A document request template is a checklist you reuse — the documents you ask a client for, defined once and dropped onto any engagement.",
+    "request_documents_hint": "What the client is asked to send. Mark the ones you cannot proceed without as required.",
+    "request_preview_label": "What your client will see"
   },
   "Status": {
     "pending": "Pending",
