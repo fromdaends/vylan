@@ -185,6 +185,23 @@ export function engagementLetterPath(parts: {
   return `firms/${parts.firmId}/letters/${parts.locale}/${parts.uuid}-${safeName}`;
 }
 
+/**
+ * A file attached to an engagement TEMPLATE's introduction — Canopy's Video and
+ * Document rows, which accept an upload as well as a link.
+ *
+ * Keyed by firm and a fresh uuid rather than by template id: the file is chosen
+ * BEFORE the template is saved (you upload, then hit Save template), so there is
+ * no id to key on yet. The template's payload holds the path.
+ */
+export function templateAssetPath(parts: {
+  firmId: string;
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = safeStorageName(parts.filename);
+  return `firms/${parts.firmId}/template-assets/${parts.uuid}-${safeName}`;
+}
+
 // The completed, signed PDF (with SignWell's audit page) returned after the
 // client signs. Keyed by the SignWell document id so re-processing the same
 // document overwrites the same object (idempotent upsert).

@@ -49,6 +49,7 @@ import { cn } from "@/lib/cn";
 import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
+import { AssetUpload } from "@/components/templates/asset-upload";
 import {
   defaultPriceVisibility,
   flattenBlocks,
@@ -138,8 +139,11 @@ export function EngagementTemplateBuilder({
   const [introMessage, setIntroMessage] = useState(initial?.payload.introMessage ?? "");
   const [videoEnabled, setVideoEnabled] = useState(initial?.payload.videoEnabled ?? false);
   const [videoUrl, setVideoUrl] = useState(initial?.payload.videoUrl ?? "");
+  const [videoPath, setVideoPath] = useState(initial?.payload.videoPath ?? "");
+  const [videoFileName, setVideoFileName] = useState(initial?.payload.videoFileName ?? "");
   const [documentEnabled, setDocumentEnabled] = useState(initial?.payload.documentEnabled ?? false);
   const [documentName, setDocumentName] = useState(initial?.payload.documentName ?? "");
+  const [documentPath, setDocumentPath] = useState(initial?.payload.documentPath ?? "");
 
   const [assigneeIds, setAssigneeIds] = useState<string[]>(initial?.payload.assigneeIds ?? []);
   // Canopy's billing blocks. Seeded from the template, or from ONE block
@@ -230,8 +234,11 @@ export function EngagementTemplateBuilder({
           introMessage: introMessage.trim(),
           videoEnabled,
           videoUrl: videoUrl.trim(),
+          videoPath,
+          videoFileName,
           documentEnabled,
           documentName: documentName.trim(),
+          documentPath,
           assigneeIds,
           termsEnabled,
           termsText: termsText.trim(),
@@ -538,11 +545,28 @@ export function EngagementTemplateBuilder({
                     on={videoEnabled}
                     onToggle={() => setVideoEnabled((v) => !v)}
                   >
-                    <Input
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      placeholder={t("intro_video_placeholder")}
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        placeholder={t("intro_video_placeholder")}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("or_upload")}
+                      </p>
+                      <AssetUpload
+                        kind="video"
+                        fileName={videoFileName}
+                        onUploaded={(path, name) => {
+                          setVideoPath(path);
+                          setVideoFileName(name);
+                        }}
+                        onClear={() => {
+                          setVideoPath("");
+                          setVideoFileName("");
+                        }}
+                      />
+                    </div>
                   </ToggleRow>
                   <ToggleRow
                     label={t("intro_document")}
@@ -550,10 +574,17 @@ export function EngagementTemplateBuilder({
                     on={documentEnabled}
                     onToggle={() => setDocumentEnabled((v) => !v)}
                   >
-                    <Input
-                      value={documentName}
-                      onChange={(e) => setDocumentName(e.target.value)}
-                      placeholder={t("intro_document_placeholder")}
+                    <AssetUpload
+                      kind="document"
+                      fileName={documentName}
+                      onUploaded={(path, name) => {
+                        setDocumentPath(path);
+                        setDocumentName(name);
+                      }}
+                      onClear={() => {
+                        setDocumentPath("");
+                        setDocumentName("");
+                      }}
                     />
                   </ToggleRow>
                 </Fieldset>
@@ -707,11 +738,11 @@ export function EngagementTemplateBuilder({
         </div>
 
         {previewOpen && (
-          <div className="hidden min-h-0 overflow-y-auto bg-muted/30 p-5 lg:block">
+          <div className="hidden min-h-0 justify-center overflow-y-auto bg-muted/30 p-5 lg:flex">
             {/* Labelled, because an unlabelled preview showing a client name
                 reads as a real engagement — the exact confusion this screen is
                 being made distinct from. */}
-            <p className="mx-auto mb-3 max-w-md text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
+            <p className="mb-3 text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
               {t("preview_sample_label")}
             </p>
             <ProposalPreview

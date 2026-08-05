@@ -98,10 +98,20 @@ export type EngagementTemplatePayload = {
    *  is total, and a bad link is the author's to fix, not a reason to lose the
    *  whole template. */
   videoUrl: string;
+  /**
+   * An UPLOADED video, as a storage path. Canopy's row takes either; so does
+   * this. Both are kept because switching from a link to a file and back must
+   * not lose the one you are not currently using — the same rule as the toggles.
+   * The link wins when both are set, because it is the cheaper thing to serve.
+   */
+  videoPath: string;
+  videoFileName: string;
   documentEnabled: boolean;
-  /** The supporting document's name. Vylan has no file picker on this screen
-   *  yet, so this records WHAT was meant and the upload follows. */
+  /** The supporting document's name — either what was typed, or the uploaded
+   *  file's own name. */
   documentName: string;
+  /** An uploaded document, as a storage path. */
+  documentPath: string;
   /** Who the engagements made from this template land on. */
   assigneeIds: string[];
   /** Canopy's Terms tab: general terms, on or off, and the text itself. */
@@ -151,8 +161,11 @@ export function emptyPayload(): EngagementTemplatePayload {
     welcomeEnabled: false,
     videoEnabled: false,
     videoUrl: "",
+    videoPath: "",
+    videoFileName: "",
     documentEnabled: false,
     documentName: "",
+    documentPath: "",
     assigneeIds: [],
     termsEnabled: false,
     termsText: "",
@@ -347,8 +360,11 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
     welcomeEnabled: o.welcomeEnabled === true,
     videoEnabled: o.videoEnabled === true,
     videoUrl: str(o.videoUrl),
+    videoPath: str(o.videoPath),
+    videoFileName: str(o.videoFileName),
     documentEnabled: o.documentEnabled === true,
     documentName: str(o.documentName),
+    documentPath: str(o.documentPath),
     // Strings only, each once, order kept. A malformed entry is dropped rather
     // than written to engagements.assigned_user_id, where a non-uuid would
     // fail the insert for everyone using the template.

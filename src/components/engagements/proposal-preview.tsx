@@ -85,17 +85,35 @@ export function ProposalPreview({
     (data.documentName?.trim().length ?? 0) > 0;
 
   return (
-    <div className="mx-auto max-w-md space-y-4">
-      {/* ── THE CLIENT'S PROGRESS ───────────────────────────────────────── */}
-      <ol className="flex items-center justify-between gap-1 px-1">
+    <div className="w-full max-w-md space-y-4">
+      {/* ── THE CLIENT'S PROGRESS ─────────────────────────────────────────
+          A GRID of equal columns, with the connectors drawn between the
+          circles rather than inside the steps.
+
+          It was a flex row where each step owned the connector after it. That
+          made every column a different width — the last step had no connector,
+          so it was narrower than the rest and the whole rail sat off-centre
+          against the card beneath it. The founder: "the preview is not
+          alligned correctly and looks off." Equal columns cannot drift. */}
+      <ol
+        className="grid items-start"
+        style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0, 1fr))` }}
+      >
         {STEPS.map((step, i) => {
           const active = step === activeStep;
           return (
-            <li key={step} className="flex flex-1 items-center gap-1">
-              <div className="flex flex-col items-center gap-1">
+            <li key={step} className="flex flex-col items-center gap-1">
+              <div className="flex w-full items-center">
+                {/* Half-width rules either side of the circle, so the line
+                    meets the neighbouring circle exactly and the first and
+                    last steps stay flush with the card's edges. */}
+                <span
+                  aria-hidden
+                  className={cn("h-px flex-1", i === 0 ? "bg-transparent" : "bg-border")}
+                />
                 <span
                   className={cn(
-                    "flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
+                    "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
                     active
                       ? "bg-foreground text-background"
                       : "border border-border text-muted-foreground",
@@ -104,22 +122,21 @@ export function ProposalPreview({
                   {i + 1}
                 </span>
                 <span
-                  className={cn(
-                    "whitespace-nowrap text-[10px]",
-                    active
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {t(`preview_step_${step}` as StepKey)}
-                </span>
-              </div>
-              {i < STEPS.length - 1 && (
-                <span
                   aria-hidden
-                  className="mb-4 h-px flex-1 bg-border"
+                  className={cn(
+                    "h-px flex-1",
+                    i === STEPS.length - 1 ? "bg-transparent" : "bg-border",
+                  )}
                 />
-              )}
+              </div>
+              <span
+                className={cn(
+                  "whitespace-nowrap text-[10px]",
+                  active ? "font-medium text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {t(`preview_step_${step}` as StepKey)}
+              </span>
             </li>
           );
         })}
