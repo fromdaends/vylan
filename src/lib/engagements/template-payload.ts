@@ -52,6 +52,67 @@ export type EngagementTemplatePayload = {
   periodMonths: number | null;
   /** The covering note at the top of the client's proposal. */
   introMessage: string;
+  /**
+   * Canopy's "Save draft" — work in progress, kept so you can come back to it.
+   *
+   * A draft is deliberately allowed to be INCOMPLETE: Canopy's own wording is
+   * "store incomplete work". So it skips the worth-saving check that a finished
+   * template must pass, and the list marks it so nobody reaches for a template
+   * that is half-written.
+   *
+   * In the payload rather than its own column because `payload` is jsonb and a
+   * migration for one boolean is a migration nobody needs.
+   */
+  isDraft: boolean;
+  /**
+   * Canopy's three INTRODUCTION rows, each with its own toggle: a welcome
+   * message, a video, and a supporting document.
+   *
+   * The toggle is stored separately from the content on purpose. Turning Video
+   * off and back on must not lose the link you already pasted — Canopy's rows
+   * behave that way, and it is the difference between a toggle and a delete.
+   */
+  welcomeEnabled: boolean;
+  videoEnabled: boolean;
+  /** A YouTube / Vimeo / Zoom link, per Canopy. Not validated here — the reader
+   *  is total, and a bad link is the author's to fix, not a reason to lose the
+   *  whole template. */
+  videoUrl: string;
+  documentEnabled: boolean;
+  /** The supporting document's name. Vylan has no file picker on this screen
+   *  yet, so this records WHAT was meant and the upload follows. */
+  documentName: string;
+  /** Who the engagements made from this template land on. */
+  assigneeIds: string[];
+  /** Canopy's Terms tab: general terms, on or off, and the text itself. */
+  termsEnabled: boolean;
+  termsText: string;
+  /** Canopy's Signatures tab: require a deposit before the work starts. */
+  depositRequired: boolean;
+  /** Cents, like every other money field in this repo. Null = not set, never 0. */
+  depositCents: number | null;
+  /**
+   * ── WHO SIGNS ───────────────────────────────────────────────────────────
+   *
+   * The founder, on Canopy's Signatures tab: "theres no way to have a signer
+   * right now but it would make sense." They are right — `signature_requests`
+   * (0400) carries exactly ONE signer, the client, as `signer_email` /
+   * `signer_name`. There is no second signer and no firm counter-signature.
+   *
+   * A TEMPLATE cannot name a person: it has no client, and the staff who work
+   * a job change between jobs. So it stores SLOTS, filled when an engagement is
+   * created from it. That is the only honest thing a template can hold, and it
+   * is what makes "a T1 for a couple always needs two signatures" expressible
+   * once instead of remembered every February.
+   */
+  clientSigns: boolean;
+  /**
+   * Extra client-side signers, by the ROLE they play — "Spouse", "Second
+   * director". Labels, not people: the person is chosen at creation.
+   */
+  additionalSignerLabels: string[];
+  /** Whether someone at the firm counter-signs. */
+  firmCountersigns: boolean;
   /** Whatever the invoice step captured. Opaque here on purpose. */
   invoice: Record<string, unknown> | null;
   /** Whatever the reminders step captured. Opaque here on purpose. */
@@ -66,6 +127,23 @@ export function emptyPayload(): EngagementTemplatePayload {
     periodStartsOn: "acceptance",
     periodMonths: null,
     introMessage: "",
+    isDraft: false,
+    welcomeEnabled: false,
+    videoEnabled: false,
+    videoUrl: "",
+    documentEnabled: false,
+    documentName: "",
+    assigneeIds: [],
+    termsEnabled: false,
+    termsText: "",
+    depositRequired: false,
+    depositCents: null,
+    // Defaults to TRUE: an engagement letter the client does not sign is the
+    // unusual case, and a template that silently asked nobody to sign would be
+    // discovered only when the paperwork was already out.
+    clientSigns: true,
+    additionalSignerLabels: [],
+    firmCountersigns: false,
     items: [],
     checklist: [],
     invoice: null,
@@ -156,6 +234,19 @@ function readChecklistItem(raw: unknown): TemplateChecklistItem | null {
  * or negative period is not a period, and storing one would put nonsense in
  * front of a client. 120 (ten years) is the ceiling; past that it IS ongoing.
  */
+/**
+ * Money, in cents.
+ *
+ * Whole cents only, and never negative. A fractional cent is not money, and a
+ * negative deposit is a refund — neither belongs on a template. Null means "not
+ * set", which is NOT the same as zero and must never collapse into it.
+ */
+function readCents(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isInteger(v)) return null;
+  if (v < 0 || v > 99_999_999) return null;
+  return v;
+}
+
 function readPeriodMonths(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isInteger(v)) return null;
   if (v < 1 || v > 120) return null;
@@ -174,6 +265,36 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
     periodStartsOn: o.periodStartsOn === "custom" ? "custom" : "acceptance",
     periodMonths: readPeriodMonths(o.periodMonths),
     introMessage: str(o.introMessage),
+    // Only literal `true` is a draft. Anything else — missing, a string, a
+    // number — reads as FINISHED, which is the safe direction: a finished
+    // template shown as a draft is confusing, but a draft treated as finished
+    // is one somebody sends to a client half-written.
+    isDraft: o.isDraft === true,
+    welcomeEnabled: o.welcomeEnabled === true,
+    videoEnabled: o.videoEnabled === true,
+    videoUrl: str(o.videoUrl),
+    documentEnabled: o.documentEnabled === true,
+    documentName: str(o.documentName),
+    // Strings only, each once, order kept. A malformed entry is dropped rather
+    // than written to engagements.assigned_user_id, where a non-uuid would
+    // fail the insert for everyone using the template.
+    assigneeIds: [
+      ...new Set(arr(o.assigneeIds).filter((x): x is string => typeof x === "string" && x.length > 0)),
+    ],
+    termsEnabled: o.termsEnabled === true,
+    termsText: str(o.termsText),
+    depositRequired: o.depositRequired === true,
+    depositCents: readCents(o.depositCents),
+    // Absent reads as TRUE — see emptyPayload. Only literal `false` turns the
+    // client's signature off, so a template written before this field existed
+    // still asks the client to sign.
+    clientSigns: o.clientSigns !== false,
+    additionalSignerLabels: arr(o.additionalSignerLabels)
+      .filter((x): x is string => typeof x === "string")
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0)
+      .slice(0, 10),
+    firmCountersigns: o.firmCountersigns === true,
     items: arr(o.items)
       .map(readItem)
       .filter((i): i is EngagementItemDraft => i != null),
