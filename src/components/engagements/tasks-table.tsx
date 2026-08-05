@@ -912,6 +912,7 @@ export function TasksTable({
               key: "restore",
               label: t("task_restore"),
               icon: RotateCcw,
+              tone: "success" as const,
               onSelect: () =>
                 runBulk({ taskIds: [], restore: true }, t("task_restore")),
             },
@@ -926,6 +927,7 @@ export function TasksTable({
                     key: "done",
                     label: t("task_mark_done_bulk"),
                     icon: CheckCircle2,
+                    tone: "success" as const,
                     // NOT runBulk. Every other action on this bar is a single
                     // write with a single "moved 8" toast; this one keeps the
                     // linger and the per-task undo the row box used to carry,
@@ -962,6 +964,7 @@ export function TasksTable({
               key: "priority",
               label: t("col_priority"),
               icon: Flag,
+              tone: "warning" as const,
               submenu: (["high", "medium", "low", "none"] as TaskPriority[]).map(
                 (pr) => ({
                   key: pr,
