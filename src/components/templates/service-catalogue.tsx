@@ -15,7 +15,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Receipt } from "lucide-react";
+import { Plus, Receipt, Trash2, CornerDownRight } from "lucide-react";
 import {
   TemplateRow,
   TemplateRowList,
@@ -58,7 +58,11 @@ export type ServiceRow = {
   archivedAt: string | null;
 };
 
-type Draft = Omit<ServiceRow, "id" | "archivedAt">;
+/** Steps typed on this form instead of picking a template. Not part of the
+ *  stored row — they become a real task template on save. */
+type DraftExtra = { newWorkSteps: string[] };
+
+type Draft = Omit<ServiceRow, "id" | "archivedAt"> & DraftExtra;
 
 const EMPTY: Draft = {
   name: "",
@@ -68,6 +72,7 @@ const EMPTY: Draft = {
   billingFrequency: "once",
   taxPct: null,
   taskTemplateId: null,
+  newWorkSteps: [],
 };
 
 type FreqKey =
@@ -128,6 +133,7 @@ export function ServiceCatalogue({
             billingFrequency: service.billingFrequency,
             taxPct: service.taxPct,
             taskTemplateId: service.taskTemplateId,
+            newWorkSteps: [],
           }
         : { ...EMPTY },
     );
@@ -376,49 +382,6 @@ export function ServiceCatalogue({
                     a dropdown whose only entry is "none" teaches nobody that
                     the feature exists, it just adds a control that does
                     nothing. */}
-                {taskTemplates.length > 0 && (
-                  <div className="sm:col-span-2">
-                    <Label htmlFor="svc-tasks">{tT("service_does_work")}</Label>
-                    <select
-                      id="svc-tasks"
-                      value={draft.taskTemplateId ?? ""}
-                      onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          taskTemplateId: e.target.value || null,
-                        })
-                      }
-                      className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <option value="">{tT("service_does_work_none")}</option>
-                      {taskTemplates.map((tt) => (
-                        <option key={tt.id} value={tt.id}>
-                          {tt.name}
-                        </option>
-                      ))}
-                    </select>
-                    {/* The STEPS, right there. A dropdown showing only a
-                        template's name asks you to remember what is inside it;
-                        the founder's whole point is that the service and its
-                        work must not feel like separate things. */}
-                    {(() => {
-                      const picked = taskTemplates.find(
-                        (tt) => tt.id === draft.taskTemplateId,
-                      );
-                      const steps = picked?.steps ?? [];
-                      return steps.length > 0 ? (
-                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                          {steps.slice(0, 5).join(" \u00b7 ")}
-                          {steps.length > 5 && ` +${steps.length - 5}`}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {tT("service_does_work_hint")}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                )}
                 <div>
                   <Label htmlFor="svc-tax">{t("item_tax")}</Label>
                   <Input
@@ -436,6 +399,123 @@ export function ServiceCatalogue({
                     className="mt-1"
                   />
                 </div>
+              </div>
+
+              {/* ── THE WORK THIS SERVICE IS ─────────────────────────────────
+                  Its own block, below the pricing, because it is not another
+                  pricing field. The founder: "the service is pretty much the
+                  action that's being done… And then within that action are a
+                  bunch of sub actions… they shouldn't be fully separated."
+
+                  Two ways in, one outcome: pick a task template you already
+                  have, or type the steps and Vylan makes one. Either way it is
+                  a REAL task template that shows on the Task templates page and
+                  any other service can reuse — the founder's call. */}
+              <div className="space-y-2 rounded-lg border border-border/70 p-3">
+                <Label>{tT("service_does_work")}</Label>
+
+                {taskTemplates.length > 0 && (
+                  <select
+                    value={draft.taskTemplateId ?? ""}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        taskTemplateId: e.target.value || null,
+                        // Picking an existing one clears anything half-typed,
+                        // so the two inputs can never both claim to be the work.
+                        newWorkSteps: [],
+                      })
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">{tT("service_does_work_none")}</option>
+                    {taskTemplates.map((tt) => (
+                      <option key={tt.id} value={tt.id}>
+                        {tt.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* The steps of whatever is picked, so you can see what you
+                    attached rather than remember what is inside a name. */}
+                {(() => {
+                  const picked = taskTemplates.find(
+                    (tt) => tt.id === draft.taskTemplateId,
+                  );
+                  return picked && picked.steps.length > 0 ? (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      {picked.steps.slice(0, 6).join(" \u00b7 ")}
+                      {picked.steps.length > 6 && ` +${picked.steps.length - 6}`}
+                    </p>
+                  ) : null;
+                })()}
+
+                {/* Type the steps instead. Shown when nothing is picked, so the
+                    form always offers a way forward even on a firm with no task
+                    templates at all — which is what the founder hit. */}
+                {!draft.taskTemplateId && (
+                  <div className="space-y-1.5">
+                    {draft.newWorkSteps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <CornerDownRight
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <Input
+                          value={step}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              newWorkSteps: draft.newWorkSteps.map((x, j) =>
+                                j === i ? e.target.value : x,
+                              ),
+                            })
+                          }
+                          placeholder={tT("service_step_placeholder")}
+                          aria-label={tT("service_step_placeholder")}
+                          className="h-8 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              newWorkSteps: draft.newWorkSteps.filter(
+                                (_, j) => j !== i,
+                              ),
+                            })
+                          }
+                          aria-label={tT("remove")}
+                          className="text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          newWorkSteps: [...draft.newWorkSteps, ""],
+                        })
+                      }
+                    >
+                      <Plus className="size-3.5" />
+                      {draft.newWorkSteps.length === 0
+                        ? tT("service_define_work")
+                        : tT("service_add_step")}
+                    </Button>
+                    {draft.newWorkSteps.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {tT("service_new_template_note")}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
