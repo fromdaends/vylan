@@ -40,7 +40,7 @@ export async function createBlankTemplateAction(formData: FormData) {
     (formData.get("__app_locale") === "en" ? "en" : "fr") as "fr" | "en";
   const name = locale === "fr" ? "Nouveau modèle" : "New template";
   const created = await cloneTemplateToFirm(BLANK_TEMPLATE_ID, name);
-  revalidatePath("/templates");
+  revalidatePath("/templates/requests");
   redirect(
     getPathname({
       locale,
@@ -93,7 +93,7 @@ export async function cloneTemplateAndOpenAction(formData: FormData) {
   const locale =
     (formData.get("__app_locale") === "en" ? "en" : "fr") as "fr" | "en";
   const created = await cloneTemplateToFirm(id);
-  revalidatePath("/templates");
+  revalidatePath("/templates/requests");
   redirect(
     getPathname({
       locale,

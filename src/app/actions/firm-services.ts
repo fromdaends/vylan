@@ -57,7 +57,7 @@ export async function createFirmServiceAction(
 
   const res = await createFirmService(parsed.data);
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
-  revalidatePath("/templates");
+  revalidatePath("/templates/services");
   return { ok: true };
 }
 
@@ -73,7 +73,7 @@ export async function updateFirmServiceAction(
 
   const res = await updateFirmService(id, parsed.data);
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
-  revalidatePath("/templates");
+  revalidatePath("/templates/services");
   return { ok: true };
 }
 
@@ -86,6 +86,6 @@ export async function archiveFirmServiceAction(
 
   const res = await archiveFirmService(id, archived);
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
-  revalidatePath("/templates");
+  revalidatePath("/templates/services");
   return { ok: true };
 }

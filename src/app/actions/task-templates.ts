@@ -73,7 +73,7 @@ export async function saveTaskTemplateAction(
   });
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
-  revalidatePath("/templates");
+  revalidatePath("/templates/tasks");
   revalidatePath("/engagements/new");
   return { ok: true };
 }
@@ -88,7 +88,7 @@ export async function archiveTaskTemplateAction(id: string): Promise<Result> {
   const res = await archiveTaskTemplate(id);
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
-  revalidatePath("/templates");
+  revalidatePath("/templates/tasks");
   revalidatePath("/engagements/new");
   return { ok: true };
 }
