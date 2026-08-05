@@ -54,13 +54,24 @@ import {
 } from "@/lib/engagements/items";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import {
+  ServiceLetterSection,
+  type ServiceLetterRow,
+} from "@/components/templates/service-letter-section";
 
-const TABS = ["service", "pricing", "work"] as const;
+// "letter" last: it is the agreement ABOUT everything the other three tabs
+// describe, and the founder's model puts one per service — "accountants have
+// a specific engagement letter that they send per service".
+const TABS = ["service", "pricing", "work", "letter"] as const;
 type Tab = (typeof TABS)[number];
 
 // Spelled out so a typo is a compile error rather than a `Templates.tab_x`
 // rendering on screen — next-intl fails silently.
-type TabKey = "tab_service_service" | "tab_service_pricing" | "tab_service_work";
+type TabKey =
+  | "tab_service_service"
+  | "tab_service_pricing"
+  | "tab_service_work"
+  | "tab_service_letter";
 type FreqKey =
   | "item_freq_once"
   | "item_freq_weekly"
@@ -78,12 +89,15 @@ export type ServiceTaskTemplateOption = {
 export function ServiceBuilder({
   locale,
   taskTemplates = [],
+  letters = [],
   initial,
 }: {
   locale: AppLocale;
   /** The firm's task templates (1570), so a service can name the work it
    *  implies. Empty hides the picker and leaves only "type the steps". */
   taskTemplates?: ServiceTaskTemplateOption[];
+  /** This service's engagement letters (1700), one per language. */
+  letters?: ServiceLetterRow[];
   /** Present when editing. Absent when creating. */
   initial?: {
     id: string;
@@ -446,6 +460,15 @@ export function ServiceBuilder({
               )}
             </div>
           )}
+        </Fieldset>
+      )}
+
+      {tab === "letter" && (
+        <Fieldset title={tT("tab_service_letter")}>
+          <ServiceLetterSection
+            serviceId={initial?.id ?? null}
+            initial={letters}
+          />
         </Fieldset>
       )}
     </TemplateBuilderShell>

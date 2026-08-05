@@ -18,9 +18,6 @@ import {
   listAutomationTemplateUseCounts,
 } from "@/lib/db/automations";
 import { listActiveFirmUsers } from "@/lib/db/users";
-import { EngagementLetterCard } from "@/components/vylan/engagement-letter-card";
-import { getEngagementLetterSummary } from "@/app/actions/engagement-letters";
-import { can } from "@/lib/auth/capabilities";
 
 // The "Vylan" hub: the firm's own automation surface, reached from the rail's
 // Sparkles tab.
@@ -136,11 +133,10 @@ async function AutomationsSection() {
   const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
   if (!firm || !user) return null;
 
-  const [automations, useCounts, members, letters] = await Promise.all([
+  const [automations, useCounts, members] = await Promise.all([
     listAutomations(),
     listAutomationTemplateUseCounts(),
     listActiveFirmUsers(),
-    getEngagementLetterSummary(),
   ]);
 
   const rows: AutomationRow[] = automations.map((a) => ({
@@ -151,22 +147,19 @@ async function AutomationsSection() {
     usedBy: useCounts[a.id] ?? 0,
   }));
 
+  // NOTE: the engagement letter used to render here. It moved onto the SERVICE
+  // (Templates > Services > a service > Engagement letter) in 1700 — the
+  // founder's correction: "accountants have a specific engagement letter that
+  // they send per service", so a firm-wide one would send bookkeeping terms to
+  // a tax client. Do not bring it back here.
   return (
-    <>
-      <AutomationsPanel
-        automations={rows}
-        members={members.map((m) => ({
-          id: m.id,
-          name: m.display_name ?? m.name,
-        }))}
-      />
-      {/* The document those automations send, set up once. Below the library
-          because it answers a question the library raises. */}
-      <EngagementLetterCard
-        letters={letters}
-        canManage={can(user, "firm.settings")}
-      />
-    </>
+    <AutomationsPanel
+      automations={rows}
+      members={members.map((m) => ({
+        id: m.id,
+        name: m.display_name ?? m.name,
+      }))}
+    />
   );
 }
 
