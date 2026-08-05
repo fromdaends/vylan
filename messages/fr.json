@@ -1249,7 +1249,8 @@
     "statuses_added_by": "Ajouté par {name} le {date}",
     "statuses_at_edge": "Il est déjà à cette extrémité.",
     "statuses_saving": "Enregistrement",
-    "statuses_saved": "Enregistré"
+    "statuses_saved": "Enregistré",
+    "statuses_stale_tab": "L'enregistrement a échoué — cette page utilise une version plus ancienne de l'application. Rechargez et réessayez."
   },
   "Health": {
     "title": "Vérification du système",

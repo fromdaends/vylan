@@ -1249,7 +1249,8 @@
     "statuses_added_by": "Added by {name} on {date}",
     "statuses_at_edge": "That's already as far as it goes.",
     "statuses_saving": "Saving",
-    "statuses_saved": "Saved"
+    "statuses_saved": "Saved",
+    "statuses_stale_tab": "That didn't save — this page is running an older version of the app. Reload and try again."
   },
   "Health": {
     "title": "System check",

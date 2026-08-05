@@ -131,6 +131,23 @@ describe("TaskStatusesEditor — a change shows without waiting for a refresh", 
     release({ ok: true });
   });
 
+  it("rolls back when the server action REJECTS, not just when it refuses", async () => {
+    // Caught live on production. A server action does not always resolve with
+    // { ok: false } — it can reject outright, and the commonest cause in this
+    // repo is Vercel deploy skew: a tab from the previous deployment posts an
+    // action id the new one has never heard of and gets a 503.
+    //
+    // With optimistic UI that is worse than "the click did nothing": the new
+    // colour is ALREADY on screen and the pip says Saved, so the page
+    // confidently shows a value the database never took. Observed exactly
+    // once, which was once too many.
+    updateStatusAction.mockRejectedValue(new Error("503"));
+    renderEditor();
+    fireEvent.click(screen.getAllByLabelText("Use #7c3aed")[0]);
+    await waitFor(() => expect(updateStatusAction).toHaveBeenCalled());
+    await waitFor(() => expect(dotOf("To do")).toBe("#2563eb"));
+  });
+
   it("never disables the name field while a save is in flight", async () => {
     // A field that goes dead under your fingers IS the latency, whether or not
     // the request is fast.
