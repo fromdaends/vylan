@@ -22,7 +22,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Plus, Trash2, ListChecks, CornerDownRight } from "lucide-react";
 import { TaskTemplateRow } from "@/components/templates/task-template-row";
-import { TemplateRowList } from "@/components/templates/template-row";
+import { SearchableTemplates } from "@/components/templates/searchable-templates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -117,75 +117,94 @@ export function TaskTemplateCatalogue({
 
   return (
     <div className="space-y-4">
-      {templates.length === 0 && !open ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            <ListChecks className="h-5 w-5" />
-          </span>
-          <p className="text-sm font-medium text-foreground">
-            {t("task_templates_empty")}
-          </p>
-          <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
-            {t("task_templates_empty_hint")}
-          </p>
-          <Button type="button" size="sm" onClick={() => setOpen(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            {t("task_templates_new")}
-          </Button>
-        </div>
-      ) : (
-        <>
-          <TemplateRowList>
-            {templates.map((tpl) => (
-              <TaskTemplateRow
-                key={tpl.id}
-                id={tpl.id}
-                name={tpl.name}
-                isPrivate={tpl.access === "private"}
-                // The steps themselves, in order — the template is short enough
-                // that a count would say less than the list.
-                meta={[
-                  tpl.payload.subtasks.map((x) => x.title).join(" · "),
-                  tpl.payload.checklist.length > 0
-                    ? t("documents_count", { count: tpl.payload.checklist.length })
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" — ")}
-                onEdit={() => {
-                  // Load it into the SAME inline form that creates one. A
-                  // second edit form would be a second place for the fields to
-                  // drift.
-                  setEditingId(tpl.id);
-                  setName(tpl.name);
-                  setAccess(tpl.access);
-                  setKind(tpl.payload.kind);
-                  setDescription(tpl.payload.description);
-                  setSteps(
-                    tpl.payload.subtasks.length > 0
-                      ? tpl.payload.subtasks.map((x) => x.title)
-                      : [""],
-                  );
-                  setChecklist(tpl.payload.checklist);
-                  setOpen(true);
-                }}
-              />
-            ))}
-          </TemplateRowList>
-          {!open && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setOpen(true)}
-            >
+      {/* The SAME header, search box and rows as every other Templates page.
+          The founder: "what the UI looks like when you click on an engagement
+          template and a task template is not the same. So it should be."
+
+          The catalogue owns the header rather than the page, because the rows'
+          Edit action loads a template into the form below and the two therefore
+          have to share state. Splitting them would need a store between them to
+          say the same thing. */}
+      <SearchableTemplates
+        title={t("section_task_templates")}
+        subtitle={t("task_templates_subtitle")}
+        action={
+          !open ? (
+            <Button type="button" size="sm" onClick={() => setOpen(true)}>
               <Plus className="h-3.5 w-3.5" />
               {t("task_templates_new")}
             </Button>
-          )}
-        </>
-      )}
-
+          ) : undefined
+        }
+        sections={[
+          {
+            key: "all",
+            title: t("section_task_templates"),
+            cards: templates.map((tpl) => ({
+              id: tpl.id,
+              // Findable by name AND by its steps — searching "reconcile"
+              // should find the close template that contains it.
+              terms: [
+                tpl.name,
+                tpl.payload.description,
+                ...tpl.payload.subtasks.map((x) => x.title),
+              ].join(" "),
+              node: (
+                <TaskTemplateRow
+                  key={tpl.id}
+                  id={tpl.id}
+                  name={tpl.name}
+                  isPrivate={tpl.access === "private"}
+                  meta={[
+                    tpl.payload.subtasks.map((x) => x.title).join(" \u00b7 "),
+                    tpl.payload.checklist.length > 0
+                      ? t("documents_count", {
+                          count: tpl.payload.checklist.length,
+                        })
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" \u2014 ")}
+                  onEdit={() => {
+                    // Loads into the SAME inline form that creates one. A
+                    // second edit form would be a second place for the fields
+                    // to drift.
+                    setEditingId(tpl.id);
+                    setName(tpl.name);
+                    setAccess(tpl.access);
+                    setKind(tpl.payload.kind);
+                    setDescription(tpl.payload.description);
+                    setSteps(
+                      tpl.payload.subtasks.length > 0
+                        ? tpl.payload.subtasks.map((x) => x.title)
+                        : [""],
+                    );
+                    setChecklist(tpl.payload.checklist);
+                    setOpen(true);
+                  }}
+                />
+              ),
+            })),
+            empty: (
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <ListChecks className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-medium text-foreground">
+                  {t("task_templates_empty")}
+                </p>
+                <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+                  {t("task_templates_empty_hint")}
+                </p>
+                <Button type="button" size="sm" onClick={() => setOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("task_templates_new")}
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+      />
       {open && (
         <div className="space-y-4 rounded-xl border border-border bg-card p-4">
           {/* ── THE PARENT TASK ─────────────────────────────────────────── */}
