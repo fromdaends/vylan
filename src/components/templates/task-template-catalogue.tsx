@@ -126,6 +126,10 @@ export function TaskTemplateCatalogue({
           have to share state. Splitting them would need a store between them to
           say the same thing. */}
       <SearchableTemplates
+        // Team and Private only: task templates carry an access level but have
+        // no draft concept, and an always-empty "Drafts (0)" would be a filter
+        // over a distinction that does not exist.
+        tabs={["team", "private"]}
         title={t("section_task_templates")}
         subtitle={t("task_templates_subtitle")}
         action={
@@ -139,9 +143,11 @@ export function TaskTemplateCatalogue({
         sections={[
           {
             key: "all",
+            primary: true,
             title: t("section_task_templates"),
             cards: templates.map((tpl) => ({
               id: tpl.id,
+              group: tpl.access === "private" ? ("private" as const) : ("team" as const),
               // Findable by name AND by its steps — searching "reconcile"
               // should find the close template that contains it.
               terms: [

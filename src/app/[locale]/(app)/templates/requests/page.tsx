@@ -139,6 +139,7 @@ export default async function RequestTemplatesPage({
         sections={[
           {
             key: "firm",
+            primary: true,
             title: t("section_firm"),
             cards: yoursCards,
             empty: (
