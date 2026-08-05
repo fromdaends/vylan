@@ -252,7 +252,9 @@ export function CloseBoard(props: {
               <th className="py-2 font-medium">{t("close_col_owed")}</th>
               <th className="py-2 font-medium">{t("close_col_books")}</th>
               <th className="py-2 font-medium">{t("close_col_bank_rec")}</th>
-              <th className="py-2 font-medium">{t("close_col_month")}</th>
+              <th className="w-[186px] py-2 text-right font-medium">
+                {t("close_col_month")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -388,8 +390,8 @@ export function CloseBoard(props: {
                     />
                   </td>
 
-                  <td className="py-2.5 align-top">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <td className="w-[186px] py-2.5 align-top text-right">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {isClosed ? (
                         <>
                           <span className="flex items-center gap-1.5 text-icon-emerald">
