@@ -257,3 +257,55 @@ No vendor documents ANY of these. Each is a Vylan decision, to be made deliberat
    Ours matches one version; do not treat it as a verified spec.
 8. **Review engagements** were NOT verified as requiring a letter in Canada — only
    compilations are confirmed. Do not say otherwise in marketing.
+
+---
+
+## ACCEPTANCE — the missing step, and Karbon's lifecycle as the reference
+
+Found while researching the proposal question: **nothing in Vylan can mark an
+engagement accepted.** The only `accepted_at` in the codebase belongs to TEAM
+INVITES. `resolveAgreementStatus` models `accepted` and nothing can reach it.
+And sending an engagement today immediately emails the client the DOCUMENT
+REQUEST — there is no proposal and no agreement in between.
+
+The founder found the same hole from the other end: *"you send out the proposal.
+They agree, sign, then you create the engagement with them, which then prompts
+them to upload the documents."* That is the correct order. Vylan does
+create → send → "upload your documents", skipping the agreement entirely.
+
+### Karbon's lifecycle, from their own Engagements overview
+
+Worth copying — it is the most completely documented of the four, and it
+independently confirms the one-document answer: *"**Agreement Text**: Include
+your firm's comprehensive terms and conditions, scope of work, and any
+disclaimers **directly within the engagement document**."*
+
+`Draft → Waiting for acceptance → Accepted → Active → Ended`
+
+| Action | Available in | What it does |
+|---|---|---|
+| **Send to client** | Draft | Goes to the **signatories** (plural). Requires ≥1 signatory and all required fields. |
+| **Resend** | Waiting for acceptance | Fresh signing link, no status or content change. |
+| **Accept on behalf** | Draft | Marks accepted with NO signature — for agreement obtained verbally or on paper. |
+| **Revert to Draft** | Waiting / Accepted | **The only way to edit after sending.** Withdraws from signatories, unlinks work, clears generated content. |
+| **Activate** | Accepted | Accepted → Active, "signalling that work can begin". Billing starts. Requires ≥1 service. |
+| **End** | Active | Historical record, no longer modifiable. |
+
+⚠️ **ACCEPTED AND ACTIVE ARE TWO DIFFERENT STATES IN KARBON.** Signing does not
+start the work; a human activates it. Vylan's `resolveAgreementStatus` already
+distinguishes them — that turns out to match Karbon exactly, which is
+reassuring, but Vylan's version derives `active` from client activity rather
+than an explicit action. Worth a founder decision.
+
+⚠️ **"Revert to Draft" is the answer to "how do you edit a sent proposal".**
+Vylan has no answer today. Karbon's is deliberately destructive and says so.
+
+⚠️ **"Accept on behalf" is the escape hatch every firm needs** — the client
+agreed on the phone. Vylan has nothing like it, and without it a firm cannot
+get an engagement moving when a client will not use the portal.
+
+### Still unestablished (from the earlier research pass)
+
+No vendor documents: whether terms freeze at signing · a firm countersignature ·
+a client-DECLINED state · bilingual/province terms · amending mid-engagement.
+Karbon's "Accept on behalf" is a bypass, NOT a countersignature.
