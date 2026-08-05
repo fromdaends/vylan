@@ -33,16 +33,21 @@ const ChecklistSchema = z.object({
   required: z.boolean().optional(),
 });
 
-const TaskSchema = z.object({
+const SubtaskSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  kind: z.string().max(60).optional(),
-  checklist: z.array(ChecklistSchema).max(200).optional(),
 });
 
+// Canopy's shape: one parent task, with steps and a client request under it.
+// `kind` stays a loose string rather than the enum, matching the
+// create-engagement action — a kind from a newer bundle must not fail the save,
+// and readTaskTemplatePayload downgrades anything unrecognised.
 const SaveSchema = z.object({
   name: z.string().trim().min(1).max(200),
   access: z.enum(["team", "private"]),
-  tasks: z.array(TaskSchema).max(100),
+  kind: z.string().max(60).optional(),
+  description: z.string().trim().max(2000).optional(),
+  subtasks: z.array(SubtaskSchema).max(100),
+  checklist: z.array(ChecklistSchema).max(200).optional(),
 });
 
 type Result = {
@@ -63,7 +68,12 @@ export async function saveTaskTemplateAction(
   // Normalised through the SAME reader the pickers use, so what gets stored is
   // exactly what will come back out. Storing the raw post instead would let a
   // template save fields that silently vanish on load.
-  const payload = readTaskTemplatePayload({ tasks: parsed.data.tasks });
+  const payload = readTaskTemplatePayload({
+    kind: parsed.data.kind,
+    description: parsed.data.description,
+    subtasks: parsed.data.subtasks,
+    checklist: parsed.data.checklist,
+  });
   if (!isWorthSavingTaskTemplate(payload)) return { ok: false, error: "empty" };
 
   const res = await createTaskTemplate({

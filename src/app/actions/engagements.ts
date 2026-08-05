@@ -203,6 +203,12 @@ const CreateSchema = z
           title: z.string().trim().min(1).max(200),
           kind: z.string().max(60).optional(),
           assignee_ids: z.array(z.string().uuid()).max(20).optional(),
+          // Steps under this task. Written as child rows via parent_id, which
+          // engagement_tasks has had since 1370.
+          subtasks: z
+            .array(z.object({ title: z.string().trim().min(1).max(200) }))
+            .max(100)
+            .optional(),
         }),
       )
       .max(50)
@@ -495,7 +501,7 @@ export async function createEngagementAction(
       const creator = await getCurrentUser();
       for (const [index, task] of parsed.data.tasks.entries()) {
         try {
-          await createEngagementTask({
+          const parentId = await createEngagementTask({
             clientId: parsed.data.client_id,
             engagementId,
             firmId: created.firm_id,
@@ -509,6 +515,33 @@ export async function createEngagementAction(
             // happen in.
             orderIndex: index,
           });
+
+          // The steps under it. Each is an ordinary engagement_task pointed at
+          // its parent — the trigger copies client_id and engagement_id down,
+          // so they are deliberately not repeated here.
+          //
+          // Its own try/catch INSIDE the parent's: a step that fails must not
+          // take the remaining steps with it, and none of them may take the
+          // parent (which already exists and is the useful half).
+          for (const [subIndex, sub] of (task.subtasks ?? []).entries()) {
+            try {
+              await createEngagementTask({
+                clientId: parsed.data.client_id,
+                engagementId,
+                firmId: created.firm_id,
+                title: sub.title,
+                // A step is always a plain task. The one-per-engagement kinds
+                // point at collections keyed by engagement_id, so a SUBTASK
+                // carrying one would drive the same rows as its parent.
+                kind: "task",
+                createdBy: creator?.id ?? null,
+                orderIndex: subIndex,
+                parentId,
+              });
+            } catch (subErr) {
+              console.error("[engagements] subtask-on-create failed:", subErr);
+            }
+          }
         } catch (taskErr) {
           console.error("[engagements] task-on-create failed:", taskErr);
         }

@@ -7,7 +7,7 @@ import {
   availableKinds,
   documentCollectionIndex,
   collectsDocuments,
-  appendTemplateTasks,
+  appendTaskTemplate,
   type TaskDraft,
 } from "./task-drafts";
 
@@ -134,98 +134,115 @@ describe("documentCollectionIndex / collectsDocuments", () => {
   });
 });
 
-describe("appendTemplateTasks", () => {
-  it("appends plain rows unchanged and keeps their order", () => {
-    const res = appendTemplateTasks(
-      [task({ title: "Existing" })],
-      [
-        { title: "Kickoff", kind: "meeting" },
-        { title: "File it", kind: "filing" },
-      ],
-    );
-    expect(res.tasks.map((t) => t.title)).toEqual([
-      "Existing",
-      "Kickoff",
-      "File it",
-    ]);
-    expect(res.tasks[1].kind).toBe("meeting");
-    expect(res.downgraded).toEqual([]);
+describe("appendTaskTemplate — one template adds ONE task", () => {
+  const tpl = (over: Record<string, unknown> = {}) => ({
+    name: "Month-end close",
+    kind: "bookkeeping" as const,
+    subtasks: [{ title: "Reconcile" }, { title: "Post journals" }],
+    ...over,
   });
 
-  it("keeps a screen-backed kind when the engagement does not hold it yet", () => {
-    const res = appendTemplateTasks(
-      [task({ title: "Review", kind: "review" })],
-      [{ title: "Collect documents", kind: "document_collection" }],
-    );
-    expect(res.tasks[1].kind).toBe("document_collection");
+  it("adds a single parent, not one row per step", () => {
+    const res = appendTaskTemplate([], tpl());
+    expect(res.tasks).toHaveLength(1);
+    expect(res.tasks[0].title).toBe("Month-end close");
+  });
+
+  it("hangs the steps under it, in order", () => {
+    const res = appendTaskTemplate([], tpl());
+    expect(res.tasks[0].subtasks).toEqual([
+      { title: "Reconcile" },
+      { title: "Post journals" },
+    ]);
+  });
+
+  it("keeps the template's kind when the engagement does not hold it", () => {
+    const res = appendTaskTemplate([], tpl({ kind: "document_collection" }));
+    expect(res.tasks[0].kind).toBe("document_collection");
     expect(res.downgraded).toEqual([]);
   });
 
   it("DOWNGRADES rather than drops when the kind is already held", () => {
-    const res = appendTemplateTasks(
-      [task({ title: "Docs", kind: "document_collection" })],
-      [{ title: "Collect documents", kind: "document_collection" }],
+    const existing = [task({ title: "Docs", kind: "document_collection" })];
+    const res = appendTaskTemplate(
+      existing,
+      tpl({ kind: "document_collection" }),
     );
-    // The row survives — losing it would lose a step the firm wrote down.
+    // The whole template survives, steps intact — only its screen is lost.
     expect(res.tasks).toHaveLength(2);
-    expect(res.tasks[1].title).toBe("Collect documents");
     expect(res.tasks[1].kind).toBe("task");
-    expect(res.downgraded).toEqual(["Collect documents"]);
-  });
-
-  it("handles a template that clashes with ITSELF", () => {
-    // Checked against the accumulating list, not just the existing one.
-    const res = appendTemplateTasks(
-      [],
-      [
-        { title: "First ask", kind: "document_collection" },
-        { title: "Second ask", kind: "document_collection" },
-      ],
-    );
-    expect(res.tasks[0].kind).toBe("document_collection");
-    expect(res.tasks[1].kind).toBe("task");
-    expect(res.downgraded).toEqual(["Second ask"]);
+    expect(res.tasks[1].subtasks).toHaveLength(2);
+    expect(res.downgraded).toEqual(["Month-end close"]);
   });
 
   it("never downgrades a screenless kind — six meetings is fine", () => {
-    const res = appendTemplateTasks(
-      [task({ title: "Kickoff", kind: "meeting" })],
-      [
-        { title: "Mid-point", kind: "meeting" },
-        { title: "Wrap-up", kind: "meeting" },
-      ],
-    );
-    expect(res.tasks.every((t) => t.kind === "meeting")).toBe(true);
+    const existing = [task({ title: "Kickoff", kind: "meeting" })];
+    const res = appendTaskTemplate(existing, tpl({ kind: "meeting" }));
+    expect(res.tasks[1].kind).toBe("meeting");
     expect(res.downgraded).toEqual([]);
   });
 
-  it("trims incoming titles and skips blank ones", () => {
-    const res = appendTemplateTasks(
-      [],
-      [
-        { title: "  Padded  ", kind: "task" },
-        { title: "   ", kind: "task" },
-      ],
-    );
-    expect(res.tasks).toHaveLength(1);
-    expect(res.tasks[0].title).toBe("Padded");
+  it("appends after what is already there", () => {
+    const existing = [task({ title: "Existing" })];
+    const res = appendTaskTemplate(existing, tpl());
+    expect(res.tasks.map((t) => t.title)).toEqual([
+      "Existing",
+      "Month-end close",
+    ]);
   });
 
-  it("appends with nobody assigned — a template is a shape of work, not a roster", () => {
-    const res = appendTemplateTasks([], [{ title: "Prepare", kind: "task" }]);
+  it("trims step titles and drops blank ones", () => {
+    const res = appendTaskTemplate(
+      [],
+      tpl({ subtasks: [{ title: "  Padded  " }, { title: "   " }] }),
+    );
+    expect(res.tasks[0].subtasks).toEqual([{ title: "Padded" }]);
+  });
+
+  it("omits subtasks entirely when the template has none", () => {
+    const res = appendTaskTemplate([], tpl({ subtasks: [] }));
+    expect(res.tasks[0]).not.toHaveProperty("subtasks");
+  });
+
+  it("adds nothing for a nameless template rather than a blank row", () => {
+    const existing = [task({ title: "Existing" })];
+    const res = appendTaskTemplate(existing, tpl({ name: "   " }));
+    expect(res.tasks).toHaveLength(1);
+    expect(res.downgraded).toEqual([]);
+  });
+
+  it("arrives with nobody assigned — a template is a shape, not a roster", () => {
+    const res = appendTaskTemplate([], tpl());
     expect(res.tasks[0].assigneeIds).toEqual([]);
   });
 
   it("does not mutate the list it was given", () => {
     const existing = [task({ title: "Existing" })];
-    appendTemplateTasks(existing, [{ title: "New", kind: "task" }]);
+    appendTaskTemplate(existing, tpl());
     expect(existing).toHaveLength(1);
   });
+});
 
-  it("applying an empty template changes nothing", () => {
-    const existing = [task({ title: "Existing" })];
-    const res = appendTemplateTasks(existing, []);
-    expect(res.tasks).toEqual(existing);
-    expect(res.downgraded).toEqual([]);
+describe("meaningfulTasks — subtasks", () => {
+  it("trims steps and drops untitled ones", () => {
+    const out = meaningfulTasks([
+      task({
+        title: "Parent",
+        subtasks: [{ title: "  Step  " }, { title: "  " }],
+      }),
+    ]);
+    expect(out[0].subtasks).toEqual([{ title: "Step" }]);
+  });
+
+  it("omits the key when every step was blank", () => {
+    const out = meaningfulTasks([
+      task({ title: "Parent", subtasks: [{ title: "  " }] }),
+    ]);
+    expect(out[0]).not.toHaveProperty("subtasks");
+  });
+
+  it("leaves a task with no steps alone", () => {
+    const out = meaningfulTasks([task({ title: "Parent" })]);
+    expect(out[0]).not.toHaveProperty("subtasks");
   });
 });

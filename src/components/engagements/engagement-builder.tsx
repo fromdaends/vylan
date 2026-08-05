@@ -64,7 +64,7 @@ import {
   meaningfulTasks,
   availableKinds,
   documentCollectionIndex,
-  appendTemplateTasks,
+  appendTaskTemplate,
   type TaskDraft,
 } from "@/lib/engagements/task-drafts";
 import { taskKindLabelKey } from "@/lib/tasks/kinds";
@@ -229,12 +229,12 @@ export function EngagementBuilder({
   taskTemplates?: {
     id: string;
     name: string;
-    tasks: {
-      title: string;
-      kind: TaskKind;
-      /** The client request the task carries, if any. */
-      checklist?: TemplateChecklistItem[];
-    }[];
+    /** The parent task's kind. */
+    kind: TaskKind;
+    /** The steps under it. */
+    subtasks: { title: string }[];
+    /** The client request the parent carries, if any. */
+    checklist?: TemplateChecklistItem[];
   }[];
   /** Saved whole-engagement templates (migration 1500). */
   engagementTemplates?: {
@@ -434,7 +434,11 @@ export function EngagementBuilder({
   function applyTaskTemplate(id: string) {
     const tpl = taskTemplates.find((x) => x.id === id);
     if (!tpl) return;
-    const res = appendTemplateTasks(tasks, tpl.tasks);
+    const res = appendTaskTemplate(tasks, {
+      name: tpl.name,
+      kind: tpl.kind,
+      subtasks: tpl.subtasks,
+    });
     setTasks(res.tasks);
     setDowngradedTasks(res.downgraded);
 
@@ -448,9 +452,7 @@ export function EngagementBuilder({
     // second apply. Leaving a filled checklist alone is the one option that
     // cannot lose anything the accountant did.
     if (items.length === 0) {
-      const carried = tpl.tasks.find(
-        (x) => x.kind === "document_collection" && (x.checklist?.length ?? 0) > 0,
-      )?.checklist;
+      const carried = tpl.checklist;
       if (carried && carried.length > 0) {
         setItems(
           carried.map((c) => ({
@@ -824,6 +826,8 @@ export function EngagementBuilder({
               title: task.title,
               kind: task.kind,
               assignee_ids: task.assigneeIds,
+              // The steps under it. Written as child rows via parent_id.
+              subtasks: task.subtasks ?? [],
             })),
             reminder_settings: reminderSettings,
             repeat_frequency: repeatFrequency,
@@ -1396,6 +1400,16 @@ export function EngagementBuilder({
                           {task.kind === "document_collection" && (
                             <span className="text-muted-foreground">
                               {t("task_documents_count")}: {items.length}
+                            </span>
+                          )}
+                          {/* Steps arrive with a task template. Shown as a
+                              count rather than a list: the row is one line and
+                              five step names would wrap it into four. */}
+                          {(task.subtasks?.length ?? 0) > 0 && (
+                            <span className="text-muted-foreground">
+                              {t("task_steps_count", {
+                                count: task.subtasks?.length ?? 0,
+                              })}
                             </span>
                           )}
                           <button
