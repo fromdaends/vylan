@@ -56,6 +56,11 @@ const PayloadSchema = z.object({
   welcomeEnabled: z.boolean().optional(),
   videoEnabled: z.boolean().optional(),
   videoUrl: z.string().trim().max(500).optional(),
+  // Storage paths, written by uploadTemplateAssetAction. Bounded; the path is
+  // built server-side so this only has to stop an oversized blob.
+  videoPath: z.string().trim().max(500).optional(),
+  videoFileName: z.string().trim().max(300).optional(),
+  documentPath: z.string().trim().max(500).optional(),
   documentEnabled: z.boolean().optional(),
   documentName: z.string().trim().max(300).optional(),
   assigneeIds: z.array(z.string()).max(20).optional(),

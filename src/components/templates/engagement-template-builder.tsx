@@ -49,6 +49,8 @@ import { cn } from "@/lib/cn";
 import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
+import { AssetUpload } from "@/components/templates/asset-upload";
+import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import {
   defaultPriceVisibility,
   flattenBlocks,
@@ -96,6 +98,8 @@ export function EngagementTemplateBuilder({
   members = [],
   fallbackTaxPct = null,
   initial,
+  firmDefaultTerms = "",
+  canManageFirmTerms = false,
 }: {
   locale: "en" | "fr";
   /**
@@ -115,6 +119,14 @@ export function EngagementTemplateBuilder({
   /** Active firm members, for the assignee picker. */
   members?: { id: string; name: string }[];
   fallbackTaxPct?: number | null;
+  /** The firm's standard terms (1610), loaded into a NEW template's Terms tab
+   *  so nobody retypes them. Copied, never referenced — editing the firm
+   *  default must not rewrite terms a client already agreed to. */
+  firmDefaultTerms?: string;
+  /** Whether this person may CHANGE the firm's standard terms. Writing terms
+   *  onto one template is not the same act as changing what every future
+   *  template starts from. */
+  canManageFirmTerms?: boolean;
 }) {
   const t = useTranslations("Templates");
   const tEng = useTranslations("Engagements");
@@ -138,8 +150,11 @@ export function EngagementTemplateBuilder({
   const [introMessage, setIntroMessage] = useState(initial?.payload.introMessage ?? "");
   const [videoEnabled, setVideoEnabled] = useState(initial?.payload.videoEnabled ?? false);
   const [videoUrl, setVideoUrl] = useState(initial?.payload.videoUrl ?? "");
+  const [videoPath, setVideoPath] = useState(initial?.payload.videoPath ?? "");
+  const [videoFileName, setVideoFileName] = useState(initial?.payload.videoFileName ?? "");
   const [documentEnabled, setDocumentEnabled] = useState(initial?.payload.documentEnabled ?? false);
   const [documentName, setDocumentName] = useState(initial?.payload.documentName ?? "");
+  const [documentPath, setDocumentPath] = useState(initial?.payload.documentPath ?? "");
 
   const [assigneeIds, setAssigneeIds] = useState<string[]>(initial?.payload.assigneeIds ?? []);
   // Canopy's billing blocks. Seeded from the template, or from ONE block
@@ -165,8 +180,14 @@ export function EngagementTemplateBuilder({
     initial?.payload.priceVisibility ?? defaultPriceVisibility(),
   );
 
-  const [termsEnabled, setTermsEnabled] = useState(initial?.payload.termsEnabled ?? false);
-  const [termsText, setTermsText] = useState(initial?.payload.termsText ?? "");
+  const [termsEnabled, setTermsEnabled] = useState(
+    initial?.payload.termsEnabled ?? firmDefaultTerms.trim().length > 0,
+  );
+  // A NEW template starts from the firm's standard terms; an existing one keeps
+  // its own, because its terms may already be what a client agreed to.
+  const [termsText, setTermsText] = useState(
+    initial ? initial.payload.termsText : firmDefaultTerms,
+  );
 
   const [clientSigns, setClientSigns] = useState(initial?.payload.clientSigns ?? true);
   const [additionalSignerLabels, setAdditionalSignerLabels] = useState<
@@ -177,6 +198,7 @@ export function EngagementTemplateBuilder({
   const [depositAmount, setDepositAmount] = useState(initial?.payload.depositCents != null ? String(initial.payload.depositCents / 100) : "");
 
   const [error, setError] = useState<string | null>(null);
+  const [termsSaved, setTermsSaved] = useState(false);
 
   // A template needs a name of its own AND a name for the engagements it makes.
   // Canopy marks both required, and it is right: without the second, every
@@ -230,8 +252,11 @@ export function EngagementTemplateBuilder({
           introMessage: introMessage.trim(),
           videoEnabled,
           videoUrl: videoUrl.trim(),
+          videoPath,
+          videoFileName,
           documentEnabled,
           documentName: documentName.trim(),
+          documentPath,
           assigneeIds,
           termsEnabled,
           termsText: termsText.trim(),
@@ -538,11 +563,28 @@ export function EngagementTemplateBuilder({
                     on={videoEnabled}
                     onToggle={() => setVideoEnabled((v) => !v)}
                   >
-                    <Input
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      placeholder={t("intro_video_placeholder")}
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        placeholder={t("intro_video_placeholder")}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("or_upload")}
+                      </p>
+                      <AssetUpload
+                        kind="video"
+                        fileName={videoFileName}
+                        onUploaded={(path, name) => {
+                          setVideoPath(path);
+                          setVideoFileName(name);
+                        }}
+                        onClear={() => {
+                          setVideoPath("");
+                          setVideoFileName("");
+                        }}
+                      />
+                    </div>
                   </ToggleRow>
                   <ToggleRow
                     label={t("intro_document")}
@@ -550,10 +592,17 @@ export function EngagementTemplateBuilder({
                     on={documentEnabled}
                     onToggle={() => setDocumentEnabled((v) => !v)}
                   >
-                    <Input
-                      value={documentName}
-                      onChange={(e) => setDocumentName(e.target.value)}
-                      placeholder={t("intro_document_placeholder")}
+                    <AssetUpload
+                      kind="document"
+                      fileName={documentName}
+                      onUploaded={(path, name) => {
+                        setDocumentPath(path);
+                        setDocumentName(name);
+                      }}
+                      onClear={() => {
+                        setDocumentPath("");
+                        setDocumentName("");
+                      }}
                     />
                   </ToggleRow>
                 </Fieldset>
@@ -583,12 +632,58 @@ export function EngagementTemplateBuilder({
                   on={termsEnabled}
                   onToggle={() => setTermsEnabled((v) => !v)}
                 >
-                  <Textarea
-                    value={termsText}
-                    onChange={(e) => setTermsText(e.target.value)}
-                    placeholder={t("general_terms_placeholder")}
-                    rows={10}
-                  />
+                  <div className="space-y-2">
+                    <Textarea
+                      value={termsText}
+                      onChange={(e) => setTermsText(e.target.value)}
+                      placeholder={t("general_terms_placeholder")}
+                      rows={10}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Load the firm's standard terms. Shown only when there
+                          are some AND the box does not already hold them, so
+                          it never offers to do nothing. */}
+                      {firmDefaultTerms.trim() &&
+                        termsText.trim() !== firmDefaultTerms.trim() && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setTermsText(firmDefaultTerms)}
+                          >
+                            {t("use_firm_terms")}
+                          </Button>
+                        )}
+                      {/* Save these AS the firm standard. Gated: writing terms
+                          on one template is not the same act as changing what
+                          every future template starts from. */}
+                      {canManageFirmTerms &&
+                        termsText.trim() &&
+                        termsText.trim() !== firmDefaultTerms.trim() && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() =>
+                              startTransition(async () => {
+                                const res = await saveFirmDefaultTermsAction({
+                                  terms: termsText.trim(),
+                                });
+                                setTermsSaved(res.ok);
+                              })
+                            }
+                          >
+                            {t("save_as_firm_terms")}
+                          </Button>
+                        )}
+                      {termsSaved && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {t("firm_terms_saved")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </ToggleRow>
               </Fieldset>
             )}
@@ -707,11 +802,11 @@ export function EngagementTemplateBuilder({
         </div>
 
         {previewOpen && (
-          <div className="hidden min-h-0 overflow-y-auto bg-muted/30 p-5 lg:block">
+          <div className="hidden min-h-0 justify-center overflow-y-auto bg-muted/30 p-5 lg:flex">
             {/* Labelled, because an unlabelled preview showing a client name
                 reads as a real engagement — the exact confusion this screen is
                 being made distinct from. */}
-            <p className="mx-auto mb-3 max-w-md text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
+            <p className="mb-3 text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
               {t("preview_sample_label")}
             </p>
             <ProposalPreview
