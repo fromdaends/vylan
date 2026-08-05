@@ -97,9 +97,14 @@ export function BillingBlocksEditor({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xs font-medium tracking-[0.18em] uppercase text-muted-foreground">
-          {t("billing_blocks")}
-        </h2>
+        {/* No "BILLING" heading. The founder: "there's a billing and payment
+            section inside, and then there's also a billing tagline where
+            service items are" — two different things wearing one word, on one
+            screen. The card this sits in already says what it is.
+
+            This component is shared, so removing it here removes it from the
+            engagement builder AND every template builder at once. */}
+        <span />
         {/* Canopy's gear: what the client sees. A menu rather than three
             switches on the page — it is set once and then not thought about. */}
         <DropdownMenu>
@@ -235,31 +240,53 @@ export function BillingBlocksEditor({
               hideFrequency
             />
 
-            <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-3">
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs">
-                <input
-                  type="checkbox"
-                  checked={b.combineItems}
+            {/* The checkbox, its note and the total used to share one flex
+                row. In a narrow column — which is where engagement creation
+                puts this — the note box was squeezed to nothing and its
+                placeholder read as "A note for the client about this c".
+                Rows now stack, and the note only appears once combining is on:
+                it is the wording for the combined line, which is meaningless
+                while the lines are shown separately. */}
+            <div className="space-y-2 border-t border-border/60 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex cursor-pointer items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={b.combineItems}
+                    onChange={(e) =>
+                      patch(idx, { ...b, combineItems: e.target.checked })
+                    }
+                  />
+                  <span>
+                    {t("combine_items")}
+                    {/* What it actually does, because "show as one line to the
+                        client" told the founder nothing: "what does that even
+                        mean?" */}
+                    <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                      {t("combine_items_hint")}
+                    </span>
+                  </span>
+                </label>
+                {visibility.blockTotals && (
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {money(total.cents)}
+                    {/* Said out loud. A total that quietly omits an unpriced
+                        hourly line is a number a client will hold you to. */}
+                    {total.partial && ` ${t("total_partial")}`}
+                  </span>
+                )}
+              </div>
+              {b.combineItems && (
+                <Input
+                  value={b.clientNote}
                   onChange={(e) =>
-                    patch(idx, { ...b, combineItems: e.target.checked })
+                    patch(idx, { ...b, clientNote: e.target.value })
                   }
+                  placeholder={t("client_note_placeholder")}
+                  aria-label={t("client_note_placeholder")}
+                  className="h-8 w-full text-xs"
                 />
-                {t("combine_items")}
-              </label>
-              <Input
-                value={b.clientNote}
-                onChange={(e) => patch(idx, { ...b, clientNote: e.target.value })}
-                placeholder={t("client_note_placeholder")}
-                aria-label={t("client_note_placeholder")}
-                className="h-8 flex-1 text-xs"
-              />
-              {visibility.blockTotals && (
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {money(total.cents)}
-                  {/* Said out loud. A total that quietly omits an unpriced
-                      hourly line is a number a client will hold you to. */}
-                  {total.partial && ` ${t("total_partial")}`}
-                </span>
               )}
             </div>
           </section>

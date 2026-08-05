@@ -15,6 +15,10 @@ const engagement = {
   status: "complete",
   magic_token: "token-1",
   invoice_amount_cents: 25_000,
+  // What the proposal said was due on acceptance (1680). A different number
+  // from the fee on purpose: reading the wrong column would invoice the whole
+  // engagement the moment somebody signed.
+  deposit_cents: 10_000 as number | null,
 };
 
 const serviceRole = {
@@ -29,6 +33,9 @@ const serviceRole = {
                   // Mirror the mock row so tests can flip its status (the
                   // at-spawn cases exercise 'sent' occurrences).
                   if (columns === "status") return { data: { status: engagement.status } };
+                  if (columns === "deposit_cents") {
+                    return { data: { deposit_cents: engagement.deposit_cents } };
+                  }
                   if (columns.includes("invoice_locks_deliverables")) {
                     return {
                       data: {
@@ -77,6 +84,11 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/db/payment-requests", () => ({
   createPaymentRequestSR: (input: unknown) => createPaymentRequest(input),
   getLatestPaymentRequestForEngagementSR: (id: string) =>
+    getLatestPaymentRequest(id),
+  // The idempotency question is asked PER KIND now (1680): a deposit and the
+  // final invoice are two charges on one job. These tests all exercise the
+  // engagement invoice, so the kind-scoped lookup answers from the same stub.
+  getPaymentRequestForEngagementKindSR: (id: string) =>
     getLatestPaymentRequest(id),
 }));
 const getFirmInvoiceSettingsSR = vi.fn();
@@ -298,5 +310,55 @@ describe("sendEngagementInvoice", () => {
       });
       expect(createPaymentRequest).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("sendEngagementInvoice — the deposit (migration 1680)", () => {
+  it("bills the DEPOSIT amount, not the engagement's fee", async () => {
+    // Two different charges on one job.
+    engagement.status = "in_progress";
+    engagement.deposit_cents = 10_000;
+    getLatestPaymentRequest.mockResolvedValue(null);
+    getFirmInvoiceSettingsSR.mockResolvedValue(null);
+
+    const res = await sendEngagementInvoice("e1", { kind: "deposit" });
+
+    expect(res.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 10_000, kind: "deposit" }),
+    );
+  });
+
+  it("bills a LIVE engagement — a deposit is owed on acceptance, not at the end", async () => {
+    engagement.status = "sent";
+    engagement.deposit_cents = 10_000;
+    getLatestPaymentRequest.mockResolvedValue(null);
+    getFirmInvoiceSettingsSR.mockResolvedValue(null);
+
+    const res = await sendEngagementInvoice("e1", { kind: "deposit" });
+    expect(res.ok).toBe(true);
+  });
+
+  it("raises nothing when no deposit was promised", async () => {
+    // Silence, not a zero-dollar invoice.
+    engagement.status = "in_progress";
+    engagement.deposit_cents = null;
+    getLatestPaymentRequest.mockResolvedValue(null);
+
+    const res = await sendEngagementInvoice("e1", { kind: "deposit" });
+    expect(res).toEqual({ ok: false, reason: "no_amount" });
+    expect(createPaymentRequest).not.toHaveBeenCalled();
+  });
+
+  it("the ENGAGEMENT invoice still carries its own kind and its own amount", async () => {
+    engagement.status = "complete";
+    engagement.deposit_cents = 10_000;
+    getLatestPaymentRequest.mockResolvedValue(null);
+    getFirmInvoiceSettingsSR.mockResolvedValue(null);
+
+    await sendEngagementInvoice("e1");
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 25_000, kind: "engagement" }),
+    );
   });
 });

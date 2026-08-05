@@ -1,7 +1,14 @@
 // Pure helpers for invoice automation (migration 0590), shared by the builder
 // UI and unit tests so the "what amount / when" rules live in one tested place.
 
-export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
+export type InvoiceAutoMode =
+  | "off"
+  // The founder: "there should be an option for when the invoice should be
+  // sent." This one fires the moment the client agrees, rather than waiting for
+  // the work to finish — see lib/engagements/on-accepted.
+  | "on_acceptance"
+  | "on_completion"
+  | "delayed";
 
 // The amount to bill (cents) from the accountant's invoice choices, or null
 // when it can't be determined: mode 'off', or a custom amount that isn't a

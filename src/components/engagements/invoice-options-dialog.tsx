@@ -68,7 +68,7 @@ export type InvoiceForOptions = {
 };
 
 export type EngagementInvoiceAutomation = {
-  mode: "off" | "on_completion" | "delayed";
+  mode: "off" | "on_acceptance" | "on_completion" | "delayed";
   delayDays: number | null;
   amountCents: number | null;
   description: string | null;

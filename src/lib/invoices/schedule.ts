@@ -11,7 +11,9 @@ import { sendEngagementInvoice } from "./send";
 type CompletedEngagement = {
   id: string;
   // Undefined pre-migration 0590 → treated as 'off' (no automation).
-  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  // 'on_acceptance' never reaches the completion dispatcher's branches below,
+  // which is correct: that invoice already went out when the client agreed.
+  invoice_auto_mode?: "off" | "on_acceptance" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   completed_at?: string | null;
 };

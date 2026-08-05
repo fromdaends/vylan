@@ -17,6 +17,7 @@
 import { revalidatePath } from "next/cache";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { findEngagementForToken, logActivity } from "@/lib/db/portal";
+import { applyAcceptedBilling } from "@/lib/engagements/on-accepted";
 
 export type ProposalResult = { ok: boolean };
 
@@ -75,6 +76,12 @@ export async function acceptProposalAction(
   await logActivity(found.firm_id, found.id, "proposal_accepted", {
     accepted_by: "client",
   });
+  // Raise whatever the acceptance owes — the deposit the proposal promised,
+  // and the engagement invoice when the firm chose to bill on acceptance.
+  // Shared with the firm's own accept path so the two cannot diverge, and
+  // best-effort inside: a billing hiccup must never turn a recorded agreement
+  // into an error on the client's screen.
+  await applyAcceptedBilling(found.id);
   // Both sides: the client's portal now shows their documents, and the firm's
   // engagement is live.
   revalidatePath(`/r/${token}`);
