@@ -671,6 +671,86 @@ export function EngagementTemplateBuilder({
             {/* What the shape adds up to. A template has no client, but it
                 absolutely has prices — and "what does this package come to"
                 is the question you are answering while you build one. */}
+            {/* ── THE WORK THESE SERVICES BRING (1620) ───────────────────
+                On the SAME tab as the services, because it is not a separate
+                decision — it is the other half of what a service is.
+
+                It appears by itself when a service that carries work is picked,
+                and the picker BELOW the list adds one directly, the way the
+                engagement's Tasks step does. Canopy puts its "+ Add task
+                template" under the box of rows, not in the header — the founder:
+                "it sits below the actual box in the canopy screenshot... And,
+                also, once again, fix it in the template builder as well."
+
+                Removable: the work came with the service, but this template is
+                allowed to disagree. */}
+            {tab === "services" && (
+              <Fieldset title={t("template_work_title")}>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {t("template_work_hint")}
+                </p>
+                {linkedWork.length > 0 && (
+                  <ul className="space-y-2">
+                    {linkedWork.map((work) => (
+                      <li
+                        key={work.id}
+                        className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{work.name}</p>
+                          {work.steps.length > 0 && (
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                              {work.steps.slice(0, 6).join(" · ")}
+                              {work.steps.length > 6 &&
+                                ` +${work.steps.length - 6}`}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTaskTemplateIds((prev) =>
+                              prev.filter((x) => x !== work.id),
+                            )
+                          }
+                          aria-label={t("remove")}
+                          className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {/* Under the list, like Canopy's. Hidden when the firm has no
+                    task templates — a dropdown whose only entry is its own
+                    placeholder is a control that does nothing. */}
+                {taskTemplates.length > 0 && (
+                  <select
+                    // Reset after each pick so the same template can be added
+                    // again; a select already holding the value fires no change.
+                    value=""
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) return;
+                      setTaskTemplateIds((prev) =>
+                        prev.includes(id) ? prev : [...prev, id],
+                      );
+                    }}
+                    aria-label={tEng("apply_task_template")}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="">{tEng("apply_task_template")}</option>
+                    {taskTemplates.map((tt) => (
+                      <option key={tt.id} value={tt.id}>
+                        {tt.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Fieldset>
+            )}
+
             {tab === "services" && templateTotals.groups.length > 0 && (
               <Fieldset title={tEng("totals_section")}>
                 <BillingTotalsPanel totals={templateTotals} locale={locale} />
