@@ -43,14 +43,29 @@ export function EngagementsListSkeleton({
   animated?: boolean;
   tone?: "muted" | "contrast";
 }) {
-  const strong = tone === "contrast" ? "bg-foreground/[0.14]" : "bg-muted";
-  const mid = tone === "contrast" ? "bg-foreground/[0.10]" : "bg-muted/50";
-  const soft = tone === "contrast" ? "bg-foreground/[0.07]" : "bg-muted/40";
+  // ── TUNED PER THEME, BY LOOKING ────────────────────────────────────────
+  //
+  // A single opacity cannot serve both. 30% of the foreground reads as a clear
+  // grey on a white page and as a bright wash on a black one; 12% reads well on
+  // black and vanishes on white. These pairs were chosen by rendering the real
+  // page in both themes and comparing, not by picking a number that looked
+  // reasonable in the one theme I happened to be in — which is how this shipped
+  // invisible twice.
+  const strong =
+    tone === "contrast"
+      ? "bg-foreground/[0.30] dark:bg-foreground/[0.12]"
+      : "bg-muted";
+  const mid =
+    tone === "contrast"
+      ? "bg-foreground/[0.22] dark:bg-foreground/[0.09]"
+      : "bg-muted/50";
+  const soft =
+    tone === "contrast"
+      ? "bg-foreground/[0.16] dark:bg-foreground/[0.07]"
+      : "bg-muted/40";
   // The modal covers the middle, so what a viewer actually sees of this is the
-  // MARGINS — thin strips top and bottom, wider ones either side. Eight rows
-  // stopped well above the fold and left the lower half plain, which read as
-  // "no frosted glass" in both themes. Enough rows to reach the bottom of a
-  // tall screen; they cost nothing, being empty divs.
+  // MARGINS — thin strips top and bottom, wider ones either side. Enough rows to
+  // reach the bottom of a tall screen; they cost nothing, being empty divs.
   const rows = tone === "contrast" ? 18 : 8;
 
   return (
