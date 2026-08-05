@@ -91,6 +91,13 @@ export type ProposalPreviewData = {
 
 /** The client's four steps through the document. */
 const STEPS = ["introduction", "services", "terms", "sign"] as const;
+type BilledKey =
+  | "preview_billed_once"
+  | "preview_billed_weekly"
+  | "preview_billed_monthly"
+  | "preview_billed_quarterly"
+  | "preview_billed_yearly";
+
 type StepKey =
   | "preview_step_introduction"
   | "preview_step_services"
@@ -251,39 +258,77 @@ export function ProposalPreview({
         </Section>
 
         <Section title={t("tab_services")}>
+          {/* ── GROUPED BY HOW IT BILLS ──────────────────────────────────
+              The founder: "the change to billing structure should update the
+              preview proposal."
+
+              Right — the firm authors these in billing blocks, so the client
+              should read them the same way: "Billed one time", "Billed
+              monthly", each with its own total, rather than one flat list that
+              hides which charges recur. Grouped from the SAME
+              computeBillingTotals the firm's own readout uses, so the two can
+              never disagree about what falls where. */}
           {namedServices.length > 0 ? (
-            <ul className="space-y-1.5 text-xs">
-              {namedServices.map((item, idx) => (
-                <li key={idx}>
-                  <div className="flex justify-between gap-3">
-                    <span className="truncate">{item.name}</span>
-                    {/* Hidden when the firm chose not to itemize. The line
-                        itself stays — the client still needs to know what they
-                        are getting, just not what each part of it costs. */}
-                    {showRates && (
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
-                        {item.rateCents == null ? "—" : money(item.rateCents)}
+            <div className="space-y-3 text-xs">
+              {totals.groups.map((group) => {
+                const inGroup = namedServices.filter(
+                  (x) => (x.billingFrequency ?? "once") === group.frequency,
+                );
+                if (inGroup.length === 0) return null;
+                return (
+                  <div key={group.frequency}>
+                    <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
+                      <span className="font-medium">
+                        {t(`preview_billed_${group.frequency}` as BilledKey)}
                       </span>
-                    )}
-                  </div>
-                  {/* What this line actually buys. Under the price, indented,
-                      in the muted size — it is detail, not another line item,
-                      and it must never read as something else to pay for. */}
-                  {item.work && item.work.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 border-l border-border pl-2.5 text-left">
-                      {item.work.map((step, i) => (
-                        <li
-                          key={i}
-                          className="text-[11px] leading-relaxed text-muted-foreground"
-                        >
-                          {step}
+                      {/* The group's own total, and only when the firm chose
+                          to show block totals. */}
+                      {data.priceVisibility?.blockTotals !== false && (
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {group.determined
+                            ? money(group.totalCents)
+                            : t("totals_tbd_short")}
+                        </span>
+                      )}
+                    </div>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {inGroup.map((item, idx) => (
+                        <li key={idx}>
+                          <div className="flex justify-between gap-3">
+                            <span className="truncate">{item.name}</span>
+                            {/* Hidden when the firm chose not to itemize. The
+                                line stays — the client still needs to know
+                                what they are getting, just not what each part
+                                of it costs. */}
+                            {showRates && (
+                              <span className="shrink-0 tabular-nums text-muted-foreground">
+                                {item.rateCents == null
+                                  ? "—"
+                                  : money(item.rateCents)}
+                              </span>
+                            )}
+                          </div>
+                          {/* What this line actually buys. Indented and muted:
+                              it is detail, not another thing to pay for. */}
+                          {item.work && item.work.length > 0 && (
+                            <ul className="mt-1 space-y-0.5 border-l border-border pl-2.5 text-left">
+                              {item.work.map((step, i) => (
+                                <li
+                                  key={i}
+                                  className="text-[11px] leading-relaxed text-muted-foreground"
+                                >
+                                  {step}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </li>
                       ))}
                     </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <Empty
               title={t("preview_no_services")}

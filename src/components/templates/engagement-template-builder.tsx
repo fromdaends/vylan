@@ -55,6 +55,7 @@ import {
   ToggleRow,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
+import { MoneyInput } from "@/components/ui/money-input";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import {
   defaultPriceVisibility,
@@ -204,6 +205,11 @@ export function EngagementTemplateBuilder({
   >(initial?.payload.additionalSignerLabels ?? []);
   const [firmCountersigns, setFirmCountersigns] = useState(initial?.payload.firmCountersigns ?? false);
   const [depositRequired, setDepositRequired] = useState(initial?.payload.depositCents != null);
+  /** Who settles the deposit — the client, or one of the named signer ROLES.
+   *  A template never names a person; the person is chosen at creation. */
+  const [depositPayer, setDepositPayer] = useState(
+    initial?.payload.depositPayer ?? "",
+  );
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(
     initial?.payload.requirePaymentMethod ?? false,
   );
@@ -319,6 +325,7 @@ export function EngagementTemplateBuilder({
           firmCountersigns,
           depositCents,
           requirePaymentMethod,
+          depositPayer,
           // The blocks are the authoring shape; `items` stays the flat source
           // of truth every other surface (totals, invoices) already reads.
           items: flattenBlocks(blocks),
@@ -673,83 +680,81 @@ export function EngagementTemplateBuilder({
             {/* Canopy's Payment settings, in the same place the engagement
                 keeps them. The deposit moved here off the Signatures tab:
                 it is money, and one concept gets one home. */}
+            {/* ── THE SAME PAYMENT CARD AS THE ENGAGEMENT BUILDER ──────
+                Canopy's Payment settings: a checkbox, a labelled amount, and
+                who pays it — every label at the same left edge, one gap between
+                rows, no rules cutting the card into pieces. The founder, on the
+                engagement's version: "clean up the billing screen its
+                completely misalligned" — and then: "ALSO REMEBER TO UPDATE THE
+                TEMPLATE BUILDER AT THE SAME TIME." */}
             {tab === "services" && (
               <Fieldset title={tEng("payment_settings")}>
                 <div className="space-y-1.5">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm">
                     <input
                       type="checkbox"
+                      className="mt-0.5"
                       checked={requirePaymentMethod}
                       onChange={(e) => setRequirePaymentMethod(e.target.checked)}
                     />
                     {tEng("require_payment_method")}
                   </label>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="pl-6 text-[11px] leading-relaxed text-muted-foreground">
                     {tEng("require_payment_method_hint")}
                   </p>
                 </div>
-                <ToggleRow
-                  label={t("require_deposit")}
-                  hint={t("require_deposit_hint")}
-                  on={depositRequired}
-                  onToggle={() => setDepositRequired((v) => !v)}
-                >
-                  <Input
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="tpl-deposit"
+                    className="block text-sm font-medium"
+                  >
+                    {t("require_deposit")}
+                  </label>
+                  <MoneyInput
+                    id="tpl-deposit"
+                    valueCents={depositCents}
+                    onChangeCents={(cents) => {
+                      setDepositRequired(cents != null);
+                      setDepositAmount(cents == null ? "" : String(cents / 100));
+                    }}
                     placeholder={t("deposit_placeholder")}
-                    inputMode="decimal"
+                    className="max-w-[16rem]"
                   />
-                </ToggleRow>
-              </Fieldset>
-            )}
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {t("require_deposit_hint")}
+                  </p>
+                </div>
 
-            {/* ── THE WORK THESE SERVICES BRING (1620) ───────────────────
-                On the SAME tab as the services, because it is not a separate
-                decision — it is the other half of what a service is. The
-                founder: "I just wanna make sure that when you build a service
-                template that it's not separated from the task template because
-                that's confusing for the user... they're both connected."
-
-                It appears by itself when a service that carries work is
-                picked, and it is removable: the work came with the service,
-                but this template is allowed to disagree. */}
-            {tab === "services" && linkedWork.length > 0 && (
-              <Fieldset title={t("template_work_title")}>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  {t("template_work_hint")}
-                </p>
-                <ul className="space-y-2">
-                  {linkedWork.map((work) => (
-                    <li
-                      key={work.id}
-                      className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+                {/* Canopy's "Signer responsible for making payment". A template
+                    names the ROLE, never a person — the same rule its signer
+                    slots follow. */}
+                {depositCents != null && (
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="tpl-payer"
+                      className="block text-sm font-medium"
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{work.name}</p>
-                        {work.steps.length > 0 && (
-                          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                            {work.steps.slice(0, 6).join(" · ")}
-                            {work.steps.length > 6 &&
-                              ` +${work.steps.length - 6}`}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setTaskTemplateIds((prev) =>
-                            prev.filter((x) => x !== work.id),
-                          )
-                        }
-                        aria-label={t("remove")}
-                        className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                      {tEng("signer_pays_label")}
+                    </label>
+                    <select
+                      id="tpl-payer"
+                      value={depositPayer}
+                      onChange={(e) => setDepositPayer(e.target.value)}
+                      className="h-9 w-full max-w-[16rem] rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      <option value="">{tEng("signer_pays_client")}</option>
+                      {additionalSignerLabels
+                        .map((x) => x.trim())
+                        .filter(Boolean)
+                        .map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </Fieldset>
             )}
 

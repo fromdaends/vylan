@@ -3243,7 +3243,14 @@
     "request_builder_explainer": "Un modèle de demande est une liste réutilisable — les documents que vous demandez à un client, définis une fois et ajoutés à n'importe quel engagement.",
     "request_documents_hint": "Ce que le client doit envoyer. Marquez comme obligatoires ceux sans lesquels vous ne pouvez pas avancer.",
     "request_preview_label": "Ce que votre client verra",
-    "combine_items_hint": "Le client voit un seul montant, décrit dans vos mots, au lieu de chaque service listé séparément. Vos propres totaux ne changent pas."
+    "combine_items_hint": "Le client voit un seul montant, décrit dans vos mots, au lieu de chaque service listé séparément. Vos propres totaux ne changent pas.",
+    "add_billing_group": "Ajouter des éléments facturés autrement",
+    "preview_billed_once": "Facturé une fois",
+    "preview_billed_weekly": "Facturé chaque semaine",
+    "preview_billed_monthly": "Facturé chaque mois",
+    "preview_billed_quarterly": "Facturé chaque trimestre",
+    "preview_billed_yearly": "Facturé chaque année",
+    "totals_tbd_short": "À déterminer"
   },
   "Status": {
     "pending": "En attente",

@@ -465,16 +465,14 @@ export async function createEngagementAction(
   // Draft engagements don't count against the active cap, so the accountant
   // can keep building a draft while they figure out billing.
   if (payload.send) {
-    // Can't send an engagement with nothing to collect — the client would
-    // land on a portal with zero documents to upload. Saving as a draft is
-    // still allowed (send=false), so this only gates the send.
-    //
-    // Accepting on behalf is exempt: it records an answer already given, and
-    // an agreement reached on the phone does not become invalid because the
-    // job asks the client for nothing.
-    if (parsed.data.items.length === 0 && !payload.accept_on_behalf) {
-      return { error: "no_documents" };
-    }
+    // NO documents gate. It used to refuse to send an engagement that asked
+    // the client for nothing, on the reasoning that they would land on an empty
+    // portal. That stopped being true when every engagement became a proposal:
+    // what they land on is the document they are being asked to agree to, and
+    // the founder — "its entirely possible for an engagement to exist that
+    // doesnt require documents to be uploaded" — is describing most advisory
+    // work, a fixed-fee review, or anything billed without a file changing
+    // hands.
     const limits = await getFirmLimits();
     if (limits && !limits.canCreateEngagement) {
       return { error: "plan_limit_reached" };
