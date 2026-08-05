@@ -1817,42 +1817,13 @@ export function EngagementBuilder({
           what Canopy's is: who it is for and what it is called. */}
       {step === "tasks" && (
         <Card>
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
-            <CardTitle className="shrink-0 whitespace-nowrap text-base">
+          <CardHeader>
+            <CardTitle className="text-base">
               {t("section_tasks")}{" "}
               <span className="font-normal text-muted-foreground">
                 ({tasks.length})
               </span>
             </CardTitle>
-            <div className="flex items-center gap-2">
-              {/* Hidden when the firm has none — a dropdown whose only entry is
-                  its own placeholder is a control that does nothing. */}
-              {taskTemplates.length > 0 && (
-                <select
-                  // Reset to "" after every apply, so applying the SAME template
-                  // twice works. A <select> whose value already equals the
-                  // chosen option fires no change event, which would read as
-                  // the second click doing nothing.
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) applyTaskTemplate(e.target.value);
-                  }}
-                  aria-label={t("apply_task_template")}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                >
-                  <option value="">{t("apply_task_template")}</option>
-                  {taskTemplates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <Button type="button" variant="outline" size="sm" onClick={addTask}>
-                <Plus className="size-4" />
-                {t("add_task")}
-              </Button>
-            </div>
           </CardHeader>
           <CardContent>
             {/* Says what the template could not bring across, rather than
@@ -1988,6 +1959,44 @@ export function EngagementBuilder({
                 ))}
               </ul>
             )}
+
+            {/* ── THE ADD CONTROLS SIT UNDER THE LIST ──────────────────────
+                Canopy puts "+ Add task template" beneath the box of rows, not
+                in the header beside the title — you read what is there, then
+                add to the end of it. The founder, with their screenshot: "move
+                the Apply task template button below the task like box... it
+                sits below the actual box in the canopy screenshot."
+
+                The header keeps only the heading and the count. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+              <Button type="button" variant="ghost" size="sm" onClick={addTask}>
+                <Plus className="size-4" />
+                {t("add_task")}
+              </Button>
+              {/* Hidden when the firm has none — a dropdown whose only entry is
+                  its own placeholder is a control that does nothing. */}
+              {taskTemplates.length > 0 && (
+                <select
+                  // Reset to "" after every apply, so applying the SAME template
+                  // twice works. A <select> whose value already equals the
+                  // chosen option fires no change event, which would read as
+                  // the second click doing nothing.
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) applyTaskTemplate(e.target.value);
+                  }}
+                  aria-label={t("apply_task_template")}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  <option value="">{t("apply_task_template")}</option>
+                  {taskTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
