@@ -339,6 +339,20 @@ export async function createEngagementAction(
     template_id?: string | null;
     items: TemplateItem[];
     send: boolean;
+    /**
+     * Canopy's "Accept the proposal for the client and set the engagement to
+     * active" — the accountant asserting the client already said yes.
+     *
+     * Deliberately NOT the same as `send`: sending asks, this records an answer
+     * already given. It therefore skips the "you need documents to send" gate —
+     * an agreement reached on the phone does not become invalid because the job
+     * asks the client for nothing.
+     *
+     * Always recorded as accepted_by = 'firm', never 'client'. That distinction
+     * is the difference between a signature and a note that one was given, and
+     * it has to survive.
+     */
+    accept_on_behalf?: boolean;
     locale: "fr" | "en";
   },
   invoiceAttachment?: File | null,
@@ -446,7 +460,11 @@ export async function createEngagementAction(
     // Can't send an engagement with nothing to collect — the client would
     // land on a portal with zero documents to upload. Saving as a draft is
     // still allowed (send=false), so this only gates the send.
-    if (parsed.data.items.length === 0) {
+    //
+    // Accepting on behalf is exempt: it records an answer already given, and
+    // an agreement reached on the phone does not become invalid because the
+    // job asks the client for nothing.
+    if (parsed.data.items.length === 0 && !payload.accept_on_behalf) {
       return { error: "no_documents" };
     }
     const limits = await getFirmLimits();
@@ -695,6 +713,27 @@ export async function createEngagementAction(
       }
     } catch (e) {
       console.error("[createEngagement] enable repeat failed:", e);
+    }
+  }
+
+  // ── ACCEPTED ON THE FIRM'S WORD ──────────────────────────────────────
+  //
+  // Last, and after everything else has succeeded: an engagement that failed
+  // to build should not be marked agreed. Best-effort like the steps above —
+  // the engagement exists either way, and the detail page's own "Accept on
+  // behalf" button is the recovery path if this half fails.
+  if (payload.accept_on_behalf) {
+    try {
+      await acceptEngagement(engagementId, "firm");
+      await activateEngagement(engagementId);
+      const created = await getEngagement(engagementId);
+      if (created) {
+        await logUserActivity(created.firm_id, engagementId, "engagement_accepted", {
+          accepted_by: "firm",
+        });
+      }
+    } catch (e) {
+      console.error("[createEngagement] accept on behalf failed:", e);
     }
   }
 

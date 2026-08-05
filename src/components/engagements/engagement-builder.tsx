@@ -943,7 +943,12 @@ export function EngagementBuilder({
     });
   }
 
-  async function submit(send: boolean) {
+  async function submit(
+    send: boolean,
+    /** Canopy's "Accept proposal": record that the client already agreed and
+     *  set the engagement live, in the same save. */
+    acceptOnBehalf = false,
+  ) {
     setError(null);
     if (!clientId) {
       setError("missing_client");
@@ -1114,6 +1119,7 @@ export function EngagementBuilder({
               repeatInvoiceRecreate,
             items: cleanItems,
             send,
+            accept_on_behalf: acceptOnBehalf,
             locale,
           },
           invoiceActive ? invoiceAttachment : null,
@@ -1243,12 +1249,50 @@ export function EngagementBuilder({
       // what your edits are doing to the document they will read. The step it
       // highlights follows where you are working.
       preview={
-        <div className="mx-auto flex max-w-md justify-center">
+        <div className="mx-auto w-full max-w-md space-y-4">
           <ProposalPreview
             data={proposalData}
             locale={locale}
             activeStep={PREVIEW_STEP_FOR[step]}
           />
+
+          {/* ── CANOPY'S ACCEPT CARD ────────────────────────────────────
+              The founder, with Canopy's screenshot: "supposedly you built a
+              way to accept proposals on the behalf of the client. Where is
+              it... REPLICATE IT."
+
+              It WAS built — as a button on the engagement's own page, and only
+              once the engagement had been sent. So it was invisible from the
+              place you would look for it and from every engagement that had
+              not been sent yet. Canopy puts it in the builder, always
+              reachable, and they are right: the common case is a firm who
+              already has the client's yes and just wants the job set up.
+
+              Recorded as accepted_by = 'firm', never 'client' — a note that an
+              agreement was given, not a signature. */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-sm leading-relaxed">
+              {t("accept_on_behalf_card")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              disabled={pending || !clientId}
+              onClick={() => submit(false, true)}
+            >
+              {t("accept_proposal")}
+            </Button>
+            {/* Says WHY it is unavailable rather than sitting greyed out with
+                no explanation — the founder has been caught by a dead control
+                before. */}
+            {!clientId && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {t("accept_on_behalf_needs_client")}
+              </p>
+            )}
+          </div>
         </div>
       }
     >
