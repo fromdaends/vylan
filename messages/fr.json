@@ -2862,7 +2862,10 @@
     "proposal_who_signs_hint": "Qui doit signer avant que ce travail soit accepté. Le client signe par défaut ; ajoutez une place pour toute autre personne qui doit signer, comme un conjoint ou un deuxième administrateur.",
     "add_document_request_task": "Demander des documents",
     "item_service_empty": "Votre catalogue de services est vide — un service porte son prix et les tâches qu'il crée, donc en choisir un ici remplit tout ça.",
-    "item_service_empty_link": "Ajouter votre premier service"
+    "item_service_empty_link": "Ajouter votre premier service",
+    "accept_on_behalf_card": "Accepter la proposition au nom du client et activer l'engagement. À utiliser lorsqu'il a déjà accepté — par téléphone, par courriel ou en personne.",
+    "accept_proposal": "Accepter la proposition",
+    "accept_on_behalf_needs_client": "Choisissez d'abord un client."
   },
   "Attention": {
     "metric_active": "Actifs",

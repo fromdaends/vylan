@@ -2862,7 +2862,10 @@
     "proposal_who_signs_hint": "Who has to sign before this work is agreed. The client signs by default; add a slot for anyone else who needs to, like a spouse or a second director.",
     "add_document_request_task": "Ask for documents",
     "item_service_empty": "Nothing in your service catalogue yet — services carry their own price and the tasks they create, so picking one here fills all of that in.",
-    "item_service_empty_link": "Add your first service"
+    "item_service_empty_link": "Add your first service",
+    "accept_on_behalf_card": "Accept the proposal for the client and set the engagement to active. Use this when they have already agreed — by phone, by email, or in person.",
+    "accept_proposal": "Accept proposal",
+    "accept_on_behalf_needs_client": "Pick a client first."
   },
   "Attention": {
     "metric_active": "Active",
