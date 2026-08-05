@@ -47,7 +47,11 @@ export default async function TemplateEditPage({
     // Pre-1560 behaviour, byte for byte: firm templates only.
     if (tmpl.firm_id == null) notFound();
     return (
-      <div className="space-y-6 max-w-3xl mx-auto">
+      // px/pt/pb match TemplatesPageShell exactly. This page cannot USE that
+      // shell (it is a detail page, not a list) but it must sit at the same
+      // distance from the edges — the founder: the builder opened "glitched
+      // off the top of the screen".
+      <div className="mx-auto w-full max-w-3xl space-y-6 px-6 pt-7 pb-18 lg:px-11">
         <Breadcrumb
           label={tCommon("breadcrumb")}
           items={[
@@ -71,7 +75,7 @@ export default async function TemplateEditPage({
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-6">
+    <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 pt-7 pb-18 lg:px-11">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[

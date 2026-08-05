@@ -7,6 +7,7 @@ import { getPathname } from "@/i18n/navigation";
 import {
   cloneTemplateToFirm,
   getTemplate,
+  listTemplates,
   updateTemplate,
   deleteTemplate,
   BLANK_TEMPLATE_ID,
@@ -39,12 +40,31 @@ export async function createBlankTemplateAction(formData: FormData) {
   const locale =
     (formData.get("__app_locale") === "en" ? "en" : "fr") as "fr" | "en";
   const name = locale === "fr" ? "Nouveau modèle" : "New template";
-  const created = await cloneTemplateToFirm(BLANK_TEMPLATE_ID, name);
+
+  // ── REUSE AN UNTOUCHED BLANK BEFORE MINTING ANOTHER ─────────────────────
+  //
+  // The founder's Client requests list had collected several identical
+  // "New template — 0 documents" rows. Every arrival here made one: a refresh,
+  // a back-button, a second click on Create. None of them was ever filled in,
+  // and none of them could be told apart.
+  //
+  // A blank with the default name and no items IS the thing about to be
+  // created, so hand back the one already sitting there. Deliberately narrow:
+  // the moment somebody renames it or adds a line it stops matching and a new
+  // one is made, so this can never reopen work in progress.
+  const existing = (await listTemplates()).find(
+    (t) =>
+      t.firm_id != null &&
+      t.items.length === 0 &&
+      (t.name === name || t.name === "New template" || t.name === "Nouveau modèle"),
+  );
+  const target = existing ?? (await cloneTemplateToFirm(BLANK_TEMPLATE_ID, name));
+
   revalidatePath("/templates/requests");
   redirect(
     getPathname({
       locale,
-      href: { pathname: `/templates/${created.id}` },
+      href: { pathname: `/templates/${target.id}` },
     }),
   );
 }
