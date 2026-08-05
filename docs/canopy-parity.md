@@ -188,3 +188,72 @@ visible change to a daily-use page, so it is the founder's call.
    test files.
 5. **Duplicate keys inside one namespace** parse fine and silently override.
    Check before committing `messages/*.json`.
+
+---
+
+## THE PROPOSAL *IS* THE ENGAGEMENT LETTER — researched, verified, decided
+
+The founder asked: *"isnt the proposal whats supposed to be signed at the begginign
+and then the engagement letter covers everything within that contract"* and then
+*"you tell me whats the best thing to do. I dont know whats like normal for
+something like this look it up."*
+
+**Answer: ONE document.** Four competitors and the professional standards all agree,
+and every quote below was re-fetched and confirmed at its source by a second agent
+prompted to refute it. Two fabricated quotes were caught and discarded in that pass —
+which is exactly why it ran.
+
+| Source | Verdict | Verbatim |
+|---|---|---|
+| **Canopy** | one | "Engagements align client communication, services, billing, and signatures in one document." · client docs say "Click on the proposal **or** engagement to begin" — same object, two words |
+| **Ignition** | one | "your engagement letter or contract terms form part of your proposal" |
+| **TaxDome** | one | object is literally named "Proposals & ELs"; "The Terms page is where you provide your engagement letter or contract" |
+| **Karbon** | one | one Engagement record with a field called "Agreement Text" |
+| **CAS/ISA 210, AR-C 80** | one | terms must be recorded in "an engagement letter **or other suitable form of written agreement**" |
+
+**The standards line is the one that settles it.** The requirement is CONTENT IN
+WRITING BEFORE WORK STARTS, not a document with a particular name. A signed proposal
+containing the required content IS the engagement letter, professionally. "Proposal"
+appears zero times as a document name in any standard.
+
+Two further findings that affect the build:
+- **Fees are OPTIONAL** in all three standards — so the "hide prices from the client"
+  visibility switches break nothing legally.
+- **A signature is not uniformly required** — the standards require written agreement,
+  not universally a signature.
+
+### What happens to migration 1580 (the uploaded PDF)
+
+**It stays. Nothing shipped breaks.** It stops being a SEPARATE thing the client signs
+and becomes one of two ways to fill the proposal's Terms section — type them, or
+attach the firm's PDF, which rides at the back of the one proposal. Ignition does
+exactly this: "any additional documents will be attached to your client's proposal
+PDF in one file."
+
+The automated send stays live-armed and becomes the fallback for a firm that has not
+built a proposal yet. The only thing discarded is the idea of a second signature,
+which was never shipped.
+
+⚠️ This still needs the OTHER SESSION's coordination — 1580 is theirs and is
+live-armed for ZT & Associates.
+
+### ⚠️ WHAT THE RESEARCH COULD NOT ESTABLISH — do not build on an invented spec
+
+No vendor documents ANY of these. Each is a Vylan decision, to be made deliberately:
+
+1. **Whether terms are frozen at signing.** Extend the repo's copy-on-use rule, but
+   know you are deciding it, not following anyone.
+2. **Firm countersignature.** No vendor documents one. US compilation standards want
+   both sides to sign; the Canadian one clearly requires only the client. The existing
+   optional toggle is right *because* nobody knows.
+3. **Client declines.** No vendor documents a declined state. It must be invented.
+4. **Bilingual / province-specific terms.** None of the four handle it. Vylan's
+   one-letter-per-language design is AHEAD of all of them — no precedent to copy.
+5. **Amending mid-engagement or re-signing next year.** Undocumented everywhere.
+6. **Ignition's "automatically convert to an engagement letter"** is MARKETING COPY
+   only — no help article describes it. Do NOT build a status change on it.
+7. **Canopy's own tab names are inconsistent** between two of their articles
+   (Introduction/Services/Terms/Signatures vs Introduction/Signers/Terms/Signatures).
+   Ours matches one version; do not treat it as a verified spec.
+8. **Review engagements** were NOT verified as requiring a letter in Canada — only
+   compilations are confirmed. Do not say otherwise in marketing.
