@@ -81,6 +81,7 @@ import {
 // The blocks editor renders the item rows now; only the catalogue type is still
 // needed here, and the flat draft type comes with flattenBlocks.
 import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
+import type { InvoiceAutoMode } from "@/lib/invoices/resolve";
 import {
   emptyTask,
   meaningfulTasks,
@@ -152,11 +153,18 @@ const KNOWN_ERRORS = new Set<string>([
   "invoice_attachment_upload_error",
 ]);
 
-export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
+// Imported and re-exported, NOT re-declared: this file used to carry its own
+// copy of the union, so adding a timing meant remembering to widen it twice.
+export type { InvoiceAutoMode };
 // Builder-local timing. Adds "now": create the invoice immediately at engagement
 // creation (payable right away), vs. the deferred on_completion / delayed
 // automation. "off" = no invoice.
-export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
+export type InvoiceTiming =
+  | "off"
+  | "now"
+  | "on_acceptance"
+  | "on_completion"
+  | "delayed";
 
 // The rail's order IS the order of the decision: who it is for, what you are
 // asking them for, what it costs, how hard you chase.
@@ -1139,7 +1147,9 @@ export function EngagementBuilder({
     // Only the deferred timings persist as an automation mode; "now" creates the
     // invoice immediately and leaves the automation off.
     const autoMode: InvoiceAutoMode =
-      invoiceMode === "on_completion" || invoiceMode === "delayed"
+      invoiceMode === "on_acceptance" ||
+      invoiceMode === "on_completion" ||
+      invoiceMode === "delayed"
         ? invoiceMode
         : "off";
     const invoiceDelay =
@@ -1218,6 +1228,9 @@ export function EngagementBuilder({
             // client's name is dropped: the snapshot reader takes it from the
             // engagement's own client, so a renamed client still reads
             // correctly on their own document.
+            // Its own field as well as the frozen proposal (1680): the
+            // snapshot is what the client READS, this is what gets CHARGED.
+            deposit_cents: proposalDepositCents,
             proposal: {
               ...proposalData,
               // The snapshot reader takes the client's name from the
@@ -2421,6 +2434,9 @@ export function EngagementBuilder({
                     <SelectContent>
                       <SelectItem value="off">{t("invoice_mode_off")}</SelectItem>
                       <SelectItem value="now">{t("invoice_mode_now")}</SelectItem>
+                      <SelectItem value="on_acceptance">
+                        {t("invoice_mode_on_acceptance")}
+                      </SelectItem>
                       <SelectItem value="on_completion">
                         {t("invoice_mode_on_completion")}
                       </SelectItem>

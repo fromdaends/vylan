@@ -18,7 +18,7 @@
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   createPaymentRequestSR,
-  getLatestPaymentRequestForEngagementSR,
+  getPaymentRequestForEngagementKindSR,
   type CreatePaymentRequestInput,
 } from "@/lib/db/payment-requests";
 import {
@@ -64,9 +64,24 @@ export async function sendEngagementInvoice(
     // same status rule as at-spawn. The existing "never bill twice" guard
     // below is what makes workflow + invoice_auto_mode overlap safe.
     atStage?: boolean;
+    /**
+     * WHICH charge this is (migration 1680).
+     *
+     * 'engagement' — the job's invoice, everything this function meant before.
+     * 'deposit'    — what the proposal said was due when the client accepted.
+     *                Its amount comes from `engagements.deposit_cents`, and it
+     *                may sit alongside the engagement invoice: they are two
+     *                charges on one job, not two attempts at one charge.
+     *
+     * ONE sender rather than two, so the rails gate, the tax upgrade, the
+     * numbering, the pay-link email and the activity entry cannot diverge
+     * between a deposit and a final bill.
+     */
+    kind?: "engagement" | "deposit";
   } = {},
 ): Promise<InvoiceSendResult> {
   const sb = getServiceRoleSupabase();
+  const kind = opts.kind ?? "engagement";
 
   const { data: engagement } = await sb
     .from("engagements")
@@ -76,6 +91,20 @@ export async function sendEngagementInvoice(
     .eq("id", engagementId)
     .maybeSingle();
   if (!engagement) return { ok: false, reason: "no_engagement" };
+
+  // The deposit's amount lives in its own column (1680). Read separately and
+  // best-effort: before the migration is applied the column does not exist, so
+  // a deposit simply cannot be raised — the honest outcome, since nothing could
+  // have stored one either.
+  let depositCents: number | null = null;
+  if (kind === "deposit") {
+    const { data: dep } = await sb
+      .from("engagements")
+      .select("deposit_cents")
+      .eq("id", engagementId)
+      .maybeSingle();
+    depositCents = (dep?.deposit_cents as number | null) ?? null;
+  }
 
   // Deliverables lock preference + description (migration 0610), read best-effort
   // so a pre-0610 environment simply gets the safe defaults (not locked / no
@@ -98,22 +127,29 @@ export async function sendEngagementInvoice(
   // (the accountant may have reopened it in the meantime). At-spawn invoicing
   // (recurring series) instead requires a LIVE occurrence — never a cancelled
   // or already-completed one.
+  // A DEPOSIT is billed the moment the client agrees, so it wants a LIVE
+  // engagement — the same rule as an at-spawn invoice, and the opposite of the
+  // completion rule that governs the final bill.
   const statusOk =
-    opts.atSpawn || opts.atStage
+    opts.atSpawn || opts.atStage || kind === "deposit"
       ? engagement.status === "sent" || engagement.status === "in_progress"
       : engagement.status === "complete";
   if (!statusOk) {
     return { ok: false, reason: "not_complete" };
   }
 
-  const amountCents = engagement.invoice_amount_cents as number | null;
+  const amountCents =
+    kind === "deposit"
+      ? depositCents
+      : (engagement.invoice_amount_cents as number | null);
   if (!amountCents || amountCents <= 0) {
     return { ok: false, reason: "no_amount" };
   }
 
-  // Idempotency: never bill twice. Any existing non-cancelled request (a prior
-  // auto-send, a job re-run, or a manual request) means we stop.
-  const existing = await getLatestPaymentRequestForEngagementSR(engagementId);
+  // Idempotency: never bill twice FOR THE SAME KIND. A deposit and the final
+  // invoice are two charges on one job and must not block each other, which is
+  // what the widened unique index in 1680 enforces at the database.
+  const existing = await getPaymentRequestForEngagementKindSR(engagementId, kind);
   if (existing && existing.status !== "canceled") {
     return { ok: false, reason: "already_sent" };
   }
@@ -170,7 +206,7 @@ export async function sendEngagementInvoice(
     .eq("id", engagement.id)
     .maybeSingle();
   const freshOk =
-    opts.atSpawn || opts.atStage
+    opts.atSpawn || opts.atStage || kind === "deposit"
       ? fresh?.status === "sent" || fresh?.status === "in_progress"
       : fresh?.status === "complete";
   if (!freshOk) {
@@ -253,6 +289,7 @@ export async function sendEngagementInvoice(
       requested_by_user_id: null,
       // Carry the lock preference set at engagement creation (0610).
       locks_deliverables: locksDeliverables,
+      kind,
       ...invoiceFields,
     });
     if (row !== "seq_duplicate") break;

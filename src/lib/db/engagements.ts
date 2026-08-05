@@ -58,7 +58,7 @@ export type Engagement = {
   // invoice_amount_cents is the amount to bill, captured at setup. All optional
   // on the type so reads survive the pre-migration window (column absent →
   // undefined → treated as 'off' / no amount).
-  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_auto_mode?: "off" | "on_acceptance" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   invoice_amount_cents?: number | null;
   // Deliverables-lock preference (migration 0610). Gates the Final documents
@@ -373,7 +373,14 @@ export type CreateEngagementInput = {
   // "AI Analyze" switch from the engagement builder. Defaults true upstream.
   ai_enabled: boolean;
   // Invoice automation (migration 0590). 'off' = no automatic invoice.
-  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_auto_mode?: "off" | "on_acceptance" | "on_completion" | "delayed";
+  /**
+   * What the proposal says is due the moment the client accepts (1680).
+   *
+   * Its OWN column rather than only the frozen proposal jsonb, because it has
+   * to be invoiced — a number inside a snapshot cannot be charged.
+   */
+  deposit_cents?: number | null;
   invoice_delay_days?: number | null;
   invoice_amount_cents?: number | null;
   // Deliverables lock preference + description (migration 0610), carried onto an
@@ -502,6 +509,13 @@ export async function createEngagementWithItems(
   // them (invoice automation is simply inert until the migration lands).
   const automationOn =
     !!input.invoice_auto_mode && input.invoice_auto_mode !== "off";
+  // Only when there IS one: a null would be indistinguishable from "column
+  // absent" in the retry ladder, and an engagement with no deposit must not
+  // depend on 1680 having been applied.
+  const depositCol =
+    typeof input.deposit_cents === "number" && input.deposit_cents > 0
+      ? { deposit_cents: input.deposit_cents }
+      : {};
   // 0590 automation columns and the 0610 lock/description columns are kept
   // separate so the tiered retry can drop ONLY the newest (0610) columns without
   // losing the automation (0590) when just 0610 hasn't been applied yet.
@@ -546,6 +560,11 @@ export async function createEngagementWithItems(
       // does not have them: the engagement is created WITHOUT a proposal
       // rather than not at all, and the portal falls back to its normal view.
       ...proposalCols,
+      // 1680, the newest of all. Dropped by the same first tier — the
+      // engagement is created without a deposit rather than not at all, and
+      // nothing is charged, which is the honest outcome on a database that
+      // cannot record one.
+      ...depositCol,
     })
     .select("*")
     .single();

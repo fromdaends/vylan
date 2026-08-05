@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { applyAcceptedBilling } from "@/lib/engagements/on-accepted";
 import {
   createEngagementWithItems,
   sendEngagement,
@@ -151,7 +152,7 @@ const CreateSchema = z
     ai_enabled: z.boolean().optional().default(true),
     // Invoice automation (migration 0590). Optional + defaults 'off'.
     invoice_auto_mode: z
-      .enum(["off", "on_completion", "delayed"])
+      .enum(["off", "on_acceptance", "on_completion", "delayed"])
       .optional()
       .default("off"),
     invoice_delay_days: z.number().int().min(1).max(365).nullable().optional(),
@@ -302,7 +303,7 @@ export async function createEngagementAction(
     due_date: string | null;
     tax_year?: number | null;
     ai_enabled?: boolean;
-    invoice_auto_mode?: "off" | "on_completion" | "delayed";
+    invoice_auto_mode?: "off" | "on_acceptance" | "on_completion" | "delayed";
     invoice_delay_days?: number | null;
     invoice_amount_cents?: number | null;
     invoice_create_now?: boolean;
@@ -310,6 +311,13 @@ export async function createEngagementAction(
     invoice_description?: string | null;
     /** The client-facing document, frozen at creation. */
     proposal?: Record<string, unknown> | null;
+    /**
+     * What the proposal says is due the moment the client accepts (1680).
+     *
+     * Its own column rather than only the frozen proposal, because it has to be
+     * INVOICED — a number buried in a jsonb snapshot cannot be charged.
+     */
+    deposit_cents?: number | null;
     service_items?: {
       name: string;
       service_id?: string | null;
@@ -493,6 +501,11 @@ export async function createEngagementAction(
       tax_year: parsed.data.tax_year ?? null,
       ai_enabled: parsed.data.ai_enabled,
       invoice_auto_mode: parsed.data.invoice_auto_mode,
+      // What the proposal says is due on acceptance (1680). Its own column so
+      // it can be INVOICED — a number buried in the frozen jsonb cannot be
+      // charged. Dropped by the insert's retry ladder before the migration
+      // lands, exactly like every other newest-column-first field here.
+      deposit_cents: payload.deposit_cents ?? null,
       // Normalize: only carry the delay/amount that the chosen mode uses, so an
       // 'off' engagement never stores a stray amount and 'on_completion' never
       // stores a delay.
@@ -726,6 +739,7 @@ export async function createEngagementAction(
     try {
       await acceptEngagement(engagementId, "firm");
       await activateEngagement(engagementId);
+      await applyAcceptedBilling(engagementId);
       const created = await getEngagement(engagementId);
       if (created) {
         await logUserActivity(created.firm_id, engagementId, "engagement_accepted", {
@@ -845,6 +859,9 @@ export async function acceptOnBehalfAction(formData: FormData) {
   await logUserActivity(engagement.firm_id, id, "engagement_accepted", {
     accepted_by: "firm",
   });
+  // The SAME billing consequences the client's own Accept triggers — a deposit
+  // is owed because they agreed, not because of which button recorded it.
+  await applyAcceptedBilling(id);
   revalidatePath(`/engagements/${id}`);
   revalidatePath("/engagements");
 }

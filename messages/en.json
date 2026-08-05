@@ -2910,7 +2910,8 @@
     "price_visibility_itemized": "Show the price of each line",
     "price_visibility_blocks": "Show a subtotal per billing cycle",
     "price_visibility_total": "Show the engagement total",
-    "item_service_creates": "Creates “{name}” on the Tasks step — {count} steps."
+    "item_service_creates": "Creates “{name}” on the Tasks step — {count} steps.",
+    "invoice_mode_on_acceptance": "When the client accepts"
   },
   "Attention": {
     "metric_active": "Active",
@@ -3084,7 +3085,7 @@
     "freq_monthly": "Monthly",
     "freq_quarterly": "Quarterly",
     "freq_yearly": "Yearly",
-    "combine_items": "Show as one line to the client",
+    "combine_items": "Show these as one line to the client",
     "client_note_placeholder": "A note for the client about this charge",
     "price_visibility": "What the client sees",
     "show_itemized_price": "Price on each service",
@@ -3238,7 +3239,8 @@
     "tab_request_documents": "Documents",
     "request_builder_explainer": "A document request template is a checklist you reuse — the documents you ask a client for, defined once and dropped onto any engagement.",
     "request_documents_hint": "What the client is asked to send. Mark the ones you cannot proceed without as required.",
-    "request_preview_label": "What your client will see"
+    "request_preview_label": "What your client will see",
+    "combine_items_hint": "The client sees a single charge with your own wording instead of each service listed separately. Your own totals are unaffected."
   },
   "Status": {
     "pending": "Pending",

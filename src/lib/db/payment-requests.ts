@@ -100,6 +100,12 @@ export type CreatePaymentRequestInput = {
   // Deliverables lock (migration 0610). Optional so callers that don't gate
   // Final documents omit it; the insert drops it gracefully pre-0610.
   locks_deliverables?: boolean;
+  /**
+   * Which charge this is (migration 1680): the job's invoice, or the deposit
+   * the client owed on accepting. Optional so callers that predate it insert
+   * exactly as before, and dropped on a pre-1680 database.
+   */
+  kind?: "engagement" | "deposit";
   // Native-invoice payload (migration 0750) — present only on generated
   // invoices; simple/attached invoices omit every field and insert exactly as
   // before. The caller (lib/invoices/create) computes all of it server-side.
@@ -600,16 +606,34 @@ export async function createPaymentRequestSR(
   input: CreatePaymentRequestInput,
 ): Promise<PaymentRequest | "duplicate" | "seq_duplicate" | null> {
   const sb = getServiceRoleSupabase();
-  const { locks_deliverables, ...base } = input;
-  const withLock =
-    locks_deliverables != null
-      ? { ...base, auto: true, locks_deliverables }
-      : { ...base, auto: true };
+  const { locks_deliverables, kind, ...base } = input;
+  // Newest columns first, dropped one tier at a time — the ladder this repo
+  // uses so a deploy that lands before its migration degrades instead of
+  // failing. A pre-1680 database has no `kind`; a pre-0610 one has no lock.
+  const full = {
+    ...base,
+    auto: true,
+    ...(locks_deliverables != null ? { locks_deliverables } : {}),
+    ...(kind != null ? { kind } : {}),
+  };
   let { data, error } = await sb
     .from("payment_requests")
-    .insert(withLock)
+    .insert(full)
     .select("*")
     .single();
+  // Pre-1680: retry without `kind`. The invoice still goes out; it simply has
+  // no kind, which is what every row meant before the column existed.
+  if (error && isUnknownColumnError(error) && kind != null) {
+    ({ data, error } = await sb
+      .from("payment_requests")
+      .insert({
+        ...base,
+        auto: true,
+        ...(locks_deliverables != null ? { locks_deliverables } : {}),
+      })
+      .select("*")
+      .single());
+  }
   // Pre-0610: retry WITHOUT the lock column (the lock is inert until 0610 lands).
   if (error && isUnknownColumnError(error) && locks_deliverables != null) {
     ({ data, error } = await sb
@@ -631,6 +655,45 @@ export async function createPaymentRequestSR(
     return null;
   }
   return data as PaymentRequest;
+}
+
+/**
+ * The live invoice of ONE KIND for an engagement (migration 1680).
+ *
+ * A deposit and the final bill are two charges on one job, so "has this been
+ * invoiced already" has to be asked per kind — otherwise raising the deposit at
+ * acceptance would permanently block the invoice at completion.
+ *
+ * Degrades to the any-kind lookup before 1680 is applied: without the column
+ * there is only one kind of invoice, so the narrower question and the wider one
+ * have the same answer, and today's behaviour is preserved exactly.
+ */
+export async function getPaymentRequestForEngagementKindSR(
+  engagementId: string,
+  kind: "engagement" | "deposit",
+): Promise<PaymentRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("*")
+    .eq("engagement_id", engagementId)
+    .eq("kind", kind)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchema(error)) {
+      // Pre-1680. A deposit cannot exist yet, so asking about one must not
+      // return the ENGAGEMENT invoice and read as "already billed".
+      return kind === "deposit"
+        ? null
+        : getLatestPaymentRequestForEngagementSR(engagementId);
+    }
+    console.error("[payment-requests] getForKind(SR) failed:", error);
+    return null;
+  }
+  return (data as PaymentRequest) ?? null;
 }
 
 export async function getLatestPaymentRequestForEngagementSR(

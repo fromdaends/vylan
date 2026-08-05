@@ -74,7 +74,7 @@ type StageEngagementRow = {
   stage_history?: unknown;
   preparation_started_at?: string | null;
   invoice_locks_deliverables?: boolean;
-  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_auto_mode?: "off" | "on_acceptance" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   completed_at?: string | null;
   // Workflow snapshot + confirm gates (migration 1560). Absent pre-1560 —
