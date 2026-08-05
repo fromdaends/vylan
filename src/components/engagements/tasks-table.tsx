@@ -61,6 +61,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
   Check,
+  CheckCircle2,
   ChevronRight,
   ExternalLink,
   Flag,
@@ -341,24 +342,30 @@ export function TasksTable({
   const kindLabel = (kind: string) => t(taskKindLabelKey(kind) as "kind_task");
 
   /**
-   * Tick a task off — or put it back.
+   * Tick tasks off — the ceremony, kept.
    *
-   * The founder: "it's too fast, and there's no actual check mark. It just
-   * disappears instantly... there should be a little pop up from the bottom
-   * that says undo."
+   * The founder, when this was a per-row box: "it's too fast, and there's no
+   * actual check mark. It just disappears instantly... there should be a little
+   * pop up from the bottom that says undo."
    *
-   * So three things happen instead of one. The box shows a CHECK. The row HOLDS
-   * its place for a few seconds even though it no longer belongs in this view,
-   * so the check is something you see rather than infer. And a toast offers
-   * UNDO for as long as the row is still there — the two are deliberately the
-   * same length, so the offer never outlives the thing it refers to.
+   * The box is gone (see the row for why — it had become one of two side by
+   * side) but none of that reasoning went with it. Three things still happen
+   * instead of one. The rows HOLD their place for a few seconds even though
+   * they no longer belong in this view, so the change is something you see
+   * rather than infer. A toast offers UNDO for as long as they are still there
+   * — the two are deliberately the same length, so the offer never outlives the
+   * thing it refers to. And undo goes back to where each task WAS, one by one,
+   * not to a generic "to do": a task that was "Needs review" must not come back
+   * as untouched, and twelve of them must not all come back as the same thing.
    */
-  function setDone(task: TaskRow, done: boolean) {
-    const next = done ? doneStatus : todoStatus;
-    const previous = statusOf(task);
-    if (!next) return;
+  function markDone(tasks: TaskRow[]) {
+    if (!doneStatus || tasks.length === 0) return;
+    // Captured BEFORE the write, per task. This is the whole reason undo is
+    // not a second bulk call.
+    const previous = tasks.map((task) => ({ task, status: statusOf(task) }));
+    const ids = tasks.map((x) => x.id);
 
-    const write = (target: FirmStatus) =>
+    const write = (task: TaskRow, target: FirmStatus) =>
       run({ id: task.id, status: target.bucket, statusId: target.id }, () =>
         updateTaskAction({
           taskId: task.id,
@@ -368,31 +375,30 @@ export function TasksTable({
         }),
       );
 
-    write(next);
-    if (!done) {
-      // Un-ticking needs no ceremony: the row is coming back into view, which
-      // is its own confirmation.
-      setJustDone((ids) => ids.filter((id) => id !== task.id));
-      return;
-    }
+    for (const task of tasks) write(task, doneStatus);
 
-    setJustDone((ids) => [...ids, task.id]);
+    setJustDone((prev) => [...prev, ...ids]);
     window.setTimeout(
-      () => setJustDone((ids) => ids.filter((id) => id !== task.id)),
+      () => setJustDone((prev) => prev.filter((id) => !ids.includes(id))),
       DONE_LINGER_MS,
     );
-    toast.success(t("task_done_toast", { title: task.title }), {
-      duration: DONE_LINGER_MS,
-      action: {
-        label: t("undo"),
-        onClick: () => {
-          setJustDone((ids) => ids.filter((id) => id !== task.id));
-          // Back to where it WAS, not to a generic "to do" — a task that was
-          // "Needs review" must not come back as untouched.
-          write(previous);
+    selection.clear();
+
+    toast.success(
+      tasks.length === 1
+        ? t("task_done_toast", { title: tasks[0].title })
+        : t("tasks_done_toast", { count: tasks.length }),
+      {
+        duration: DONE_LINGER_MS,
+        action: {
+          label: t("undo"),
+          onClick: () => {
+            setJustDone((prev) => prev.filter((id) => !ids.includes(id)));
+            for (const { task, status } of previous) write(task, status);
+          },
         },
       },
-    });
+    );
   }
 
   // The label and colour a row wears. Falls back to the built-in three when the
@@ -564,7 +570,6 @@ export function TasksTable({
 
   // Where the tick-box sends a task, decided by the firm's own order.
   const doneStatus = statusOptions.find((x) => x.bucket === "done");
-  const todoStatus = statusOptions.find((x) => x.bucket === "todo");
 
   const clientOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -862,7 +867,6 @@ export function TasksTable({
                   kindLabel={kindLabel}
                   t={t}
                   onOpenDetail={() => setDetailId(task.id)}
-                  onSetDone={(done) => setDone(task, done)}
                   onOpenScreen={onOpen}
                   run={run}
                 />
@@ -912,6 +916,27 @@ export function TasksTable({
                 runBulk({ taskIds: [], restore: true }, t("task_restore")),
             },
           ] : [
+            // FIRST, and on its own. Finishing work is the most common thing
+            // anyone does to a task list, and it used to be a box on every row
+            // until that box became one of two sitting side by side. It is not
+            // allowed to end up as the ninth item inside a status submenu.
+            ...(doneStatus
+              ? [
+                  {
+                    key: "done",
+                    label: t("task_mark_done_bulk"),
+                    icon: CheckCircle2,
+                    // NOT runBulk. Every other action on this bar is a single
+                    // write with a single "moved 8" toast; this one keeps the
+                    // linger and the per-task undo the row box used to carry,
+                    // which needs each task's previous status remembered.
+                    onSelect: () =>
+                      markDone(
+                        rows.filter((r) => selection.ids.includes(r.id)),
+                      ),
+                  },
+                ]
+              : []),
             {
               key: "status",
               label: t("task_change_status"),
@@ -1061,7 +1086,6 @@ function Row({
   kindLabel,
   t,
   onOpenDetail,
-  onSetDone,
   onOpenScreen,
   run,
 }: {
@@ -1080,8 +1104,6 @@ function Row({
   kindLabel: (kind: string) => string;
   t: ReturnType<typeof useTranslations<"Engagements">>;
   onOpenDetail: () => void;
-  /** Tick it off, or put it back. The table owns the pause and the undo. */
-  onSetDone: (done: boolean) => void;
   onOpenScreen?: (taskId: string) => void;
   run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
 }) {
@@ -1091,7 +1113,6 @@ function Row({
   const comment = useCommentFromMenu();
   // Only a kind with a real screen is clickable through.
   const openable = Boolean(onOpenScreen && taskKindHasScreen(task.kind));
-  const isDone = status.bucket === "done";
 
   // THE SAME MENU AN ENGAGEMENT ROW HAS. Founder: "you should have the same
   // options you have when right clicking a task that you have for an
@@ -1242,10 +1263,18 @@ function Row({
         isSelected && "bg-accent-subtle/40",
       )}
     >
-      {/* The SELECTOR, not the done tick. They are different questions asked in
-          adjacent columns, so they get different controls: a square box you
-          tick to act on, and the rounded box beside the name that finishes the
-          work. */}
+      {/* THE ONLY BOX ON THE ROW. It selects.
+          There used to be a second one right beside it that marked the task
+          done, and for a while that was the right shape — the founder had said
+          of the first version "how are you supposed to mark a task done. thats
+          a major design flaw". Then bulk actions arrived and added THIS column,
+          and two rounded boxes an inch apart asked two different questions with
+          no way to tell which was which: "there shouldnt be 2 rows of circle
+          selectors... MERGE THE TWO TOGETHER/GETRID OF THE RIGHT SIDE ONE."
+          So finishing work moved to where the selection already leads — tick
+          the row, hit Mark done on the bar (it is the FIRST action there, not
+          buried under Change status) — and the pill beside the name still sets
+          any of the firm's states directly. Do not reintroduce a second box. */}
       <td className="w-8 px-2 py-2" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
@@ -1257,33 +1286,6 @@ function Row({
       </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-2">
-        {/* ONE CLICK TO TICK IT OFF. The founder, on the first version of this
-            column: "how are you supposed to mark a task done. thats a major
-            design flaw" — and they were right. Replacing the checkbox with a
-            status menu made the single most common action on a task list cost
-            two clicks and a read.
-            So both live here: the BOX finishes it (and un-finishes it), the
-            PILL beside it is for saying which of the firm's states it is in.
-            A menu was still the right call for the pill — nine statuses cannot
-            be clicked through — but it was never a replacement for this. */}
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetDone(!isDone);
-          }}
-          aria-label={t("task_mark_done", { title: task.title })}
-          aria-pressed={isDone}
-          className={cn(
-            "flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors disabled:opacity-40",
-            isDone
-              ? "border-foreground bg-foreground text-background"
-              : "border-border hover:border-foreground/60",
-          )}
-        >
-          {isDone && <Check className="size-3" aria-hidden />}
-        </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={!canEdit}>
             <button

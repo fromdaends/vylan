@@ -432,14 +432,43 @@ describe("TasksTable — the two screens", () => {
 
 // Founder: "it's too fast, and there's no actual check mark. It just disappears
 // instantly... there should be a little pop up from the bottom that says undo."
+//
+// The per-row box that used to do this is GONE — it had become one of two boxes
+// sitting side by side once bulk selection arrived, and the founder: "there
+// shouldnt be 2 rows of circle selectors... MERGE THE TWO TOGETHER/GETRID OF
+// THE RIGHT SIDE ONE." Finishing work now goes through the selection that was
+// already there. Every guarantee below is unchanged, which is the point.
 describe("TasksTable — finishing a task is a moment, not a disappearance", () => {
+  /** Tick a row, then hit Mark done on the bulk bar. */
+  const finish = (...titles: string[]) => {
+    for (const title of titles) {
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: new RegExp(`Select ${title}`) }),
+      );
+    }
+    fireEvent.click(
+      screen.getByRole("button", { name: en.Engagements.task_mark_done_bulk }),
+    );
+  };
+
+  it("has ONE box per row — the second one is what got merged away", () => {
+    renderTable();
+    const row = screen
+      .getByRole("button", { name: /Details for Mike soon/ })
+      .closest("tr")!;
+    // Not "one checkbox and one button that looks like a checkbox" — one
+    // control, full stop.
+    expect(within(row).getAllByRole("checkbox")).toHaveLength(1);
+    expect(
+      within(row).queryByRole("button", { name: /Mark Mike soon done/ }),
+    ).toBeNull();
+  });
+
   it("keeps the row in place after it is ticked, so the check can be seen", () => {
     renderTable();
     expect(names()).toContain("Mike soon");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Mark Mike soon done/ }),
-    );
+    finish("Mike soon");
 
     // Still there, even though "Active work" no longer describes it. A row that
     // vanishes on the same frame as the click reads as "something happened, no
@@ -449,9 +478,7 @@ describe("TasksTable — finishing a task is a moment, not a disappearance", () 
 
   it("offers Undo for exactly as long as the row lingers", () => {
     renderTable();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Mark Mike soon done/ }),
-    );
+    finish("Mike soon");
 
     expect(toastSuccess).toHaveBeenCalledTimes(1);
     const [message, opts] = toastSuccess.mock.calls[0] as [
@@ -470,9 +497,7 @@ describe("TasksTable — finishing a task is a moment, not a disappearance", () 
     // must return it there — coming back as untouched would lose a state
     // somebody deliberately set.
     renderTable();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Mark Alpha no date done/ }),
-    );
+    finish("Alpha no date");
     const [, opts] = toastSuccess.mock.calls.at(-1) as [
       string,
       { action: { onClick: () => void } },
@@ -484,16 +509,27 @@ describe("TasksTable — finishing a task is a moment, not a disappearance", () 
     );
   });
 
-  it("un-ticking needs no toast — the row coming back IS the confirmation", () => {
+  it("undoes TWELVE tasks to twelve different places, not all to To do", () => {
+    // The reason this is not one bulk write. "Alpha no date" was in the firm's
+    // "Needs review" and "Mike soon" was not; bringing both back as the same
+    // status would quietly flatten a state somebody set on purpose.
     renderTable();
-    fireEvent.click(
-      within(screen.getByRole("tablist")).getByRole("tab", { name: /All work/ }),
+    finish("Alpha no date", "Mike soon");
+
+    const [, opts] = toastSuccess.mock.calls.at(-1) as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+    updateTaskAction.mockClear();
+    opts.action.onClick();
+
+    expect(updateTaskAction).toHaveBeenCalledTimes(2);
+    expect(updateTaskAction).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "t-nodate", statusId: "s-review" }),
     );
-    toastSuccess.mockClear();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Mark Delta finished done/ }),
+    expect(updateTaskAction).not.toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "t-soon", statusId: "s-review" }),
     );
-    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });
 

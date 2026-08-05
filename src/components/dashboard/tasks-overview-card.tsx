@@ -45,6 +45,7 @@ import {
   type AddTaskEngagement,
 } from "@/components/engagements/add-task-dialog";
 import { type ComboboxClient } from "@/components/clients/client-combobox";
+import { type ListSavedView } from "@/components/ui/list-views-menu";
 
 type Person = { id: string; name: string };
 
@@ -55,6 +56,7 @@ export function TasksOverviewCard({
   engagements,
   statuses,
   viewerId,
+  savedViews = [],
 }: {
   tasks: TaskRow[];
   members: Person[];
@@ -63,6 +65,11 @@ export function TasksOverviewCard({
   engagements: AddTaskEngagement[];
   statuses: FirmStatus[];
   viewerId: string;
+  /** The person's own saved views for the tasks list. The founder, after they
+   *  started making them: "make sure the new custom dividers updates on the
+   *  overview page task preview" — a view you built is a view you expect to
+   *  see wherever this table is drawn, and this card IS that table. */
+  savedViews?: ListSavedView[];
 }) {
   const t = useTranslations("Dashboard");
 
@@ -89,6 +96,7 @@ export function TasksOverviewCard({
       </div>
 
       <TasksTable
+        savedViews={savedViews}
         tasks={tasks}
         members={members}
         canEdit

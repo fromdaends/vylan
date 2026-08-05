@@ -9,6 +9,7 @@ import { assertLocale } from "@/lib/locale";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
+import { listSavedViews } from "@/lib/db/saved-views";
 import { listFirmLinks } from "@/lib/db/firm-links";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
@@ -60,6 +61,7 @@ export default async function DashboardPage({
     links,
     connection,
     notifications,
+    taskViews,
   ] = await Promise.all([
       getCurrentFirm(),
       listFirmUsers(),
@@ -80,6 +82,9 @@ export default async function DashboardPage({
         console.error("[dashboard] home notifications failed:", e);
         return [];
       }),
+      // The person's saved task views, so the strip on this card carries the
+      // same tabs the Tasks page does. [] before 1630 is applied.
+      listSavedViews("tasks"),
     ]);
 
   // The BELL reads the stored notifications table (real read/unread state,
@@ -169,6 +174,7 @@ export default async function DashboardPage({
         </div>
 
         <TasksOverviewCard
+          savedViews={taskViews}
           statuses={taskStatuses}
           // The SAME rows the Tasks page renders — the card draws them with
           // the same table, so anything hand-picked here would be a field the
