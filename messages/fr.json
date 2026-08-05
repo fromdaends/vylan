@@ -3087,7 +3087,10 @@
     "section_items": "Éléments",
     "items_empty": "Aucun élément. Cliquez sur « Ajouter un document ».",
     "add_item": "Ajouter un document",
-    "field_name": "Nom du modèle"
+    "field_name": "Nom du modèle",
+    "search_placeholder": "Rechercher un modèle…",
+    "no_matches": "Rien ne correspond à « {query} »",
+    "no_matches_hint": "Essayez un autre nom, ou effacez la recherche."
   },
   "Status": {
     "pending": "En attente",
