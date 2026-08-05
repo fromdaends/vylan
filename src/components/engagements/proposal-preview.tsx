@@ -43,6 +43,16 @@ export type ProposalPreviewData = {
   videoUrl: string | null;
   documentName: string | null;
   /**
+   * Storage paths for an UPLOADED video / document, when the firm attached a
+   * file instead of pasting a link.
+   *
+   * Not rendered here — the panel shows the link or the file's name. They are
+   * carried so the frozen snapshot knows which file the client was promised;
+   * dropping them would make the uploader write to nothing.
+   */
+  videoPath?: string | null;
+  documentPath?: string | null;
+  /**
    * The priced lines, each with the WORK it brings (1620).
    *
    * `work` is what the client is actually buying — "Monthly bookkeeping" means

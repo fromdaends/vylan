@@ -412,6 +412,10 @@ export function EngagementTemplateBuilder({
               welcome: welcomeEnabled ? introMessage : null,
               videoUrl: videoEnabled ? videoUrl : null,
               documentName: documentEnabled ? documentName : null,
+              // Carried so the frozen proposal knows which uploaded file the
+              // client was promised, not just its name.
+              videoPath: videoEnabled ? videoPath || null : null,
+              documentPath: documentEnabled ? documentPath || null : null,
               // The work rides on the FIRST line only. It belongs to the
               // template as a whole (services were picked across blocks and
               // only their ids survive), and repeating the same six steps under
