@@ -116,17 +116,17 @@ export function TemplateCard({
   const body = (
     <>
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-foreground">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-accent-subtle text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-foreground">
           {createElement(icon, { className: "h-5 w-5", "aria-hidden": true })}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
+            <h3 className="truncate text-[14.5px] font-semibold leading-snug text-foreground">
               {cleanLabel(name)}
             </h3>
             {badge}
           </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted-foreground">
             <span className="tabular-nums">
               {t("documents_count", { count: itemCount })}
             </span>
@@ -163,13 +163,13 @@ export function TemplateCard({
       </div>
 
       {shown.length > 0 && (
-        <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground/65">
+        <p className="mt-3 line-clamp-2 text-[12.5px] leading-[1.55] text-muted-foreground">
+          <span className="font-medium text-foreground/85">
             {t("includes")}{" "}
           </span>
           {shown.join(" · ")}
           {more > 0 && (
-            <span className="text-muted-foreground/70">
+            <span className="text-muted-foreground/75">
               {" "}
               {t("plus_more", { count: more })}
             </span>
@@ -178,7 +178,7 @@ export function TemplateCard({
       )}
 
       {workflowSummary && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Zap className="h-3 w-3 shrink-0 text-accent" aria-hidden />
           <span className="truncate">{workflowSummary}</span>
         </p>
@@ -187,13 +187,13 @@ export function TemplateCard({
   );
 
   const footerRow = footer ? (
-    <div className="mt-3 flex items-center justify-end gap-1 border-t border-border/50 pt-2">
+    <div className="mt-3.5 flex items-center justify-end gap-2 border-t border-border/50 pt-3">
       {footer}
     </div>
   ) : null;
 
   const cardClass = cn(
-    "group block rounded-xl border border-border/70 bg-card p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
+    "group block rounded-xl border border-border/70 bg-card px-[18px] pt-4 pb-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
     className,
   );
 

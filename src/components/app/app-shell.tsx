@@ -138,6 +138,7 @@ export function AppShell({
     pathname === "/files" ||
     pathname === "/billing" ||
     pathname === "/clients" ||
+    pathname.startsWith("/templates/") ||
     // A client PROFILE too — its overview is a three-column grid that needs
     // the width. Sub-routes (/clients/import, /clients/[id]/archive) are
     // ordinary screens and keep the centred column.

@@ -98,8 +98,8 @@ export default async function RequestTemplatesPage({
         action={
           <form action={createBlankTemplateAction}>
             <input type="hidden" name="__app_locale" value={locale} />
-            <Button type="submit" size="sm">
-              <Plus className="h-3.5 w-3.5" />
+            <Button type="submit" className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">
+              <Plus className="size-[18px]" />
               {t("templates_new")}
             </Button>
           </form>

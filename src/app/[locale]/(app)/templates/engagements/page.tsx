@@ -55,7 +55,7 @@ export default async function EngagementTemplatesPage({
             {t("engagement_templates_empty_hint")}
           </p>
           <Link href="/engagements/new">
-            <Button size="sm">{t("engagement_templates_start")}</Button>
+            <Button className="h-[42px] gap-2 rounded-[11px] px-5 text-[14.5px] font-semibold shadow-[0_4px_14px_oklch(0.55_0.18_258_/_0.28)]">{t("engagement_templates_start")}</Button>
           </Link>
         </EmptyState>
       ) : (

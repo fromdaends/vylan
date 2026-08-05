@@ -17,33 +17,45 @@ import type { ReactNode } from "react";
 export function TemplatesPageHeader({
   title,
   subtitle,
+  search,
   action,
 }: {
   title: string;
   subtitle: string;
+  /** Live filter for this page's list. Sits LEFT of the action, so the one
+   * coloured button stays the last thing on the row. */
+  search?: ReactNode;
   /** Right-aligned control — usually the "new one" button for this type. */
   action?: ReactNode;
 }) {
   return (
-    <header className="animate-in-up flex flex-wrap items-start justify-between gap-4">
+    <header className="animate-in-up flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
+        <h1 className="text-[26px] font-[650] tracking-[-0.02em]">{title}</h1>
+        <p className="mt-[5px] max-w-[56ch] text-sm text-muted-foreground">
           {subtitle}
         </p>
       </div>
-      {action}
+      {(search || action) && (
+        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+          {search}
+          {action}
+        </div>
+      )}
     </header>
   );
 }
 
 /** The page shell — one width rule for all four, so they line up when you move
- *  between them via the sidebar. */
+ *  between them via the sidebar.
+ *
+ *  FULL WIDTH: a card grid capped at 1024px leaves two thirds of a monitor
+ *  empty and wraps to two columns when four would fit. The page supplies the
+ *  handoff's own 28/44/72 padding, so the app shell hands it the bare canvas
+ *  (see `fullBleed` in app-shell). */
 export function TemplatesPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-5xl space-y-8 min-[1800px]:max-w-[90rem]">
-      {children}
-    </div>
+    <div className="w-full space-y-6 px-6 pt-7 pb-18 lg:px-11">{children}</div>
   );
 }
 
@@ -76,9 +88,11 @@ export function TemplatesSection({
   );
 }
 
+/** Cards flow to fit rather than snapping between fixed column counts — the
+ *  grid fills a 27" monitor and a laptop with the same rule. */
 export function CardGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(330px,1fr))] gap-3.5">
       {children}
     </div>
   );
@@ -86,7 +100,7 @@ export function CardGrid({ children }: { children: ReactNode }) {
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-xl border-[1.5px] border-dashed border-border/90 bg-card px-6 py-11 text-center">
       {children}
     </div>
   );
