@@ -239,6 +239,7 @@ export function SelectableTemplateCard({
   onSelect,
   groupName,
   builtin = false,
+  layout = "card",
 }: TemplateCardData & {
   selected: boolean;
   onSelect: () => void;
@@ -246,6 +247,18 @@ export function SelectableTemplateCard({
   groupName: string;
   /** Show the small "built-in" tag in the meta row. */
   builtin?: boolean;
+  /**
+   * "card" is the wide three-across grid on a full page.
+   *
+   * "row" is the same card laid flat, for a NARROW column — engagement creation
+   * shows this picker inside a modal beside a live preview, where three columns
+   * came out about 180px each and every name arrived truncated ("New ...",
+   * "Trust...", "T1 Pe..."). The founder: "clean up the ui on engagement
+   * creation for when choosing a document request template."
+   *
+   * A variant rather than a second component, so the two cannot drift.
+   */
+  layout?: "card" | "row";
 }) {
   const t = useTranslations("Templates");
   const tEng = useTranslations("Engagements");
@@ -256,10 +269,15 @@ export function SelectableTemplateCard({
   return (
     <label
       className={cn(
-        "group relative flex cursor-pointer flex-col rounded-xl border bg-card p-4 text-left transition-all duration-200 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none",
+        "group relative flex cursor-pointer flex-col rounded-xl border bg-card text-left transition-all duration-200 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none",
+        // A row is tighter and does not lift on hover: a list of twelve rows
+        // that each jump 2px is noise, where a grid of six cards is not.
+        layout === "row" ? "px-3 py-2.5" : "p-4",
         selected
           ? "border-primary ring-2 ring-primary"
-          : "border-border/70 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
+          : layout === "row"
+            ? "border-border/70 hover:border-accent/40"
+            : "border-border/70 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
       )}
     >
       <input
@@ -271,20 +289,32 @@ export function SelectableTemplateCard({
       />
       {selected && (
         <CheckCircle2
-          className="absolute right-3 top-3 h-4 w-4 text-primary"
+          className={cn(
+            "absolute h-4 w-4 text-primary",
+            layout === "row" ? "right-3 top-1/2 -translate-y-1/2" : "right-3 top-3",
+          )}
           aria-hidden
         />
       )}
-      <div className="flex items-start gap-3">
+      <div
+        className={cn(
+          "flex gap-3",
+          layout === "row" ? "items-center" : "items-start",
+        )}
+      >
         <span
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            "flex shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            layout === "row" ? "h-8 w-8" : "h-10 w-10",
             selected
               ? "bg-primary/10 text-primary"
               : "bg-accent/10 text-accent group-hover:bg-accent group-hover:text-accent-foreground",
           )}
         >
-          {createElement(icon, { className: "h-5 w-5", "aria-hidden": true })}
+          {createElement(icon, {
+            className: layout === "row" ? "h-4 w-4" : "h-5 w-5",
+            "aria-hidden": true,
+          })}
         </span>
         <div className="min-w-0 flex-1 pr-5">
           <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
@@ -316,7 +346,7 @@ export function SelectableTemplateCard({
         </div>
       </div>
 
-      {shown.length > 0 && (
+      {layout === "card" && shown.length > 0 && (
         <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground/65">
             {t("includes")}{" "}

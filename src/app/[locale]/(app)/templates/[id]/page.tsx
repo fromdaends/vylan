@@ -4,18 +4,14 @@ import { getTemplate } from "@/lib/db/templates";
 import { listAutomations } from "@/lib/db/automations";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
-import { TemplateEditor } from "@/components/templates/template-editor";
-import {
-  TemplateDetailShell,
-  ReadOnlyItems,
-} from "@/components/templates/template-detail-shell";
+import { ReadOnlyItems } from "@/components/templates/template-read-only";
+import { RequestTemplateBuilder } from "@/components/templates/request-template-builder";
 import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { cloneTemplateAndOpenAction } from "@/app/actions/templates";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { cleanLabel } from "@/lib/text/clean-label";
 import { assertLocale } from "@/lib/locale";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 // The template's own page. Two shapes, by the Part A switch:
 //
@@ -44,109 +40,62 @@ export default async function TemplateEditPage({
     (firm as { workflows_enabled?: boolean }).workflows_enabled === true;
 
   const t = await getTranslations("Templates");
-  const tApp = await getTranslations("App");
-  const tCommon = await getTranslations("Common");
   // "Clone to customize" lives in the Automations namespace, which is where the
   // other branch reads it from too.
   const tAuto = await getTranslations("Automations");
 
   const displayName = cleanLabel(localizedTemplateName(tmpl, locale));
 
-  if (!workflowsOn) {
-    // ── A BUILT-IN IS READABLE, NOT A DEAD LINK ─────────────────────────
-    //
-    // The founder: "when you click on document request templates, when you try
-    // and open them, it completely... it says page not found."
-    //
-    // Reproduced: every BUILT-IN row 404'd. The list gives every row an href,
-    // and this branch answered notFound() for anything the firm does not own —
-    // so on a firm with workflows off, all seven built-ins were dead links.
-    //
-    // "Pre-1560 behaviour, byte for byte" was the reason, and it was the wrong
-    // reason: the rule preserved was about EDITING somebody else's template,
-    // not about being allowed to look at one. The workflows-on branch already
-    // shows built-ins read-only with Clone to customize. This does the same, so
-    // the two branches differ in what they offer rather than in whether the
-    // page exists.
-    if (tmpl.firm_id == null) {
-      return (
-        <div className="mx-auto w-full max-w-3xl space-y-6 px-6 pt-7 pb-18 lg:px-11">
-          <header className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {displayName}
-            </h1>
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-              {t("builtin_chip")}
-            </span>
-            {/* The one-step door out of read-only, the same as the other
-                branch: a built-in cannot be edited, so the only useful action
-                is to take a copy you CAN edit. */}
-            <form action={cloneTemplateAndOpenAction} className="ml-auto">
-              <input type="hidden" name="id" value={tmpl.id} />
-              <input type="hidden" name="__app_locale" value={locale} />
-              <Button type="submit" size="sm" variant="outline">
-                <Copy className="mr-1.5 size-3.5" aria-hidden />
-                {tAuto("clone_to_customize")}
-              </Button>
-            </form>
-          </header>
-          <ReadOnlyItems template={tmpl} locale={locale} />
-        </div>
-      );
-    }
-
+  // ── A BUILT-IN IS READABLE, NOT EDITABLE ────────────────────────────────
+  //
+  // Nobody edits a built-in, in either world, so it renders its document list
+  // read-only with the one-step door out. This used to 404 when workflows were
+  // off — the founder: "when you try and open them, it says page not found."
+  if (tmpl.firm_id == null) {
     return (
-      // px/pt/pb match TemplatesPageShell exactly. This page cannot USE that
-      // shell (it is a detail page, not a list) but it must sit at the same
-      // distance from the edges — the founder: the builder opened "glitched
-      // off the top of the screen".
       <div className="mx-auto w-full max-w-3xl space-y-6 px-6 pt-7 pb-18 lg:px-11">
-        <Breadcrumb
-          label={tCommon("breadcrumb")}
-          items={[
-            { label: tApp("nav_templates"), href: "/templates" },
-            { label: tmpl.name },
-          ]}
-        />
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("edit_title")}
-          </h1>
+        <header className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{displayName}</h1>
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            {t("builtin_chip")}
+          </span>
+          <form action={cloneTemplateAndOpenAction} className="ml-auto">
+            <input type="hidden" name="id" value={tmpl.id} />
+            <input type="hidden" name="__app_locale" value={locale} />
+            <Button type="submit" size="sm" variant="outline">
+              <Copy className="mr-1.5 size-3.5" aria-hidden />
+              {tAuto("clone_to_customize")}
+            </Button>
+          </form>
         </header>
-        <TemplateEditor template={tmpl} locale={locale} />
+        <ReadOnlyItems template={tmpl} locale={locale} />
       </div>
     );
   }
 
-  const [automations, members] = await Promise.all([
-    listAutomations(),
-    listActiveFirmUsers(),
-  ]);
+  // ── ONE BUILDER, THE SAME AS EVERY OTHER TEMPLATE TYPE ──────────────────
+  //
+  // There used to be two layouts here, chosen by `workflows_enabled`: a plain
+  // stacked editor and a boxed-sidebar one. The flag defaults false, so the
+  // sidebar version was unreachable code that still had to be kept in step with
+  // the reachable one — and neither looked like the engagement, task or service
+  // builders. The founder: "ALL THE UIS FOR BUILDING EVERYTHING TEMPLATES
+  // SHOULD ALL BE THE SAME."
+  //
+  // Now: one builder on the shared chrome, and the workflow sections appear as
+  // EXTRA TABS when the flag is on. Nothing was deleted to get consistency.
+  const [automations, members] = workflowsOn
+    ? await Promise.all([listAutomations(), listActiveFirmUsers()])
+    : [[], []];
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 pt-7 pb-18 lg:px-11">
-      <Breadcrumb
-        label={tCommon("breadcrumb")}
-        items={[
-          { label: tApp("nav_templates"), href: "/templates" },
-          { label: displayName },
-        ]}
-      />
-      <TemplateDetailShell
-        template={tmpl}
-        displayName={displayName}
-        automations={automations.map((a) => ({
-          id: a.id,
-          firmId: a.firmId,
-          name: a.name,
-          definition: a.definition,
-        }))}
-        members={members.map((m) => ({
-          id: m.id,
-          name: m.display_name ?? m.name,
-        }))}
-        locale={locale}
-      />
-    </div>
+    <RequestTemplateBuilder
+      template={tmpl}
+      displayName={displayName}
+      locale={locale}
+      workflowsOn={workflowsOn}
+      automations={automations}
+      members={members}
+    />
   );
 }

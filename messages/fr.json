@@ -2757,7 +2757,7 @@
     "tasks_panel_failed": "Impossible de charger ces tâches.",
     "tasks_panel_open_engagement": "Ouvrir le mandat à la place",
     "tasks_panel_loading": "Chargement des tâches",
-    "item_service": "Service",
+    "item_service": "Modèle de service",
     "item_service_none": "Hors catalogue",
     "details_card_title": "Détails du mandat",
     "details_signatures": "{signed}/{total} signatures",
@@ -3209,7 +3209,12 @@
     "preview_unnamed_service": "Service sans nom",
     "preview_unnamed_task": "Tâche sans nom",
     "creating_request_template": "Préparation de votre modèle…",
-    "tab_nav_label": "Sections du constructeur"
+    "tab_nav_label": "Sections du constructeur",
+    "tab_request_details": "Modèle",
+    "tab_request_documents": "Documents",
+    "request_builder_explainer": "Un modèle de demande est une liste réutilisable — les documents que vous demandez à un client, définis une fois et ajoutés à n'importe quel engagement.",
+    "request_documents_hint": "Ce que le client doit envoyer. Marquez comme obligatoires ceux sans lesquels vous ne pouvez pas avancer.",
+    "request_preview_label": "Ce que votre client verra"
   },
   "Status": {
     "pending": "En attente",
