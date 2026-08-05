@@ -130,6 +130,12 @@ export default async function NewEngagementPage({
         invoiceDefaultDelayDays={firm?.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}
         canManageReminderDefaults={can(user, "firm.settings")}
+        // The firm's standard terms (1610) — what makes an engagement built
+        // WITHOUT a template still a real proposal rather than a price list.
+        firmDefaultTerms={
+          (firm as { default_engagement_terms?: string | null } | null)
+            ?.default_engagement_terms ?? ""
+        }
         authorizedContacts={authorizedContacts}
         // The firm's service catalogue (1480). Without this the Service
         // dropdown on an engagement item never appears.

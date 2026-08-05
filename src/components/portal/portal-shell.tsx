@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { ProposalAcceptance } from "@/components/portal/proposal-acceptance";
 import {
   CheckCircle2,
   ShieldCheck,
@@ -256,6 +257,31 @@ export function PortalShell({
         },
       ],
     }));
+  }
+
+  // ── A DECISION COMES BEFORE ANYTHING ELSE ────────────────────────────────
+  //
+  // When a client is being asked to agree, the proposal IS the portal. Showing
+  // a document checklist beside it would ask them to start doing the work of an
+  // engagement they have not agreed to — which is exactly the order the founder
+  // corrected: "you send out the proposal. They agree, sign, then... they
+  // upload the documents."
+  //
+  // Returned BEFORE every hook-free branch below so nothing else renders. This
+  // sits after the hooks above, never inside a condition, so the hook order is
+  // identical on both paths.
+  if (ctx.awaiting_proposal) {
+    return (
+      <div className="relative flex flex-1 flex-col">
+        <ProposalAcceptance
+          token={ctx.engagement.magic_token ?? ""}
+          data={ctx.awaiting_proposal.data}
+          declinedAt={ctx.awaiting_proposal.declinedAt}
+          locale={locale}
+          firmName={ctx.firm.name}
+        />
+      </div>
+    );
   }
 
   return (
