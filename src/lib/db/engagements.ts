@@ -386,6 +386,9 @@ export type CreateEngagementInput = {
   // Canopy's step 1 (migration 1510). start_date is WHEN THE WORK BEGINS,
   // distinct from due_date which is when it is owed.
   start_date?: string | null;
+  /** The client-facing document, frozen. Its presence is what makes the portal
+   *  ask the client to agree before anything else. */
+  proposal?: Record<string, unknown> | null;
   intro_message?: string | null;
   service_items?: {
     name: string;
@@ -460,6 +463,12 @@ export async function createEngagementWithItems(
   // Included only when SET, so a pre-1510 database only hits the retry ladder
   // for an engagement that actually used them — and the retry drops them, which
   // creates the engagement without a start date rather than not at all.
+  // The frozen proposal + the flag that makes the portal ask (1650/1660).
+  // Included ONLY when there is a proposal, so an engagement without one never
+  // depends on the new columns and never asks a client to agree to nothing.
+  const proposalCols = input.proposal
+    ? { proposal: input.proposal, requires_acceptance: true }
+    : {};
   const detailCols1510 = {
     ...(input.start_date != null ? { start_date: input.start_date } : {}),
     ...(input.intro_message != null
@@ -533,6 +542,10 @@ export async function createEngagementWithItems(
       // 1510 is the newest set; if it's missing the FIRST retry tier below
       // (which omits it) still creates the engagement — fail-open.
       ...detailCols1510,
+      // 1650/1660. Dropped by the same first retry tier on a database that
+      // does not have them: the engagement is created WITHOUT a proposal
+      // rather than not at all, and the portal falls back to its normal view.
+      ...proposalCols,
     })
     .select("*")
     .single();
