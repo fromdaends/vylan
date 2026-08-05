@@ -32,7 +32,6 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
-import { BookOpenCheck } from "lucide-react";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmQuickbooksConnectedClients } from "@/lib/db/quickbooks";
 import { listFirmXeroConnectedClients } from "@/lib/db/xero";
@@ -132,29 +131,26 @@ export default async function BookkeepingPage({
     `/quickbooks/drafts?tab=${id}${sp.period ? `&period=${sp.period}` : ""}`;
 
   return (
-    <div className="flex flex-col gap-5 animate-in-up">
-      <header className="flex flex-col gap-1">
-        <div className="flex items-center gap-2.5">
-          <BookOpenCheck
-            className="h-6 w-6 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("bk_title")}
-          </h1>
-        </div>
-        <p className="text-sm text-muted-foreground">{t("bk_subtitle")}</p>
+    // Full width, like the rest of the redesigned sections: the logs are wide
+    // rows of columns and a centred column wastes the space they need.
+    <div className="flex w-full animate-in-up flex-col gap-5 px-6 pt-7 pb-18 lg:px-11">
+      <header>
+        {/* No icon beside the title, and no coloured button on this screen —
+            everything here is an outline action on a row. */}
+        <h1 className="text-[26px] font-[650] tracking-[-0.02em]">
+          {t("bk_title")}
+        </h1>
+        <p className="mt-[5px] text-sm text-muted-foreground">
+          {t("bk_subtitle")}
+        </p>
       </header>
 
       {/* ── The close. Top of the page, its own section, not a tab. ────── */}
+      {/* No `aside` on this Panel: CloseBoard already prints "N of M closed"
+          beside its month switcher, for BOTH the surfaces it renders on.
+          Adding it to the panel header put the same sentence on screen twice. */}
       {connectedClients.length > 0 && (
-        <Panel
-          title={t("close_title")}
-          aside={t("close_progress", {
-            closed: closedCount,
-            total: connectedClients.length,
-          })}
-        >
+        <Panel title={t("close_title")}>
           <CloseBoard
             period={period}
             locale={locale}
@@ -181,7 +177,7 @@ export default async function BookkeepingPage({
         tabs={
           <nav
             aria-label={t("bk_logs_title")}
-            className="flex items-center gap-1"
+            className="flex items-center gap-[26px] self-end"
           >
             {tabs.map((item) => {
               const active = item.id === tab;
@@ -191,10 +187,10 @@ export default async function BookkeepingPage({
                   href={hrefFor(item.id)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "-mb-[11px] border-b-2 px-2.5 pb-2.5 text-sm transition-colors",
+                    "-mb-px border-b-2 px-0.5 pb-[15px] text-sm transition-colors",
                     active
-                      ? "border-foreground font-medium text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
+                      ? "border-accent font-semibold text-foreground"
+                      : "border-transparent font-medium text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {item.label}
@@ -231,13 +227,15 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-b border-border/60 px-4 py-2.5">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+    <section className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-5 gap-y-2 border-b border-border/60 px-5">
+        <h2 className="text-[14.5px] font-semibold">{title}</h2>
         {tabs}
-        {aside && <span className="text-xs text-muted-foreground">{aside}</span>}
+        {aside && (
+          <span className="text-[12.5px] text-muted-foreground">{aside}</span>
+        )}
       </div>
-      <div className="px-4 py-4">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </section>
   );
 }
