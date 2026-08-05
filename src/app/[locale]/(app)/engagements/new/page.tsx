@@ -133,7 +133,30 @@ export default async function NewEngagementPage({
         authorizedContacts={authorizedContacts}
         // The firm's service catalogue (1480). Without this the Service
         // dropdown on an engagement item never appears.
-        services={services}
+        // Each service carries the work it implies (1620), so picking one on
+        // the Services step brings its tasks in.
+        services={services.map((svc) => {
+          const tpl = svc.taskTemplateId
+            ? taskTemplates.find((tt) => tt.id === svc.taskTemplateId)
+            : undefined;
+          return {
+            id: svc.id,
+            name: svc.name,
+            description: svc.description,
+            rateCents: svc.rateCents,
+            rateType: svc.rateType,
+            billingFrequency: svc.billingFrequency,
+            taxPct: svc.taxPct,
+            work: tpl
+              ? {
+                  templateId: tpl.id,
+                  name: tpl.name,
+                  kind: tpl.payload.kind,
+                  stepCount: tpl.payload.subtasks.length,
+                }
+              : null,
+          };
+        })}
         // Saved whole-engagement templates (1500). Without this the start
         // chooser can never offer one.
         engagementTemplates={engagementTemplates.map((x) => ({

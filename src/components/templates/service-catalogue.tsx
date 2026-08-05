@@ -53,6 +53,8 @@ export type ServiceRow = {
   rateType: RateType;
   billingFrequency: BillingFrequency;
   taxPct: number | null;
+  /** The work this service implies (1620). Null = it carries none. */
+  taskTemplateId: string | null;
   archivedAt: string | null;
 };
 
@@ -65,6 +67,7 @@ const EMPTY: Draft = {
   rateType: "item",
   billingFrequency: "once",
   taxPct: null,
+  taskTemplateId: null,
 };
 
 type FreqKey =
@@ -77,6 +80,7 @@ type RateKey = "item_rate_item" | "item_rate_hour";
 
 export function ServiceCatalogue({
   services,
+  taskTemplates = [],
   locale,
   canManage,
   /**
@@ -90,6 +94,9 @@ export function ServiceCatalogue({
   openOnMount = false,
 }: {
   services: ServiceRow[];
+  /** The firm's task templates (1570), so a service can name the work it
+   *  implies. Empty hides the picker entirely. */
+  taskTemplates?: { id: string; name: string; steps: string[] }[];
   locale: AppLocale;
   canManage: boolean;
   openOnMount?: boolean;
@@ -114,6 +121,7 @@ export function ServiceCatalogue({
             rateType: service.rateType,
             billingFrequency: service.billingFrequency,
             taxPct: service.taxPct,
+            taskTemplateId: service.taskTemplateId,
           }
         : { ...EMPTY },
     );
@@ -212,7 +220,21 @@ export function ServiceCatalogue({
                 name={s.name}
                 // Price first, then the description — the price is what you
                 // scan a service list for.
-                meta={[priceLabel(s), s.description ?? ""]
+                // Price, then the work it implies, then the description. The
+                // link has to read from BOTH ends: the catalogue says which
+                // work a service brings, and the engagement says which service
+                // brought each task.
+                meta={[
+                  priceLabel(s),
+                  s.taskTemplateId
+                    ? t("service_does_work_meta", {
+                        name:
+                          taskTemplates.find((tt) => tt.id === s.taskTemplateId)
+                            ?.name ?? "",
+                      })
+                    : "",
+                  s.description ?? "",
+                ]
                   .filter(Boolean)
                   .join(" \u2014 ")}
                 dimmed={s.archivedAt != null}
@@ -339,6 +361,58 @@ export function ServiceCatalogue({
                     ))}
                   </select>
                 </div>
+                {/* ── THE WORK THIS SERVICE IMPLIES (1620) ──────────────────
+                    Canopy's Service Item carries "the tasks you'll perform".
+                    Selling a service and then separately remembering to apply
+                    the matching task template is the manual step this removes.
+
+                    The picker is only drawn when the firm HAS task templates —
+                    a dropdown whose only entry is "none" teaches nobody that
+                    the feature exists, it just adds a control that does
+                    nothing. */}
+                {taskTemplates.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="svc-tasks">{t("service_does_work")}</Label>
+                    <select
+                      id="svc-tasks"
+                      value={draft.taskTemplateId ?? ""}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          taskTemplateId: e.target.value || null,
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">{t("service_does_work_none")}</option>
+                      {taskTemplates.map((tt) => (
+                        <option key={tt.id} value={tt.id}>
+                          {tt.name}
+                        </option>
+                      ))}
+                    </select>
+                    {/* The STEPS, right there. A dropdown showing only a
+                        template's name asks you to remember what is inside it;
+                        the founder's whole point is that the service and its
+                        work must not feel like separate things. */}
+                    {(() => {
+                      const picked = taskTemplates.find(
+                        (tt) => tt.id === draft.taskTemplateId,
+                      );
+                      const steps = picked?.steps ?? [];
+                      return steps.length > 0 ? (
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          {steps.slice(0, 5).join(" \u00b7 ")}
+                          {steps.length > 5 && ` +${steps.length - 5}`}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {t("service_does_work_hint")}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
                 <div>
                   <Label htmlFor="svc-tax">{t("item_tax")}</Label>
                   <Input

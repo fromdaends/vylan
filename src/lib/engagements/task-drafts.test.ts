@@ -246,3 +246,39 @@ describe("meaningfulTasks — subtasks", () => {
     expect(out[0]).not.toHaveProperty("subtasks");
   });
 });
+
+describe("appendTaskTemplate — where a task came from", () => {
+  const tpl = {
+    name: "Month-end close",
+    kind: "bookkeeping" as const,
+    subtasks: [{ title: "Reconcile" }],
+  };
+
+  it("records the service that pulled it in", () => {
+    const res = appendTaskTemplate([], tpl, "Monthly Bookkeeping");
+    expect(res.tasks[0].sourceLabel).toBe("Monthly Bookkeeping");
+  });
+
+  it("omits the label entirely when a person added it by hand", () => {
+    const res = appendTaskTemplate([], tpl);
+    expect(res.tasks[0]).not.toHaveProperty("sourceLabel");
+  });
+
+  it("keeps the label on a DOWNGRADED task — you still need to know why it is there", () => {
+    const existing = [task({ title: "Docs", kind: "document_collection" })];
+    const res = appendTaskTemplate(
+      existing,
+      { ...tpl, kind: "document_collection" },
+      "Year-end",
+    );
+    expect(res.tasks[1].kind).toBe("task");
+    expect(res.tasks[1].sourceLabel).toBe("Year-end");
+  });
+
+  it("does not leak the label into what gets SAVED", () => {
+    // It explains the row on screen; engagement_tasks has no column for it.
+    const res = appendTaskTemplate([], tpl, "Monthly Bookkeeping");
+    const saved = meaningfulTasks(res.tasks);
+    expect(saved[0]).not.toHaveProperty("sourceLabel");
+  });
+});

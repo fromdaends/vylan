@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { listFirmServices } from "@/lib/db/firm-services";
+import { listTaskTemplates } from "@/lib/db/task-templates";
 import { getCurrentUser } from "@/lib/db/users";
 import { can } from "@/lib/auth/capabilities";
 import { ServiceCatalogue } from "@/components/templates/service-catalogue";
@@ -26,9 +27,11 @@ export default async function ServiceTemplatesPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [services, user] = await Promise.all([
+  const [services, user, taskTemplates] = await Promise.all([
     listFirmServices(),
     getCurrentUser(),
+    // So a service can name the work it implies (1620). Empty hides the picker.
+    listTaskTemplates(),
   ]);
   // Editing what the firm SELLS is a firm-settings decision, not something
   // anyone with an engagement can do. The server action enforces this too —
@@ -45,6 +48,13 @@ export default async function ServiceTemplatesPage({
       />
       <ServiceCatalogue
         services={services}
+        taskTemplates={taskTemplates.map((tt) => ({
+          id: tt.id,
+          name: tt.name,
+          // The steps travel WITH the name so the service form can show what
+          // it just attached rather than only what it is called.
+          steps: tt.payload.subtasks.map((x) => x.title),
+        }))}
         locale={locale}
         canManage={canManageServices}
         openOnMount={sp.new != null}

@@ -467,6 +467,38 @@ export function EngagementBuilder({
       }
     }
   }
+  /**
+   * Bring in the work a picked service implies (1620).
+   *
+   * Goes through appendTaskTemplate for the same reason applying a template by
+   * hand does: two services can both carry a document-collection task, and an
+   * engagement holds only one. The second lands as a plain task and the step
+   * says so, rather than the insert failing silently the way a fail-soft write
+   * would.
+   *
+   * Idempotent by SOURCE: picking the same service twice, or re-picking it on
+   * another line, must not stack duplicate tasks.
+   */
+  function pullServiceWork(service: {
+    name: string;
+    work?: { templateId: string; name: string; kind: string; stepCount: number } | null;
+  }) {
+    const work = service.work;
+    if (!work) return;
+    const tpl = taskTemplates.find((x) => x.id === work.templateId);
+    if (!tpl) return;
+    setTasks((prev) => {
+      if (prev.some((x) => x.sourceLabel === service.name)) return prev;
+      const res = appendTaskTemplate(
+        prev,
+        { name: tpl.name, kind: tpl.kind, subtasks: tpl.subtasks },
+        service.name,
+      );
+      if (res.downgraded.length > 0) setDowngradedTasks(res.downgraded);
+      return res.tasks;
+    });
+  }
+
   function moveTask(idx: number, delta: number) {
     setTasks((prev) => {
       const to = idx + delta;
@@ -1242,6 +1274,11 @@ export function EngagementBuilder({
             <EngagementItemsEditor
               items={serviceItems}
               onChange={setServiceItems}
+              // A service that carries work brings it. Automatic, per the
+              // founder — no prompt; the tasks land in the Tasks step labelled
+              // with the service that brought them, and are edited or deleted
+              // there like any other.
+              onServicePicked={pullServiceWork}
               locale={locale}
               services={services}
             />
@@ -1405,6 +1442,11 @@ export function EngagementBuilder({
                           {/* Steps arrive with a task template. Shown as a
                               count rather than a list: the row is one line and
                               five step names would wrap it into four. */}
+                          {task.sourceLabel && (
+                            <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[10px] font-medium text-accent">
+                              {t("task_from_service", { name: task.sourceLabel })}
+                            </span>
+                          )}
                           {(task.subtasks?.length ?? 0) > 0 && (
                             <span className="text-muted-foreground">
                               {t("task_steps_count", {

@@ -24,6 +24,14 @@ export type FirmService = {
   rateType: RateType;
   billingFrequency: BillingFrequency;
   taxPct: number | null;
+  /**
+   * The work this service implies (1620) — a task template id, or null.
+   *
+   * A LIVE reference from the catalogue, so improving the template improves
+   * what every future engagement gets. The tasks are COPIED onto an engagement
+   * when the service is used, so editing it never rewrites a job under way.
+   */
+  taskTemplateId: string | null;
   archivedAt: string | null;
 };
 
@@ -32,6 +40,7 @@ type Row = {
   name: string;
   description: string | null;
   rate_cents: number | null;
+  task_template_id?: string | null;
   rate_type: RateType;
   billing_frequency: BillingFrequency;
   tax_pct: number | string | null;
@@ -49,6 +58,9 @@ function toService(r: Row): FirmService {
     // Postgres numeric comes back as a STRING through PostgREST. Left as a
     // number here so nothing downstream has to remember that.
     taxPct: r.tax_pct == null ? null : Number(r.tax_pct),
+    // Absent before 1620 is applied, which reads as "carries no work" — the
+    // catalogue keeps working, it simply pulls no tasks.
+    taskTemplateId: r.task_template_id ?? null,
     archivedAt: r.archived_at,
   };
 }
@@ -67,7 +79,7 @@ export async function listFirmServices(
   let q = supabase
     .from("firm_services")
     .select(
-      "id, name, description, rate_cents, rate_type, billing_frequency, tax_pct, archived_at",
+      "id, name, description, rate_cents, rate_type, billing_frequency, tax_pct, task_template_id, archived_at",
     )
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
@@ -90,6 +102,8 @@ export type FirmServiceInput = {
   rateType: RateType;
   billingFrequency: BillingFrequency;
   taxPct: number | null;
+  /** Null clears the link — a service that carries no work is normal. */
+  taskTemplateId?: string | null;
 };
 
 export async function createFirmService(
@@ -109,6 +123,11 @@ export async function createFirmService(
       rate_type: input.rateType,
       billing_frequency: input.billingFrequency,
       tax_pct: input.taxPct,
+      // Only when set, so a database without 1620 keeps saving services that
+      // carry no work rather than failing outright.
+      ...(input.taskTemplateId !== undefined
+        ? { task_template_id: input.taskTemplateId }
+        : {}),
       created_by_user_id: user.id,
     })
     .select("id")
@@ -136,6 +155,11 @@ export async function updateFirmService(
       rate_type: input.rateType,
       billing_frequency: input.billingFrequency,
       tax_pct: input.taxPct,
+      // Only when set, so a database without 1620 keeps saving services that
+      // carry no work rather than failing outright.
+      ...(input.taskTemplateId !== undefined
+        ? { task_template_id: input.taskTemplateId }
+        : {}),
     })
     .eq("id", id);
 
