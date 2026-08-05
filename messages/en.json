@@ -2841,7 +2841,12 @@
     "assignee_nobody": "No teammates to assign yet.",
     "assignee_needs_migration": "Multiple assignees need a database update before this saves.",
     "assignee_failed": "Could not change who is on this job. Try again.",
-    "agreement_stepper_label": "Agreement progress"
+    "agreement_stepper_label": "Agreement progress",
+    "bulk_more": "More",
+    "bulk_partial": "{done} of {total} updated — the rest didn't take.",
+    "bulk_select_all_clients": "Select every client shown",
+    "bulk_select_client": "Select {name}",
+    "bulk_select_task": "Select {title}"
   },
   "Attention": {
     "metric_active": "Active",

@@ -63,6 +63,7 @@ import {
   Check,
   ChevronRight,
   ExternalLink,
+  Flag,
   MessageSquare,
   Milestone,
   Trash2,
@@ -102,6 +103,10 @@ import type { RowMenuItem } from "@/components/engagements/engagement-row-menu";
 import { commentKeyForTask } from "@/components/engagements/comment-keys";
 import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 import { loadCommentCountsAction } from "@/app/actions/comments";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { useRowSelection } from "@/lib/bulk/use-row-selection";
+import { BULK_MAX } from "@/lib/bulk/selection";
+import { bulkUpdateTasksAction } from "@/app/actions/engagement-tasks";
 
 type TaskStatus = "todo" | "doing" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high";
@@ -443,6 +448,35 @@ export function TasksTable({
   // count and the tabs never disagree with each other.
   const visible = maxRows ? shown.slice(0, maxRows) : shown;
 
+  // The bulk runner. One place so every action reports the same way — and says
+  // "8 of 10" when some rows fail rather than claiming a clean sweep.
+  const runBulk = (
+    patch: Parameters<typeof bulkUpdateTasksAction>[0],
+    label: string,
+  ) => {
+    if (bulkBusy || selection.count === 0) return;
+    setBulkBusy(true);
+    void bulkUpdateTasksAction({ ...patch, taskIds: selection.ids })
+      .then((res) => {
+        if (!res.ok && res.error === "too_many") {
+          toast.error(t("bulk_too_many", { max: BULK_MAX }));
+          return;
+        }
+        if (!res.ok) {
+          toast.error(t("bulk_failed"));
+          return;
+        }
+        toast.success(
+          res.failed
+            ? t("bulk_partial", { done: res.done ?? 0, total: selection.count })
+            : `${label} · ${t("bulk_moved", { count: res.done ?? 0 })}`,
+        );
+        selection.clear();
+        router.refresh();
+      })
+      .finally(() => setBulkBusy(false));
+  };
+
   // Which of these tasks carry a comment. ONE request for the whole table, not
   // one per row — the bubble has to know its count before anybody touches it,
   // and forty rows each asking would be forty round trips on /work.
@@ -451,6 +485,13 @@ export function TasksTable({
   // speed it did before commenting existed; bubbles appear a moment later on
   // the rows that have something to show. Keyed on the ids actually visible, so
   // filtering or paging re-asks only when the set really changes.
+  // TICK ROWS, ACT ON ALL OF THEM. The founder, after reading Canopy's bulk
+  // docs: "Do bulk for tasks and clients and well engagements." The tasks list
+  // had no selection at all — the box on each row is the DONE tick, which is
+  // why the selector had to be a second, narrower column rather than a reuse.
+  const selection = useRowSelection(visible.map((x) => x.id));
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const visibleIdsKey = visible.map((x) => x.id).join(",");
   useEffect(() => {
@@ -556,6 +597,23 @@ export function TasksTable({
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
+                {/* CANOPY'S RULE, DELIBERATELY: this covers the rows ON SCREEN
+                    after filtering, never the whole unseen result set. A
+                    select-all that reaches past what you can see is how
+                    somebody archives four hundred rows meaning to archive
+                    eight. */}
+                <th className="w-8 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selection.header === "all"}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selection.header === "some";
+                    }}
+                    onChange={selection.toggleHeader}
+                    aria-label={t("bulk_select_all")}
+                    className="size-[15px] cursor-pointer accent-[var(--accent)]"
+                  />
+                </th>
                 <ColumnMenu
                   label={t("col_status")}
                   t={t}
@@ -663,6 +721,8 @@ export function TasksTable({
                   key={task.id}
                   task={task}
                   commentCount={commentCounts[task.id] ?? 0}
+                  isSelected={selection.isSelected(task.id)}
+                  onSelectToggle={() => selection.toggle(task.id)}
                   status={statusOf(task)}
                   statusOptions={statusOptions}
                   firmWide={firmWide}
@@ -679,7 +739,7 @@ export function TasksTable({
               ))}
             {hidden > 0 && moreHref && (
                 <tr>
-                  <td colSpan={firmWide ? 8 : 7} className="px-2">
+                  <td colSpan={firmWide ? 9 : 8} className="px-2">
                     <Link
                       href={moreHref}
                       className="block py-2.5 text-xs text-muted-foreground transition-colors hover:text-accent"
@@ -692,7 +752,7 @@ export function TasksTable({
             {shown.length === 0 && (
                 <tr>
                   <td
-                    colSpan={firmWide ? 8 : 7}
+                    colSpan={firmWide ? 9 : 8}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     {filtersOn || view !== "active"
@@ -704,6 +764,92 @@ export function TasksTable({
             </tbody>
           </table>
       </div>
+
+      {/* CANOPY'S ACTION SET, cut to what Vylan can already do one row at a
+          time: Status, Priority, Assignee on the bar; Delete behind More
+          because it is the one that costs something. */}
+      {canEdit && (
+        <BulkActionBar
+          count={selection.count}
+          busy={bulkBusy}
+          onClear={selection.clear}
+          actions={[
+            {
+              key: "status",
+              label: t("task_change_status"),
+              icon: Milestone,
+              submenu: statusOptions.map((option) => ({
+                key: option.id,
+                label: option.name,
+                dotColor: option.color,
+                onSelect: () =>
+                  runBulk(
+                    {
+                      taskIds: [],
+                      statusId: option.id.startsWith("bucket:") ? null : option.id,
+                      status: option.id.startsWith("bucket:")
+                        ? option.bucket
+                        : undefined,
+                    },
+                    option.name,
+                  ),
+              })),
+            },
+            {
+              key: "priority",
+              label: t("col_priority"),
+              icon: Flag,
+              submenu: (["high", "medium", "low", "none"] as TaskPriority[]).map(
+                (pr) => ({
+                  key: pr,
+                  label: t(`priority_${pr}` as "priority_none"),
+                  onSelect: () =>
+                    runBulk(
+                      { taskIds: [], priority: pr },
+                      t(`priority_${pr}` as "priority_none"),
+                    ),
+                }),
+              ),
+            },
+            ...(members.length > 0
+              ? [
+                  {
+                    key: "assignee",
+                    label: t("assign_to"),
+                    icon: UserRound,
+                    submenu: [
+                      ...members.map((m) => ({
+                        key: m.id,
+                        label: m.name,
+                        onSelect: () =>
+                          runBulk({ taskIds: [], assigneeId: m.id }, m.name),
+                      })),
+                      {
+                        key: "__nobody",
+                        label: t("assign_nobody"),
+                        onSelect: () =>
+                          runBulk(
+                            { taskIds: [], assigneeId: null },
+                            t("assign_nobody"),
+                          ),
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+          moreActions={[
+            {
+              key: "delete",
+              label: t("task_delete"),
+              icon: Trash2,
+              variant: "destructive" as const,
+              onSelect: () =>
+                runBulk({ taskIds: [], remove: true }, t("task_delete")),
+            },
+          ]}
+        />
+      )}
 
       <TaskDetailPanel
         task={rows.find((r) => r.id === detailId) ?? null}
@@ -761,6 +907,8 @@ type Patch =
 function Row({
   task,
   commentCount,
+  isSelected,
+  onSelectToggle,
   status,
   statusOptions,
   firmWide,
@@ -777,6 +925,8 @@ function Row({
   task: TaskRow;
   /** How many comments this task has, from the table's one batched count. */
   commentCount: number;
+  isSelected: boolean;
+  onSelectToggle: () => void;
   /** Already resolved to the firm's label and colour. */
   status: FirmStatus;
   statusOptions: FirmStatus[];
@@ -944,8 +1094,24 @@ function Row({
         careless click both ticks a task off and opens a panel about it. */}
     <tr
       onClick={onOpenDetail}
-      className="group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40"
+      className={cn(
+        "group cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/40",
+        isSelected && "bg-accent-subtle/40",
+      )}
     >
+      {/* The SELECTOR, not the done tick. They are different questions asked in
+          adjacent columns, so they get different controls: a square box you
+          tick to act on, and the rounded box beside the name that finishes the
+          work. */}
+      <td className="w-8 px-2 py-2" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onSelectToggle()}
+          aria-label={t("bulk_select_task", { title: task.title })}
+          className="size-[15px] cursor-pointer accent-[var(--accent)]"
+        />
+      </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-2">
         {/* ONE CLICK TO TICK IT OFF. The founder, on the first version of this

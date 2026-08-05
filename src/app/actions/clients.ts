@@ -26,6 +26,7 @@ import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
 import { addClientMemberAction } from "@/app/actions/client-members";
 import { parseDraftTeam } from "@/lib/clients/draft-team";
+import { guardBulkIds } from "@/lib/bulk/selection";
 
 export type ClientFormState = {
   ok?: boolean;
@@ -491,4 +492,69 @@ export async function importFromSessionAndRedirect(
   await bulkCreateClients(validated);
   revalidatePath("/", "layout");
   redirect(getPathname({ locale, href: "/clients" }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BULK
+//
+// Canopy's client list carries bulk icons of its own (Bulk Task, email, assign,
+// edit, folder, More). This does the two Vylan already has single-row actions
+// for — who owns the client, and archiving — rather than inventing writers that
+// have never been exercised one row at a time.
+//
+// Reassignment is deliberately NOT owner-gated, matching reassignClientAction:
+// it is accountability, not access control, and clients stay firm-visible.
+// Archiving IS gated on clients.manage, matching archiveClientAction — a Junior
+// does the work on a client but does not decide the client is finished with.
+//
+// Partial success is reported, not swallowed: `done` and `failed` both come
+// back so the toast can say "8 of 10".
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type BulkClientResult = {
+  ok: boolean;
+  done?: number;
+  failed?: number;
+  error?: "no_session" | "not_allowed" | "too_many" | "failed";
+};
+
+export async function bulkUpdateClientsAction(input: {
+  clientIds: string[];
+  /** Who owns them. Null unassigns. */
+  assigneeId?: string | null;
+  archive?: boolean;
+}): Promise<BulkClientResult> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+
+  const guarded = guardBulkIds(input.clientIds);
+  if (!guarded.ok) return { ok: false, error: "too_many" };
+  if (guarded.ids.length === 0) return { ok: true, done: 0, failed: 0 };
+
+  if (input.archive && !can(user, "clients.manage")) {
+    return { ok: false, error: "not_allowed" };
+  }
+
+  let done = 0;
+  let failed = 0;
+  for (const clientId of guarded.ids) {
+    try {
+      if (input.archive) {
+        await archiveClient(clientId);
+      } else if (input.assigneeId !== undefined) {
+        // Through the same checked path a single reassign uses, so the
+        // "target must be an ACTIVE member of THIS firm" rule cannot be
+        // skipped by going in bulk.
+        const res = await reassignClientAction(clientId, input.assigneeId ?? "");
+        if (!res.ok) throw new Error(res.error ?? "reassign_failed");
+      }
+      done += 1;
+    } catch (err) {
+      console.error("[clients] bulk row failed:", clientId, err);
+      failed += 1;
+    }
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: done > 0 || failed === 0, done, failed };
 }

@@ -427,6 +427,28 @@ export async function updateEngagementTask(input: {
  * exception. Adding this after the table had rows would have meant rewriting
  * every read of it, which is why it went in while the table was still empty.
  */
+/**
+ * Who is on one task, right now.
+ *
+ * Exists for the BULK assign path, which replaces a task's assignee set rather
+ * than adding to it: "assign these twelve to Marc" means Marc is on them, not
+ * that Marc joins whoever was already there. Doing that needs to know who to
+ * take off, and reading it here keeps the rule in this module rather than
+ * having the action reach into the table itself.
+ */
+export async function listTaskAssignees(taskId: string): Promise<string[]> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_task_assignees")
+    .select("user_id")
+    .eq("task_id", taskId);
+  if (error) {
+    if (isMissingSchema(error)) throw new EngagementTasksUnsupportedError();
+    throw error;
+  }
+  return ((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id);
+}
+
 export async function setTaskAssignee(input: {
   taskId: string;
   userId: string;
