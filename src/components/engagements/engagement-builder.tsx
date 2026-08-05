@@ -34,12 +34,14 @@ import {
   ScrollText,
 } from "lucide-react";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
-import { cn } from "@/lib/cn";
 // The SAME radio card the template builders use. A hand-rolled copy here was
 // how this step ended up shouting "ENGAGEMENT PERIOD BEGINS ON" in caps over
 // two lines while the template builder said it quietly in one — the exact
 // drift the shared chrome exists to prevent.
-import { RadioCard } from "@/components/templates/template-builder-shell";
+import {
+  BuilderChrome,
+  RadioCard,
+} from "@/components/templates/template-builder-shell";
 import {
   findScopeWarning,
   type ScopeWarningContact,
@@ -86,7 +88,6 @@ import {
   type EngagementTemplatePayload,
   type TemplateChecklistItem,
 } from "@/lib/engagements/template-payload";
-import { EngagementWizardRail } from "@/components/engagements/engagement-wizard-rail";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
 import { SelectableTemplateCard } from "@/components/templates/template-card";
@@ -162,6 +163,23 @@ export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
 /** Same list the template builder offers, so a template's period survives the
  *  trip into an engagement without landing on a value the dropdown lacks. */
 const PERIOD_OPTIONS: (number | null)[] = [null, 1, 3, 6, 12, 24];
+
+const PREVIEW_STEP_FOR: Record<
+  string,
+  "introduction" | "services" | "terms" | "sign"
+> = {
+  // Who it is for and what it is called — the top of the client's document.
+  details: "introduction",
+  // The priced lines, and the work and money that hang off them. All three
+  // land in the client's Services section.
+  services: "services",
+  tasks: "services",
+  billing: "services",
+  // Chasing is invisible to the client, so it highlights nothing new — the
+  // introduction is the honest neutral, not a section reminders belong to.
+  reminders: "introduction",
+  proposal: "sign",
+};
 
 const WIZARD_STEPS = [
   "details",
@@ -607,6 +625,9 @@ export function EngagementBuilder({
   }
 
   const [step, setStep] = useState<WizardStep>("details");
+  // Open by default, like every template builder. The eye in the tab bar hides
+  // it for anyone who wants the full width for the form.
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   // Load a saved engagement template into the form. Everything it carries is
@@ -685,7 +706,6 @@ export function EngagementBuilder({
     // and refusing to let them would break the existing flow.
     proposal: true,
   };
-  const stepIndex = WIZARD_STEPS.indexOf(step);
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
   const [emptyAttempts, setEmptyAttempts] = useState(0);
@@ -1166,6 +1186,9 @@ export function EngagementBuilder({
       title={t("new_title")}
       closeHref="/engagements"
       busy={pending}
+      // BuilderChrome scrolls its own middle and pins its own footer, so the
+      // modal body must not scroll or pad on top of it.
+      flushBody
       onSaveDraft={() => submit(false)}
       onSaveAndSend={() => submit(true)}
       onSaveAsTemplate={() => setSavingTemplate(true)}
@@ -1185,29 +1208,50 @@ export function EngagementBuilder({
       suggestedName={title.trim()}
     />
 
-    {/* Rail left, one step's worth of form right. The rail is sticky so it
-        stays a table of contents on a long step rather than scrolling with it.
-        The rail is a FIXED 17rem and the form takes everything else. A
-        A fractional rail (1fr_3fr) would grow the table of contents on a wide
-        monitor, which is the one thing here that gains nothing from extra
-        width — the form is where the room is needed. */}
-    <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
-      <div className="lg:sticky lg:top-6">
-        <EngagementWizardRail
-          label={t("wizard_nav_label")}
-          current={step}
-          onSelect={setStep}
-          steps={WIZARD_STEPS.map((k) => ({
-            key: k,
-            label: t(`wizard_step_${k}` as WizardStepKey),
-            complete: stepComplete[k],
-            // Only the two that actually stop you sending are marked required.
-            required: k === "details" || k === "tasks",
-          }))}
-        />
-      </div>
+    {/* ── THE SAME CHROME AS EVERY TEMPLATE BUILDER ────────────────────
+        The founder: "the engagement creation ui is still lacking. IT still has
+        that Vylan UI look not the canopy Ui look that you can see on the
+        template builders. I want the same feel on engagement creation."
 
-      <div className="space-y-6">
+        So the left rail and the hand-rolled Back/Next are gone, replaced by
+        BuilderChrome — the identical tabs, preview toggle, form/preview split
+        and footer the three template builders wear. Not a copy of them: the
+        same component, so the next change to how a builder looks reaches this
+        screen without anyone remembering to come here.
+
+        The MODAL stays. The founder asked for the same FEEL, not for
+        engagement creation to stop being an overlay — and the overlay was its
+        own decision, made over three rounds of bug reports. */}
+    <BuilderChrome
+      tabs={WIZARD_STEPS.map((k): { key: string; label: string; incomplete: boolean } => ({
+        key: k,
+        label: t(`wizard_step_${k}` as WizardStepKey),
+        // The red mark means "required and not answered yet" — the same thing
+        // the rail's asterisk-plus-empty-circle used to say, in the template
+        // builders' vocabulary. Only the two that actually stop you sending.
+        incomplete: (k === "details" || k === "tasks") && !stepComplete[k],
+      }))}
+      activeTab={step}
+      onTabChange={(k) => setStep(k as WizardStep)}
+      previewOpen={previewOpen}
+      onPreviewToggle={() => setPreviewOpen((v) => !v)}
+      // ── THE PROPOSAL, ON EVERY STEP ─────────────────────────────────
+      // Founder: "Put the preview that you see on proposal appear throughout
+      // the entire engagement creation process."
+      //
+      // It is the same component the client opens, so every step now shows
+      // what your edits are doing to the document they will read. The step it
+      // highlights follows where you are working.
+      preview={
+        <div className="mx-auto flex max-w-md justify-center">
+          <ProposalPreview
+            data={proposalData}
+            locale={locale}
+            activeStep={PREVIEW_STEP_FOR[step]}
+          />
+        </div>
+      }
+    >
       {error && (
         <Alert variant="destructive">
           <AlertDescription>
@@ -2450,8 +2494,7 @@ export function EngagementBuilder({
           template, which meant an engagement built from scratch got defaults it
           could not see, let alone change. */}
       {step === "proposal" && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-          <div className="space-y-6">
+        <>
             {/* ── WHEN IT RUNS ─────────────────────────────────────────── */}
             <Card>
               <CardHeader>
@@ -2646,47 +2689,10 @@ export function EngagementBuilder({
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* THE SAME COMPONENT the client opens, and the same one the template
-              builder previews. Not a mock-up of it — if this drifted from what
-              is actually sent, previewing would be worse than not previewing. */}
-          <div className="xl:sticky xl:top-6">
-            <ProposalPreview
-              data={proposalData}
-              locale={locale}
-              activeStep="sign"
-            />
-          </div>
-        </div>
+        </>
       )}
 
-      {/* Step navigation ONLY. Saving moved into the bar above, where it stays
-          reachable on a long step instead of hiding under the form. */}
-      <div className="flex flex-wrap items-center gap-3 pt-2">
-        {stepIndex > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setStep(WIZARD_STEPS[stepIndex - 1])}
-            disabled={pending}
-          >
-            {t("wizard_back")}
-          </Button>
-        )}
-        {stepIndex < WIZARD_STEPS.length - 1 && (
-          <Button
-            type="button"
-            className="ml-auto"
-            onClick={() => setStep(WIZARD_STEPS[stepIndex + 1])}
-            disabled={pending}
-          >
-            {t("wizard_next")}
-          </Button>
-        )}
-      </div>
-      </div>
-    </div>
+    </BuilderChrome>
     </EngagementModalShell>
   );
 }
