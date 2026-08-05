@@ -46,12 +46,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/cn";
-import {
-  EngagementItemsEditor,
-  type CatalogueService,
-} from "@/components/engagements/engagement-items-editor";
+import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
-import type { EngagementItemDraft } from "@/lib/engagements/items";
+import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
+import {
+  defaultPriceVisibility,
+  flattenBlocks,
+  type BillingBlock,
+  type PriceVisibility,
+} from "@/lib/engagements/billing-blocks";
 import {
   resolvePlaceholders,
   PLACEHOLDERS,
@@ -139,7 +142,28 @@ export function EngagementTemplateBuilder({
   const [documentName, setDocumentName] = useState(initial?.payload.documentName ?? "");
 
   const [assigneeIds, setAssigneeIds] = useState<string[]>(initial?.payload.assigneeIds ?? []);
-  const [items, setItems] = useState<EngagementItemDraft[]>(() => [...(initial?.payload.items ?? [])]);
+  // Canopy's billing blocks. Seeded from the template, or from ONE block
+  // holding whatever flat items it already had — a template written before
+  // blocks existed opens with its services intact rather than empty.
+  const [blocks, setBlocks] = useState<BillingBlock[]>(() => {
+    const saved = initial?.payload.billingBlocks ?? [];
+    if (saved.length > 0) return saved.map((b) => ({ ...b, items: [...b.items] }));
+    const flat = initial?.payload.items ?? [];
+    if (flat.length === 0) return [];
+    return [
+      {
+        billingType: "one_time" as const,
+        timing: "on_acceptance" as const,
+        frequency: "monthly" as const,
+        combineItems: false,
+        clientNote: "",
+        items: [...flat],
+      },
+    ];
+  });
+  const [visibility, setVisibility] = useState<PriceVisibility>(
+    initial?.payload.priceVisibility ?? defaultPriceVisibility(),
+  );
 
   const [termsEnabled, setTermsEnabled] = useState(initial?.payload.termsEnabled ?? false);
   const [termsText, setTermsText] = useState(initial?.payload.termsText ?? "");
@@ -217,7 +241,11 @@ export function EngagementTemplateBuilder({
             .filter((s) => s.length > 0),
           firmCountersigns,
           depositCents,
-          items: items.filter((i) => i.name.trim().length > 0),
+          // The blocks are the authoring shape; `items` stays the flat source
+          // of truth every other surface (totals, invoices) already reads.
+          items: flattenBlocks(blocks),
+          billingBlocks: blocks,
+          priceVisibility: visibility,
         },
         // A draft skips the "is this worth saving" check — half-written IS the
         // point of a draft.
@@ -533,13 +561,14 @@ export function EngagementTemplateBuilder({
             )}
 
             {tab === "services" && (
-              // IMPORTED, not rebuilt. The same priced-scope editor the
-              // engagement builder uses — same rounding, same catalogue picker,
-              // same totals. A second copy is how the two would start
-              // disagreeing about money.
-              <EngagementItemsEditor
-                items={items}
-                onChange={setItems}
+              // Canopy's Services tab: blocks, each with a billing rule, each
+              // holding services edited by the SAME items editor the engagement
+              // builder uses.
+              <BillingBlocksEditor
+                blocks={blocks}
+                onChange={setBlocks}
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
                 locale={locale}
                 services={services}
                 fallbackTaxPct={fallbackTaxPct}
@@ -696,7 +725,7 @@ export function EngagementTemplateBuilder({
                 welcome: welcomeEnabled ? introMessage : null,
                 videoUrl: videoEnabled ? videoUrl : null,
                 documentName: documentEnabled ? documentName : null,
-                services: items.map((i) => ({
+                services: flattenBlocks(blocks).map((i) => ({
                   name: i.name,
                   rateCents: i.rateCents,
                 })),

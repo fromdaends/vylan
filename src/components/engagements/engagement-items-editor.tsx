@@ -64,12 +64,22 @@ export function EngagementItemsEditor({
   services = [],
   /** The firm's default tax rate, used where a line does not set its own. */
   fallbackTaxPct = null,
+  /**
+   * Hide the per-item billing frequency.
+   *
+   * TRUE inside a BILLING BLOCK, where the block decides how often its services
+   * bill and flattenBlocks overwrites whatever the item held. Showing the
+   * control there would offer an answer that is then thrown away — worse than
+   * not offering it, because the accountant would believe it.
+   */
+  hideFrequency = false,
 }: {
   items: EngagementItemDraft[];
   onChange: (next: EngagementItemDraft[]) => void;
   locale: AppLocale;
   services?: CatalogueService[];
   fallbackTaxPct?: number | null;
+  hideFrequency?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const total = totalForItems(items, fallbackTaxPct);
@@ -216,7 +226,7 @@ export function EngagementItemsEditor({
                       </select>
                     </div>
 
-                    <div>
+                    <div className={hideFrequency ? "hidden" : undefined}>
                       <Label htmlFor={`item-freq-${idx}`} className="text-xs">
                         {t("item_billing_frequency")}
                       </Label>

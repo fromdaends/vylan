@@ -12,6 +12,15 @@
 // throwing. A template that half-loads is worth far more than one that errors.
 
 import {
+  BLOCK_FREQUENCIES,
+  BILLING_TYPES,
+  ONE_TIME_TIMINGS,
+  RECURRING_TIMINGS,
+  defaultPriceVisibility,
+  type BillingBlock,
+  type PriceVisibility,
+} from "@/lib/engagements/billing-blocks";
+import {
   BILLING_FREQUENCIES,
   RATE_TYPES,
   type BillingFrequency,
@@ -33,8 +42,19 @@ export type EngagementTemplatePayload = {
   /** The engagement's own title, not the template's name. */
   title: string;
   type: string | null;
-  /** Priced scope. */
+  /** Priced scope, flat. Kept as the source of truth for totals and invoices —
+   *  blocks below are the AUTHORING shape and flatten into this. */
   items: EngagementItemDraft[];
+  /**
+   * Canopy's billing blocks: services grouped by one billing rule.
+   *
+   * Empty on a template written before blocks existed, which reads as "the flat
+   * list is all there is" — exactly right, and why the flat `items` above stays
+   * the thing everything else consumes.
+   */
+  billingBlocks: BillingBlock[];
+  /** Canopy's gear menu: what the client is allowed to see. */
+  priceVisibility: PriceVisibility;
   /** What the client is asked to send. */
   checklist: TemplateChecklistItem[];
   /**
@@ -145,6 +165,8 @@ export function emptyPayload(): EngagementTemplatePayload {
     additionalSignerLabels: [],
     firmCountersigns: false,
     items: [],
+    billingBlocks: [],
+    priceVisibility: defaultPriceVisibility(),
     checklist: [],
     invoice: null,
     reminders: null,
@@ -253,6 +275,58 @@ function readPeriodMonths(v: unknown): number | null {
   return v;
 }
 
+/**
+ * One billing block, read defensively.
+ *
+ * Null for anything that is not an object. A block with an unrecognised type or
+ * timing falls back to the safe pair (one-time, on acceptance) rather than being
+ * dropped: losing the block loses its SERVICES, and a wrong-but-visible billing
+ * rule is one the accountant can see and fix, where a missing block is not.
+ */
+function readBillingBlock(raw: unknown): BillingBlock | null {
+  const o = obj(raw);
+  if (!o) return null;
+
+  const billingType = (BILLING_TYPES as readonly string[]).includes(
+    o.billingType as string,
+  )
+    ? (o.billingType as BillingBlock["billingType"])
+    : "one_time";
+
+  const allowed: readonly string[] =
+    billingType === "one_time" ? ONE_TIME_TIMINGS : RECURRING_TIMINGS;
+  const timing = allowed.includes(o.timing as string)
+    ? (o.timing as BillingBlock["timing"])
+    : (allowed[0] as BillingBlock["timing"]);
+
+  return {
+    billingType,
+    timing,
+    frequency: (BLOCK_FREQUENCIES as readonly string[]).includes(
+      o.frequency as string,
+    )
+      ? (o.frequency as BillingBlock["frequency"])
+      : "monthly",
+    combineItems: o.combineItems === true,
+    clientNote: str(o.clientNote),
+    items: arr(o.items)
+      .map(readItem)
+      .filter((i): i is EngagementItemDraft => i != null),
+  };
+}
+
+/** The three switches. Absent reads as VISIBLE — a client who cannot see what
+ *  they are paying for is the surprising state, not the safe one. */
+function readPriceVisibility(raw: unknown): PriceVisibility {
+  const o = obj(raw);
+  if (!o) return defaultPriceVisibility();
+  return {
+    itemizedPrice: o.itemizedPrice !== false,
+    blockTotals: o.blockTotals !== false,
+    total: o.total !== false,
+  };
+}
+
 export function readPayload(raw: unknown): EngagementTemplatePayload {
   const o = obj(raw);
   if (!o) return emptyPayload();
@@ -298,6 +372,10 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
     items: arr(o.items)
       .map(readItem)
       .filter((i): i is EngagementItemDraft => i != null),
+    billingBlocks: arr(o.billingBlocks)
+      .map(readBillingBlock)
+      .filter((b): b is BillingBlock => b != null),
+    priceVisibility: readPriceVisibility(o.priceVisibility),
     checklist: arr(o.checklist)
       .map(readChecklistItem)
       .filter((i): i is TemplateChecklistItem => i != null),

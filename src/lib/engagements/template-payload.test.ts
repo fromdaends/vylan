@@ -358,3 +358,96 @@ describe("readPayload — who signs", () => {
     expect(readPayload({ firmCountersigns: "yes" }).firmCountersigns).toBe(false);
   });
 });
+
+describe("readPayload — billing blocks", () => {
+  it("defaults to none, which reads as 'the flat list is all there is'", () => {
+    expect(readPayload({}).billingBlocks).toEqual([]);
+  });
+
+  it("survives billingBlocks not being an array", () => {
+    expect(readPayload({ billingBlocks: "nope" }).billingBlocks).toEqual([]);
+  });
+
+  it("drops non-object entries", () => {
+    const p = readPayload({ billingBlocks: [null, 7, { billingType: "recurring" }] });
+    expect(p.billingBlocks).toHaveLength(1);
+  });
+
+  it("keeps a valid type and timing pair", () => {
+    const p = readPayload({
+      billingBlocks: [{ billingType: "one_time", timing: "on_completion" }],
+    });
+    expect(p.billingBlocks[0].billingType).toBe("one_time");
+    expect(p.billingBlocks[0].timing).toBe("on_completion");
+  });
+
+  it("REPAIRS a timing that does not belong to the type rather than dropping the block", () => {
+    // Losing the block loses its services; a visibly-wrong rule can be fixed.
+    const p = readPayload({
+      billingBlocks: [{ billingType: "recurring", timing: "on_completion" }],
+    });
+    expect(p.billingBlocks[0].timing).toBe("engagement_start");
+  });
+
+  it("falls back to one-time for an unrecognised type", () => {
+    const p = readPayload({ billingBlocks: [{ billingType: "quarterly_ish" }] });
+    expect(p.billingBlocks[0].billingType).toBe("one_time");
+    expect(p.billingBlocks[0].timing).toBe("on_acceptance");
+  });
+
+  it("falls back to monthly for an unrecognised frequency", () => {
+    const p = readPayload({
+      billingBlocks: [{ billingType: "recurring", frequency: "fortnightly" }],
+    });
+    expect(p.billingBlocks[0].frequency).toBe("monthly");
+  });
+
+  it("never accepts 'once' as a block frequency", () => {
+    // A block that bills once is a one-time block; two ways to say it could
+    // then disagree.
+    const p = readPayload({
+      billingBlocks: [{ billingType: "recurring", frequency: "once" }],
+    });
+    expect(p.billingBlocks[0].frequency).toBe("monthly");
+  });
+
+  it("only literal true combines items", () => {
+    expect(
+      readPayload({ billingBlocks: [{ combineItems: "true" }] }).billingBlocks[0]
+        .combineItems,
+    ).toBe(false);
+  });
+
+  it("reads the services inside a block", () => {
+    const p = readPayload({
+      billingBlocks: [
+        { billingType: "one_time", items: [{ name: "Setup", rateCents: 50000 }] },
+      ],
+    });
+    expect(p.billingBlocks[0].items).toHaveLength(1);
+    expect(p.billingBlocks[0].items[0].name).toBe("Setup");
+  });
+});
+
+describe("readPayload — price visibility", () => {
+  it("shows everything when absent", () => {
+    expect(readPayload({}).priceVisibility).toEqual({
+      itemizedPrice: true,
+      blockTotals: true,
+      total: true,
+    });
+  });
+
+  it("only literal false hides something", () => {
+    const p = readPayload({
+      priceVisibility: { itemizedPrice: false, blockTotals: "false", total: 0 },
+    });
+    expect(p.priceVisibility.itemizedPrice).toBe(false);
+    expect(p.priceVisibility.blockTotals).toBe(true);
+    expect(p.priceVisibility.total).toBe(true);
+  });
+
+  it("survives priceVisibility being the wrong type", () => {
+    expect(readPayload({ priceVisibility: "nope" }).priceVisibility.total).toBe(true);
+  });
+});
