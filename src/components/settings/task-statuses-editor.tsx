@@ -494,12 +494,8 @@ function StatusRow({
     onPatched(status.id, patch);
     setState("saving");
 
-    void updateStatusAction({ id: status.id, ...patch }).then((res) => {
-      if (onSaved(res)) {
-        setState("saved");
-        return;
-      }
-      // Put it back exactly as it was, in the row AND in the list.
+    // Put it back exactly as it was, in the row AND in the list.
+    const revert = () => {
       committed.current = rollback;
       setName(rollback.name);
       setDescription(rollback.description);
@@ -509,7 +505,32 @@ function StatusRow({
         description: rollback.description || null,
       });
       setState("idle");
-    });
+    };
+
+    void updateStatusAction({ id: status.id, ...patch })
+      .then((res) => {
+        if (onSaved(res)) {
+          setState("saved");
+          return;
+        }
+        revert();
+      })
+      // ⚠️ .catch IS NOT OPTIONAL HERE, and its absence was a real bug caught
+      // on production. A server action does not always RESOLVE with
+      // { ok: false } — it can REJECT outright, and the most common reason in
+      // this repo is Vercel deploy skew: a tab loaded from the previous
+      // deployment posts an action id the new one has never heard of and gets
+      // a 503 (see the skew notes on engagement AutoRefresh).
+      //
+      // Optimistic UI turns that from "the click did nothing" into something
+      // worse — the new colour is ALREADY on screen and the pip says Saved,
+      // so the page confidently shows a value the database never took. This
+      // was observed exactly once, live, and it is the whole reason a failure
+      // path has to cover rejection and not just refusal.
+      .catch(() => {
+        revert();
+        toast.error(t("statuses_stale_tab"));
+      });
   }
 
   /** Typing debounces; picking a colour commits at once. */
