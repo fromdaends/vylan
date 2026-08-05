@@ -19,6 +19,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   sendEngagementAction,
   completeEngagementAction,
+  acceptOnBehalfAction,
+  activateEngagementAction,
+  revertEngagementToDraftAction,
   reopenEngagementAction,
   deleteDraftAction,
 } from "@/app/actions/engagements";
@@ -969,10 +972,11 @@ export default async function EngagementDetailPage({
     status: engagement.status,
     sentAt: engagement.sent_at ?? null,
     completedAt: engagement.completed_at ?? null,
-    // No acceptance step exists yet, so a missing acceptedAt must read as NOT
-    // accepted — the other default would silently mark every historical
-    // engagement as agreed to by a client who was never asked.
-    acceptedAt: null,
+    // The acceptance step exists now (1640). A NULL still reads as not
+    // accepted, which is what every historical engagement is — the other
+    // default would mark them all as agreed to by a client never asked.
+    acceptedAt: engagement.accepted_at ?? null,
+    activatedAt: engagement.activated_at ?? null,
     // "The client has done something since we sent it" is the honest stand-in
     // for live until acceptance draws that line properly.
     clientHasEngaged: attention.daysSinceClientActivity != null,
@@ -1307,6 +1311,43 @@ export default async function EngagementDetailPage({
                   button hover (no green tint) per founder preference. When the
                   firm requires an owner's sign-off, staff see a disabled button
                   + hint instead (an owner marks it done). */}
+              {/* ── ACCEPTANCE (1640) ────────────────────────────────────
+                  Each button appears only in the state it belongs to, which is
+                  Karbon's model: an action offered in the wrong state is a
+                  button that either does nothing or does something surprising.
+
+                  SENT, not yet agreed -> record that they agreed elsewhere. */}
+              {agreementStatus === "sent" && (
+                <form action={acceptOnBehalfAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" size="sm" variant="outline">
+                    {t("accept_on_behalf")}
+                  </Button>
+                </form>
+              )}
+              {/* AGREED, not yet started -> let the work begin. Signing is the
+                  client's act; starting is the firm's. */}
+              {agreementStatus === "accepted" && (
+                <form action={activateEngagementAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" size="sm">
+                    {t("activate_engagement")}
+                  </Button>
+                </form>
+              )}
+              {/* SENT or AGREED -> pull it back to edit. Destructive: it
+                  withdraws the send AND clears the acceptance, because editing
+                  what a client agreed to while keeping their agreement on the
+                  record is the one outcome this must make impossible. */}
+              {(agreementStatus === "sent" ||
+                agreementStatus === "accepted") && (
+                <form action={revertEngagementToDraftAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" size="sm" variant="ghost">
+                    {t("revert_to_draft")}
+                  </Button>
+                </form>
+              )}
               {(
                 <form action={completeEngagementAction}>
                   <input type="hidden" name="id" value={engagement.id} />

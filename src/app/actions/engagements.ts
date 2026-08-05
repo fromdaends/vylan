@@ -14,6 +14,9 @@ import {
   sendEngagement,
   cancelEngagement,
   completeEngagement,
+  acceptEngagement,
+  activateEngagement,
+  revertEngagementToDraft,
   reopenEngagement,
   archiveEngagement,
   unarchiveEngagement,
@@ -770,6 +773,82 @@ export async function cancelEngagementAction(formData: FormData) {
   // and the stage column clears, so its chip falls back to "Cancelled".
   await syncEngagementStage(await getServerSupabase(), id);
   revalidateEngagementPaths(id);
+}
+
+// --- ACCEPTANCE (1640) -------------------------------------------------------
+
+/**
+ * Karbon's "Accept on behalf": the client agreed on the phone or on paper.
+ *
+ * Recorded as accepted_by = 'firm', NEVER 'client'. The distinction is the
+ * whole point — one is a signature, the other is a note that one was given —
+ * and the audit entry says which so it is answerable later.
+ */
+export async function acceptOnBehalfAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  const me = await getCurrentUser();
+  if (!me?.firm_id) return;
+
+  const engagement = await getEngagement(id);
+  // Accepting something that was never sent is not a state anyone chose. The
+  // database guard stops a double-accept; this stops the nonsensical one.
+  if (!engagement || engagement.status === "draft") return;
+
+  await acceptEngagement(id, "firm");
+  await logUserActivity(engagement.firm_id, id, "engagement_accepted", {
+    accepted_by: "firm",
+  });
+  revalidatePath(`/engagements/${id}`);
+  revalidatePath("/engagements");
+}
+
+/** Karbon's Activate: Accepted -> work may begin. */
+export async function activateEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  const me = await getCurrentUser();
+  if (!me?.firm_id) return;
+
+  const engagement = await getEngagement(id);
+  if (!engagement) return;
+
+  // The real guard is in the query (accepted_at is not null); this only avoids
+  // a pointless write and a misleading audit line.
+  await activateEngagement(id);
+  await logUserActivity(engagement.firm_id, id, "engagement_activated", {});
+  revalidatePath(`/engagements/${id}`);
+  revalidatePath("/engagements");
+}
+
+/**
+ * Karbon's "Revert to Draft" — the only way to edit an engagement after it has
+ * been sent, and deliberately destructive.
+ *
+ * It clears the acceptance too. An engagement that kept its agreement while
+ * being edited would let a firm change what a client agreed to, after they
+ * agreed, with the agreement still on the record. Reminders are cancelled for
+ * the same reason: nothing should keep chasing a client about a document
+ * request that has been withdrawn.
+ */
+export async function revertEngagementToDraftAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  const me = await getCurrentUser();
+  if (!me?.firm_id) return;
+
+  const engagement = await getEngagement(id);
+  if (!engagement) return;
+
+  await revertEngagementToDraft(id);
+  await cancelEngagementReminders(id);
+  await logUserActivity(engagement.firm_id, id, "engagement_reverted", {
+    // Worth recording: reverting an ACCEPTED engagement throws away a client's
+    // agreement, which is a heavier act than pulling back an unread one.
+    was_accepted: engagement.accepted_at != null,
+  });
+  revalidatePath(`/engagements/${id}`);
+  revalidatePath("/engagements");
 }
 
 export async function completeEngagementAction(formData: FormData) {
