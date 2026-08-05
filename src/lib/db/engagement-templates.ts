@@ -23,6 +23,11 @@ export type EngagementTemplate = {
   payload: EngagementTemplatePayload;
   /** Whose it is — the picker groups private ones under their own heading. */
   createdByUserId: string | null;
+  /** When it was last changed (1600). Set by trigger on every update. */
+  updatedAt: string | null;
+  /** Who changed it (1600). Null renders as the date with no name — honest
+   *  about "we did not record who" rather than guessing. */
+  updatedByUserId: string | null;
 };
 
 type Row = {
@@ -31,6 +36,8 @@ type Row = {
   access: string;
   payload: unknown;
   created_by_user_id: string | null;
+  updated_at?: string | null;
+  updated_by_user_id?: string | null;
 };
 
 /**
@@ -44,7 +51,7 @@ export async function listEngagementTemplates(): Promise<EngagementTemplate[]> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("engagement_templates")
-    .select("id, name, access, payload, created_by_user_id")
+    .select("id, name, access, payload, created_by_user_id, updated_at, updated_by_user_id")
     .is("archived_at", null)
     .order("created_at", { ascending: false });
 
@@ -61,6 +68,8 @@ export async function listEngagementTemplates(): Promise<EngagementTemplate[]> {
     access: r.access === "private" ? "private" : "team",
     payload: readPayload(r.payload),
     createdByUserId: r.created_by_user_id,
+    updatedAt: r.updated_at ?? null,
+    updatedByUserId: r.updated_by_user_id ?? null,
   }));
 }
 
@@ -77,7 +86,7 @@ export async function getEngagementTemplate(
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("engagement_templates")
-    .select("id, name, access, payload, created_by_user_id")
+    .select("id, name, access, payload, created_by_user_id, updated_at, updated_by_user_id")
     .eq("id", id)
     .is("archived_at", null)
     .maybeSingle();
@@ -97,6 +106,8 @@ export async function getEngagementTemplate(
     access: r.access === "private" ? "private" : "team",
     payload: readPayload(r.payload),
     createdByUserId: r.created_by_user_id,
+    updatedAt: r.updated_at ?? null,
+    updatedByUserId: r.updated_by_user_id ?? null,
   };
 }
 
@@ -113,12 +124,17 @@ export async function updateEngagementTemplate(input: {
   payload: EngagementTemplatePayload;
 }): Promise<{ ok: boolean; needsMigration?: boolean }> {
   const supabase = await getServerSupabase();
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from("engagement_templates")
     .update({
       name: input.name,
       access: input.access,
       payload: input.payload,
+      // updated_at is the trigger's (1600). WHO is ours — the database cannot
+      // know that. Included only when we have a user, so a service-role write
+      // records the change without inventing an author.
+      ...(user?.id ? { updated_by_user_id: user.id } : {}),
     })
     .eq("id", input.id);
 
@@ -149,6 +165,7 @@ export async function createEngagementTemplate(input: {
       access: input.access,
       payload: input.payload,
       created_by_user_id: user.id,
+      updated_by_user_id: user.id,
     })
     .select("id")
     .single();
