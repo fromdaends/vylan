@@ -22,6 +22,11 @@ export type TaskStatus = {
   color: string;
   bucket: StatusBucket;
   sort: number;
+  /** One line saying what this status MEANS (1590). Null = none offered. */
+  description: string | null;
+  /** One of the three every firm is seeded with (1420), shown as "Preset".
+   *  NOT derived from created_by — see 1590 for why that would drift. */
+  isBuiltin: boolean;
 };
 
 export function toStatusBucket(v: unknown): StatusBucket {
@@ -34,6 +39,12 @@ export function toStatusBucket(v: unknown): StatusBucket {
  *  fall back to the three built-in labels rather than a 500. */
 function isMissingTable(error: { code?: string } | null): boolean {
   return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+/** An unknown COLUMN, as opposed to a missing table — 1590's description /
+ *  is_builtin before it is applied. Matched on codes only (repo rule). */
+function isMissingColumn(error: { code?: string } | null): boolean {
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
 const BUCKET_ORDER: Record<StatusBucket, number> = {
@@ -54,9 +65,17 @@ const BUCKET_ORDER: Record<StatusBucket, number> = {
 export const listTaskStatuses = cache(
   async function _listTaskStatuses(): Promise<TaskStatus[]> {
     const supabase = await getServerSupabase();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("task_statuses")
-      .select("id, name, color, bucket, sort");
+      .select("id, name, color, bucket, sort, description, is_builtin");
+    // Before 1590 those two columns do not exist. Retry without them rather
+    // than 500 a settings page — the reader below coalesces both, so the UI
+    // renders exactly as it did before the migration landed.
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("task_statuses")
+        .select("id, name, color, bucket, sort"));
+    }
     if (error) {
       if (isMissingTable(error)) return [];
       throw error;
@@ -68,6 +87,11 @@ export const listTaskStatuses = cache(
         color: typeof r.color === "string" ? r.color : "#64748b",
         bucket: toStatusBucket(r.bucket),
         sort: typeof r.sort === "number" ? r.sort : 0,
+        description:
+          typeof r.description === "string" && r.description.trim()
+            ? r.description
+            : null,
+        isBuiltin: r.is_builtin === true,
       }))
       .filter((s) => s.id && s.name)
       .sort(
@@ -84,6 +108,7 @@ export async function createTaskStatus(input: {
   name: string;
   color: string;
   bucket: StatusBucket;
+  description?: string | null;
   createdBy?: string | null;
 }): Promise<{ id: string } | { error: "duplicate" | "failed" }> {
   const supabase = await getServerSupabase();
@@ -100,18 +125,31 @@ export async function createTaskStatus(input: {
   const nextSort =
     (((existing ?? [])[0] as { sort?: number } | undefined)?.sort ?? 0) + 10;
 
-  const { data, error } = await supabase
+  const row: Record<string, unknown> = {
+    firm_id: input.firmId,
+    name: input.name,
+    color: input.color,
+    bucket: input.bucket,
+    sort: nextSort,
+    created_by: input.createdBy ?? null,
+  };
+  // Only sent when there IS one, so a pre-1590 database still accepts the
+  // insert instead of failing the whole create over an optional line of text.
+  if (input.description != null) row.description = input.description;
+
+  let { data, error } = await supabase
     .from("task_statuses")
-    .insert({
-      firm_id: input.firmId,
-      name: input.name,
-      color: input.color,
-      bucket: input.bucket,
-      sort: nextSort,
-      created_by: input.createdBy ?? null,
-    })
+    .insert(row)
     .select("id")
     .single();
+  if (error && isMissingColumn(error)) {
+    delete row.description;
+    ({ data, error } = await supabase
+      .from("task_statuses")
+      .insert(row)
+      .select("id")
+      .single());
+  }
   if (error) {
     // 23505 is the (firm_id, lower(name)) unique index — two statuses with one
     // name defeats the entire point, which is that the name is what people say.
@@ -125,20 +163,39 @@ export async function createTaskStatus(input: {
 export async function updateTaskStatus(input: {
   id: string;
   firmId: string;
-  patch: { name?: string; color?: string; bucket?: StatusBucket };
+  patch: {
+    name?: string;
+    color?: string;
+    bucket?: StatusBucket;
+    description?: string | null;
+  };
 }): Promise<{ ok: true } | { error: "duplicate" | "failed" }> {
   const supabase = await getServerSupabase();
   const row: Record<string, unknown> = {};
   if (input.patch.name !== undefined) row.name = input.patch.name;
   if (input.patch.color !== undefined) row.color = input.patch.color;
   if (input.patch.bucket !== undefined) row.bucket = input.patch.bucket;
+  if (input.patch.description !== undefined) {
+    row.description = input.patch.description;
+  }
   if (Object.keys(row).length === 0) return { ok: true };
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("task_statuses")
     .update(row)
     .eq("id", input.id)
     .eq("firm_id", input.firmId);
+  // Pre-1590: drop the description and save everything else, so renaming a
+  // status still works on a database that is behind the deployment.
+  if (error && isMissingColumn(error) && "description" in row) {
+    delete row.description;
+    if (Object.keys(row).length === 0) return { ok: true };
+    ({ error } = await supabase
+      .from("task_statuses")
+      .update(row)
+      .eq("id", input.id)
+      .eq("firm_id", input.firmId));
+  }
   if (error) {
     if (error.code === "23505") return { error: "duplicate" };
     console.error("[task-statuses] update failed:", error);

@@ -19,9 +19,15 @@ vi.mock("@/app/actions/task-statuses", () => ({
 import { TaskStatusesEditor, type EditableStatus } from "./task-statuses-editor";
 
 const STATUSES: EditableStatus[] = [
-  { id: "s1", name: "To do", color: "#2563eb", bucket: "todo" },
-  { id: "s2", name: "In progress", color: "#dc2626", bucket: "doing" },
-  { id: "s3", name: "Done", color: "#16a34a", bucket: "done" },
+  { id: "s1", name: "To do", color: "#2563eb", bucket: "todo", isBuiltin: true },
+  {
+    id: "s2",
+    name: "In progress",
+    color: "#dc2626",
+    bucket: "doing",
+    isBuiltin: true,
+  },
+  { id: "s3", name: "Done", color: "#16a34a", bucket: "done", isBuiltin: true },
 ];
 
 function renderEditor(statuses = STATUSES, canEdit = true) {
@@ -139,5 +145,90 @@ describe("TaskStatusesEditor — deleting", () => {
     await waitFor(() =>
       expect(screen.queryByDisplayValue("Blocked")).toBeNull(),
     );
+  });
+});
+
+// ── DESCRIPTION + PRESET (1590) ─────────────────────────────────────────────
+//
+// Founder's instruction, from Canopy's own help centre: a status carries a
+// description, and the ones the product ships are labelled rather than passed
+// off as the firm's own work.
+describe("TaskStatusesEditor — descriptions and presets", () => {
+  it("badges the seeded three, and nothing the firm made itself", () => {
+    renderEditor([
+      ...STATUSES,
+      { id: "s4", name: "With client", color: "#0891b2", bucket: "doing" },
+    ]);
+    // Three presets, and "With client" is not one of them.
+    expect(screen.getAllByText(en.Settings.statuses_preset)).toHaveLength(3);
+    const custom = screen.getByDisplayValue("With client").closest("li")!;
+    expect(custom.textContent).not.toContain(en.Settings.statuses_preset);
+  });
+
+  it("saves a description on blur, and shows it without a refresh", async () => {
+    renderEditor();
+    const field = screen.getByLabelText("Description for To do");
+    fireEvent.change(field, { target: { value: "Nobody has picked it up" } });
+    fireEvent.blur(field);
+
+    await waitFor(() => expect(updateStatusAction).toHaveBeenCalled());
+    expect(updateStatusAction.mock.calls[0][0]).toMatchObject({
+      id: "s1",
+      description: "Nobody has picked it up",
+    });
+  });
+
+  it("clears the description rather than storing an empty string", async () => {
+    renderEditor([
+      { ...STATUSES[0], description: "Nobody has picked it up" },
+      ...STATUSES.slice(1),
+    ]);
+    const field = screen.getByLabelText("Description for To do");
+    fireEvent.change(field, { target: { value: "   " } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(updateStatusAction).toHaveBeenCalled());
+    // null, not "" — the reader has one falsy case instead of two.
+    expect(updateStatusAction.mock.calls[0][0].description).toBeNull();
+  });
+
+  it("does not write when the description has not changed", async () => {
+    renderEditor([
+      { ...STATUSES[0], description: "Nobody has picked it up" },
+      ...STATUSES.slice(1),
+    ]);
+    const field = screen.getByLabelText("Description for To do");
+    fireEvent.blur(field);
+    expect(updateStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("sends the description when adding a status", async () => {
+    createStatusAction.mockResolvedValue({
+      ok: true,
+      created: {
+        id: "s4",
+        name: "With client",
+        color: "#0891b2",
+        bucket: "doing",
+        description: "Sent out, waiting on them",
+        isBuiltin: false,
+      },
+    });
+    renderEditor();
+    fireEvent.click(screen.getByRole("button", { name: en.Settings.statuses_add }));
+    fireEvent.change(
+      screen.getByPlaceholderText(en.Settings.statuses_name_placeholder),
+      { target: { value: "With client" } },
+    );
+    fireEvent.change(screen.getByLabelText(en.Settings.statuses_description), {
+      target: { value: "Sent out, waiting on them" },
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: en.Settings.statuses_add }).slice(-1)[0],
+    );
+    await waitFor(() => expect(createStatusAction).toHaveBeenCalled());
+    expect(createStatusAction.mock.calls[0][0]).toMatchObject({
+      name: "With client",
+      description: "Sent out, waiting on them",
+    });
   });
 });
