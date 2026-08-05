@@ -11,6 +11,7 @@
 // from application code as well would be two writers for one fact.
 
 import { getServerSupabase } from "@/lib/supabase/server";
+import { userDisplayLabel } from "@/lib/db/users";
 import { cache } from "react";
 
 export const STATUS_BUCKETS = ["todo", "doing", "done"] as const;
@@ -27,6 +28,11 @@ export type TaskStatus = {
   /** One of the three every firm is seeded with (1420), shown as "Preset".
    *  NOT derived from created_by — see 1590 for why that would drift. */
   isBuiltin: boolean;
+  /** Who added it, resolved live so a rename fixes it everywhere. Null for a
+   *  preset (nobody did) or an author who has since left the firm. Canopy shows
+   *  the same on custom statuses; presets show the Preset badge instead. */
+  createdByName: string | null;
+  createdAt: string | null;
 };
 
 export function toStatusBucket(v: unknown): StatusBucket {
@@ -67,20 +73,22 @@ export const listTaskStatuses = cache(
     const supabase = await getServerSupabase();
     let { data, error } = await supabase
       .from("task_statuses")
-      .select("id, name, color, bucket, sort, description, is_builtin");
+      .select(
+        "id, name, color, bucket, sort, description, is_builtin, created_by, created_at",
+      );
     // Before 1590 those two columns do not exist. Retry without them rather
     // than 500 a settings page — the reader below coalesces both, so the UI
     // renders exactly as it did before the migration landed.
     if (error && isMissingColumn(error)) {
       ({ data, error } = await supabase
         .from("task_statuses")
-        .select("id, name, color, bucket, sort"));
+        .select("id, name, color, bucket, sort, created_by, created_at"));
     }
     if (error) {
       if (isMissingTable(error)) return [];
       throw error;
     }
-    return ((data ?? []) as Array<Record<string, unknown>>)
+    const rows = ((data ?? []) as Array<Record<string, unknown>>)
       .map((r) => ({
         id: String(r.id),
         name: typeof r.name === "string" ? r.name : "",
@@ -92,6 +100,9 @@ export const listTaskStatuses = cache(
             ? r.description
             : null,
         isBuiltin: r.is_builtin === true,
+        createdBy: (r.created_by as string | null) ?? null,
+        createdByName: null as string | null,
+        createdAt: (r.created_at as string | null) ?? null,
       }))
       .filter((s) => s.id && s.name)
       .sort(
@@ -100,6 +111,32 @@ export const listTaskStatuses = cache(
           a.sort - b.sort ||
           a.name.localeCompare(b.name),
       );
+
+    // Resolve author names in ONE query, and live rather than denormalized —
+    // unlike a comment, a status is not a record of what somebody said at a
+    // moment, so a rename should fix it everywhere.
+    const authorIds = [
+      ...new Set(rows.map((r) => r.createdBy).filter((x): x is string => !!x)),
+    ];
+    if (authorIds.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, display_name, name, email")
+        .in("id", authorIds);
+      const byId = new Map<string, string>();
+      for (const u of (users ?? []) as Array<{
+        id: string;
+        display_name: string | null;
+        name: string;
+        email: string;
+      }>) {
+        byId.set(u.id, userDisplayLabel(u));
+      }
+      for (const r of rows) {
+        if (r.createdBy) r.createdByName = byId.get(r.createdBy) ?? null;
+      }
+    }
+    return rows.map(({ createdBy: _drop, ...rest }) => rest);
   },
 );
 
@@ -199,6 +236,73 @@ export async function updateTaskStatus(input: {
   if (error) {
     if (error.code === "23505") return { error: "duplicate" };
     console.error("[task-statuses] update failed:", error);
+    return { error: "failed" };
+  }
+  return { ok: true };
+}
+
+/**
+ * Move a status one place up or down WITHIN ITS BUCKET.
+ *
+ * Bucket-local on purpose: the board is grouped by bucket and ordered inside
+ * it, so a status cannot be dragged past the boundary into a group it does not
+ * belong to. Changing which bucket it is in is a different, louder action —
+ * it reclassifies every task on it.
+ *
+ * Implemented as a SWAP of two `sort` values rather than a renumber of the
+ * whole list: two writes instead of N, and nothing else in the bucket moves,
+ * so two owners reordering at once cannot scramble each other's list.
+ */
+export async function moveTaskStatus(input: {
+  id: string;
+  firmId: string;
+  direction: "up" | "down";
+}): Promise<{ ok: true } | { error: "failed" | "at_edge" }> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("task_statuses")
+    .select("id, bucket, sort, name")
+    .eq("firm_id", input.firmId);
+  if (error) {
+    console.error("[task-statuses] move read failed:", error);
+    return { error: "failed" };
+  }
+  const all = (data ?? []) as Array<{
+    id: string;
+    bucket: string;
+    sort: number;
+    name: string;
+  }>;
+  const me = all.find((r) => r.id === input.id);
+  if (!me) return { error: "failed" };
+
+  // Same order the reader renders, so "up" means what it looked like.
+  const siblings = all
+    .filter((r) => r.bucket === me.bucket)
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  const i = siblings.findIndex((r) => r.id === me.id);
+  const j = input.direction === "up" ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= siblings.length) return { error: "at_edge" };
+
+  const other = siblings[j];
+  // Equal sorts would leave the pair ordered by NAME and the swap would look
+  // like nothing happened, so give them distinct values before swapping.
+  const mine = me.sort === other.sort ? me.sort + (i < j ? -1 : 1) : me.sort;
+
+  const [a, b] = await Promise.all([
+    supabase
+      .from("task_statuses")
+      .update({ sort: other.sort })
+      .eq("id", me.id)
+      .eq("firm_id", input.firmId),
+    supabase
+      .from("task_statuses")
+      .update({ sort: mine })
+      .eq("id", other.id)
+      .eq("firm_id", input.firmId),
+  ]);
+  if (a.error || b.error) {
+    console.error("[task-statuses] move failed:", a.error ?? b.error);
     return { error: "failed" };
   }
   return { ok: true };
