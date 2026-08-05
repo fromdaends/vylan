@@ -58,6 +58,10 @@ none — see `feedback_keep-roadmap-artifact-live`.
 | 20 | **A template carries the work its services imply** | — | `taskTemplateIds` on the payload; the engagement seeds its tasks from it |
 | 21 | **The proposal shows what each service buys** | — | The task steps under the priced line |
 | 22 | **Engagement creation gets a Proposal step** | — | Terms, period, signers and deposit are editable per engagement |
+| 23 | **Tasks start EMPTY on a from-scratch engagement** | #1388 | The seeded document-request row is gone; a template still brings its own |
+| 24 | **"Engagement items" renamed "Service items"** | #1388 | Founder's call — one word per concept across the workflow |
+| 25 | **An empty service catalogue says so** | #1388 | The link picker used to render nothing, so the feature read as missing |
+| 26 | **Document request builder: padding, entry route, no more blanks** | #1387 | Its `<h1>` sat at `top: 0`; `?new=1` minted a blank on every arrival |
 
 ---
 
@@ -187,18 +191,29 @@ converting.** Everything else that authors a template already shares the frame.
 
 ---
 
-## Naming — one open question for the founder
+## Naming — DECIDED for the line, still open for the catalogue
 
-Canopy's word vs Vylan's, for the same object:
+The founder, 2026-08-05: *"On the engagement creation for the engagement items
+tab. Are they the same as Service items? If so re label engagement items to
+service items so the naming is consistent throughout the workflow."*
 
-| Canopy | Vylan today |
+They are the same. An engagement item is a priced line that may point at a
+catalogue entry (`engagement_items.service_id`), which is what Canopy calls a
+Service Item. Two words for one concept inside one workflow.
+
+| Canopy | Vylan now |
 |---|---|
-| Engagement Item | Service |
+| Engagement Item | **Service item** (the line, on an engagement) |
+| Engagement Item | "Service templates" (the catalogue page) — **STILL OPEN** |
 | Client Request | Document request |
 
-The Templates flyout says "Client request". The page's own section headings
-still say "Document requests" and "Services". Renaming the headings is a
-visible change to a daily-use page, so it is the founder's call.
+**Done:** the wizard step, the section heading and the field label on engagement
+creation all say "Service item" now. The `engagement_items` table keeps its
+name — that is storage, not vocabulary.
+
+**Open:** `/templates/services` is still titled "Service templates". Renaming a
+daily-use page is the founder's call, and it was not part of the sentence above.
+Ask before changing it.
 
 ---
 
