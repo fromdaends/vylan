@@ -1675,7 +1675,27 @@
     "wl_col_client": "Client",
     "wl_col_service": "Service items",
     "wl_col_items": "Tasks",
-    "wl_col_started": "Start date"
+    "wl_col_started": "Start date",
+    "dash_title": "Work dashboard",
+    "dash_tab_tasks": "Tasks",
+    "dash_tab_engagements": "Engagements",
+    "dash_kpi_open": "Open tasks",
+    "dash_kpi_overdue": "Overdue tasks",
+    "dash_kpi_completed": "Completed tasks",
+    "dash_kpi_percent": "Percentage complete",
+    "dash_chart_completed": "Tasks completed monthly by task type",
+    "dash_chart_completed_eng": "Engagements completed monthly by stage",
+    "dash_chart_created": "Tasks created monthly by task type",
+    "dash_chart_created_eng": "Engagements created monthly by stage",
+    "dash_chart_yoy": "Completed monthly, year over year",
+    "dash_chart_by_status": "Open task count by status",
+    "dash_chart_by_stage": "Open engagement count by stage",
+    "dash_empty_completed": "Nothing has been finished yet, so there is nothing to chart.",
+    "dash_empty_created": "Nothing has been created yet, so there is nothing to chart.",
+    "dash_empty_open": "Nothing is open right now.",
+    "dash_explore": "Explore",
+    "dash_card_menu": "Card options",
+    "dash_stage_none": "No stage"
   },
   "App": {
     "nav_primary_label": "Primary navigation",
@@ -1726,7 +1746,9 @@
     "nav_integrations_filing": "Document filing",
     "nav_filing_short": "Filing",
     "nav_vylan": "Vylan",
-    "nav_files": "Files"
+    "nav_files": "Files",
+    "nav_work_dashboard": "Dashboard",
+    "nav_work_dashboard_hint": "Your numbers, at a glance"
   },
   "TeamChat": {
     "page_title": "Team chat",

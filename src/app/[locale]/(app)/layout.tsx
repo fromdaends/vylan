@@ -133,6 +133,8 @@ export default async function AppLayout({
         engagements: t("nav_engagements"),
         work: t("nav_work"),
         workTasks: t("nav_work_tasks_list"),
+        workDashboard: t("nav_work_dashboard"),
+        workDashboardHint: t("nav_work_dashboard_hint"),
         workEngagements: t("nav_work_engagements_list"),
         workTasksHint: t("nav_work_tasks_hint"),
         workEngagementsHint: t("nav_engagements_hint"),

@@ -45,6 +45,8 @@ type Labels = {
   // One line each, under the label in the rail's second sidebar.
   workTasksHint: string;
   workEngagementsHint: string;
+  workDashboard: string;
+  workDashboardHint: string;
   closePanel: string;
   engagementsToggle: string;
   templates: string;
@@ -278,6 +280,13 @@ export function AppShell({
             href: "/engagements",
             label: labels.workEngagements,
             description: labels.workEngagementsHint,
+          },
+          // Canopy's fifth row, and the only one of their three we could
+          // build: Resolution Cases and Tax Organizers have no home here.
+          {
+            href: "/work/dashboard",
+            label: labels.workDashboard,
+            description: labels.workDashboardHint,
           },
         ],
       },
