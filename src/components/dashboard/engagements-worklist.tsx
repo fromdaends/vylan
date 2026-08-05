@@ -6,6 +6,10 @@ import { EngagementReassignMenu } from "@/components/engagements/engagement-reas
 import { PresenceFaces } from "@/components/engagements/presence-faces";
 import { BulkAssignBar } from "@/components/engagements/bulk-assign-bar";
 import {
+  ListViewsMenu,
+  type ListSavedView,
+} from "@/components/ui/list-views-menu";
+import {
   EngagementTasksDialog,
   type EngagementTasksPanelData,
 } from "@/components/engagements/engagement-tasks-dialog";
@@ -391,6 +395,8 @@ export function WorklistTable({
   presenceRoster,
   bulkAssignMembers,
   countLabel,
+  savedViews = [],
+  viewLinks = [],
   flushTop = false,
 }: {
   rows: WorklistRow[];
@@ -446,6 +452,12 @@ export function WorklistTable({
    * worse than no count at all. Whoever does the filtering owns the number.
    */
   countLabel?: (count: number) => string;
+  /** This person's saved filter sets for the engagements list (1630). */
+  savedViews?: ListSavedView[];
+  /** The overflow VIEWS that live at their own URL — Ready to review, Archived,
+   *  Recently deleted. They used to sit in a kebab in the page header; they now
+   *  share ONE menu with the saved views, beside the list they filter. */
+  viewLinks?: { href: string; label: string; count?: number }[];
   /**
    * Drop the table's own top rule because the page already drew one.
    *
@@ -459,6 +471,7 @@ export function WorklistTable({
   flushTop?: boolean;
 }) {
   const t = useTranslations("Dashboard");
+  const tViews = useTranslations("Views");
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
@@ -613,6 +626,29 @@ export function WorklistTable({
    * Same resolver, same label builder, same order as the chip in the cell.
    */
   const stageLabel = (v: string) => tEng(agreementLabelKey(v as AgreementStatus));
+  // Which saved view is showing, if any. Cleared the moment a filter is changed
+  // by hand — a lit tab beside a list that no longer matches it is a lie.
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  // Applying REPLACES every filter, including clearing the ones the view does
+  // not name. A view that only added filters would mean different results
+  // depending on what you happened to have set before clicking it.
+  const applySavedView = (v: ListSavedView) => {
+    const f = v.filters as {
+      clientFilter?: string[];
+      serviceFilter?: string[];
+      assigneeFilter?: string[];
+      stageFilter?: string[];
+    };
+    const arr = (x: unknown): string[] =>
+      Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : [];
+    setClientFilter(arr(f.clientFilter));
+    setServiceFilter(arr(f.serviceFilter));
+    setAssigneeFilter(arr(f.assigneeFilter));
+    setStageFilter(arr(f.stageFilter));
+    setActiveViewId(v.id);
+  };
+
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [serviceFilter, setServiceFilter] = useState<string[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
@@ -789,10 +825,32 @@ export function WorklistTable({
 
   return (
     <div className={cn(!flushTop && "border-t border-border")}>
-      {countLabel && (
-        <p className="px-4 py-2.5 text-sm tabular-nums text-muted-foreground">
-          {countLabel(visibleRows.length)}
-        </p>
+      {(countLabel || viewLinks.length > 0 || savedViews.length > 0) && (
+        <div className="flex items-center justify-between gap-2 px-4 py-1.5">
+          <p className="text-sm tabular-nums text-muted-foreground">
+            {countLabel ? countLabel(visibleRows.length) : ""}
+          </p>
+          {/* ⋯ BESIDE THE LIST IT FILTERS, not up in the page header.
+              It moved because a saved view captures the filters that live HERE
+              — client, service, assignee, stage — and a menu in the header
+              cannot reach them. It carries its three view links with it, so
+              there is still exactly one ⋯ on this page. */}
+          <ListViewsMenu
+            label={tViews("menu_label")}
+            links={viewLinks}
+            surface="engagements"
+            savedViews={savedViews}
+            activeViewId={activeViewId}
+            currentFilters={() => ({
+              clientFilter,
+              serviceFilter,
+              assigneeFilter,
+              stageFilter,
+            })}
+            onApply={applySavedView}
+            onChanged={() => router.refresh()}
+          />
+        </div>
       )}
       <Table>
         <TableHeader>

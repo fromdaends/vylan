@@ -48,6 +48,8 @@ export function EngagementsView({
   teamEnabled,
   assignMembers,
   firmId,
+  savedViews = [],
+  viewLinks = [],
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -61,6 +63,11 @@ export function EngagementsView({
   assignMembers?: { id: string; name: string }[];
   // Enables live presence on the rows. Absent → no subscription, no faces.
   firmId?: string | null;
+  /** This person's saved filter sets for this list (1630). */
+  savedViews?: { id: string; name: string; filters: Record<string, unknown> }[];
+  /** Ready to review / Archived / Recently deleted — the overflow views that
+   *  used to live in the page header's kebab. */
+  viewLinks?: { href: string; label: string; count?: number }[];
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -207,6 +214,8 @@ export function EngagementsView({
           after the column menus have filtered and only the table knows that. */}
 
       <WorklistTable
+        savedViews={savedViews}
+        viewLinks={viewLinks}
         rows={visible}
         locale={locale}
         emptyText={
