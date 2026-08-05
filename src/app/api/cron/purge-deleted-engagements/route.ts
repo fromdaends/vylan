@@ -15,6 +15,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { BUCKET } from "@/lib/storage";
 import { purgeExpiredDeletedEngagements } from "@/lib/engagements/purge";
+import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,34 @@ export async function GET(request: NextRequest) {
   // platform's expired rows (RLS would otherwise scope to nobody).
   const sb = getServiceRoleSupabase();
 
+  // TASKS SHARE THE WINDOW AND THE CRON (1650). Their bin has the same 30 days
+  // as an engagement's, so it wants the same sweep — a second cron on a second
+  // schedule is how the two retention promises start disagreeing.
+  //
+  // A task has no storage files of its own (its uploads belong to the
+  // engagement), so this is a plain delete rather than the file-rehoming dance
+  // below. Best-effort and FIRST: a failure here must not stop engagements
+  // being purged, which is the job this route was built for.
+  let tasksPurged = 0;
+  try {
+    const cutoff = new Date(
+      Date.now() - DELETED_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { data: goneTasks, error: taskErr } = await sb
+      .from("engagement_tasks")
+      .delete()
+      .not("deleted_at", "is", null)
+      .lt("deleted_at", cutoff)
+      .select("id");
+    if (taskErr) {
+      console.error("[purge] task sweep failed:", taskErr);
+    } else {
+      tasksPurged = (goneTasks ?? []).length;
+    }
+  } catch (e) {
+    console.error("[purge] task sweep threw:", e);
+  }
+
   const result = await purgeExpiredDeletedEngagements({
     supabase: sb,
     removeStorageObjects: async (paths) => {
@@ -52,6 +81,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    tasksPurged,
     ranAt: new Date().toISOString(),
     purgedCount: result.purged.length,
     filesRehomed: result.filesRehomed,
