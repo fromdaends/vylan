@@ -47,7 +47,9 @@ none — see `feedback_keep-roadmap-artifact-live`.
 | 9 | **Task templates** | #1343 / 1570 | Applied + verified live |
 | 10 | **Templates opens a flyout** | #1345 | Four rows; reuses `RailFlyout` |
 | 11 | **Apply a task template in the Tasks step** | #1345 | Downgrades a clashing one-per-engagement kind and says so |
-| 12 | **A task template carries its client request** | *in flight* | Per A2: copied at edit time, not referenced |
+| 12 | **A task template carries its client request** | #1347 | Per A2: copied at edit time, not referenced |
+| 13 | **One Templates page per type** | #1350 | `/templates` redirects; the sidebar is the divider |
+| 14 | **Task templates take Canopy's parent shape** | #1351 | One parent + steps, not N siblings |
 
 ---
 
@@ -94,13 +96,12 @@ the first only. Source: A1, S1.
 These are places where Vylan's shape is **not** Canopy's. None is an accident;
 each needs a founder call before it is "fixed".
 
-**Task template structure.** Canopy's task template (A3) is ONE PARENT TASK —
-name, description, roles, assignees, tags, budgeted hours, return type, a Dates
-section — with **subtasks** and **client requests** added under it via `+ Add`.
-Vylan's is a flat list of task rows with a name on the template. Flat is simpler
-and matches how Vylan's `engagement_tasks` are actually used today (it already
-supports `parent_id` subtasks, which the template does not expose). Going to
-Canopy's shape means the template payload gains a parent level.
+**Task template structure — RESOLVED, now matches Canopy (#1351).** Vylan's task
+template is ONE PARENT TASK with steps and a client request under it, written as
+`engagement_tasks` rows linked by `parent_id`. It was briefly a flat list of
+siblings; the founder chose Canopy's shape. Templates saved flat upgrade on
+read. Still missing from the parent, versus Canopy: roles, task tags, budgeted
+hours, return type, a Dates section, automations, file/reminder tools.
 
 **Who can edit a shared template.** Canopy: *"All users can access shared task
 templates, but only admins or the template creator can edit them."* Vylan's RLS
