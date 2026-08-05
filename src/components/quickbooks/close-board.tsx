@@ -18,6 +18,8 @@ import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { StatusCapsule } from "@/components/ui/status-capsule";
 import {
   AlertTriangle,
   Check,
@@ -267,18 +269,39 @@ export function CloseBoard(props: {
                   className="border-b border-border/50 last:border-0"
                 >
                   {!scoped && (
-                    <td className="py-2.5 align-top font-medium">{row.name}</td>
+                    /* WHO, in one cell: initials, the client, and which set of
+                       books this is. The provider used to be invisible here,
+                       so a QuickBooks client and a Xero one looked identical
+                       right up until the Check column behaved differently. */
+                    <td className="py-2.5 align-top">
+                      <span className="flex items-center gap-2.5">
+                        <AvatarInitials name={row.name} size={30} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {row.name}
+                          </span>
+                          <span className="block text-[12.5px] text-muted-foreground">
+                            {row.provider === "quickbooks"
+                              ? t("close_provider_quickbooks")
+                              : t("close_provider_xero")}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
                   )}
 
                   <td className="py-2.5 align-top">
+                    {/* Waiting on the CLIENT is the one state here worth
+                        marking — it is the thing you cannot clear yourself.
+                        Amber, per the kit: a chase, not damage. */}
                     {row.openRequests === 0 ? (
                       <span className="text-muted-foreground">
                         {t("close_nothing_owed")}
                       </span>
                     ) : (
-                      <span>
+                      <StatusCapsule tone="warning">
                         {t("close_owed", { count: row.openRequests })}
-                      </span>
+                      </StatusCapsule>
                     )}
                   </td>
 

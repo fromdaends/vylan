@@ -4353,7 +4353,9 @@
     "post_body_income_xero": "Create this as a sales invoice in Xero? You can undo it afterward.",
     "post_body_salesreceipt_xero": "Create this as a received payment in Xero? You can undo it afterward.",
     "xero_tracking_label": "Tracking",
-    "xero_tracking_none": "None"
+    "xero_tracking_none": "None",
+    "close_provider_quickbooks": "QuickBooks",
+    "close_provider_xero": "Xero"
   },
   "ClientMessages": {
     "thread_title": "Messages with your client",
