@@ -96,7 +96,17 @@ export function EngagementModalShell({
   // you move from a two-card question to a fourteen-card template grid. Capped
   // against the viewport so it never overflows a laptop screen.
   const sheet = cn(
-    "flex w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
+    // `relative` is load-bearing, not decoration.
+    //
+    // CSS paints POSITIONED elements (even at z-index:auto) in a later layer
+    // than non-positioned ones. The dim beside it is `absolute`; this sheet was
+    // static. So the dim painted ON TOP of the dialog no matter what order they
+    // appeared in the DOM — the whole thing washed out grey, which is what the
+    // founder saw four times and I misread three times as a blur problem.
+    //
+    // Positioning the sheet puts both in the same painting step, where DOM
+    // order decides — and the sheet comes last.
+    "relative flex w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
     "pointer-events-auto h-[min(86vh,54rem)]",
     // LIGHTER than the page, not merely bordered. The app background is pure
     // black and bg-card is oklch 0.14 — near enough identical that the sheet
