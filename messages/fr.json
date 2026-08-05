@@ -4891,5 +4891,26 @@
     "status_connected": "Connecté",
     "empty_search_title": "Rien ne correspond à « {query} »",
     "empty_search_hint": "Essayez un autre nom, ou effacez la recherche."
+  },
+  "Views": {
+    "saved_heading": "Vos vues",
+    "saved_empty": "Aucune pour l'instant. Filtrez la liste, puis enregistrez-la.",
+    "save_current": "Enregistrer cette vue…",
+    "resave": "Mettre cette vue à jour",
+    "save_title": "Nommer cette vue",
+    "rename_title": "Renommer la vue",
+    "name_label": "Nom de la vue",
+    "name_placeholder": "p. ex. En retard, les miennes",
+    "save_confirm": "Enregistrer",
+    "rename_confirm": "Renommer",
+    "cancel": "Annuler",
+    "rename_one": "Renommer {name}",
+    "delete_one": "Supprimer {name}",
+    "error_duplicate": "Vous avez déjà une vue portant ce nom.",
+    "error_too_many": "C'est le maximum de vues pour une liste.",
+    "error_bad_name": "Donnez d'abord un nom à la vue.",
+    "error_not_ready": "Les vues enregistrées nécessitent une mise à jour de la base de données.",
+    "error_failed": "Impossible d'enregistrer. Réessayez.",
+    "menu_label": "Vues de la liste"
   }
 }

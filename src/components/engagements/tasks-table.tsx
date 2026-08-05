@@ -106,6 +106,7 @@ import { loadCommentCountsAction } from "@/app/actions/comments";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useRowSelection } from "@/lib/bulk/use-row-selection";
 import { BULK_MAX } from "@/lib/bulk/selection";
+import { ListViewsMenu, type ListSavedView } from "@/components/ui/list-views-menu";
 import { bulkUpdateTasksAction } from "@/app/actions/engagement-tasks";
 
 type TaskStatus = "todo" | "doing" | "done";
@@ -192,6 +193,7 @@ export function TasksTable({
   statuses,
   variant = "firm",
   initialView = "active",
+  savedViews = [],
   onOpen,
   maxRows,
   moreHref,
@@ -215,6 +217,8 @@ export function TasksTable({
    * one thing the panel must not do.
    */
   initialView?: TaskView;
+  /** This person's saved views for the tasks list (1630). */
+  savedViews?: ListSavedView[];
   /** Opens a task's own screen. Job page only; see task-detail-panel.tsx. */
   onOpen?: (taskId: string) => void;
   /**
@@ -231,6 +235,7 @@ export function TasksTable({
   moreHref?: string;
 }) {
   const t = useTranslations("Engagements");
+  const tViews = useTranslations("Views");
   const tStatus = useTranslations("Clients");
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -243,6 +248,39 @@ export function TasksTable({
 
   // "active" everywhere the table is the page. The engagements list's panel
   // passes "all", because you get there by clicking a total.
+  // Which saved view is showing, if any. Cleared the moment a filter is touched
+  // by hand — a tab that stays lit while the list no longer matches it is
+  // worse than no tab at all.
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  // Applying a saved view REPLACES every filter, including clearing the ones it
+  // does not name. A view that only added filters would drift depending on what
+  // you happened to have set before clicking it, which is the opposite of the
+  // point.
+  const applySavedView = (v: ListSavedView) => {
+    const f = v.filters as {
+      view?: TaskView;
+      statusFilter?: string[];
+      clientFilter?: string[];
+      kindFilter?: string[];
+      assigneeFilter?: string[];
+      priorityFilter?: TaskPriority[];
+    };
+    const arr = (x: unknown): string[] =>
+      Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : [];
+    setView(
+      f.view && (VIEWS as string[]).concat("done", "unassigned").includes(f.view)
+        ? f.view
+        : "active",
+    );
+    setStatusFilter(arr(f.statusFilter));
+    setClientFilter(arr(f.clientFilter));
+    setKindFilter(arr(f.kindFilter));
+    setAssigneeFilter(arr(f.assigneeFilter));
+    setPriorityFilter(arr(f.priorityFilter) as TaskPriority[]);
+    setActiveViewId(v.id);
+  };
+
   const [view, setView] = useState<TaskView>(
     // On a job there is no strip to change this with, so it must be the view
     // that shows the job's whole task list.
@@ -562,15 +600,51 @@ export function TasksTable({
           whose two tasks were both finished, printing "Nothing planned on your
           side yet" underneath a count of two. */}
       {variant === "firm" && (
-        <ViewTabs
-          activeKey={view}
-          onSelect={(key) => setView(key as TaskView)}
-          tabs={VIEWS.map((v) => ({
-            key: v,
-            label: t(`view_${v}` as "view_active"),
-            count: counts[v],
-          }))}
-        />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <ViewTabs
+              activeKey={activeViewId ?? view}
+              onSelect={(key) => {
+                const saved = savedViews.find((v) => v.id === key);
+                if (saved) {
+                  applySavedView(saved);
+                  return;
+                }
+                setActiveViewId(null);
+                setView(key as TaskView);
+              }}
+              tabs={[
+                ...VIEWS.map((v) => ({
+                  key: v,
+                  label: t(`view_${v}` as "view_active"),
+                  count: counts[v],
+                })),
+                // Saved views sit AFTER the built-ins, which is where Canopy
+                // puts them — their strip reads "Active Clients | ... | Ben's
+                // Clients", everything past the defaults being somebody's own.
+                ...savedViews.map((v) => ({ key: v.id, label: v.name })),
+              ]}
+            />
+          </div>
+          {/* The ⋯ tasks never had. It exists now because there is finally
+              something to put in it: your saved views. */}
+          <ListViewsMenu
+            label={tViews("menu_label")}
+            surface="tasks"
+            savedViews={savedViews}
+            activeViewId={activeViewId}
+            currentFilters={() => ({
+              view,
+              statusFilter,
+              clientFilter,
+              kindFilter,
+              assigneeFilter,
+              priorityFilter,
+            })}
+            onApply={applySavedView}
+            onChanged={() => router.refresh()}
+          />
+        </div>
       )}
 
       {filtersOn && (
