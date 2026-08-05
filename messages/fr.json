@@ -4350,7 +4350,9 @@
     "post_body_income_xero": "Créer ceci comme facture de vente dans Xero? Vous pourrez l'annuler ensuite.",
     "post_body_salesreceipt_xero": "Créer ceci comme paiement reçu dans Xero? Vous pourrez l'annuler ensuite.",
     "xero_tracking_label": "Suivi",
-    "xero_tracking_none": "Aucun"
+    "xero_tracking_none": "Aucun",
+    "close_provider_quickbooks": "QuickBooks",
+    "close_provider_xero": "Xero"
   },
   "ClientMessages": {
     "thread_title": "Messages avec votre client",
