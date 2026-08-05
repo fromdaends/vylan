@@ -30,11 +30,11 @@
 // reclassifying themselves. And the last status in a bucket cannot go at all —
 // a bucket with none is a state nothing could ever be set to.
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,12 +148,24 @@ export function TaskStatusesEditor({
   const [draftDescription, setDraftDescription] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  function report(res: StatusActionResult): boolean {
+  /**
+   * Report an action's outcome, and decide whether the server list is worth
+   * re-reading.
+   *
+   * ⚠️ A REFRESH PER KEYSTROKE WAS HALF THE LATENCY. Every accepted write used
+   * to call router.refresh(), which re-renders this Server Component route —
+   * three database reads — and hands the client a whole new array. Typing a
+   * seven-letter status name fired seven of them, each one racing the next and
+   * each one re-seeding the list underneath the cursor.
+   *
+   * `structural` says the change moved something the client cannot work out for
+   * itself: a new row, a deletion, a reorder. Renames, recolours and
+   * descriptions are all patched locally and correctly, so re-reading the
+   * server tells nobody anything.
+   */
+  function report(res: StatusActionResult, structural = false): boolean {
     if (res.ok) {
-      // Still refresh: the server remains the source of truth, and this pulls
-      // back anything the optimistic patch could not know (sort order, another
-      // owner's concurrent edit). It is no longer what makes the change VISIBLE.
-      startTransition(() => router.refresh());
+      if (structural) startTransition(() => router.refresh());
       return true;
     }
     toast.error(
@@ -199,8 +211,12 @@ export function TaskStatusesEditor({
   // cursor instead of after a refresh you cannot see.
   const patchRow = (id: string, patch: Partial<EditableStatus>) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const removeRow = (id: string) =>
+  const removeRow = (id: string) => {
     setRows((prev) => prev.filter((r) => r.id !== id));
+    // Deleting DOES move every task off this status, so this one re-reads —
+    // it is the only edit on the page whose effects reach past this list.
+    startTransition(() => router.refresh());
+  };
 
   // Reorder optimistically for the same reason everything else here is
   // optimistic: a list that only moves after a refresh reads as a list that
@@ -224,7 +240,7 @@ export function TaskStatusesEditor({
     try {
       // Put it back if the server refuses — an order that silently disagrees
       // with the database is worse than one that visibly snaps back.
-      if (!report(await moveStatusAction({ id, direction }))) setRows(before);
+      if (!report(await moveStatusAction({ id, direction }), true)) setRows(before);
     } finally {
       setBusy(false);
     }
@@ -415,48 +431,163 @@ function StatusRow({
 }) {
   const [name, setName] = useState(status.name);
   const [description, setDescription] = useState(status.description ?? "");
-  const [busy, setBusy] = useState(false);
+  // "saving" / "saved" instead of a disabled row. See save() for why.
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  // What the server last accepted, so a commit fires only on a real change and
+  // a failure knows what to roll back to.
+  const committed = useRef({
+    name: status.name,
+    color: status.color,
+    description: status.description ?? "",
+  });
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Delete keeps a disable, and ONLY delete: it moves every task off this
+  // status, so a double-click is a second migration. Everything else on this
+  // row is reversible and instant.
+  const [deleting, setDeleting] = useState(false);
   // Where its tasks go. Anything in the firm except this one — including
   // another bucket, which is a real choice: "this stage turned out to be done".
   const [replacement, setReplacement] = useState(
     statuses.find((s) => s.id !== status.id)?.id ?? "",
   );
 
-  async function save(patch: {
+  /**
+   * Commit a change — SCREEN FIRST, SERVER SECOND.
+   *
+   * The founder, on the version this replaces: "There was still a lot of
+   * latency on the statuses page. Like, bro, come on. It should be seamless."
+   * They were right, and it was never slow code. It was this function awaiting
+   * the round trip BEFORE touching the screen, with setBusy(true) disabling the
+   * whole row while it waited. So picking a colour meant: row greys out, wait
+   * for the network, dot finally moves, then a full router.refresh() re-renders
+   * the page from the server. Three visible delays for one click.
+   *
+   * Now the patch lands immediately and the write goes out behind it. A failure
+   * rolls the row back and says so — which is the only moment anybody should
+   * ever wait, and it is the moment that almost never happens.
+   *
+   * The same shape the roles workbench already uses ("I shouldn't have to click
+   * save because people are gonna not do that"), so the two editors in this app
+   * that let you name-and-colour a thing now behave identically.
+   */
+  function save(patch: {
     name?: string;
     color?: string;
     description?: string | null;
   }) {
-    setBusy(true);
-    try {
-      // Patch the list the moment the server accepts it. Without this the row
-      // keeps rendering the OLD prop until a refresh lands, which is what made
-      // every colour click look like it did nothing.
-      if (onSaved(await updateStatusAction({ id: status.id, ...patch }))) {
-        onPatched(status.id, patch);
+    // Nothing actually changed — a blur on an untouched field, a re-click of
+    // the colour already chosen.
+    const unchanged =
+      (patch.name === undefined || patch.name === committed.current.name) &&
+      (patch.color === undefined || patch.color === committed.current.color) &&
+      (patch.description === undefined ||
+        (patch.description ?? "") === committed.current.description);
+    if (unchanged) return;
+
+    const rollback = { ...committed.current };
+    committed.current = {
+      name: patch.name ?? committed.current.name,
+      color: patch.color ?? committed.current.color,
+      description: patch.description ?? committed.current.description,
+    };
+    // The list redraws NOW. Everything below this line is bookkeeping.
+    onPatched(status.id, patch);
+    setState("saving");
+
+    void updateStatusAction({ id: status.id, ...patch }).then((res) => {
+      if (onSaved(res)) {
+        setState("saved");
+        return;
       }
-    } finally {
-      setBusy(false);
-    }
+      // Put it back exactly as it was, in the row AND in the list.
+      committed.current = rollback;
+      setName(rollback.name);
+      setDescription(rollback.description);
+      onPatched(status.id, {
+        name: rollback.name,
+        color: rollback.color,
+        description: rollback.description || null,
+      });
+      setState("idle");
+    });
   }
+
+  /** Typing debounces; picking a colour commits at once. */
+  function editName(next: string) {
+    setName(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const clean = next.trim();
+      // An empty field is "I have not finished typing", never "call it
+      // nothing" — the status keeps the name it has.
+      if (clean) save({ name: clean });
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function editDescription(next: string) {
+    setDescription(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(
+      () => save({ description: next.trim() || null }),
+      SAVE_DEBOUNCE_MS,
+    );
+  }
+
+  /** Flush a pending debounce — on blur, on Enter, and on unmount. */
+  const flush = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, []);
+
+  // A half-typed name must still land if you navigate away mid-word.
+  useEffect(() => {
+    const pending = timer;
+    return () => {
+      if (pending.current) clearTimeout(pending.current);
+    };
+  }, []);
 
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5">
       <div className="flex items-center gap-2.5">
+        {/* THE ROW IS ITS OWN PREVIEW. This is the same chrome a task row's
+            status pill wears, so the colour you are picking is shown at the
+            size and against the background you will actually meet it — the
+            roles workbench does the same with its badge, and for the same
+            reason: a 12px dot tells you almost nothing about a colour. */}
         <span
-          className="size-3 shrink-0 rounded-full"
-          style={{ backgroundColor: status.color }}
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs"
           aria-hidden
-        />
+        >
+          <span
+            className="size-2 shrink-0 rounded-full transition-colors"
+            style={{ backgroundColor: status.color }}
+          />
+          <span className="max-w-[9rem] truncate text-muted-foreground">
+            {name || status.name}
+          </span>
+        </span>
         {canEdit ? (
           <Input
             value={name}
-            disabled={busy}
-            onChange={(e) => setName(e.target.value)}
+            // NOT disabled while saving. A field that goes dead under your
+            // fingers is the latency, whether or not the request is fast.
+            onChange={(e) => editName(e.target.value)}
             onBlur={() => {
+              flush();
               const next = name.trim();
-              if (next && next !== status.name) save({ name: next });
-              else setName(status.name);
+              if (next) save({ name: next });
+              else setName(committed.current.name);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                flush();
+                const next = name.trim();
+                if (next) save({ name: next });
+              }
             }}
             aria-label={t("statuses_name")}
             className="h-8 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
@@ -468,6 +599,20 @@ function StatusRow({
         {/* Where it CAME FROM, not what can be done to it — a preset renames,
             recolours and re-describes like any other. Canopy labels its shipped
             statuses the same way rather than presenting them as the firm's. */}
+        {/* Feedback WITHOUT a wait. The row no longer greys out, so this is the
+            only thing telling you the write landed — and it is the right
+            amount: present when it matters, gone a moment later. */}
+        <span
+          aria-live="polite"
+          className={cn(
+            "shrink-0 text-[10px] font-medium uppercase tracking-wide transition-opacity duration-300",
+            state === "idle" ? "opacity-0" : "opacity-100",
+            state === "saved" ? "text-success" : "text-muted-foreground",
+          )}
+        >
+          {state === "saving" ? t("statuses_saving") : t("statuses_saved")}
+        </span>
+
         {status.isBuiltin && (
           <span className="shrink-0 rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             {t("statuses_preset")}
@@ -488,7 +633,7 @@ function StatusRow({
             <button
               type="button"
               onClick={() => onMove(status.id, "up")}
-              disabled={!canMoveUp || busy}
+              disabled={!canMoveUp}
               aria-label={t("statuses_move_up", { name: status.name })}
               title={t("statuses_move_up", { name: status.name })}
               className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
@@ -498,7 +643,7 @@ function StatusRow({
             <button
               type="button"
               onClick={() => onMove(status.id, "down")}
-              disabled={!canMoveDown || busy}
+              disabled={!canMoveDown}
               aria-label={t("statuses_move_down", { name: status.name })}
               title={t("statuses_move_down", { name: status.name })}
               className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
@@ -533,14 +678,11 @@ function StatusRow({
       {canEdit ? (
         <Input
           value={description}
-          disabled={busy}
           maxLength={DESCRIPTION_MAX}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => editDescription(e.target.value)}
           onBlur={() => {
-            const next = description.trim();
-            if (next !== (status.description ?? "")) {
-              save({ description: next || null });
-            }
+            flush();
+            save({ description: description.trim() || null });
           }}
           aria-label={t("statuses_description_for", { name: status.name })}
           placeholder={t("statuses_description_placeholder")}
@@ -596,9 +738,9 @@ function StatusRow({
               type="button"
               size="sm"
               variant="destructive"
-              disabled={!replacement || busy}
+              disabled={!replacement || deleting}
               onClick={async () => {
-                setBusy(true);
+                setDeleting(true);
                 try {
                   if (
                     onSaved(
@@ -611,7 +753,7 @@ function StatusRow({
                     onRemoved(status.id);
                   }
                 } finally {
-                  setBusy(false);
+                  setDeleting(false);
                 }
               }}
             >
@@ -623,6 +765,12 @@ function StatusRow({
     </li>
   );
 }
+
+// Long enough that a normal typing pause does not write per word, short enough
+// that tabbing away lands after it has saved. Same number the roles workbench
+// settled on, deliberately — two editors that feel different while doing the
+// same job is how an app stops feeling like one product.
+const SAVE_DEBOUNCE_MS = 700;
 
 function ColorPicker({
   value,
@@ -660,13 +808,20 @@ function ColorDots({
           aria-label={t("statuses_color_pick", { color })}
           aria-pressed={value.toLowerCase() === color}
           className={cn(
-            "size-4 rounded-full transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "relative flex size-5 items-center justify-center rounded-full transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             value.toLowerCase() === color
               ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
-              : "hover:scale-110",
+              : "hover:scale-115",
           )}
           style={{ backgroundColor: color }}
-        />
+        >
+          {/* A ring alone reads as "focused" as easily as "chosen". The tick
+              is unambiguous, and it is the only thing on this row somebody
+              scanning eight near-identical circles can actually land on. */}
+          {value.toLowerCase() === color && (
+            <Check className="size-3 text-white drop-shadow-sm" aria-hidden />
+          )}
+        </button>
       ))}
     </div>
   );
