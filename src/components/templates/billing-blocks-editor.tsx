@@ -248,8 +248,8 @@ export function BillingBlocksEditor({
                 it is the wording for the combined line, which is meaningless
                 while the lines are shown separately. */}
             <div className="space-y-2 border-t border-border/60 pt-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex cursor-pointer items-start gap-2 text-xs">
+              <div className="flex items-start justify-between gap-4">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 text-xs">
                   <input
                     type="checkbox"
                     className="mt-0.5"
@@ -268,7 +268,10 @@ export function BillingBlocksEditor({
                     </span>
                   </span>
                 </label>
-                {visibility.blockTotals && (
+                {/* Only when there IS a total. A block with no priced lines
+                    used to render a bare "$0.00" floating under the hint —
+                    the founder: "service items is fully glitched look". */}
+                {visibility.blockTotals && b.items.length > 0 && (
                   <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                     {money(total.cents)}
                     {/* Said out loud. A total that quietly omits an unpriced
@@ -301,7 +304,7 @@ export function BillingBlocksEditor({
           onClick={() => onChange([...blocks, emptyBlock("one_time")])}
         >
           <Plus className="size-3.5" />
-          {t("add_billing_block")}
+          {t("add_billing_group")}
         </Button>
       </div>
     </div>

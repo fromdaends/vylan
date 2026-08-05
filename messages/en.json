@@ -3240,7 +3240,14 @@
     "request_builder_explainer": "A document request template is a checklist you reuse — the documents you ask a client for, defined once and dropped onto any engagement.",
     "request_documents_hint": "What the client is asked to send. Mark the ones you cannot proceed without as required.",
     "request_preview_label": "What your client will see",
-    "combine_items_hint": "The client sees a single charge with your own wording instead of each service listed separately. Your own totals are unaffected."
+    "combine_items_hint": "The client sees a single charge with your own wording instead of each service listed separately. Your own totals are unaffected.",
+    "add_billing_group": "Add items billed differently",
+    "preview_billed_once": "Billed one time",
+    "preview_billed_weekly": "Billed weekly",
+    "preview_billed_monthly": "Billed monthly",
+    "preview_billed_quarterly": "Billed quarterly",
+    "preview_billed_yearly": "Billed yearly",
+    "totals_tbd_short": "TBD"
   },
   "Status": {
     "pending": "Pending",

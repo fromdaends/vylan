@@ -44,6 +44,7 @@ import {
   ToggleRow,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
+import { MoneyInput } from "@/components/ui/money-input";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
 import { computeBillingTotals } from "@/lib/engagements/billing-totals";
@@ -534,6 +535,9 @@ export function EngagementBuilder({
   );
   // Canopy's Payment settings: the client saves a card on acceptance so a
   // recurring invoice can be charged without asking again.
+  /** Who settles the deposit — the client by default, or one of the named
+   *  signer roles. Canopy asks this; we were not asking at all. */
+  const [proposalPayer, setProposalPayer] = useState("");
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(
     tpl?.requirePaymentMethod ?? false,
   );
@@ -852,7 +856,6 @@ export function EngagementBuilder({
   };
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
-  const [emptyAttempts, setEmptyAttempts] = useState(0);
   const [pending, startTransition] = useTransition();
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
@@ -1006,10 +1009,9 @@ export function EngagementBuilder({
   // object the page loaded.
 
 
-  // After a 2nd failed "Create and send" on an empty checklist, ring the
-  // checklist section. The top-of-form error is easy to miss when the Send
-  // button sits at the bottom, right next to this section.
-  const highlightEmptyChecklist = items.length === 0 && emptyAttempts >= 2;
+  // An empty checklist is no longer an error, so nothing needs ringing: an
+  // engagement that asks the client for nothing is an ordinary engagement.
+  const highlightEmptyChecklist = false;
 
   function pickTemplate(id: string) {
     setTemplateId(id);
@@ -1128,13 +1130,10 @@ export function EngagementBuilder({
       }))
       .filter((i) => i.label_fr.length > 0);
 
-    // Sending needs at least one document for the client to upload. Saving a
-    // draft with an empty checklist is still allowed.
-    if (send && cleanItems.length === 0) {
-      setError("no_documents");
-      setEmptyAttempts((n) => n + 1);
-      return;
-    }
+    // NO documents gate — the founder: "its entirely possible for an
+    // engagement to exist that doesnt require documents to be uploaded." An
+    // empty checklist used to block Send on the reasoning that the client would
+    // land on an empty portal; what they land on now is the proposal.
 
     // Any invoice (created now OR automated) needs a valid amount up front.
     // Guard client-side to match the server refine.
@@ -1406,6 +1405,13 @@ export function EngagementBuilder({
       onTabChange={(k) => setStep(k as WizardStep)}
       previewOpen={previewOpen}
       onPreviewToggle={() => setPreviewOpen((v) => !v)}
+      // On the Proposal step — the last one — Next becomes the send. It is the
+      // only thing left to do there, and a greyed-out Next said nothing.
+      finalAction={{
+        label: t("create_and_send"),
+        disabled: pending,
+        onClick: () => submit(true),
+      }}
       // ── THE PROPOSAL, ON EVERY STEP ─────────────────────────────────
       // Founder: "Put the preview that you see on proposal appear throughout
       // the entire engagement creation process."
@@ -2209,47 +2215,77 @@ export function EngagementBuilder({
       {step === "billing" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              {t("payment_settings")}
-            </CardTitle>
+            <CardTitle className="text-base">{t("payment_settings")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Price visibility is NOT here: it is the gear on the Service
-                items step, where the lines it hides actually live, and where
-                the template builder keeps it too. It was briefly in both. */}
-            <div className="space-y-1.5 border-t border-border/60 pt-3">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+          {/* ── ONE COLUMN, ONE RHYTHM ───────────────────────────────────
+              Canopy's Payment settings card: a checkbox, a labelled amount,
+              and who pays it — every label at the same left edge, one gap
+              between rows, no rules cutting the card into pieces.
+
+              Ours had a stray divider under the heading, a second one between
+              the two controls, and an amount box floating at half width. The
+              founder: "clean up the billing screen its completely
+              misalligned." */}
+          <CardContent className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
                 <input
                   type="checkbox"
+                  className="mt-0.5"
                   checked={requirePaymentMethod}
                   onChange={(e) => setRequirePaymentMethod(e.target.checked)}
                 />
                 {t("require_payment_method")}
               </label>
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <p className="pl-6 text-[11px] leading-relaxed text-muted-foreground">
                 {t("require_payment_method_hint")}
               </p>
             </div>
 
-            <div className="space-y-1.5 border-t border-border/60 pt-3">
-              <Label
-                htmlFor="engagement-deposit"
-                className="text-xs text-muted-foreground"
-              >
+            <div className="space-y-1.5">
+              <Label htmlFor="engagement-deposit" className="text-sm">
                 {tTpl("require_deposit")}
               </Label>
-              <Input
+              <MoneyInput
                 id="engagement-deposit"
-                value={proposalDeposit}
-                onChange={(e) => setProposalDeposit(e.target.value)}
+                valueCents={proposalDepositCents}
+                onChangeCents={(cents) =>
+                  setProposalDeposit(cents == null ? "" : String(cents / 100))
+                }
                 placeholder={tTpl("deposit_placeholder")}
-                inputMode="decimal"
-                className="max-w-[12rem]"
+                className="max-w-[16rem]"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
                 {tTpl("require_deposit_hint")}
               </p>
             </div>
+
+            {/* Canopy's "Signer responsible for making payment". Only when a
+                deposit is actually being asked for — naming a payer for an
+                amount of nothing is a control with no question behind it. */}
+            {proposalDepositCents != null && (
+              <div className="space-y-1.5">
+                <Label htmlFor="engagement-payer" className="text-sm">
+                  {t("signer_pays_label")}
+                </Label>
+                <select
+                  id="engagement-payer"
+                  value={proposalPayer}
+                  onChange={(e) => setProposalPayer(e.target.value)}
+                  className="h-9 w-full max-w-[16rem] rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">{t("signer_pays_client")}</option>
+                  {proposalSigners
+                    .map((x) => x.trim())
+                    .filter(Boolean)
+                    .map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

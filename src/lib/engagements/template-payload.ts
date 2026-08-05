@@ -149,6 +149,9 @@ export type EngagementTemplatePayload = {
    * chooses to do, never something a template does on their behalf by omission.
    */
   requirePaymentMethod: boolean;
+  /** Which signer ROLE settles the deposit. Empty = the client, which is the
+   *  ordinary case and the safe default. */
+  depositPayer: string;
   /**
    * ── WHO SIGNS ───────────────────────────────────────────────────────────
    *
@@ -200,6 +203,7 @@ export function emptyPayload(): EngagementTemplatePayload {
     depositRequired: false,
     depositCents: null,
     requirePaymentMethod: false,
+    depositPayer: "",
     // Defaults to TRUE: an engagement letter the client does not sign is the
     // unusual case, and a template that silently asked nobody to sign would be
     // discovered only when the paperwork was already out.
@@ -416,6 +420,7 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
       .slice(0, 10),
     firmCountersigns: o.firmCountersigns === true,
     requirePaymentMethod: o.requirePaymentMethod === true,
+    depositPayer: str(o.depositPayer).trim().slice(0, 120),
     items: arr(o.items)
       .map(readItem)
       .filter((i): i is EngagementItemDraft => i != null),

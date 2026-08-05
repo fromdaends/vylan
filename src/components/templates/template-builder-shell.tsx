@@ -167,6 +167,7 @@ export function BuilderChrome({
   previewOpen,
   onPreviewToggle,
   error,
+  finalAction,
   children,
 }: {
   tabs: BuilderTab[];
@@ -176,6 +177,17 @@ export function BuilderChrome({
   previewOpen?: boolean;
   onPreviewToggle?: () => void;
   error?: string | null;
+  /**
+   * What Next BECOMES on the last tab.
+   *
+   * The founder: "the next button at the end of the engagement creation should
+   * flip into a send button." A disabled Next on the final step is a dead
+   * control at the exact moment there is one obvious thing left to do.
+   *
+   * Optional: a template builder has no send, so its Next simply disables as
+   * before.
+   */
+  finalAction?: { label: string; onClick: () => void; disabled?: boolean };
   children: React.ReactNode;
 }) {
   const t = useTranslations("Templates");
@@ -270,16 +282,29 @@ export function BuilderChrome({
               <ArrowLeft className="size-3.5" />
               {t("back")}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={tabIndex === tabs.length - 1}
-              onClick={() => onTabChange(tabs[tabIndex + 1].key)}
-            >
-              {t("next")}
-              <ArrowRight className="size-3.5" />
-            </Button>
+            {tabIndex === tabs.length - 1 && finalAction ? (
+              // The last step's Next turns into the thing you came here to do.
+              <Button
+                type="button"
+                size="sm"
+                disabled={finalAction.disabled}
+                onClick={finalAction.onClick}
+              >
+                {finalAction.label}
+                <ArrowRight className="size-3.5" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={tabIndex === tabs.length - 1}
+                onClick={() => onTabChange(tabs[tabIndex + 1].key)}
+              >
+                {t("next")}
+                <ArrowRight className="size-3.5" />
+              </Button>
+            )}
           </div>
         </div>
 
