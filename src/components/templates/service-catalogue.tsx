@@ -102,6 +102,12 @@ export function ServiceCatalogue({
   openOnMount?: boolean;
 }) {
   const t = useTranslations("Engagements");
+  // A SECOND translator, for this file's own Templates-namespace copy. The
+  // service form's field labels (item_rate, item_tax…) are shared with the
+  // engagement items editor and live under Engagements; the work-link copy is
+  // this screen's own and lives under Templates. Reading both from one
+  // translator is what printed `Engagements.service_does_work` on screen.
+  const tT = useTranslations("Templates");
   const [, startTransition] = useTransition();
   const [editing, setEditing] = useState<ServiceRow | null>(null);
   // Seeded, not forced: once you close it, it stays closed for this page view.
@@ -227,7 +233,7 @@ export function ServiceCatalogue({
                 meta={[
                   priceLabel(s),
                   s.taskTemplateId
-                    ? t("service_does_work_meta", {
+                    ? tT("service_does_work_meta", {
                         name:
                           taskTemplates.find((tt) => tt.id === s.taskTemplateId)
                             ?.name ?? "",
@@ -243,7 +249,7 @@ export function ServiceCatalogue({
                 badges={
                   s.archivedAt ? (
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
-                      {t("services_archived_badge")}
+                      {tT("services_archived_badge")}
                     </span>
                   ) : null
                 }
@@ -372,7 +378,7 @@ export function ServiceCatalogue({
                     nothing. */}
                 {taskTemplates.length > 0 && (
                   <div className="sm:col-span-2">
-                    <Label htmlFor="svc-tasks">{t("service_does_work")}</Label>
+                    <Label htmlFor="svc-tasks">{tT("service_does_work")}</Label>
                     <select
                       id="svc-tasks"
                       value={draft.taskTemplateId ?? ""}
@@ -384,7 +390,7 @@ export function ServiceCatalogue({
                       }
                       className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <option value="">{t("service_does_work_none")}</option>
+                      <option value="">{tT("service_does_work_none")}</option>
                       {taskTemplates.map((tt) => (
                         <option key={tt.id} value={tt.id}>
                           {tt.name}
@@ -407,7 +413,7 @@ export function ServiceCatalogue({
                         </p>
                       ) : (
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          {t("service_does_work_hint")}
+                          {tT("service_does_work_hint")}
                         </p>
                       );
                     })()}

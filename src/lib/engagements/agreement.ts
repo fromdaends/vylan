@@ -65,6 +65,18 @@ export type AgreementFacts = {
    * agreed to by a client who was never asked.
    */
   acceptedAt?: string | null;
+  /**
+   * When the firm said work could begin (1630).
+   *
+   * A SEPARATE decision from acceptance, which is Karbon's model too — their
+   * Accepted state has an explicit "Activate" action "signalling that work can
+   * begin". A signature is the client's act; starting is the firm's, and a
+   * January-signed engagement should not look in-progress in January.
+   *
+   * When set it WINS over the client-activity guess below, because it is
+   * somebody's actual decision rather than an inference from behaviour.
+   */
+  activatedAt?: string | null;
 };
 
 /**
@@ -85,13 +97,18 @@ export function resolveAgreementStatus(f: AgreementFacts): AgreementStatus {
   // and nothing has happened since, which is a real and actionable state — it is
   // the firm's move, not the client's.
   if (f.acceptedAt != null) {
+    // An explicit activation is the strongest signal there is — somebody
+    // decided. Client activity remains a fallback for an engagement accepted
+    // before Activate existed, or one where work simply started.
+    if (f.activatedAt != null) return "active";
     return f.clientHasEngaged || f.status === "in_progress"
       ? "active"
       : "accepted";
   }
 
-  // Sent, no acceptance concept yet. Client activity is the stand-in for "this
-  // is live" until the accept step draws that line properly.
+  // Sent but not accepted. `activatedAt` is deliberately NOT consulted here:
+  // activating something nobody agreed to is not a state the UI offers, and
+  // honouring a stray value would let a bad write skip the agreement.
   return f.clientHasEngaged || f.status === "in_progress" ? "active" : "sent";
 }
 
