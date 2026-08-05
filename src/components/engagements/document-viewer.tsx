@@ -4,6 +4,7 @@
 //
 // IMPORTANT: this module imports react-pdf, which pulls in pdf.js — that engine
 // references browser-only globals (DOMMatrix, etc.) at import time and throws in
+import { usePrefersReducedMotion } from "@/lib/motion/use-reduced-motion";
 // Node. So this file must ONLY ever be loaded through `next/dynamic(..., { ssr:
 // false })`. The consumer (file-preview-row.tsx) does exactly that, which also
 // guarantees `document` exists on first render (no SSR pass).
@@ -89,23 +90,6 @@ type ViewerSource = {
   filename: string;
   isImage: boolean;
 };
-
-function usePrefersReducedMotion() {
-  // Lazy-init from the media query (this component is client-only), then only
-  // update from the change event — never synchronously inside the effect body.
-  const [reduced, setReduced] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const on = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return reduced;
-}
 
 // ---------------------------------------------------------------------------
 // Shared bits
