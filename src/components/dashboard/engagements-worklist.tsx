@@ -1216,19 +1216,30 @@ function WorklistRowView({
           <TableRow
             className="group/row cursor-pointer"
             onClick={(e) => {
-              // Whole-row click opens the engagement. Skip when the click
-              // lands on an interactive child (the title link or the "..."
-              // menu button) or while the user is selecting text, so those
-              // keep their own behaviour. Plain JS navigation — not a CSS
-              // stretched-link — so it works in Safari too (cf. #366).
+              // WHOLE-ROW CLICK OPENS THE PANEL, matching the tasks list.
+              //
+              // This INVERTS #1311, which had the row navigate and hid the
+              // panel behind a hover-revealed icon. The founder: "make opening
+              // the sidebar for engagements the same as tasks. Instead of
+              // having to click that tiny ass button." A 14px target that only
+              // appears on hover is not the way to reach the primary view of a
+              // row, and the tasks list had already proved the better shape.
+              //
+              // The TITLE stays a real link to the full page, so the two remain
+              // different actions — but the big target is now the common one,
+              // and cmd-click on the title still opens the engagement in a new
+              // tab, which a button could never do.
+              //
+              // Plain JS — not a CSS stretched-link — so it works in Safari
+              // too (cf. #366).
               const el = e.target as HTMLElement;
               if (el.closest("a, button, input")) return;
               if (window.getSelection()?.toString()) return;
-              router.push(`/engagements/${row.id}`);
+              onOpenDetail?.(row.id);
             }}
           >
             {selectable && (
-              <TableCell className="w-9 py-3 pl-4 pr-0 align-top">
+              <TableCell className="w-9 py-3 pl-4 pr-0 align-middle">
                 <input
                   type="checkbox"
                   aria-label={tEng("bulk_select_row")}
@@ -1240,7 +1251,7 @@ function WorklistRowView({
                   // untouched list is exactly the kind of always-on control
                   // this app avoids.
                   className={cn(
-                    "mt-1 size-3.5 cursor-pointer accent-primary transition-opacity",
+                    "size-3.5 cursor-pointer accent-primary transition-opacity",
                     selected || anySelected
                       ? "opacity-100"
                       : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
@@ -1248,17 +1259,65 @@ function WorklistRowView({
                 />
               </TableCell>
             )}
-            <TableCell className="px-4 py-3 align-top">
-              <div className="flex items-center gap-1.5">
+            <TableCell className="px-4 py-3 align-middle">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <Link
                   href={`/engagements/${row.id}`}
                   // Canopy renders both name columns as links, in blue. Ours
                   // were links already but painted like plain text, so the one
                   // thing on the row you are meant to click did not look it.
-                  className="font-medium text-accent hover:underline focus-visible:underline focus-visible:outline-none"
+                  className="truncate font-medium text-accent hover:underline focus-visible:underline focus-visible:outline-none"
                 >
                   {row.title}
                 </Link>
+                {/* ⚠️ INLINE, AND NOT WRAPPING — this is what makes every row the same
+                    height. The founder: "tasks regardless of the size of text or wtv
+                    its all the same size for each block consistently. Wheras
+                    engagement it differs. MAKE IT CONSISTENT FOR EVERY
+                    ENGAGEMENT." These badges used to sit BELOW the title in a
+                    flex-wrap row, so a row with two of them was ~25px taller
+                    than one with none and the list looked ragged.
+                    They now ride the title line, shrink-0 so they are never
+                    squashed, with the title truncating instead. Urgency still
+                    lives in the always-visible Engagement cell (not the Due
+                    column, which is hidden on phones) so triage badges never
+                    disappear on small screens. (not the
+                    Due column, which is hidden on phones) so triage badges never
+                    disappear on small screens. */}
+                {(overdueText ||
+                  dueSoonText ||
+                  staleText ||
+                  readyText ||
+                  (row.paymentStatus && row.paymentStatus !== "canceled")) && (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {overdueText && (
+                      <Badge variant="destructive" className="gap-1 font-normal">
+                        <AlertTriangle className="h-3 w-3" />
+                        {overdueText}
+                      </Badge>
+                    )}
+                    {dueSoonText && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        <Clock className="h-3 w-3" />
+                        {dueSoonText}
+                      </Badge>
+                    )}
+                    {readyText && (
+                      <Badge variant="secondary" className="font-normal">
+                        {readyText}
+                      </Badge>
+                    )}
+                    {staleText && (
+                      <Badge variant="outline" className="gap-1 font-normal">
+                        <FileWarning className="h-3 w-3" />
+                        {staleText}
+                      </Badge>
+                    )}
+                    {row.paymentStatus && (
+                      <PaymentBadge status={row.paymentStatus} />
+                    )}
+                  </span>
+                )}
                 {/* ⚠️ THE PANEL GETS ITS OWN CONTROL — the NAME KEEPS NAVIGATING.
                     The tasks table maps name→panel, chevron→screen, and copying
                     that here looked right until the tests said otherwise: on
@@ -1272,20 +1331,6 @@ function WorklistRowView({
                     untouched. Hover-revealed, like the row's tick-box: the
                     founder's standing preference is that a control which is not
                     always needed is not always shown. */}
-                {onOpenDetail && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenDetail(row.id)}
-                    aria-label={tEng("open_engagement")}
-                    title={tEng("open_engagement")}
-                    className={cn(
-                      "rounded-[5px] p-0.5 text-muted-foreground transition-opacity hover:bg-secondary hover:text-foreground",
-                      "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
-                    )}
-                  >
-                    <PanelRight className="size-3.5" aria-hidden />
-                  </button>
-                )}
                 {row.seriesId && (
                   <RecurringBadge label={tEng("repeat_badge")} compact />
                 )}
@@ -1310,50 +1355,13 @@ function WorklistRowView({
                   {countdownText}
                 </div>
               )}
-              {/* Urgency lives in the always-visible Engagement cell (not the
-                  Due column, which is hidden on phones) so triage badges never
-                  disappear on small screens. */}
-              {(overdueText ||
-                dueSoonText ||
-                staleText ||
-                readyText ||
-                (row.paymentStatus && row.paymentStatus !== "canceled")) && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {overdueText && (
-                    <Badge variant="destructive" className="gap-1 font-normal">
-                      <AlertTriangle className="h-3 w-3" />
-                      {overdueText}
-                    </Badge>
-                  )}
-                  {dueSoonText && (
-                    <Badge variant="secondary" className="gap-1 font-normal">
-                      <Clock className="h-3 w-3" />
-                      {dueSoonText}
-                    </Badge>
-                  )}
-                  {readyText && (
-                    <Badge variant="secondary" className="font-normal">
-                      {readyText}
-                    </Badge>
-                  )}
-                  {staleText && (
-                    <Badge variant="outline" className="gap-1 font-normal">
-                      <FileWarning className="h-3 w-3" />
-                      {staleText}
-                    </Badge>
-                  )}
-                  {row.paymentStatus && (
-                    <PaymentBadge status={row.paymentStatus} />
-                  )}
-                </div>
-              )}
             </TableCell>
 
             {/* CLIENT — behind the same divider as the header, and a link,
                 because "whose is this" is a question you answer by GOING there.
                 The row's own click handler bails on any <a>, so this does not
                 fight it. */}
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle text-sm lg:table-cell">
               {row.clientId ? (
                 <Link
                   href={`/clients/${row.clientId}`}
@@ -1381,7 +1389,7 @@ function WorklistRowView({
                 column reads "Custom" on most existing rows — four fixed values
                 cannot describe a real firm's services, which is the whole
                 reason the priced lines exist. */}
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle text-sm lg:table-cell">
               {services.length > 0 ? (
                 <div className="flex flex-wrap items-baseline gap-x-1.5">
                   <span className="text-foreground">
@@ -1400,7 +1408,7 @@ function WorklistRowView({
               )}
             </TableCell>
 
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top md:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle md:table-cell">
               {/* ⚠️ THE BAR CAME OUT. Canopy's Engagement items column is a
                   VALUE, not a gauge, and the founder asked for its UI exactly.
 
@@ -1435,7 +1443,7 @@ function WorklistRowView({
             </TableCell>
 
             {teamEnabled && (
-              <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top text-sm lg:table-cell">
+              <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle text-sm lg:table-cell">
                 {/* A person is a place. This name is where you actually think
                     "what else is she on?", so it has to be the way there —
                     until now nobody in the app was clickable, and the only
@@ -1464,7 +1472,7 @@ function WorklistRowView({
               </TableCell>
             )}
 
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top sm:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle sm:table-cell">
               <div className={cn("text-sm tabular-nums", dueTone)}>
                 {formatDate(row.dueDate, locale, "medium")}
               </div>
@@ -1490,7 +1498,7 @@ function WorklistRowView({
               // times — a positional assertion is really a test of the column
               // order dressed up as a test of the pill.
               data-column="status"
-              className="border-l border-border/60 px-4 py-3 align-top"
+              className="border-l border-border/60 px-4 py-3 align-middle"
             >
               {/* The AGREEMENT, not the workflow. The stage pill answered a
                   question the engagement can no longer answer once it holds six
@@ -1509,14 +1517,14 @@ function WorklistRowView({
             {/* Opt-in reassign menu (the teammate profile passes the teammates
                 to hand work to). Built here inside the client component so no
                 function crosses the server→client boundary. */}
-            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-top lg:table-cell">
+            <TableCell className="hidden border-l border-border/60 px-4 py-3 align-middle lg:table-cell">
               <div className="text-sm tabular-nums text-muted-foreground">
                 {row.startedAt ? formatDate(row.startedAt, locale, "medium") : "—"}
               </div>
             </TableCell>
 
             {reassignMembers && reassignMembers.length > 0 && (
-              <TableCell className="px-2 py-3 align-top">
+              <TableCell className="px-2 py-3 align-middle">
                 <EngagementReassignMenu
                   engagementId={row.id}
                   members={reassignMembers}
@@ -1527,7 +1535,7 @@ function WorklistRowView({
             {/* Actions menu. Left-clicking the "..." opens the menu; right-
                 clicking anywhere on the row opens the same menu via the
                 context-menu wrapper. (The engagement title is the row's link.) */}
-            <TableCell className="px-2 py-3 align-top">
+            <TableCell className="px-2 py-3 align-middle">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
