@@ -2,18 +2,28 @@
 
 // Task templates on the Templates page (migration 1570) — list, create, retire.
 //
-// Modelled on ServiceCatalogue rather than on the document-template cards: like
-// the service catalogue, this is a short list of small things you edit IN PLACE
-// on this page, not objects with their own detail route. An engagement template
-// earns a card because it carries scope, money and documents; a task template
-// is a name and a handful of lines.
+// ── THE SHAPE ──────────────────────────────────────────────────────────────
+//
+// One PARENT TASK with steps and a client request under it, which is Canopy's
+// shape (support article 12573386) and what the founder asked for after seeing
+// the two side by side.
+//
+// It was a flat list of sibling tasks first. That put five rows on the Work
+// list for every client at month-end instead of one you expand — and left the
+// whole job's assignee and due date with nowhere to live. The parent fixes
+// both. Vylan's database already had `engagement_tasks.parent_id`; only the
+// template could not express it.
+//
+// The parent's NAME is the template's name. Canopy has both, and two name
+// fields on one small form is a question nobody wants asked twice.
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { Plus, Trash2, ListChecks } from "lucide-react";
+import { Plus, Trash2, ListChecks, CornerDownRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { TASK_KIND_META, taskKindLabelKey } from "@/lib/tasks/kinds";
 import type { TaskKind } from "@/lib/db/engagement-tasks";
 import type { TaskTemplate } from "@/lib/db/task-templates";
@@ -22,13 +32,6 @@ import {
   saveTaskTemplateAction,
   archiveTaskTemplateAction,
 } from "@/app/actions/task-templates";
-
-type DraftRow = {
-  title: string;
-  kind: TaskKind;
-  /** The client request this task carries, copied from a request template. */
-  checklist: TemplateChecklistItem[];
-};
 
 export function TaskTemplateCatalogue({
   templates,
@@ -39,8 +42,7 @@ export function TaskTemplateCatalogue({
   templates: TaskTemplate[];
   /**
    * The firm's document-request templates — Canopy's "Client request
-   * templates". Offered inside a document-collection row so a task template can
-   * carry what the client is asked to send.
+   * templates". Applying one COPIES its lines onto the parent task.
    */
   requestTemplates?: {
     id: string;
@@ -59,16 +61,26 @@ export function TaskTemplateCatalogue({
   const [open, setOpen] = useState(openOnMount);
   const [name, setName] = useState("");
   const [access, setAccess] = useState<"team" | "private">("team");
-  const [rows, setRows] = useState<DraftRow[]>([{ title: "", kind: "task", checklist: [] }]);
+  const [kind, setKind] = useState<TaskKind>("task");
+  const [description, setDescription] = useState("");
+  const [steps, setSteps] = useState<string[]>([""]);
+  const [checklist, setChecklist] = useState<TemplateChecklistItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const usableRows = rows.filter((r) => r.title.trim().length > 0);
-  const canSave = name.trim().length > 0 && usableRows.length > 0;
+  const usableSteps = steps.map((s) => s.trim()).filter((s) => s.length > 0);
+  // A parent with neither steps nor a client request is a name attached to
+  // nothing — the same rule isWorthSavingTaskTemplate applies on the server.
+  const canSave =
+    name.trim().length > 0 &&
+    (usableSteps.length > 0 || checklist.length > 0);
 
   function reset() {
     setName("");
     setAccess("team");
-    setRows([{ title: "", kind: "task", checklist: [] }]);
+    setKind("task");
+    setDescription("");
+    setSteps([""]);
+    setChecklist([]);
     setError(null);
   }
 
@@ -79,16 +91,10 @@ export function TaskTemplateCatalogue({
       const res = await saveTaskTemplateAction({
         name: name.trim(),
         access,
-        tasks: usableRows.map((r) => ({
-          title: r.title.trim(),
-          kind: r.kind,
-          // Only where it means something. A client request on a "meeting"
-          // row is ignored by the reader anyway, but sending it would put
-          // noise in the stored payload.
-          ...(r.kind === "document_collection" && r.checklist.length > 0
-            ? { checklist: r.checklist }
-            : {}),
-        })),
+        kind,
+        description: description.trim(),
+        subtasks: usableSteps.map((title) => ({ title })),
+        checklist,
       });
       if (!res.ok) {
         // needsMigration is its own message: "it didn't work" is unhelpful when
@@ -112,6 +118,8 @@ export function TaskTemplateCatalogue({
       router.refresh();
     });
   }
+
+  const label = (k: TaskKind) => tEng(taskKindLabelKey(k) as "kind_task");
 
   return (
     <div className="space-y-4">
@@ -143,21 +151,34 @@ export function TaskTemplateCatalogue({
                   <ListChecks className="h-4 w-4" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-medium text-foreground">
                       {tpl.name}
                     </p>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {label(tpl.payload.kind)}
+                    </span>
                     {tpl.access === "private" && (
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                         {t("access_private")}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {/* The steps themselves, in order — the whole template is
-                        short enough that a count would say less than the list. */}
-                    {tpl.payload.tasks.map((x) => x.title).join(" · ")}
-                  </p>
+                  {/* The steps themselves, in order — the template is short
+                      enough that a count would say less than the list. */}
+                  {tpl.payload.subtasks.length > 0 && (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {tpl.payload.subtasks.map((s) => s.title).join(" · ")}
+                    </p>
+                  )}
+                  {tpl.payload.checklist.length > 0 && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t("task_template_client_request")}{" "}
+                      {t("documents_count", {
+                        count: tpl.payload.checklist.length,
+                      })}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -186,190 +207,165 @@ export function TaskTemplateCatalogue({
       )}
 
       {open && (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("task_templates_name_placeholder")}
-            aria-label={t("task_templates_name_placeholder")}
-          />
-
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <label className="flex cursor-pointer select-none items-center gap-1.5">
-              <input
-                type="radio"
-                name="task-template-access"
-                checked={access === "team"}
-                onChange={() => setAccess("team")}
-              />
-              {t("access_team")}
-            </label>
-            <label className="flex cursor-pointer select-none items-center gap-1.5">
-              <input
-                type="radio"
-                name="task-template-access"
-                checked={access === "private"}
-                onChange={() => setAccess("private")}
-              />
-              {t("access_private")}
-            </label>
+        <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+          {/* ── THE PARENT TASK ─────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("task_templates_name_placeholder")}
+              aria-label={t("task_templates_name_placeholder")}
+            />
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as TaskKind)}
+                aria-label={tEng("task_kind_label")}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              >
+                {/* Every kind, including the one-per-engagement ones. A template
+                    is not an engagement — that limit applies when the tasks are
+                    created, and the builder's own picker enforces it there. */}
+                {TASK_KIND_META.map((meta) => (
+                  <option key={meta.kind} value={meta.kind}>
+                    {label(meta.kind)}
+                  </option>
+                ))}
+              </select>
+              <label className="flex cursor-pointer select-none items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="task-template-access"
+                  checked={access === "team"}
+                  onChange={() => setAccess("team")}
+                />
+                {t("access_team")}
+              </label>
+              <label className="flex cursor-pointer select-none items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="task-template-access"
+                  checked={access === "private"}
+                  onChange={() => setAccess("private")}
+                />
+                {t("access_private")}
+              </label>
+            </div>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t("task_template_description_placeholder")}
+              aria-label={t("task_template_description_placeholder")}
+              rows={2}
+              className="text-xs"
+            />
           </div>
 
-          <ul className="space-y-2">
-            {rows.map((row, idx) => (
-              <li key={idx} className="space-y-2">
-                <div className="flex items-center gap-2">
-                <Input
-                  value={row.title}
-                  onChange={(e) =>
-                    setRows((prev) =>
-                      prev.map((r, i) =>
-                        i === idx ? { ...r, title: e.target.value } : r,
-                      ),
-                    )
-                  }
-                  placeholder={tEng("task_title_placeholder")}
-                  aria-label={tEng("task_title_placeholder")}
-                  className="flex-1"
-                />
-                {/* Every kind is offered here, INCLUDING the one-per-engagement
-                    ones. A template is not an engagement — the limit applies
-                    when the tasks are actually created, and the builder's own
-                    picker enforces it there. */}
+          {/* ── THE STEPS UNDER IT ──────────────────────────────────────── */}
+          <div className="space-y-2 border-l-2 border-border pl-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("task_template_steps")}
+            </p>
+            <ul className="space-y-2">
+              {steps.map((step, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <CornerDownRight
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Input
+                    value={step}
+                    onChange={(e) =>
+                      setSteps((prev) =>
+                        prev.map((s, i) => (i === idx ? e.target.value : s)),
+                      )
+                    }
+                    placeholder={t("task_template_step_placeholder")}
+                    aria-label={t("task_template_step_placeholder")}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSteps((prev) =>
+                        prev.length === 1
+                          ? prev
+                          : prev.filter((_, i) => i !== idx),
+                      )
+                    }
+                    disabled={steps.length === 1}
+                    className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-30"
+                    aria-label={t("remove")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setSteps((prev) => [...prev, ""])}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("task_template_add_step")}
+            </Button>
+          </div>
+
+          {/* ── THE CLIENT REQUEST THE PARENT CARRIES ───────────────────── */}
+          {requestTemplates.length > 0 && (
+            <div className="space-y-2 border-l-2 border-border pl-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("task_template_client_request")}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <select
-                  value={row.kind}
-                  onChange={(e) =>
-                    setRows((prev) =>
-                      prev.map((r, i) =>
-                        i === idx
-                          ? { ...r, kind: e.target.value as TaskKind }
-                          : r,
-                      ),
-                    )
-                  }
-                  aria-label={tEng("task_kind_label")}
-                  className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                  // Resets after each apply so the same request template can be
+                  // applied twice; a select already holding the value fires no
+                  // change event.
+                  value=""
+                  onChange={(e) => {
+                    const picked = requestTemplates.find(
+                      (x) => x.id === e.target.value,
+                    );
+                    if (picked) setChecklist([...picked.items]);
+                  }}
+                  aria-label={t("task_template_apply_request")}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                 >
-                  {TASK_KIND_META.map((meta) => (
-                    <option key={meta.kind} value={meta.kind}>
-                      {tEng(taskKindLabelKey(meta.kind) as "kind_task")}
+                  <option value="">{t("task_template_apply_request")}</option>
+                  {requestTemplates.map((rt) => (
+                    <option key={rt.id} value={rt.id}>
+                      {rt.name}
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRows((prev) =>
-                      prev.length === 1
-                        ? prev
-                        : prev.filter((_, i) => i !== idx),
-                    )
-                  }
-                  disabled={rows.length === 1}
-                  className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-30"
-                  aria-label={t("remove")}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                </div>
-
-                {/* ── THE CLIENT REQUEST THIS TASK CARRIES ─────────────────
-                    Canopy's "Add client request", which lives INSIDE the task
-                    template rather than beside it: their article has you edit
-                    the task template and, at the bottom, Add → Add client
-                    request, then Apply template to fill it in.
-
-                    Applying COPIES the lines rather than storing a reference.
-                    Canopy's own wording is that the fields "will be populated
-                    according to the selected template", and this repo's rule is
-                    copy-on-use — otherwise a firm tidying up its document
-                    requests would silently change what every saved task
-                    template asks for. */}
-                {row.kind === "document_collection" &&
-                  requestTemplates.length > 0 && (
-                    <div className="ml-1 flex flex-wrap items-center gap-2 border-l-2 border-border pl-3 text-xs">
-                      <span className="text-muted-foreground">
-                        {t("task_template_client_request")}
-                      </span>
-                      <select
-                        // Resets after each apply so the same request template
-                        // can be applied twice; a select already holding the
-                        // value fires no change event.
-                        value=""
-                        onChange={(e) => {
-                          const picked = requestTemplates.find(
-                            (x) => x.id === e.target.value,
-                          );
-                          if (!picked) return;
-                          setRows((prev) =>
-                            prev.map((r, i) =>
-                              i === idx
-                                ? { ...r, checklist: [...picked.items] }
-                                : r,
-                            ),
-                          );
-                        }}
-                        aria-label={t("task_template_apply_request")}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                      >
-                        <option value="">
-                          {t("task_template_apply_request")}
-                        </option>
-                        {requestTemplates.map((rt) => (
-                          <option key={rt.id} value={rt.id}>
-                            {rt.name}
-                          </option>
-                        ))}
-                      </select>
-                      {row.checklist.length > 0 && (
-                        <>
-                          <span className="text-muted-foreground">
-                            {/* The lines themselves, not a count — a template
-                                you are building should show what it will ask
-                                for. */}
-                            {row.checklist
-                              .slice(0, 4)
-                              .map((c) =>
-                                locale === "fr"
-                                  ? c.label_fr || c.label_en
-                                  : c.label_en || c.label_fr,
-                              )
-                              .join(" · ")}
-                            {row.checklist.length > 4 &&
-                              ` +${row.checklist.length - 4}`}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRows((prev) =>
-                                prev.map((r, i) =>
-                                  i === idx ? { ...r, checklist: [] } : r,
-                                ),
-                              )
-                            }
-                            className="text-muted-foreground underline transition-colors hover:text-destructive"
-                          >
-                            {t("remove")}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-              </li>
-            ))}
-          </ul>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() =>
-              setRows((prev) => [...prev, { title: "", kind: "task", checklist: [] }])
-            }
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {tEng("add_task")}
-          </Button>
+                {checklist.length > 0 && (
+                  <>
+                    <span className="text-muted-foreground">
+                      {checklist
+                        .slice(0, 4)
+                        .map((c) =>
+                          locale === "fr"
+                            ? c.label_fr || c.label_en
+                            : c.label_en || c.label_fr,
+                        )
+                        .join(" · ")}
+                      {checklist.length > 4 && ` +${checklist.length - 4}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setChecklist([])}
+                      className="text-muted-foreground underline transition-colors hover:text-destructive"
+                    >
+                      {t("remove")}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className="text-xs text-destructive">

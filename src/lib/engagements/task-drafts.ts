@@ -32,6 +32,15 @@ import { TASK_KIND_META, taskKindHasScreen } from "@/lib/tasks/kinds";
 export type TaskDraft = {
   title: string;
   kind: TaskKind;
+  /**
+   * The steps under this task — Canopy's subtasks, and what a task template
+   * carries.
+   *
+   * Optional because a task typed by hand in the builder has none, and making
+   * every caller pass `[]` to say "no steps" is noise. `engagement_tasks` has
+   * had `parent_id` since 1370; this is what finally fills it.
+   */
+  subtasks?: { title: string }[];
   /** Everybody on it at creation. The founder asked for assignment to happen
    *  WHILE creating rather than as a second pass afterwards. */
   assigneeIds: string[];
@@ -60,11 +69,19 @@ export function isMeaningful(task: TaskDraft): boolean {
  * accountant typed is the sequence the work is meant to happen in.
  */
 export function meaningfulTasks(tasks: readonly TaskDraft[]): TaskDraft[] {
-  return tasks.filter(isMeaningful).map((task) => ({
-    title: task.title.trim(),
-    kind: task.kind,
-    assigneeIds: [...new Set(task.assigneeIds)],
-  }));
+  return tasks.filter(isMeaningful).map((task) => {
+    // Steps get the same treatment as their parent: trimmed, and an untitled
+    // one dropped rather than written as a nameless row under a real task.
+    const subtasks = (task.subtasks ?? [])
+      .map((s) => ({ title: s.title.trim() }))
+      .filter((s) => s.title.length > 0);
+    return {
+      title: task.title.trim(),
+      kind: task.kind,
+      assigneeIds: [...new Set(task.assigneeIds)],
+      ...(subtasks.length > 0 ? { subtasks } : {}),
+    };
+  });
 }
 
 /**
@@ -132,46 +149,60 @@ export type AppendResult = {
 };
 
 /**
- * Add a task template's rows to the tasks an engagement is being created with.
+ * Add a task template to the tasks an engagement is being created with.
  *
- * ── THE RULE THIS EXISTS FOR ───────────────────────────────────────────────
+ * ── ONE TEMPLATE ADDS ONE TASK ─────────────────────────────────────────────
  *
- * A task template may legitimately contain `document_collection`, `signatures`
- * or `deliverables` — the template builder offers every kind, because a
- * template is not an engagement. But an ENGAGEMENT may hold only one of each
- * (1370's partial unique index), and tasks are written fail-soft: a refused
- * insert is logged and swallowed, so a second one would simply never appear
- * and nothing would say why.
+ * A task template is a PARENT TASK with steps under it, not a bag of siblings.
+ * "Month-end close" with five steps must add ONE row to the engagement — the
+ * five are subtasks of it. Adding five siblings is what the flat shape did, and
+ * it is why the founder asked for Canopy's: ten clients at month-end is ten
+ * rows on the Work list, not fifty.
  *
- * So a clashing row is DOWNGRADED to a plain task rather than dropped. Dropping
- * loses the step the firm wrote down; downgrading loses only its screen, keeps
- * it visible, and leaves it one dropdown away from being fixed by hand.
+ * ── THE RULE THIS ALSO HAS TO OBEY ─────────────────────────────────────────
  *
- * Checked against the ACCUMULATING list, not just the existing one — a template
- * carrying two document-collection rows has to be handled too, and it is
- * exactly the case a check against `existing` alone would miss.
+ * A template may legitimately be a `document_collection`, `signatures` or
+ * `deliverables` — the template editor offers every kind, because a template is
+ * not an engagement. But an ENGAGEMENT may hold only one of each (1370's
+ * partial unique index), and tasks are written fail-soft: a refused insert is
+ * logged and swallowed, so a second would never appear and nothing would say
+ * why.
+ *
+ * So a clashing template lands as a PLAIN TASK rather than being dropped.
+ * Dropping loses work the firm wrote down; downgrading loses only its screen,
+ * keeps the whole thing visible with its steps intact, and leaves it one
+ * dropdown away from being fixed by hand.
  */
-export function appendTemplateTasks(
+export function appendTaskTemplate(
   existing: readonly TaskDraft[],
-  incoming: readonly { title: string; kind: TaskKind }[],
+  template: {
+    /** The parent task's name — the template's own name. */
+    name: string;
+    kind: TaskKind;
+    subtasks: readonly { title: string }[];
+  },
 ): AppendResult {
-  const tasks: TaskDraft[] = [...existing];
-  const downgraded: string[] = [];
+  const title = template.name.trim();
+  // Nothing to add. Returning the list unchanged (rather than pushing a
+  // nameless row) keeps this safe to call with whatever the picker had.
+  if (title.length === 0) return { tasks: [...existing], downgraded: [] };
 
-  for (const row of incoming) {
-    const title = row.title.trim();
-    // A template should never contain one of these — readTaskTemplatePayload
-    // drops untitled rows — but this function must not depend on that to be
-    // correct, because it also serves whatever calls it next.
-    if (title.length === 0) continue;
+  const clashes = kindTaken(existing, template.kind);
+  const subtasks = template.subtasks
+    .map((s) => ({ title: s.title.trim() }))
+    .filter((s) => s.title.length > 0);
 
-    if (kindTaken(tasks, row.kind)) {
-      tasks.push({ title, kind: "task", assigneeIds: [] });
-      downgraded.push(title);
-    } else {
-      tasks.push({ title, kind: row.kind, assigneeIds: [] });
-    }
-  }
+  const parent: TaskDraft = {
+    title,
+    kind: clashes ? "task" : template.kind,
+    assigneeIds: [],
+    // Omitted rather than stored as [] so a task with no steps and one whose
+    // steps were all blank read identically.
+    ...(subtasks.length > 0 ? { subtasks } : {}),
+  };
 
-  return { tasks, downgraded };
+  return {
+    tasks: [...existing, parent],
+    downgraded: clashes ? [title] : [],
+  };
 }
