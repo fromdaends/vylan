@@ -159,7 +159,16 @@ export function EngagementModalShell({
           The blur is a plain `filter` on the scenery, not a `backdrop-filter`
           pane: backdrop-filter samples a "backdrop root" whose membership
           depends on the same stacking rules that kept breaking this. */}
-      <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      {/* NO `animate-in-fade` on this container, and that is the whole fix.
+          Proven in the live page: stripping that one class makes the dialog
+          snap crisp and the frosted glass appear behind it. With it, the sheet
+          rendered grey and washed out no matter how the layers underneath were
+          ordered — which is why five attempts at the layering changed nothing.
+
+          `main` already fades the page in, so this was a second fade over the
+          first; once the scenery and its dim moved INSIDE this container, that
+          compositing is what flattened the dialog into them. */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
         <div
           aria-hidden
           // `inert` as well as pointer-events-none: nothing in here may take
