@@ -200,22 +200,22 @@ export function AppShell({
         // then the steps inside one, then the two building blocks.
         items: [
           {
-            href: "/templates#engagement-templates",
+            href: "/templates/engagements",
             label: tHome("templates_engagement"),
             description: tHome("templates_engagement_hint"),
           },
           {
-            href: "/templates#task-templates",
+            href: "/templates/tasks",
             label: tHome("templates_task"),
             description: tHome("templates_task_hint"),
           },
           {
-            href: "/templates#document-requests",
+            href: "/templates/requests",
             label: tHome("templates_request"),
             description: tHome("templates_request_hint"),
           },
           {
-            href: "/templates#services",
+            href: "/templates/services",
             label: tHome("templates_service"),
             description: tHome("templates_service_hint"),
           },
@@ -355,12 +355,12 @@ export function AppShell({
               // founder: "the whole function is to create one not just bring
               // you to the page". Service opens its dialog; document request
               // clones the blank template and drops you in its editor.
-              href: "/templates?new=service",
+              href: "/templates/services?new=1",
               label: tHome("create_service"),
               description: tHome("create_service_hint"),
             },
             {
-              href: "/templates?new=document",
+              href: "/templates/requests?new=1",
               label: tHome("create_template"),
               description: tHome("create_template_hint"),
             },

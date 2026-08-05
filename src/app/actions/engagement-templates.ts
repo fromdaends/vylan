@@ -87,7 +87,7 @@ export async function saveEngagementAsTemplateAction(
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
   revalidatePath("/engagements/new");
-  revalidatePath("/templates");
+  revalidatePath("/templates/engagements");
   return { ok: true };
 }
 
@@ -104,6 +104,6 @@ export async function archiveEngagementTemplateAction(
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
   revalidatePath("/engagements/new");
-  revalidatePath("/templates");
+  revalidatePath("/templates/engagements");
   return { ok: true };
 }
