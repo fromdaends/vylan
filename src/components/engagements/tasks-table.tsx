@@ -64,6 +64,7 @@ import {
   ChevronRight,
   ExternalLink,
   Flag,
+  RotateCcw,
   MessageSquare,
   Milestone,
   Trash2,
@@ -194,6 +195,7 @@ export function TasksTable({
   variant = "firm",
   initialView = "active",
   savedViews = [],
+  deletedMode = false,
   onOpen,
   maxRows,
   moreHref,
@@ -219,6 +221,11 @@ export function TasksTable({
   initialView?: TaskView;
   /** This person's saved views for the tasks list (1630). */
   savedViews?: ListSavedView[];
+  /** Renders the RECYCLE BIN (1670): the same table, but every row offers
+   *  Restore and Delete forever instead of the live actions. Same component on
+   *  purpose — a separate "deleted tasks" table would drift from this one the
+   *  first time a column changed. */
+  deletedMode?: boolean;
   /** Opens a task's own screen. Job page only; see task-detail-panel.tsx. */
   onOpen?: (taskId: string) => void;
   /**
@@ -636,6 +643,13 @@ export function TasksTable({
               something to put in it: your saved views. */}
           <ListViewsMenu
             label={tViews("menu_label")}
+            // The bin's only way in — same shape as the engagements ⋯, which
+            // carries Archived and Recently deleted beside its saved views.
+            links={
+              deletedMode
+                ? []
+                : [{ href: "/work/deleted", label: t("deleted_tasks_title") }]
+            }
             surface="tasks"
             savedViews={savedViews}
             activeViewId={activeViewId}
@@ -853,7 +867,15 @@ export function TasksTable({
           count={selection.count}
           busy={bulkBusy}
           onClear={selection.clear}
-          actions={[
+          actions={deletedMode ? [
+            {
+              key: "restore",
+              label: t("task_restore"),
+              icon: RotateCcw,
+              onSelect: () =>
+                runBulk({ taskIds: [], restore: true }, t("task_restore")),
+            },
+          ] : [
             {
               key: "status",
               label: t("task_change_status"),
@@ -921,11 +943,16 @@ export function TasksTable({
           moreActions={[
             {
               key: "delete",
-              label: t("task_delete"),
+              // In the bin this is the LAST step, not the first — the label has
+              // to say so, because "Delete" there means something different.
+              label: deletedMode ? t("task_delete_forever") : t("task_delete"),
               icon: Trash2,
               variant: "destructive" as const,
               onSelect: () =>
-                runBulk({ taskIds: [], remove: true }, t("task_delete")),
+                runBulk(
+                  { taskIds: [], remove: true },
+                  deletedMode ? t("task_delete_forever") : t("task_delete"),
+                ),
             },
           ]}
         />

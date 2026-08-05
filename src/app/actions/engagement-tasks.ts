@@ -30,6 +30,8 @@ import {
   type TaskKind,
   type TaskPriority,
   listTaskAssignees,
+  restoreEngagementTask,
+  purgeEngagementTask,
 } from "@/lib/db/engagement-tasks";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { revalidateAllLocales } from "@/lib/revalidate";
@@ -320,6 +322,8 @@ export async function bulkUpdateTasksAction(input: {
   /** Replaces the assignee set with this ONE person, or clears it with null. */
   assigneeId?: string | null;
   remove?: boolean;
+  /** Bring them back out of the recycle bin (1670). */
+  restore?: boolean;
 }): Promise<BulkTaskResult> {
   const g = await guard();
   if ("error" in g) return { ok: false, error: g.error };
@@ -333,8 +337,14 @@ export async function bulkUpdateTasksAction(input: {
 
   for (const taskId of guarded.ids) {
     try {
-      if (input.remove) {
-        await deleteEngagementTask({ taskId, firmId: g.firm.id });
+      if (input.restore) {
+        await restoreEngagementTask({ taskId, firmId: g.firm.id });
+      } else if (input.remove) {
+        await deleteEngagementTask({
+          taskId,
+          firmId: g.firm.id,
+          actorId: g.user.id,
+        });
       } else if (input.assigneeId !== undefined) {
         // Replace rather than add: "assign these twelve to Marc" means Marc is
         // on them, not that Marc joins whoever was already there. Reading the
@@ -386,4 +396,39 @@ export async function bulkUpdateTasksAction(input: {
   // ok reports whether ANYTHING landed; the counts say how much. A run where
   // every row failed is not a success with done:0.
   return { ok: done > 0 || failed === 0, done, failed };
+}
+
+// ── THE RECYCLE BIN (1670) ───────────────────────────────────────────────────
+//
+// Deleting a task now moves it here for 30 days instead of destroying it. These
+// two are the ways back out: put it back, or finish the job early.
+
+export async function restoreTaskAction(input: {
+  taskId: string;
+}): Promise<TaskActionResult> {
+  const g = await guard();
+  if ("error" in g) return { ok: false, error: g.error };
+  try {
+    await restoreEngagementTask({ taskId: input.taskId, firmId: g.firm.id });
+  } catch (err) {
+    return handle(err, "restore");
+  }
+  revalidateAllLocales("/work");
+  revalidateAllLocales("/dashboard");
+  return { ok: true };
+}
+
+/** Gone for good, before the cron would have done it. The bin's own control. */
+export async function purgeTaskAction(input: {
+  taskId: string;
+}): Promise<TaskActionResult> {
+  const g = await guard();
+  if ("error" in g) return { ok: false, error: g.error };
+  try {
+    await purgeEngagementTask({ taskId: input.taskId, firmId: g.firm.id });
+  } catch (err) {
+    return handle(err, "purge");
+  }
+  revalidateAllLocales("/work");
+  return { ok: true };
 }

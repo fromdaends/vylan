@@ -2850,7 +2850,13 @@
     "bulk_partial": "{done} sur {total} mises à jour — le reste n'a pas fonctionné.",
     "bulk_select_all_clients": "Sélectionner tous les clients affichés",
     "bulk_select_client": "Sélectionner {name}",
-    "bulk_select_task": "Sélectionner {title}"
+    "bulk_select_task": "Sélectionner {title}",
+    "task_restore": "Restaurer",
+    "task_delete_forever": "Supprimer définitivement",
+    "deleted_tasks_title": "Supprimées récemment",
+    "deleted_tasks_hint": "Les tâches supprimées restent ici 30 jours, puis disparaissent définitivement.",
+    "deleted_tasks_empty": "Rien de supprimé depuis 30 jours.",
+    "back_to_work": "Retour aux tâches"
   },
   "Attention": {
     "metric_active": "Actifs",
