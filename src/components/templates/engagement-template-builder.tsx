@@ -58,6 +58,7 @@ import {
   placeholderText,
 } from "@/lib/engagements/placeholders";
 import { saveEngagementAsTemplateAction } from "@/app/actions/engagement-templates";
+import type { EngagementTemplatePayload } from "@/lib/engagements/template-payload";
 
 // Canopy's four tabs, in Canopy's order.
 const TABS = ["introduction", "services", "terms", "signatures"] as const;
@@ -91,8 +92,22 @@ export function EngagementTemplateBuilder({
   services = [],
   members = [],
   fallbackTaxPct = null,
+  initial,
 }: {
   locale: "en" | "fr";
+  /**
+   * An existing template being EDITED. Absent when creating.
+   *
+   * Every field below seeds from it directly rather than through an effect: a
+   * mount effect that called a dozen setters would render the empty form first
+   * and correct it a frame later, which reads as the page losing your work.
+   */
+  initial?: {
+    id: string;
+    name: string;
+    access: "team" | "private";
+    payload: EngagementTemplatePayload;
+  };
   services?: CatalogueService[];
   /** Active firm members, for the assignee picker. */
   members?: { id: string; name: string }[];
@@ -106,36 +121,36 @@ export function EngagementTemplateBuilder({
   const [tab, setTab] = useState<Tab>("introduction");
   const [previewOpen, setPreviewOpen] = useState(true);
 
-  const [name, setName] = useState("");
-  const [access, setAccess] = useState<"team" | "private">("team");
-  const [title, setTitle] = useState("");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [access, setAccess] = useState<"team" | "private">(initial?.access ?? "team");
+  const [title, setTitle] = useState(initial?.payload.title ?? "");
   const [periodStartsOn, setPeriodStartsOn] = useState<"acceptance" | "custom">(
-    "acceptance",
+    initial?.payload.periodStartsOn ?? "acceptance",
   );
-  const [periodMonths, setPeriodMonths] = useState<number | null>(null);
+  const [periodMonths, setPeriodMonths] = useState<number | null>(initial?.payload.periodMonths ?? null);
 
   // Canopy's three Introduction rows. The toggle is kept separate from the
   // content so turning a row off does not lose what you already typed.
-  const [welcomeEnabled, setWelcomeEnabled] = useState(false);
-  const [introMessage, setIntroMessage] = useState("");
-  const [videoEnabled, setVideoEnabled] = useState(false);
-  const [videoUrl, setVideoUrl] = useState("");
-  const [documentEnabled, setDocumentEnabled] = useState(false);
-  const [documentName, setDocumentName] = useState("");
+  const [welcomeEnabled, setWelcomeEnabled] = useState(initial?.payload.welcomeEnabled ?? false);
+  const [introMessage, setIntroMessage] = useState(initial?.payload.introMessage ?? "");
+  const [videoEnabled, setVideoEnabled] = useState(initial?.payload.videoEnabled ?? false);
+  const [videoUrl, setVideoUrl] = useState(initial?.payload.videoUrl ?? "");
+  const [documentEnabled, setDocumentEnabled] = useState(initial?.payload.documentEnabled ?? false);
+  const [documentName, setDocumentName] = useState(initial?.payload.documentName ?? "");
 
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [items, setItems] = useState<EngagementItemDraft[]>([]);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(initial?.payload.assigneeIds ?? []);
+  const [items, setItems] = useState<EngagementItemDraft[]>(() => [...(initial?.payload.items ?? [])]);
 
-  const [termsEnabled, setTermsEnabled] = useState(false);
-  const [termsText, setTermsText] = useState("");
+  const [termsEnabled, setTermsEnabled] = useState(initial?.payload.termsEnabled ?? false);
+  const [termsText, setTermsText] = useState(initial?.payload.termsText ?? "");
 
-  const [clientSigns, setClientSigns] = useState(true);
+  const [clientSigns, setClientSigns] = useState(initial?.payload.clientSigns ?? true);
   const [additionalSignerLabels, setAdditionalSignerLabels] = useState<
     string[]
-  >([]);
-  const [firmCountersigns, setFirmCountersigns] = useState(false);
-  const [depositRequired, setDepositRequired] = useState(false);
-  const [depositAmount, setDepositAmount] = useState("");
+  >(initial?.payload.additionalSignerLabels ?? []);
+  const [firmCountersigns, setFirmCountersigns] = useState(initial?.payload.firmCountersigns ?? false);
+  const [depositRequired, setDepositRequired] = useState(initial?.payload.depositCents != null);
+  const [depositAmount, setDepositAmount] = useState(initial?.payload.depositCents != null ? String(initial.payload.depositCents / 100) : "");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -177,6 +192,9 @@ export function EngagementTemplateBuilder({
     setError(null);
     startTransition(async () => {
       const res = await saveEngagementAsTemplateAction({
+        // Present => update. Absent => create. Without this, editing would
+        // leave the original behind as a duplicate.
+        ...(initial ? { id: initial.id } : {}),
         name: name.trim(),
         access,
         payload: {
@@ -227,7 +245,7 @@ export function EngagementTemplateBuilder({
       {/* ── TITLE BAR ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
         <h1 className="text-lg font-semibold tracking-tight">
-          {t("create_engagement_template")}
+          {initial ? t("edit_engagement_template") : t("create_engagement_template")}
         </h1>
         <div className="flex items-center gap-2">
           <Button
