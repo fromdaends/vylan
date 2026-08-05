@@ -3028,6 +3028,7 @@
     "placeholder_hint": "Insérer :",
     "preview_client_label": "Nom du client",
     "create_engagement_template": "Créer un modèle de mandat",
+    "edit_engagement_template": "Modifier le modèle de mandat",
     "engagement_templates_new": "Nouveau modèle de mandat",
     "save_template": "Enregistrer le modèle",
     "tab_introduction": "Introduction",

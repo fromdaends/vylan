@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/db/users";
 import {
   archiveEngagementTemplate,
   createEngagementTemplate,
+  updateEngagementTemplate,
 } from "@/lib/db/engagement-templates";
 import {
   isWorthSaving,
@@ -74,6 +75,8 @@ const PayloadSchema = z.object({
 });
 
 const SaveSchema = z.object({
+  /** Present when editing one that already exists; absent when creating. */
+  id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(200),
   access: z.enum(["team", "private"]),
   payload: PayloadSchema,
@@ -112,11 +115,18 @@ export async function saveEngagementAsTemplateAction(
     return { ok: false, error: "empty" };
   }
 
-  const res = await createEngagementTemplate({
-    name: parsed.data.name,
-    access: parsed.data.access,
-    payload,
-  });
+  const res = parsed.data.id
+    ? await updateEngagementTemplate({
+        id: parsed.data.id,
+        name: parsed.data.name,
+        access: parsed.data.access,
+        payload,
+      })
+    : await createEngagementTemplate({
+        name: parsed.data.name,
+        access: parsed.data.access,
+        payload,
+      });
   if (!res.ok) return { ok: false, needsMigration: res.needsMigration };
 
   revalidatePath("/engagements/new");

@@ -64,6 +64,72 @@ export async function listEngagementTemplates(): Promise<EngagementTemplate[]> {
   }));
 }
 
+/**
+ * One template, by id — for the edit screen.
+ *
+ * RLS decides whether it is visible at all: a private template belonging to
+ * somebody else simply is not there, so "not found" and "not yours" are the
+ * same answer and neither leaks the other's existence.
+ */
+export async function getEngagementTemplate(
+  id: string,
+): Promise<EngagementTemplate | null> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("engagement_templates")
+    .select("id, name, access, payload, created_by_user_id")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[engagement-templates] get failed:", error);
+    }
+    return null;
+  }
+  if (!data) return null;
+
+  const r = data as Row;
+  return {
+    id: r.id,
+    name: r.name,
+    access: r.access === "private" ? "private" : "team",
+    payload: readPayload(r.payload),
+    createdByUserId: r.created_by_user_id,
+  };
+}
+
+/**
+ * Save changes to one that already exists.
+ *
+ * Separate from create because overwriting through the create path would leave
+ * the old row behind as a duplicate every time somebody fixed a typo.
+ */
+export async function updateEngagementTemplate(input: {
+  id: string;
+  name: string;
+  access: EngagementTemplateAccess;
+  payload: EngagementTemplatePayload;
+}): Promise<{ ok: boolean; needsMigration?: boolean }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagement_templates")
+    .update({
+      name: input.name,
+      access: input.access,
+      payload: input.payload,
+    })
+    .eq("id", input.id);
+
+  if (error) {
+    if (isMissingSchema(error)) return { ok: false, needsMigration: true };
+    console.error("[engagement-templates] update failed:", error);
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
 export async function createEngagementTemplate(input: {
   name: string;
   access: EngagementTemplateAccess;
