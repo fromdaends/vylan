@@ -29,6 +29,9 @@
 import { useTranslations } from "next-intl";
 import { ChevronRight, FileText, PlayCircle, PenLine } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { computeBillingTotals } from "@/lib/engagements/billing-totals";
+import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
+import type { BillingFrequency } from "@/lib/engagements/items";
 
 export type ProposalPreviewData = {
   clientName: string;
@@ -50,7 +53,25 @@ export type ProposalPreviewData = {
    * Optional, and empty is normal: plenty of services are a price and nothing
    * else, and a proposal written before this existed has none.
    */
-  services: { name: string; rateCents: number | null; work?: string[] }[];
+  services: {
+    name: string;
+    rateCents: number | null;
+    work?: string[];
+    /** Carried so the CLIENT's own copy can total itself the same way the
+     *  builder did — rather than the builder storing a number the document
+     *  then has to be trusted to have computed correctly. */
+    billingFrequency?: BillingFrequency;
+    taxPct?: number | null;
+  }[];
+  /**
+   * Canopy's "Hide itemized rates on the proposal" gear.
+   *
+   * Absent means show everything. A client who cannot see what they are paying
+   * for is the surprising default, not the safe one — and a proposal written
+   * before this existed showed every figure, so that is what it must keep
+   * doing.
+   */
+  priceVisibility?: { itemizedPrice: boolean; blockTotals: boolean; total: boolean };
   terms: string | null;
   clientSigns: boolean;
   additionalSignerLabels: string[];
@@ -90,6 +111,21 @@ export function ProposalPreview({
       : t("period_months", { count: data.periodMonths });
 
   const namedServices = data.services.filter((s) => s.name.trim().length > 0);
+  const showRates = data.priceVisibility?.itemizedPrice !== false;
+  // Totalled from the LINES, not from a stored figure — the document computes
+  // its own sum the same way the builder did, so the two cannot disagree.
+  const totals = computeBillingTotals(
+    namedServices.map((x) => ({
+      name: x.name,
+      serviceId: null,
+      description: null,
+      rateCents: x.rateCents,
+      rateType: "item" as const,
+      billingFrequency: x.billingFrequency ?? "once",
+      taxPct: x.taxPct ?? null,
+    })),
+    { depositCents: data.depositCents },
+  );
   const hasIntro =
     (data.welcome?.trim().length ?? 0) > 0 ||
     (data.videoUrl?.trim().length ?? 0) > 0 ||
@@ -211,9 +247,14 @@ export function ProposalPreview({
                 <li key={idx}>
                   <div className="flex justify-between gap-3">
                     <span className="truncate">{item.name}</span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {item.rateCents == null ? "—" : money(item.rateCents)}
-                    </span>
+                    {/* Hidden when the firm chose not to itemize. The line
+                        itself stays — the client still needs to know what they
+                        are getting, just not what each part of it costs. */}
+                    {showRates && (
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {item.rateCents == null ? "—" : money(item.rateCents)}
+                      </span>
+                    )}
                   </div>
                   {/* What this line actually buys. Under the price, indented,
                       in the muted size — it is detail, not another line item,
@@ -238,6 +279,23 @@ export function ProposalPreview({
               title={t("preview_no_services")}
               hint={t("preview_no_services_hint")}
             />
+          )}
+
+          {/* What it comes to — the same panel the firm reads while building
+              it, filtered by what they chose to show. */}
+          {totals.groups.length > 0 && (
+            <div className="mt-3 border-t border-border pt-3 text-left">
+              <BillingTotalsPanel
+                totals={totals}
+                locale={locale}
+                visibility={
+                  data.priceVisibility ?? {
+                    blockTotals: true,
+                    total: true,
+                  }
+                }
+              />
+            </div>
           )}
         </Section>
 

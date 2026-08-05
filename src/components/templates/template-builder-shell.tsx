@@ -232,10 +232,14 @@ export function BuilderChrome({
             aria-label={showPreview ? t("hide_preview") : t("show_preview")}
             title={showPreview ? t("hide_preview") : t("show_preview")}
           >
+            {/* The icon shows the STATE, not the action: an open eye means the
+                preview is open, a crossed-out eye means it is hidden. It was the
+                other way round and read backwards — the tooltip still names the
+                action, which is where an action belongs. */}
             {showPreview ? (
-              <EyeOff className="size-4" aria-hidden />
-            ) : (
               <Eye className="size-4" aria-hidden />
+            ) : (
+              <EyeOff className="size-4" aria-hidden />
             )}
           </button>
         )}

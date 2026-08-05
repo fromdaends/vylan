@@ -40,6 +40,12 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CatalogueService } from "@/components/engagements/engagement-items-editor";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
+// The SAME readout the engagement's Billing step renders, from the same
+// computeBillingTotals — the founder: "Dont make the same mistake again of
+// building new stuff on the engagement builder but not transferring it over to
+// other places it exists."
+import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
+import { computeBillingTotals } from "@/lib/engagements/billing-totals";
 // ONE chrome for every builder — see the note at the top of that file.
 import {
   TemplateBuilderShell,
@@ -198,6 +204,9 @@ export function EngagementTemplateBuilder({
   >(initial?.payload.additionalSignerLabels ?? []);
   const [firmCountersigns, setFirmCountersigns] = useState(initial?.payload.firmCountersigns ?? false);
   const [depositRequired, setDepositRequired] = useState(initial?.payload.depositCents != null);
+  const [requirePaymentMethod, setRequirePaymentMethod] = useState(
+    initial?.payload.requirePaymentMethod ?? false,
+  );
   const [depositAmount, setDepositAmount] = useState(initial?.payload.depositCents != null ? String(initial.payload.depositCents / 100) : "");
 
   const [error, setError] = useState<string | null>(null);
@@ -258,6 +267,13 @@ export function EngagementTemplateBuilder({
   // What the client would see. Placeholders resolve against a SAMPLE client,
   // because a template has none — showing raw {{clientname}} in a panel meant
   // to answer "what will this look like" answers the wrong question.
+  // Flattened first: blocks are the AUTHORING shape, and the flat lines are
+  // what every other surface (totals, invoices, the proposal) consumes. Totalling
+  // the blocks directly would be a second definition of the same sum.
+  const templateTotals = computeBillingTotals(flattenBlocks(blocks), {
+    depositCents,
+  });
+
   const previewTitle = useMemo(
     () =>
       resolvePlaceholders(
@@ -302,6 +318,7 @@ export function EngagementTemplateBuilder({
             .filter((s) => s.length > 0),
           firmCountersigns,
           depositCents,
+          requirePaymentMethod,
           // The blocks are the authoring shape; `items` stays the flat source
           // of truth every other surface (totals, invoices) already reads.
           items: flattenBlocks(blocks),
@@ -402,6 +419,8 @@ export function EngagementTemplateBuilder({
               services: flattenBlocks(blocks).map((i, idx) => ({
                 name: i.name,
                 rateCents: i.rateCents,
+                billingFrequency: i.billingFrequency,
+                taxPct: i.taxPct,
                 work:
                   idx === 0
                     ? linkedWork.flatMap((w) => w.steps)
@@ -414,6 +433,7 @@ export function EngagementTemplateBuilder({
               ),
               firmCountersigns,
               depositCents,
+              priceVisibility: visibility,
             }}
           />
         </div>
@@ -637,6 +657,49 @@ export function EngagementTemplateBuilder({
               />
             )}
 
+            {/* What the shape adds up to. A template has no client, but it
+                absolutely has prices — and "what does this package come to"
+                is the question you are answering while you build one. */}
+            {tab === "services" && templateTotals.groups.length > 0 && (
+              <Fieldset title={tEng("totals_section")}>
+                <BillingTotalsPanel totals={templateTotals} locale={locale} />
+              </Fieldset>
+            )}
+
+            {/* Canopy's Payment settings, in the same place the engagement
+                keeps them. The deposit moved here off the Signatures tab:
+                it is money, and one concept gets one home. */}
+            {tab === "services" && (
+              <Fieldset title={tEng("payment_settings")}>
+                <div className="space-y-1.5">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={requirePaymentMethod}
+                      onChange={(e) => setRequirePaymentMethod(e.target.checked)}
+                    />
+                    {tEng("require_payment_method")}
+                  </label>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    {tEng("require_payment_method_hint")}
+                  </p>
+                </div>
+                <ToggleRow
+                  label={t("require_deposit")}
+                  hint={t("require_deposit_hint")}
+                  on={depositRequired}
+                  onToggle={() => setDepositRequired((v) => !v)}
+                >
+                  <Input
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    placeholder={t("deposit_placeholder")}
+                    inputMode="decimal"
+                  />
+                </ToggleRow>
+              </Fieldset>
+            )}
+
             {/* ── THE WORK THESE SERVICES BRING (1620) ───────────────────
                 On the SAME tab as the services, because it is not a separate
                 decision — it is the other half of what a service is. The
@@ -811,19 +874,6 @@ export function EngagementTemplateBuilder({
                   {t("signer_firm")}
                 </label>
 
-                <ToggleRow
-                  label={t("require_deposit")}
-                  hint={t("require_deposit_hint")}
-                  on={depositRequired}
-                  onToggle={() => setDepositRequired((v) => !v)}
-                >
-                  <Input
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                    placeholder={t("deposit_placeholder")}
-                    inputMode="decimal"
-                  />
-                </ToggleRow>
               </Fieldset>
             )}
     </TemplateBuilderShell>

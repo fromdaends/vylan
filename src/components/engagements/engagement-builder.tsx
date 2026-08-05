@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,12 @@ import {
   BuilderChrome,
   RadioCard,
 } from "@/components/templates/template-builder-shell";
+import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
+import { computeBillingTotals } from "@/lib/engagements/billing-totals";
+import {
+  defaultPriceVisibility,
+  type PriceVisibility,
+} from "@/lib/engagements/billing-blocks";
 import {
   findScopeWarning,
   type ScopeWarningContact,
@@ -467,6 +473,18 @@ export function EngagementBuilder({
     tpl?.depositCents != null ? String(tpl.depositCents / 100) : "",
   );
 
+  // Canopy's gear menu on the Services tab: which figures reach the client.
+  // Template-only until now, which meant an engagement could not hide a rate
+  // the template it came from was hiding.
+  const [priceVisibility, setPriceVisibility] = useState<PriceVisibility>(
+    tpl?.priceVisibility ?? defaultPriceVisibility(),
+  );
+  // Canopy's Payment settings: the client saves a card on acceptance so a
+  // recurring invoice can be charged without asking again.
+  const [requirePaymentMethod, setRequirePaymentMethod] = useState(
+    tpl?.requirePaymentMethod ?? false,
+  );
+
   const proposalDepositCents = useMemo(() => {
     const n = Number(proposalDeposit.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(n) || n <= 0) return null;
@@ -624,7 +642,45 @@ export function EngagementBuilder({
     });
   }
 
-  const [step, setStep] = useState<WizardStep>("details");
+  const [rawStep, setRawStep] = useState<WizardStep>("details");
+  const step = rawStep;
+
+  /**
+   * Moving between steps writes a history entry, so the browser's own back and
+   * forward buttons walk the wizard — the founder: "the back and forth buttons
+   * should be linked to browser back and forth buttons."
+   *
+   * history.pushState directly rather than the Next router: this is a modal
+   * whose state lives in this component, and a router navigation would re-run
+   * the server component for a change that is purely local. pushState moves the
+   * URL and nothing else.
+   */
+  function setStep(next: WizardStep) {
+    setRawStep((prev) => {
+      if (prev !== next && typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("step", next);
+        window.history.pushState({ vylanStep: next }, "", url);
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    // Back/forward: read the step out of the URL the browser just restored.
+    // Anything unrecognised falls back to the first step rather than throwing —
+    // a hand-edited URL must not break the form.
+    function onPop() {
+      const raw = new URL(window.location.href).searchParams.get("step");
+      setRawStep(
+        (WIZARD_STEPS as readonly string[]).includes(raw ?? "")
+          ? (raw as WizardStep)
+          : "details",
+      );
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // Open by default, like every template builder. The eye in the tab bar hides
   // it for anyone who wants the full width for the form.
   const [previewOpen, setPreviewOpen] = useState(true);
@@ -783,6 +839,13 @@ export function EngagementBuilder({
   // memo whose deps it thinks may be mutated, and one already exists in this
   // component — a second would add an error without changing the outcome. It is
   // a handful of maps over a list that is never long.
+  // Plain, not memoized: this component already carries a manual memo the React
+  // Compiler refuses to preserve, so a second adds an error without changing the
+  // outcome. It is a couple of passes over a list that is never long.
+  const billingTotals = computeBillingTotals(serviceItems, {
+    depositCents: proposalDepositCents,
+  });
+
   const proposalData = {
     clientName: selectedClient?.display_name ?? t("preview_no_client"),
     engagementName: resolvePlaceholders(
@@ -817,6 +880,10 @@ export function EngagementBuilder({
           name: i.name.trim(),
           rateCents: i.rateCents,
           work: tt?.subtasks.map((x) => x.title),
+          // So the client's own copy totals itself the same way this screen
+          // does, rather than trusting a number we computed for them.
+          billingFrequency: i.billingFrequency,
+          taxPct: i.taxPct,
         };
       }),
     terms: proposalTerms.trim() || null,
@@ -824,6 +891,7 @@ export function EngagementBuilder({
     additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
     firmCountersigns: proposalFirmCountersigns,
     depositCents: proposalDepositCents,
+    priceVisibility,
   };
 
   // ── The wizard ────────────────────────────────────────────────────────────
@@ -1583,8 +1651,8 @@ export function EngagementBuilder({
           what Canopy's is: who it is for and what it is called. */}
       {step === "tasks" && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+            <CardTitle className="shrink-0 whitespace-nowrap text-base">
               {t("section_tasks")}{" "}
               <span className="font-normal text-muted-foreground">
                 ({tasks.length})
@@ -1613,32 +1681,6 @@ export function EngagementBuilder({
                     </option>
                   ))}
                 </select>
-              )}
-              {/* An OFFER, not a row. The list starts empty now (founder:
-                  "IT SHOULDNT. It should just be empty"), and the documents
-                  section only exists while a document-collection task does — so
-                  without this, a from-scratch engagement has no visible way to
-                  ask the client for anything, and "Create and send" refuses
-                  with "no documents" and no path out. Disappears the moment
-                  such a task exists. */}
-              {docTaskIndex === -1 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setTasks((prev) => [
-                      ...prev,
-                      {
-                        ...emptyTask("document_collection"),
-                        title: t("task_seed_documents"),
-                      },
-                    ])
-                  }
-                >
-                  <Plus className="size-4" />
-                  {t("add_document_request_task")}
-                </Button>
               )}
               <Button type="button" variant="outline" size="sm" onClick={addTask}>
                 <Plus className="size-4" />
@@ -1971,6 +2013,104 @@ export function EngagementBuilder({
           </CardHeader>
           <CardContent>
             <EngagementServicesPanel items={serviceItems} locale={locale} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── WHAT IT ALL COMES TO ─────────────────────────────────────────
+          Canopy's totals readout, which Vylan had nowhere at all — the founder:
+          "Theres no screen or way to view pricing and stuff like fully."
+
+          The SAME component the template builder's Services tab renders, from
+          the same computeBillingTotals, so the two can never disagree about
+          what a set of lines adds up to. */}
+      {step === "billing" && billingTotals.groups.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("totals_section")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BillingTotalsPanel totals={billingTotals} locale={locale} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── WHAT THE CLIENT SEES, AND HOW THEY PAY ───────────────────────
+          Canopy's "Hide itemized rates on the proposal" plus their Payment
+          settings block. The deposit lives HERE now rather than on the
+          Proposal step: it is money, it belongs with the money, and having it
+          in two conceptual places is how the two drift. */}
+      {step === "billing" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {t("payment_settings")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("price_visibility")}
+              </p>
+              {(
+                [
+                  ["itemizedPrice", "price_visibility_itemized"],
+                  ["blockTotals", "price_visibility_blocks"],
+                  ["total", "price_visibility_total"],
+                ] as const
+              ).map(([key, labelKey]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={priceVisibility[key]}
+                    onChange={(e) =>
+                      setPriceVisibility((prev) => ({
+                        ...prev,
+                        [key]: e.target.checked,
+                      }))
+                    }
+                  />
+                  {t(labelKey)}
+                </label>
+              ))}
+            </div>
+
+            <div className="space-y-1.5 border-t border-border/60 pt-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={requirePaymentMethod}
+                  onChange={(e) => setRequirePaymentMethod(e.target.checked)}
+                />
+                {t("require_payment_method")}
+              </label>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {t("require_payment_method_hint")}
+              </p>
+            </div>
+
+            <div className="space-y-1.5 border-t border-border/60 pt-3">
+              <Label
+                htmlFor="engagement-deposit"
+                className="text-xs text-muted-foreground"
+              >
+                {tTpl("require_deposit")}
+              </Label>
+              <Input
+                id="engagement-deposit"
+                value={proposalDeposit}
+                onChange={(e) => setProposalDeposit(e.target.value)}
+                placeholder={tTpl("deposit_placeholder")}
+                inputMode="decimal"
+                className="max-w-[12rem]"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {tTpl("require_deposit_hint")}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -2712,25 +2852,6 @@ export function EngagementBuilder({
                   {tTpl("signer_firm")}
                 </label>
 
-                <div className="space-y-1.5 border-t border-border/60 pt-3">
-                  <Label
-                    htmlFor="engagement-deposit"
-                    className="text-xs text-muted-foreground"
-                  >
-                    {tTpl("require_deposit")}
-                  </Label>
-                  <Input
-                    id="engagement-deposit"
-                    value={proposalDeposit}
-                    onChange={(e) => setProposalDeposit(e.target.value)}
-                    placeholder={tTpl("deposit_placeholder")}
-                    inputMode="decimal"
-                    className="max-w-[12rem]"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    {tTpl("require_deposit_hint")}
-                  </p>
-                </div>
               </CardContent>
             </Card>
         </>

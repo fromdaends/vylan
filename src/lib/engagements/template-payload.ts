@@ -141,6 +141,15 @@ export type EngagementTemplatePayload = {
   /** Cents, like every other money field in this repo. Null = not set, never 0. */
   depositCents: number | null;
   /**
+   * Canopy's "Require payment method to be shared for future payments" — the
+   * client saves a card when they accept, so a recurring invoice can be charged
+   * without asking again.
+   *
+   * Defaults FALSE. Asking a client to hand over card details is a thing a firm
+   * chooses to do, never something a template does on their behalf by omission.
+   */
+  requirePaymentMethod: boolean;
+  /**
    * ── WHO SIGNS ───────────────────────────────────────────────────────────
    *
    * The founder, on Canopy's Signatures tab: "theres no way to have a signer
@@ -190,6 +199,7 @@ export function emptyPayload(): EngagementTemplatePayload {
     termsText: "",
     depositRequired: false,
     depositCents: null,
+    requirePaymentMethod: false,
     // Defaults to TRUE: an engagement letter the client does not sign is the
     // unusual case, and a template that silently asked nobody to sign would be
     // discovered only when the paperwork was already out.
@@ -405,6 +415,7 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
       .filter((x) => x.length > 0)
       .slice(0, 10),
     firmCountersigns: o.firmCountersigns === true,
+    requirePaymentMethod: o.requirePaymentMethod === true,
     items: arr(o.items)
       .map(readItem)
       .filter((i): i is EngagementItemDraft => i != null),

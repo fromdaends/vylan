@@ -221,6 +221,29 @@ export function EngagementItemsEditor({
                           </option>
                         ))}
                       </select>
+
+                      {/* ── THE LINK, FROM THIS END ──────────────────────
+                          The founder: "I still don't see the the linking
+                          between service items and tasks."
+
+                          The Tasks step already chips each task with the
+                          service that brought it. This is the other direction —
+                          the line saying what work it creates — so the
+                          relationship reads from both ends instead of only
+                          from the one you happen to be standing on. */}
+                      {(() => {
+                        const picked = services.find(
+                          (x) => x.id === item.serviceId,
+                        );
+                        return picked?.work ? (
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {t("item_service_creates", {
+                              name: picked.work.name,
+                              count: picked.work.stepCount,
+                            })}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   )}
 

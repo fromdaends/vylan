@@ -64,7 +64,13 @@ describe("readProposalSnapshot — money and services", () => {
       ],
     });
     expect(p.services).toEqual([
-      { name: "Bookkeeping", rateCents: 50000, work: [] },
+      {
+        name: "Bookkeeping",
+        rateCents: 50000,
+        work: [],
+        billingFrequency: "once",
+        taxPct: null,
+      },
     ]);
   });
 
@@ -145,5 +151,49 @@ describe("proposalIsPresentable", () => {
     expect(
       proposalIsPresentable(read({ engagementName: "   ", terms: "  " })),
     ).toBe(false);
+  });
+});
+
+describe("readProposalSnapshot — what the client is allowed to see", () => {
+  it("shows everything when the field is absent", () => {
+    // A proposal written before the gear existed showed every figure, and it
+    // must keep doing exactly that.
+    const v = read({}).priceVisibility!;
+    expect(v).toEqual({ itemizedPrice: true, blockTotals: true, total: true });
+  });
+
+  it("only a literal false hides a figure", () => {
+    const v = read({
+      priceVisibility: { itemizedPrice: false, blockTotals: "false", total: 0 },
+    }).priceVisibility!;
+    expect(v.itemizedPrice).toBe(false);
+    expect(v.blockTotals).toBe(true);
+    expect(v.total).toBe(true);
+  });
+
+  it("survives the field being the wrong type", () => {
+    expect(read({ priceVisibility: "nope" }).priceVisibility!.total).toBe(true);
+  });
+});
+
+describe("readProposalSnapshot — money carried per line", () => {
+  it("keeps a known billing frequency and tax rate", () => {
+    const p = read({
+      services: [{ name: "Bookkeeping", billingFrequency: "monthly", taxPct: 5 }],
+    });
+    expect(p.services[0].billingFrequency).toBe("monthly");
+    expect(p.services[0].taxPct).toBe(5);
+  });
+
+  it("an unrecognised frequency reads as a one-off", () => {
+    // The safe reading: it groups the line on its own rather than folding it
+    // into somebody else's billing cycle.
+    const p = read({ services: [{ name: "X", billingFrequency: "fortnightly" }] });
+    expect(p.services[0].billingFrequency).toBe("once");
+  });
+
+  it("a non-numeric tax rate reads as no tax", () => {
+    const p = read({ services: [{ name: "X", taxPct: "lots" }] });
+    expect(p.services[0].taxPct).toBeNull();
   });
 });

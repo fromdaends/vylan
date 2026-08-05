@@ -72,6 +72,7 @@ const PayloadSchema = z.object({
   additionalSignerLabels: z.array(z.string().trim().max(120)).max(10).optional(),
   firmCountersigns: z.boolean().optional(),
   depositCents: z.number().int().min(0).max(99_999_999).nullable().optional(),
+  requirePaymentMethod: z.boolean().optional(),
   items: z.array(ItemSchema).max(50).optional(),
   checklist: z.array(ChecklistSchema).max(200).optional(),
   // The work this template implies (1570 task template ids). Ids only — the

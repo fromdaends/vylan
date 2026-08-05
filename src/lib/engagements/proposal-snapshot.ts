@@ -10,6 +10,7 @@
 // by a newer build — and it returns something a client can read.
 
 import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
+import { BILLING_FREQUENCIES as FREQUENCIES, type BillingFrequency } from "@/lib/engagements/items";
 
 function obj(v: unknown): Record<string, unknown> | null {
   return v != null && typeof v === "object" && !Array.isArray(v)
@@ -77,12 +78,19 @@ export function readProposalSnapshot(
             .map((x) => x.trim())
             .filter((x) => x.length > 0)
             .slice(0, 25),
+          // Carried so the client's copy totals itself. An unrecognised value
+          // reads as a one-off charge, which is the safe reading: it groups the
+          // line on its own rather than folding it into someone else's cycle.
+          billingFrequency: FREQUENCIES.includes(s.billingFrequency as BillingFrequency)
+            ? (s.billingFrequency as BillingFrequency)
+            : "once",
+          taxPct:
+            typeof s.taxPct === "number" && Number.isFinite(s.taxPct)
+              ? s.taxPct
+              : null,
         };
       })
-      .filter(
-        (x): x is { name: string; rateCents: number | null; work: string[] } =>
-          x != null,
-      ),
+      .filter((x) => x != null),
     terms: textOrNull(o?.terms),
     // Absent reads as TRUE. A proposal whose signature block failed to read
     // should still ask the client to sign — the other default would present a
@@ -95,6 +103,14 @@ export function readProposalSnapshot(
       .slice(0, 10),
     firmCountersigns: o?.firmCountersigns === true,
     depositCents: cents(o?.depositCents),
+    // Absent means show everything: a proposal written before this existed
+    // showed every figure, and it must keep doing exactly that. Only a literal
+    // false hides one.
+    priceVisibility: {
+      itemizedPrice: obj(o?.priceVisibility)?.itemizedPrice !== false,
+      blockTotals: obj(o?.priceVisibility)?.blockTotals !== false,
+      total: obj(o?.priceVisibility)?.total !== false,
+    },
   };
 }
 

@@ -1,0 +1,161 @@
+import { describe, it, expect } from "vitest";
+import {
+  computeBillingTotals,
+  hasBillingTotals,
+  FREQUENCY_ORDER,
+} from "./billing-totals";
+import type { EngagementItemDraft } from "./items";
+
+const item = (over: Partial<EngagementItemDraft> = {}): EngagementItemDraft => ({
+  name: "Bookkeeping",
+  serviceId: null,
+  description: null,
+  rateCents: 100_00,
+  rateType: "item",
+  billingFrequency: "monthly",
+  taxPct: null,
+  ...over,
+});
+
+describe("computeBillingTotals — grouping", () => {
+  it("shows nothing for an empty list", () => {
+    const t = computeBillingTotals([]);
+    expect(t.groups).toEqual([]);
+    expect(hasBillingTotals(t)).toBe(false);
+  });
+
+  it("ignores blank rows — a row you are about to type into is not a charge", () => {
+    const t = computeBillingTotals([item({ name: "   " })]);
+    expect(t.groups).toEqual([]);
+  });
+
+  it("groups by billing frequency and skips the ones nobody used", () => {
+    const t = computeBillingTotals([
+      item({ billingFrequency: "monthly" }),
+      item({ billingFrequency: "monthly" }),
+      item({ billingFrequency: "yearly" }),
+    ]);
+    expect(t.groups.map((g) => g.frequency)).toEqual(["monthly", "yearly"]);
+    expect(t.groups[0].itemCount).toBe(2);
+  });
+
+  it("orders groups one-off first, then shortest cycle to longest", () => {
+    const t = computeBillingTotals(
+      // Deliberately reversed on the way in.
+      [...FREQUENCY_ORDER].reverse().map((f) => item({ billingFrequency: f })),
+    );
+    expect(t.groups.map((g) => g.frequency)).toEqual(FREQUENCY_ORDER);
+  });
+});
+
+describe("computeBillingTotals — money", () => {
+  it("adds up a simple group", () => {
+    const t = computeBillingTotals([
+      item({ rateCents: 40_000 }),
+      item({ rateCents: 25_50 }),
+    ]);
+    expect(t.subtotalCents).toBe(42_550);
+    expect(t.totalCents).toBe(42_550);
+  });
+
+  it("taxes each line then sums — NOT one rate over the subtotal", () => {
+    // A GST-only line beside a GST+QST one is ordinary in Canada, and a blended
+    // rate over the subtotal gives a different (wrong) answer.
+    const t = computeBillingTotals([
+      item({ rateCents: 100_00, taxPct: 5 }),
+      item({ rateCents: 100_00, taxPct: 14.975 }),
+    ]);
+    expect(t.subtotalCents).toBe(200_00);
+    expect(t.taxCents).toBe(500 + 1498); // 5.00 + 14.98, each rounded alone
+    expect(t.totalCents).toBe(200_00 + 500 + 1498);
+  });
+
+  it("treats a missing tax rate as no tax, not as an unknown", () => {
+    const t = computeBillingTotals([item({ rateCents: 100_00, taxPct: null })]);
+    expect(t.taxCents).toBe(0);
+    expect(t.determined).toBe(true);
+  });
+
+  it("a zero or negative tax rate adds nothing", () => {
+    expect(
+      computeBillingTotals([item({ rateCents: 100_00, taxPct: 0 })]).taxCents,
+    ).toBe(0);
+    expect(
+      computeBillingTotals([item({ rateCents: 100_00, taxPct: -5 })]).taxCents,
+    ).toBe(0);
+  });
+});
+
+describe("computeBillingTotals — an unpriced line is UNKNOWN, never zero", () => {
+  it("marks its own group undetermined", () => {
+    const t = computeBillingTotals([
+      item({ rateCents: null, name: "Advisory (hourly)" }),
+    ]);
+    expect(t.groups[0].determined).toBe(false);
+    // Rendering this as $0.00 would tell a client the work is free.
+    expect(t.groups[0].subtotalCents).toBe(0);
+  });
+
+  it("still counts the line, so the group lists it", () => {
+    const t = computeBillingTotals([
+      item({ rateCents: 40_000 }),
+      item({ rateCents: null }),
+    ]);
+    expect(t.groups[0].itemCount).toBe(2);
+    expect(t.groups[0].subtotalCents).toBe(40_000);
+    expect(t.groups[0].determined).toBe(false);
+  });
+
+  it("one unknown anywhere makes the ENGAGEMENT total unknown", () => {
+    // "$4,000" beside a fourth line reading "hourly, TBD" is the misleading
+    // answer, so the whole readout admits it does not know.
+    const t = computeBillingTotals([
+      item({ rateCents: 400_000, billingFrequency: "monthly" }),
+      item({ rateCents: null, billingFrequency: "weekly" }),
+    ]);
+    expect(t.groups.find((g) => g.frequency === "monthly")!.determined).toBe(true);
+    expect(t.determined).toBe(false);
+  });
+
+  it("everything priced means the total is trustworthy", () => {
+    const t = computeBillingTotals([
+      item({ rateCents: 100_00, billingFrequency: "monthly" }),
+      item({ rateCents: 200_00, billingFrequency: "yearly" }),
+    ]);
+    expect(t.determined).toBe(true);
+    expect(t.totalCents).toBe(300_00);
+  });
+});
+
+describe("computeBillingTotals — due on acceptance", () => {
+  it("is null when no deposit is required", () => {
+    expect(computeBillingTotals([item()]).dueOnAcceptanceCents).toBeNull();
+    expect(
+      computeBillingTotals([item()], { depositCents: null }).dueOnAcceptanceCents,
+    ).toBeNull();
+  });
+
+  it("refuses a zero, fractional or negative deposit", () => {
+    for (const depositCents of [0, -100, 10.5]) {
+      expect(
+        computeBillingTotals([item()], { depositCents }).dueOnAcceptanceCents,
+      ).toBeNull();
+    }
+  });
+
+  it("carries a real deposit through", () => {
+    expect(
+      computeBillingTotals([item()], { depositCents: 100_000 })
+        .dueOnAcceptanceCents,
+    ).toBe(100_000);
+  });
+
+  it("is independent of whether the rest is priced", () => {
+    // You can know the deposit and not yet know the engagement total.
+    const t = computeBillingTotals([item({ rateCents: null })], {
+      depositCents: 50_000,
+    });
+    expect(t.determined).toBe(false);
+    expect(t.dueOnAcceptanceCents).toBe(50_000);
+  });
+});
