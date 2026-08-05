@@ -50,13 +50,24 @@ export const ENGAGEMENT_VIEWS: EngagementView[] = [
 // engagements." It is Canopy's order too — Active, All Engagements, then
 // Drafts — and it reads as narrowest-to-widest-to-unsent rather than putting
 // the not-yet-sent pile in the middle of the two live lists.
+// The strip, and now the ONLY views this list offers.
 export const TAB_VIEWS: EngagementView[] = ["active", "all", "drafts"];
 
 /**
  * The overflow menu, in the order it reads. Ready to review is a slice of live
  * work, Archived and Recently deleted are the two shelves.
  */
-export const MENU_VIEWS: EngagementView[] = ["ready", "archived", "deleted"];
+// The ⋯, which now holds these TWO and your saved views — nothing else.
+//
+// "Ready to review" was dropped (founder: "DELETE THEM IN GEENRAL", then "they
+// dont exist for tasks"). It was the odd one out: a FILTER dressed as a view,
+// and the Status column already answers it. Archived and Recently deleted
+// stayed on the founder's own second thought — "maybe a recently deleted and
+// archived should stay" — because they are not filters at all. They are
+// SHELVES: different lifecycle scopes with their own database reads, and
+// Recently deleted is a 30-day recovery window with a purge cron on the far
+// side of it. Unreachable there would mean unrecoverable.
+export const MENU_VIEWS: EngagementView[] = ["archived", "deleted"];
 
 // Which DB lifecycle scope a view needs loaded. Most views read the "active"
 // set (not archived, not deleted); Archived and Recently Deleted read their

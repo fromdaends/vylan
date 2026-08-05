@@ -164,11 +164,20 @@ describe("ENGAGEMENT_VIEWS", () => {
   // contains.
   it("leaves no view stranded", () => {
     const reachable = new Set([...TAB_VIEWS, ...MENU_VIEWS]);
+    // "completed" and "ready" are DELIBERATELY unlinked, and for the same
+    // reason: both are FILTERS the Status column already answers, not scopes.
+    // "ready" lost its link when the founder said "DELETE THEM IN GEENRAL" and
+    // then "they dont exist for tasks" — it was the odd one out in that menu.
+    // Archived and Recently deleted stayed, because they are not filters at
+    // all: they are separate lifecycle scopes with their own database reads.
     const stranded = ENGAGEMENT_VIEWS.filter(
-      (v) => !reachable.has(v) && v !== "completed",
+      (v) => !reachable.has(v) && v !== "completed" && v !== "ready",
     );
     expect(stranded).toEqual([]);
+    // The one that MUST always have a way in: a 30-day recovery window with a
+    // purge cron on the far side. Unreachable here is unrecoverable there.
     expect(reachable.has("deleted")).toBe(true);
+    expect(reachable.has("archived")).toBe(true);
   });
 
   it("all = every status, archived and deleted excluded by its scope", () => {
