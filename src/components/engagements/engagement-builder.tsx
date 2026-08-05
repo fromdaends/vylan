@@ -193,6 +193,7 @@ export function EngagementBuilder({
   invoiceDefaultDelayDays = null,
   reminderDefaultSettings = null,
   canManageReminderDefaults = false,
+  firmDefaultTerms = "",
   authorizedContacts = {},
 }: {
   clients: ComboboxClient[];
@@ -253,6 +254,17 @@ export function EngagementBuilder({
   // so customizing this form never mutates the saved firm default.
   reminderDefaultSettings?: ReminderSettings | null;
   canManageReminderDefaults?: boolean;
+  /**
+   * The firm's standard terms (1610).
+   *
+   * What makes a from-scratch engagement a real proposal. Every engagement IS a
+   * proposal — the founder, on this being template-only: "make it so all
+   * engagements are a proposal wtf not only templates?? that would make sense
+   * right?" It does. A template supplies richer content (a welcome message, a
+   * video, extra signers); without one, the firm's standard terms plus the
+   * priced services is still a complete, honest agreement.
+   */
+  firmDefaultTerms?: string;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -379,6 +391,9 @@ export function EngagementBuilder({
     );
   });
   const [error, setError] = useState<string | null>(null);
+  // Shorthand for the template's payload, since every proposal field now falls
+  // back when there isn't one.
+  const tpl = initialEngagementTemplate?.payload;
 
   // ── The wizard ────────────────────────────────────────────────────────────
   //
@@ -864,42 +879,46 @@ export function EngagementBuilder({
             // Absent when the engagement did not come from a template — there
             // is nothing to show, and the portal falls back to its normal view
             // rather than presenting a blank page with an Accept button.
-            proposal: initialEngagementTemplate
-              ? {
-                  engagementName: resolvePlaceholders(
-                    effectiveTitle.trim(),
-                    {
-                      clientName: selectedClient?.display_name ?? null,
-                      taxYear: taxYear ? Number(taxYear) : null,
-                    },
-                    new Date(),
-                    locale,
-                  ),
-                  periodStartsOn: initialEngagementTemplate.payload.periodStartsOn,
-                  periodMonths: initialEngagementTemplate.payload.periodMonths,
-                  welcome: initialEngagementTemplate.payload.welcomeEnabled
-                    ? initialEngagementTemplate.payload.introMessage
-                    : null,
-                  videoUrl: initialEngagementTemplate.payload.videoEnabled
-                    ? initialEngagementTemplate.payload.videoUrl
-                    : null,
-                  documentName: initialEngagementTemplate.payload.documentEnabled
-                    ? initialEngagementTemplate.payload.documentName
-                    : null,
-                  services: serviceItems
-                    .filter((i) => i.name.trim().length > 0)
-                    .map((i) => ({ name: i.name.trim(), rateCents: i.rateCents })),
-                  terms: initialEngagementTemplate.payload.termsEnabled
-                    ? initialEngagementTemplate.payload.termsText
-                    : null,
-                  clientSigns: initialEngagementTemplate.payload.clientSigns,
-                  additionalSignerLabels:
-                    initialEngagementTemplate.payload.additionalSignerLabels,
-                  firmCountersigns:
-                    initialEngagementTemplate.payload.firmCountersigns,
-                  depositCents: initialEngagementTemplate.payload.depositCents,
-                }
-              : undefined,
+            proposal: {
+              engagementName: resolvePlaceholders(
+                effectiveTitle.trim(),
+                {
+                  clientName: selectedClient?.display_name ?? null,
+                  taxYear: taxYear ? Number(taxYear) : null,
+                },
+                new Date(),
+                locale,
+              ),
+              // A template supplies the richer content; without one, the
+              // sensible defaults ARE the proposal — which is the point: a
+              // from-scratch engagement is still an agreement.
+              periodStartsOn: tpl?.periodStartsOn ?? "acceptance",
+              periodMonths: tpl?.periodMonths ?? null,
+              welcome:
+                tpl?.welcomeEnabled && tpl.introMessage
+                  ? tpl.introMessage
+                  : // The builder's own intro field, which every engagement has
+                    // (1510), so a from-scratch proposal still opens with a note
+                    // if one was written.
+                    introMessage.trim() || null,
+              videoUrl: tpl?.videoEnabled ? tpl.videoUrl || null : null,
+              documentName: tpl?.documentEnabled ? tpl.documentName || null : null,
+              services: serviceItems
+                .filter((i) => i.name.trim().length > 0)
+                .map((i) => ({ name: i.name.trim(), rateCents: i.rateCents })),
+              // The firm's standard terms when the template has none. This is
+              // what makes a from-scratch engagement a real agreement rather
+              // than a price list.
+              terms: tpl?.termsEnabled
+                ? tpl.termsText || null
+                : firmDefaultTerms.trim() || null,
+              // Absent template => the ordinary case: the client signs, nobody
+              // else does, no deposit.
+              clientSigns: tpl?.clientSigns ?? true,
+              additionalSignerLabels: tpl?.additionalSignerLabels ?? [],
+              firmCountersigns: tpl?.firmCountersigns ?? false,
+              depositCents: tpl?.depositCents ?? null,
+            },
             tasks: meaningfulTasks(tasks).map((task) => ({
               title: task.title,
               kind: task.kind,
