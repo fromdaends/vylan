@@ -580,12 +580,36 @@ export function TasksTable({
     priorityFilter.length > 0;
 
   const clearAll = () => {
+    // Clearing the filters is itself a change away from what was saved, so the
+    // saved view lets go here too — otherwise its tab stays lit over a list
+    // showing everything.
+    setActiveViewId(null);
     setStatusFilter([]);
     setClientFilter([]);
     setKindFilter([]);
     setAssigneeFilter([]);
     setPriorityFilter([]);
   };
+
+  // ⚠️ TOUCHING A FILTER BY HAND LEAVES THE SAVED VIEW. Its tab stops being lit
+  // the moment the list no longer matches what was saved — a tab that stays
+  // highlighted beside filters you have since changed is claiming something
+  // untrue, and it is also what makes "Update this view to match" mean anything.
+  //
+  // Wrapped rather than sprinkled through every menu: five setters passed to
+  // five different controls would be five chances to forget one, and the one
+  // forgotten is the one that lies.
+  const detach =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      setActiveViewId(null);
+      set(v);
+    };
+  const onStatusFilter = detach(setStatusFilter);
+  const onClientFilter = detach(setClientFilter);
+  const onKindFilter = detach(setKindFilter);
+  const onAssigneeFilter = detach(setAssigneeFilter);
+  const onPriorityFilter = detach(setPriorityFilter);
 
   return (
     <div className="flex flex-col gap-3">
@@ -615,6 +639,16 @@ export function TasksTable({
               applySavedView(saved);
               return;
             }
+            // ⚠️ LEAVING A SAVED VIEW MUST CLEAR WHAT IT APPLIED. Founder:
+            // "saved views work but dont reset when you swap back to a
+            // different view" — you land on Active work with the saved view's
+            // filters still on, so the tab says one thing and the list shows
+            // another.
+            //
+            // Only when leaving a SAVED view. Switching between the built-in
+            // tabs leaves filters you set BY HAND alone — clearing those would
+            // make the tabs unusable alongside any filter.
+            if (activeViewId) clearAll();
             setActiveViewId(null);
             setView(key as TaskView);
           }}
@@ -717,7 +751,7 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_lowest"), t("sort_highest")]}
                   selected={statusFilter}
-                  onChange={setStatusFilter}
+                  onChange={onStatusFilter}
                   options={statusOptions.map((v) => ({
                     value: v.id,
                     label: v.name,
@@ -752,7 +786,7 @@ export function TasksTable({
                     setSort={setSort}
                     sortLabels={[t("sort_asc"), t("sort_desc")]}
                     selected={clientFilter}
-                    onChange={setClientFilter}
+                    onChange={onClientFilter}
                     options={clientOptions}
                   />
                 )}
@@ -765,7 +799,7 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_asc"), t("sort_desc")]}
                   selected={kindFilter}
-                  onChange={setKindFilter}
+                  onChange={onKindFilter}
                   options={kinds.map((k) => ({ value: k, label: kindLabel(k) }))}
                 />
                 <ColumnMenu
@@ -777,7 +811,7 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_asc"), t("sort_desc")]}
                   selected={assigneeFilter}
-                  onChange={setAssigneeFilter}
+                  onChange={onAssigneeFilter}
                   options={[
                     { value: "none", label: t("work_unassigned") },
                     ...members.map((m) => ({ value: m.id, label: m.name })),
@@ -792,7 +826,9 @@ export function TasksTable({
                   setSort={setSort}
                   sortLabels={[t("sort_lowest"), t("sort_highest")]}
                   selected={priorityFilter}
-                  onChange={(v: string[]) => setPriorityFilter(v as TaskPriority[])}
+                  onChange={(v: string[]) =>
+                    onPriorityFilter(v as TaskPriority[])
+                  }
                   options={(["high", "medium", "low", "none"] as TaskPriority[]).map(
                     (v) => ({ value: v, label: t(`priority_${v}` as "priority_none") }),
                   )}

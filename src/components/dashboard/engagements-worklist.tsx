@@ -654,6 +654,27 @@ export function WorklistTable({
   const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
   const [stageFilter, setStageFilter] = useState<string[]>([]);
 
+  // ⚠️ TOUCHING A FILTER BY HAND LEAVES THE SAVED VIEW — its tab stops being lit
+  // the moment the list no longer matches what was saved. Wrapped rather than
+  // sprinkled through every menu: four setters passed to four controls is four
+  // chances to forget one, and the one forgotten is the one that lies.
+  const detach =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      setActiveViewId(null);
+      set(v);
+    };
+  const onClientFilter = detach(setClientFilter);
+  const onServiceFilter = detach(setServiceFilter);
+  const onAssigneeFilterChange = detach(setAssigneeFilter);
+  const onStageFilter = detach(setStageFilter);
+
+  // NOTE: no clear-on-leave here, unlike tasks. The engagements list's built-in
+  // tabs (Active / All / Drafts) are ROUTES, so leaving a saved view is a
+  // navigation that remounts this component with fresh state — there is nothing
+  // left over to clear. Tasks' tabs are client state, which is exactly why the
+  // filters survived the switch there.
+
   /** The distinct values actually present, so a menu never offers an empty row. */
   const distinct = useMemo(() => {
     const clients = new Map<string, string>();
@@ -908,7 +929,7 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
               selected={clientFilter}
-              onChange={setClientFilter}
+              onChange={onClientFilter}
               options={distinct.clients.map((c) => ({ value: c, label: c }))}
             />
             {/* SERVICE ITEMS in Canopy's words. The founder was unsure what
@@ -925,7 +946,7 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
               selected={serviceFilter}
-              onChange={setServiceFilter}
+              onChange={onServiceFilter}
               options={distinct.services.map((v) => ({
                 value: v,
                 // A type key needs translating ("t1" → "Personal tax (T1)"); a
@@ -965,7 +986,7 @@ export function WorklistTable({
                 setSort={setSort}
                 sortLabels={[tEng("sort_asc"), tEng("sort_desc")]}
                 selected={assigneeFilter}
-                onChange={setAssigneeFilter}
+                onChange={onAssigneeFilterChange}
                 options={distinct.assignees.map((name) => ({
                   value: name,
                   // "" is nobody. It is the value people filter for most, so it
@@ -994,7 +1015,7 @@ export function WorklistTable({
               setSort={setSort}
               sortLabels={[tEng("sort_agr_earliest"), tEng("sort_agr_latest")]}
               selected={stageFilter}
-              onChange={setStageFilter}
+              onChange={onStageFilter}
               options={distinct.stages.map((v) => ({
                 value: v,
                 label: stageLabel(v),

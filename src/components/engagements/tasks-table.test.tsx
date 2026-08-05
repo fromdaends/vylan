@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from "vitest";
-import { render, fireEvent, cleanup, screen, within } from "@testing-library/react";
+import { render, fireEvent, cleanup, screen, within, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 
@@ -526,5 +526,52 @@ describe("TasksTable — capped, for the Overview", () => {
   it("is uncapped by default — the Tasks page shows the lot", () => {
     renderTable();
     expect(names()).toHaveLength(3);
+  });
+});
+
+// ── LEAVING A SAVED VIEW ────────────────────────────────────────────────────
+//
+// Founder: "saved views work but dont reset when you swap back to a different
+// view". You clicked Active work and landed there with the saved view's filters
+// still applied — the tab said one thing and the list showed another.
+//
+// The tabs on THIS list are client state, not routes, so nothing remounts to
+// clear them. (The engagements list does not have this bug for exactly that
+// reason: its tabs are links.)
+describe("TasksTable — a saved view lets go when you leave it", () => {
+  const VIEW = {
+    id: "sv-1",
+    name: "Doc Requests",
+    filters: { view: "all", kindFilter: ["document_collection"] },
+  };
+
+  it("clears the view's filters when a built-in tab is clicked", async () => {
+    renderTable({ savedViews: [VIEW] });
+
+    // On the saved view: filtered down.
+    fireEvent.click(screen.getByRole("tab", { name: /Doc Requests/i }));
+    const filtered = names().length;
+    expect(screen.getByText(en.Engagements.filters_clear)).toBeTruthy();
+
+    // Back to a built-in tab: the filter chip is gone and more rows are back.
+    fireEvent.click(
+      screen.getByRole("tab", { name: new RegExp(en.Engagements.view_all, "i") }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(en.Engagements.filters_clear)).toBeNull(),
+    );
+    expect(names().length).toBeGreaterThan(filtered);
+  });
+
+  it("stops calling itself the saved view once a filter is changed by hand", () => {
+    renderTable({ savedViews: [VIEW] });
+    const tab = screen.getByRole("tab", { name: /Doc Requests/i });
+    fireEvent.click(tab);
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+
+    // Any hand-made filter change means the list no longer matches what was
+    // saved, so the tab must stop claiming otherwise.
+    fireEvent.click(screen.getByText(en.Engagements.filters_clear));
+    expect(tab.getAttribute("aria-selected")).toBe("false");
   });
 });
