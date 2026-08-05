@@ -32,6 +32,16 @@ export type StatusActionResult = {
     | "duplicate"
     | "last_in_bucket"
     | "failed";
+  /** The row that was just created, so the list can show it WITHOUT waiting for
+   *  a refresh to bring it back. See the editor's note on why that matters:
+   *  the whole page read as broken because every change was invisible until a
+   *  manual reload. Only createStatusAction sets it. */
+  created?: {
+    id: string;
+    name: string;
+    color: string;
+    bucket: StatusBucket;
+  };
 };
 
 // Long enough for "Waiting on client signature", short enough to fit a pill in
@@ -82,16 +92,21 @@ export async function createStatusAction(input: {
   const name = cleanName(input.name);
   if (!name) return { ok: false, error: "bad_name" };
 
+  const color = cleanColor(input.color);
+  const bucket = cleanBucket(input.bucket);
   const res = await createTaskStatus({
     firmId: g.firm.id,
     name,
-    color: cleanColor(input.color),
-    bucket: cleanBucket(input.bucket),
+    color,
+    bucket,
     createdBy: g.user.id,
   });
   if ("error" in res) return { ok: false, error: res.error };
   revalidateStatuses();
-  return { ok: true };
+  // Hand the row back so the editor can put it on screen immediately. The
+  // CLEANED values, not the raw input — the list must show what was actually
+  // stored, or the first reload would silently "change" what you just typed.
+  return { ok: true, created: { id: res.id, name, color, bucket } };
 }
 
 export async function updateStatusAction(input: {
