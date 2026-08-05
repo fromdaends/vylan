@@ -21,6 +21,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -141,14 +142,6 @@ export function EngagementItemsEditor({
   // Dollars in the box, cents in state. Empty stays NULL rather than becoming 0:
   // "we will tell you the rate later" is a real answer, and a proposal that says
   // $0.00 where it means that has promised the work for free.
-  function setRate(idx: number, raw: string) {
-    const trimmed = raw.trim();
-    if (trimmed === "") return patch(idx, { rateCents: null });
-    const dollars = Number(trimmed.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(dollars)) return;
-    patch(idx, { rateCents: Math.round(dollars * 100) });
-  }
-
   return (
     <div className="space-y-4">
       {items.length === 0 ? (
@@ -252,15 +245,15 @@ export function EngagementItemsEditor({
                       <Label htmlFor={`item-rate-${idx}`} className="text-xs">
                         {t("item_rate")}
                       </Label>
-                      <Input
+                      {/* MoneyInput, not a raw Input: rendering cents back into
+                          the box on every keystroke made it impossible to type
+                          "400" — every digit after the first was eaten by the
+                          reformat. Same bug, same day, two files, which is why
+                          it is a component now. */}
+                      <MoneyInput
                         id={`item-rate-${idx}`}
-                        inputMode="decimal"
-                        value={
-                          item.rateCents == null
-                            ? ""
-                            : (item.rateCents / 100).toFixed(2)
-                        }
-                        onChange={(e) => setRate(idx, e.target.value)}
+                        valueCents={item.rateCents}
+                        onChangeCents={(cents) => patch(idx, { rateCents: cents })}
                         placeholder={t("item_rate_placeholder")}
                         className="mt-1"
                       />
