@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
+import { EngagementsListSkeleton } from "@/components/engagements/engagements-list-skeleton";
 
 export function EngagementModalShell({
   title,
@@ -122,9 +123,37 @@ export function EngagementModalShell({
           
           It is a plain page again. It LOOKS overlaid and nothing behind it is
           real, so nothing behind it can move, repaint, or steal a click. */}
+      {/* ── THE APP, BEHIND FROSTED GLASS ──────────────────────────────
+          The founder: "the engagement creation hovers over the existing UI,
+          but the background is just blurred out. But do not do it incorrectly.
+          Do it so it does not fuck with the UI, the latency... it uses an
+          overlay that looks like the background UI, but it's really not. And
+          it's just a screenshot of it."
+
+          Exactly the right instinct, and it is what this is. Behind the glass
+          is the SHAPE of the engagements list and nothing else: no data, no
+          client components, no hydration, no scrolling, no animation. It is
+          scenery — closer to a photograph of the page than to the page.
+
+          That inertness is the whole point. `backdrop-filter` recomputes every
+          frame the content beneath it CHANGES, so a live page under a blur is
+          a full-screen blur recomputed continuously — which is what made this
+          modal unusable in three earlier attempts ("its extremly laggy... cant
+          even X out of the screen"). Nothing under this blur can move, so the
+          blur paints once and stays painted. */}
       <div
         aria-hidden
-        className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm sm:left-[var(--rail-width)]"
+        // `inert` as well as pointer-events-none: nothing in here may take
+        // focus from the dialog, including via the keyboard.
+        inert
+        className="pointer-events-none fixed inset-0 z-30 overflow-hidden select-none px-6 pt-7 lg:px-11 sm:left-[var(--rail-width)]"
+      >
+        <EngagementsListSkeleton animated={false} />
+      </div>
+
+      <div
+        aria-hidden
+        className="fixed inset-0 z-40 bg-background/70 backdrop-blur-md sm:left-[var(--rail-width)]"
       />
 
       <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
