@@ -276,6 +276,21 @@ export function EngagementTemplateBuilder({
         </div>
       </div>
 
+      {/* ── WHAT THIS SCREEN IS ───────────────────────────────────────────
+          The founder: "when i try and create an engagement template its just
+          the same as creating an engagement normally. It should be its own
+          defined thing thats seperate from creating an engagement."
+
+          They are right, and the reason is that the two forms ask overlapping
+          questions. What actually differs is not the fields, it is the OBJECT:
+          this makes a reusable shape, not a job. Nothing on the screen said so.
+          Now the first thing on it does — and it names the two things a
+          template deliberately has no answer for, which is what makes it a
+          template rather than an engagement with the client left blank. */}
+      <p className="border-b border-border bg-accent-subtle/40 px-5 py-2.5 text-[12.5px] leading-relaxed text-muted-foreground">
+        {t("template_builder_explainer")}
+      </p>
+
       {/* ── TABS + PREVIEW TOGGLE ─────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 border-b border-border px-5">
         <div
@@ -664,6 +679,12 @@ export function EngagementTemplateBuilder({
 
         {previewOpen && (
           <div className="hidden min-h-0 overflow-y-auto bg-muted/30 p-5 lg:block">
+            {/* Labelled, because an unlabelled preview showing a client name
+                reads as a real engagement — the exact confusion this screen is
+                being made distinct from. */}
+            <p className="mx-auto mb-3 max-w-md text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
+              {t("preview_sample_label")}
+            </p>
             <ProposalPreview
               locale={locale}
               activeStep={TAB_TO_STEP[tab]}

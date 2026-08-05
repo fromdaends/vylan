@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { FilePlus2, Plus } from "lucide-react";
 import { assertLocale } from "@/lib/locale";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
+import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { lastEditedLine } from "@/lib/templates/last-edited";
 import { EngagementTemplateRow } from "@/components/templates/engagement-template-row";
 import { SearchableTemplates } from "@/components/templates/searchable-templates";
 import {
@@ -28,8 +30,13 @@ export default async function EngagementTemplatesPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const engagementTemplates = await listEngagementTemplates();
+  const [engagementTemplates, viewer, members] = await Promise.all([
+    listEngagementTemplates(),
+    getCurrentUser(),
+    listFirmUsers(),
+  ]);
   const t = await getTranslations("Templates");
+  const nameById = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
 
   // The one line under each name. Built here rather than in the row so the
   // server does the counting and the row stays about presentation.
@@ -42,6 +49,18 @@ export default async function EngagementTemplatesPage({
       parts.push(t("documents_count", { count: tmpl.payload.checklist.length }));
     }
     if (tmpl.payload.title.trim()) parts.push(tmpl.payload.title.trim());
+    // Canopy's line, last: what it is, then when it was touched.
+    const edited = lastEditedLine(
+      {
+        updatedAt: tmpl.updatedAt,
+        updatedByUserId: tmpl.updatedByUserId,
+        viewerUserId: viewer?.id ?? null,
+        nameById,
+      },
+      t,
+      locale,
+    );
+    if (edited) parts.push(edited);
     return parts.join(" · ");
   };
 
@@ -58,12 +77,22 @@ export default async function EngagementTemplatesPage({
             </Button>
           </Link>
         }
+        tabs={["team", "private", "draft"]}
         sections={[
           {
             key: "all",
+            primary: true,
             title: t("section_engagement_templates"),
             cards: engagementTemplates.map((tmpl) => ({
               id: tmpl.id,
+              // A draft belongs ONLY under Drafts, whatever its access level —
+              // a half-written template appearing in Team is exactly what that
+              // tab exists to prevent.
+              group: tmpl.payload.isDraft
+                ? ("draft" as const)
+                : tmpl.access === "private"
+                  ? ("private" as const)
+                  : ("team" as const),
               // Findable by its own name AND by what it contains — searching
               // "T4" should find the template that asks for one.
               terms: [
