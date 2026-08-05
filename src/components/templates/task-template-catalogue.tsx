@@ -21,6 +21,8 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Plus, Trash2, ListChecks, CornerDownRight } from "lucide-react";
+import { TaskTemplateRow } from "@/components/templates/task-template-row";
+import { TemplateRowList } from "@/components/templates/template-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,10 +30,7 @@ import { TASK_KIND_META, taskKindLabelKey } from "@/lib/tasks/kinds";
 import type { TaskKind } from "@/lib/db/engagement-tasks";
 import type { TaskTemplate } from "@/lib/db/task-templates";
 import type { TemplateChecklistItem } from "@/lib/engagements/template-payload";
-import {
-  saveTaskTemplateAction,
-  archiveTaskTemplateAction,
-} from "@/app/actions/task-templates";
+import { saveTaskTemplateAction } from "@/app/actions/task-templates";
 
 export function TaskTemplateCatalogue({
   templates,
@@ -59,6 +58,8 @@ export function TaskTemplateCatalogue({
   const [pending, startTransition] = useTransition();
 
   const [open, setOpen] = useState(openOnMount);
+  // Set while editing one that already exists; null while creating.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [access, setAccess] = useState<"team" | "private">("team");
   const [kind, setKind] = useState<TaskKind>("task");
@@ -75,6 +76,7 @@ export function TaskTemplateCatalogue({
     (usableSteps.length > 0 || checklist.length > 0);
 
   function reset() {
+    setEditingId(null);
     setName("");
     setAccess("team");
     setKind("task");
@@ -89,6 +91,9 @@ export function TaskTemplateCatalogue({
     setError(null);
     startTransition(async () => {
       const res = await saveTaskTemplateAction({
+        // Present => update the existing one. Absent => create. Without this an
+        // edit would leave the original behind as a duplicate.
+        ...(editingId ? { id: editingId } : {}),
         name: name.trim(),
         access,
         kind,
@@ -104,17 +109,6 @@ export function TaskTemplateCatalogue({
       }
       reset();
       setOpen(false);
-      router.refresh();
-    });
-  }
-
-  function archive(id: string) {
-    startTransition(async () => {
-      const res = await archiveTaskTemplateAction(id);
-      if (!res.ok) {
-        setError(res.needsMigration ? "needs_migration" : "failed");
-        return;
-      }
       router.refresh();
     });
   }
@@ -141,57 +135,43 @@ export function TaskTemplateCatalogue({
         </div>
       ) : (
         <>
-          <ul className="space-y-2">
+          <TemplateRowList>
             {templates.map((tpl) => (
-              <li
+              <TaskTemplateRow
                 key={tpl.id}
-                className="flex items-start gap-3 rounded-xl border border-border/70 bg-card p-3"
-              >
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                  <ListChecks className="h-4 w-4" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {tpl.name}
-                    </p>
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {label(tpl.payload.kind)}
-                    </span>
-                    {tpl.access === "private" && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {t("access_private")}
-                      </span>
-                    )}
-                  </div>
-                  {/* The steps themselves, in order — the template is short
-                      enough that a count would say less than the list. */}
-                  {tpl.payload.subtasks.length > 0 && (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {tpl.payload.subtasks.map((s) => s.title).join(" · ")}
-                    </p>
-                  )}
-                  {tpl.payload.checklist.length > 0 && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {t("task_template_client_request")}{" "}
-                      {t("documents_count", {
-                        count: tpl.payload.checklist.length,
-                      })}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => archive(tpl.id)}
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                  aria-label={t("remove_a11y", { name: tpl.name })}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
+                id={tpl.id}
+                name={tpl.name}
+                isPrivate={tpl.access === "private"}
+                // The steps themselves, in order — the template is short enough
+                // that a count would say less than the list.
+                meta={[
+                  tpl.payload.subtasks.map((x) => x.title).join(" · "),
+                  tpl.payload.checklist.length > 0
+                    ? t("documents_count", { count: tpl.payload.checklist.length })
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" — ")}
+                onEdit={() => {
+                  // Load it into the SAME inline form that creates one. A
+                  // second edit form would be a second place for the fields to
+                  // drift.
+                  setEditingId(tpl.id);
+                  setName(tpl.name);
+                  setAccess(tpl.access);
+                  setKind(tpl.payload.kind);
+                  setDescription(tpl.payload.description);
+                  setSteps(
+                    tpl.payload.subtasks.length > 0
+                      ? tpl.payload.subtasks.map((x) => x.title)
+                      : [""],
+                  );
+                  setChecklist(tpl.payload.checklist);
+                  setOpen(true);
+                }}
+              />
             ))}
-          </ul>
+          </TemplateRowList>
           {!open && (
             <Button
               type="button"
