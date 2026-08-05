@@ -1,0 +1,277 @@
+"use client";
+
+// Canopy's SERVICES TAB — billing blocks, and what the client is allowed to see.
+//
+// A block is a group of services sharing one billing rule: "$4,000 on
+// acceptance" is one, "$500/month from the engagement start" is another, and a
+// proposal can carry both. Canopy builds their Services tab from these; Vylan
+// had a flat list of priced lines, each carrying its own frequency, which could
+// say HOW OFTEN but never WHEN or on what terms.
+//
+// The services inside a block are edited by the SAME EngagementItemsEditor the
+// engagement builder uses — same rounding, same catalogue picker, same totals.
+// What this file adds is only the grouping and the rule.
+//
+// ── ONE THING DELIBERATELY HIDDEN ──────────────────────────────────────────
+//
+// Each item still has its own billing-frequency field (migration 1450), but
+// inside a block the BLOCK decides — flattenBlocks overwrites it on the way
+// out. Showing a per-item frequency here would offer a control whose answer is
+// then thrown away, so the editor is told to hide it.
+
+import { useTranslations } from "next-intl";
+import { Plus, Trash2, Settings2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/cn";
+import {
+  EngagementItemsEditor,
+  type CatalogueService,
+} from "@/components/engagements/engagement-items-editor";
+import {
+  BILLING_TYPES,
+  BLOCK_FREQUENCIES,
+  blockTotal,
+  emptyBlock,
+  timingsFor,
+  withBillingType,
+  type BillingBlock,
+  type BlockFrequency,
+  type BlockTiming,
+  type PriceVisibility,
+} from "@/lib/engagements/billing-blocks";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+// Spelled out so a typo is a compile error rather than a `Templates.x`
+// rendering on screen — next-intl fails silently.
+type TimingKey =
+  | "timing_on_acceptance"
+  | "timing_on_completion"
+  | "timing_engagement_start"
+  | "timing_custom_date";
+type FrequencyKey =
+  | "freq_weekly"
+  | "freq_monthly"
+  | "freq_quarterly"
+  | "freq_yearly";
+type BillingTypeKey = "billing_one_time" | "billing_recurring";
+
+export function BillingBlocksEditor({
+  blocks,
+  onChange,
+  visibility,
+  onVisibilityChange,
+  locale,
+  services = [],
+  fallbackTaxPct = null,
+}: {
+  blocks: BillingBlock[];
+  onChange: (next: BillingBlock[]) => void;
+  visibility: PriceVisibility;
+  onVisibilityChange: (next: PriceVisibility) => void;
+  locale: "en" | "fr";
+  services?: CatalogueService[];
+  fallbackTaxPct?: number | null;
+}) {
+  const t = useTranslations("Templates");
+
+  const money = (cents: number) =>
+    new Intl.NumberFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+      style: "currency",
+      currency: "CAD",
+    }).format(cents / 100);
+
+  function patch(idx: number, next: BillingBlock) {
+    onChange(blocks.map((b, i) => (i === idx ? next : b)));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-medium tracking-[0.18em] uppercase text-muted-foreground">
+          {t("billing_blocks")}
+        </h2>
+        {/* Canopy's gear: what the client sees. A menu rather than three
+            switches on the page — it is set once and then not thought about. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="sm" variant="outline">
+              <Settings2 className="size-3.5" />
+              {t("price_visibility")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuCheckboxItem
+              checked={visibility.itemizedPrice}
+              onCheckedChange={(v) =>
+                onVisibilityChange({ ...visibility, itemizedPrice: v === true })
+              }
+            >
+              {t("show_itemized_price")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={visibility.blockTotals}
+              onCheckedChange={(v) =>
+                onVisibilityChange({ ...visibility, blockTotals: v === true })
+              }
+            >
+              {t("show_block_totals")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={visibility.total}
+              onCheckedChange={(v) =>
+                onVisibilityChange({ ...visibility, total: v === true })
+              }
+            >
+              {t("show_total")}
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {blocks.length === 0 && (
+        <p className="rounded-xl border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
+          {t("billing_blocks_empty")}
+        </p>
+      )}
+
+      {blocks.map((b, idx) => {
+        const total = blockTotal(b, fallbackTaxPct);
+        return (
+          <section
+            key={idx}
+            className="space-y-3 rounded-xl border border-border bg-card p-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {/* HOW it bills. Changing this resets a timing the new type has
+                  no meaning for — see withBillingType. */}
+              {BILLING_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => patch(idx, withBillingType(b, type))}
+                  aria-pressed={b.billingType === type}
+                  className={cn(
+                    "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                    b.billingType === type
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t(
+                    (type === "one_time"
+                      ? "billing_one_time"
+                      : "billing_recurring") as BillingTypeKey,
+                  )}
+                </button>
+              ))}
+
+              <span className="text-xs text-muted-foreground">
+                {t("billing_when")}
+              </span>
+              <select
+                value={b.timing}
+                onChange={(e) =>
+                  patch(idx, { ...b, timing: e.target.value as BlockTiming })
+                }
+                aria-label={t("billing_when")}
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              >
+                {timingsFor(b.billingType).map((timing) => (
+                  <option key={timing} value={timing}>
+                    {t(`timing_${timing}` as TimingKey)}
+                  </option>
+                ))}
+              </select>
+
+              {b.billingType === "recurring" && (
+                <select
+                  value={b.frequency}
+                  onChange={(e) =>
+                    patch(idx, {
+                      ...b,
+                      frequency: e.target.value as BlockFrequency,
+                    })
+                  }
+                  aria-label={t("billing_frequency")}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  {BLOCK_FREQUENCIES.map((f) => (
+                    <option key={f} value={f}>
+                      {t(`freq_${f}` as FrequencyKey)}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onChange(blocks.filter((_, i) => i !== idx))}
+                aria-label={t("remove")}
+                className="ml-auto text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+
+            {/* The SAME priced-scope editor the engagement builder uses. The
+                per-item frequency is hidden because the block decides it. */}
+            <EngagementItemsEditor
+              items={b.items}
+              onChange={(items) => patch(idx, { ...b, items })}
+              locale={locale}
+              services={services}
+              fallbackTaxPct={fallbackTaxPct}
+              hideFrequency
+            />
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-3">
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={b.combineItems}
+                  onChange={(e) =>
+                    patch(idx, { ...b, combineItems: e.target.checked })
+                  }
+                />
+                {t("combine_items")}
+              </label>
+              <Input
+                value={b.clientNote}
+                onChange={(e) => patch(idx, { ...b, clientNote: e.target.value })}
+                placeholder={t("client_note_placeholder")}
+                aria-label={t("client_note_placeholder")}
+                className="h-8 flex-1 text-xs"
+              />
+              {visibility.blockTotals && (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {money(total.cents)}
+                  {/* Said out loud. A total that quietly omits an unpriced
+                      hourly line is a number a client will hold you to. */}
+                  {total.partial && ` ${t("total_partial")}`}
+                </span>
+              )}
+            </div>
+          </section>
+        );
+      })}
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onChange([...blocks, emptyBlock("one_time")])}
+        >
+          <Plus className="size-3.5" />
+          {t("add_billing_block")}
+        </Button>
+      </div>
+    </div>
+  );
+}

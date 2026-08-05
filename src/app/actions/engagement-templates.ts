@@ -69,6 +69,30 @@ const PayloadSchema = z.object({
   depositCents: z.number().int().min(0).max(99_999_999).nullable().optional(),
   items: z.array(ItemSchema).max(50).optional(),
   checklist: z.array(ChecklistSchema).max(200).optional(),
+  // Canopy's billing blocks. Bounded, but deliberately loose about the enum
+  // values — readPayload repairs a type/timing mismatch rather than dropping
+  // the block, and this schema exists to stop an unbounded blob, not to be a
+  // second definition of the shape.
+  billingBlocks: z
+    .array(
+      z.object({
+        billingType: z.string().max(30).optional(),
+        timing: z.string().max(40).optional(),
+        frequency: z.string().max(30).optional(),
+        combineItems: z.boolean().optional(),
+        clientNote: z.string().trim().max(2000).optional(),
+        items: z.array(ItemSchema).max(50).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  priceVisibility: z
+    .object({
+      itemizedPrice: z.boolean().optional(),
+      blockTotals: z.boolean().optional(),
+      total: z.boolean().optional(),
+    })
+    .optional(),
   invoice: OpaqueSchema,
   reminders: OpaqueSchema,
   repeat: OpaqueSchema,
