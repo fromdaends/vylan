@@ -148,12 +148,12 @@ export function EngagementModalShell({
         inert
         className="pointer-events-none fixed inset-0 z-30 overflow-hidden select-none px-6 pt-7 lg:px-11 sm:left-[var(--rail-width)]"
       >
-        <EngagementsListSkeleton animated={false} />
+        <EngagementsListSkeleton animated={false} tone="contrast" />
       </div>
 
       <div
         aria-hidden
-        className="fixed inset-0 z-40 bg-background/70 backdrop-blur-md sm:left-[var(--rail-width)]"
+        className="fixed inset-0 z-40 bg-background/60 backdrop-blur-md sm:left-[var(--rail-width)]"
       />
 
       <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
