@@ -332,17 +332,26 @@ export function BuilderChrome({
             On the last step Continue turns into the thing you came here to do.
             Not "Next, then find the save button" — the founder's rule. */}
         <div className="flex shrink-0 items-center justify-between border-t border-border px-[22px] py-[13px]">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={index === 0}
-            onClick={() => onTabChange(tabs[index - 1].key)}
-            className="disabled:opacity-35"
-          >
-            <ArrowLeft className="size-3.5" />
-            {t("back")}
-          </Button>
+          {/* A single-step flow has NO Back — not a disabled one. Client,
+              invoice and import are one card with one thing to do, and a greyed
+              control beside it is a step somebody spends a moment looking for.
+              Inside a real wizard it stays, disabled, because on step 1 of 5
+              its absence would be the surprise instead. */}
+          {showSteps ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={index === 0}
+              onClick={() => onTabChange(tabs[index - 1].key)}
+              className="disabled:opacity-35"
+            >
+              <ArrowLeft className="size-3.5" />
+              {t("back")}
+            </Button>
+          ) : (
+            <span />
+          )}
           {last ? (
             <Button
               type="button"

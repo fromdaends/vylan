@@ -452,19 +452,34 @@ export function RailPopover({
             onClick={() => onClose()}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "block rounded-lg px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "group block rounded-lg px-2.5 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active ? "bg-accent-subtle" : "hover:bg-muted",
             )}
           >
-            {/* Where you are is said twice — a colour for everyone who can see
-                it, and aria-current above for everyone who cannot. */}
+            {/* ── THE LABEL IS THE LINK, AND IT LOOKS LIKE ONE ──────────
+                Founder, comparing the popover against the panel it replaced:
+                "make the writing the same colour as before, that blue instead
+                of plain."
+
+                Right, and the chevron comes back with it. The blue and the
+                arrow-after-the-words are Canopy's own list — the arrow is part
+                of the sentence rather than an ornament parked at the right
+                edge, which is why it is always visible instead of arriving on
+                hover. The popover borrowed the panel's shape and lost its one
+                piece of vocabulary on the way.
+
+                Where you are is still said twice — a heavier weight for
+                everyone who can see it, aria-current above for everyone who
+                cannot. Colour cannot carry it here, because every row is
+                already blue. */}
             <span
               className={cn(
-                "block truncate text-[13px] font-[550]",
-                active ? "text-accent" : "text-foreground",
+                "flex items-center gap-1 text-[13px] leading-tight text-accent transition-colors group-hover:text-accent-hover",
+                active ? "font-semibold" : "font-[550]",
               )}
             >
-              {item.label}
+              <span className="min-w-0 truncate">{item.label}</span>
+              <ChevronRight aria-hidden className="size-3.5 shrink-0" />
             </span>
             {item.description && (
               <span className="mt-px block text-[11px] leading-snug text-muted-foreground">
