@@ -27,16 +27,39 @@ import {
   totalForItems,
   type EngagementItemDraft,
 } from "@/lib/engagements/items";
-import { formatCurrency, type AppLocale } from "@/lib/format";
+import { formatCurrency, formatDate, type AppLocale } from "@/lib/format";
+
+/** What the live schedule for one frequency looks like on screen (1710). */
+export type ServiceScheduleState = {
+  frequency: string;
+  /** ISO date of the next invoice, or null when it is paused/ended. */
+  nextChargeOn: string | null;
+  status: "active" | "paused" | "ended";
+  /** Periods already invoiced. "Billed 3 times so far." */
+  chargesSoFar: number;
+};
 
 export function EngagementServicesPanel({
   items,
   locale,
+  schedules = [],
 }: {
   items: EngagementItemDraft[];
   locale: AppLocale;
+  /**
+   * The recurring arrangements actually running (1710).
+   *
+   * This panel used to state a promise — "billed monthly" — with nothing behind
+   * it: the engagement was invoiced once and no second month was ever charged.
+   * Now that a schedule genuinely exists, the panel says which one and when it
+   * next fires, because a schedule nobody can see is the same broken promise in
+   * a new place.
+   */
+  schedules?: ServiceScheduleState[];
 }) {
   const t = useTranslations("Engagements");
+  const scheduleFor = (frequency: string) =>
+    schedules.find((s) => s.frequency === frequency) ?? null;
 
   if (items.length === 0) {
     return (
@@ -52,14 +75,30 @@ export function EngagementServicesPanel({
     <div className="space-y-6">
       {groups.map((group) => {
         const total = totalForItems(group.items);
+        const schedule = scheduleFor(group.frequency);
         return (
           <section
             key={group.frequency}
             className="overflow-hidden rounded-lg border border-border"
           >
             <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
-              <span className="text-sm font-medium text-foreground">
+              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-medium text-foreground">
                 {t(`billed_${group.frequency}` as "billed_once")}
+                {/* WHEN the next one actually goes out. Without this the word
+                    "monthly" is the only evidence anything repeats, which is
+                    what it was before there was a schedule behind it. */}
+                {schedule?.status === "active" && schedule.nextChargeOn && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {t("services_next_invoice", {
+                      date: formatDate(schedule.nextChargeOn, locale),
+                    })}
+                  </span>
+                )}
+                {schedule?.status === "paused" && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {t("services_billing_paused")}
+                  </span>
+                )}
               </span>
               <span className="text-sm tabular-nums text-muted-foreground">
                 {t("services_total")}{" "}

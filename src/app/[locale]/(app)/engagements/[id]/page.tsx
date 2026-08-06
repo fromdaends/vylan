@@ -33,6 +33,7 @@ import {
 import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { listEngagementItems } from "@/lib/db/engagements";
+import { listBillingSchedulesForEngagement } from "@/lib/db/billing-schedules";
 import { EngagementServicesPanel } from "@/components/engagements/engagement-services-panel";
 import { EngagementClientViewPanel } from "@/components/engagements/engagement-client-view-panel";
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
@@ -279,7 +280,13 @@ export default async function EngagementDetailPage({
   // The engagement's PRICED lines (#1274) — Canopy's "Services" column on the
   // details card. Awaited on its own rather than in a batch above because it
   // is one small indexed read and everything above it was already in flight.
-  const engagementItems = await listEngagementItems(engagement.id);
+  // Paired with the schedules (1710) rather than awaited after them: both are
+  // small indexed reads on the same engagement, and the Services panel needs
+  // them together — "billed monthly" and "next invoice Sept 1" are one fact.
+  const [engagementItems, billingSchedules] = await Promise.all([
+    listEngagementItems(engagement.id),
+    listBillingSchedulesForEngagement(engagement.id),
+  ]);
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
   // SECOND batch: everything keyed off engagement/firm fields, fanned out in
@@ -1641,7 +1648,16 @@ export default async function EngagementDetailPage({
         // Rendered HERE because the page owns the data; the tab strip only
         // decides which of the three is on screen.
         servicesPanel={
-          <EngagementServicesPanel items={engagementItems} locale={locale} />
+          <EngagementServicesPanel
+            items={engagementItems}
+            locale={locale}
+            schedules={billingSchedules.map((s) => ({
+              frequency: s.frequency,
+              nextChargeOn: s.next_charge_on,
+              status: s.status,
+              chargesSoFar: s.charges_so_far,
+            }))}
+          />
         }
         clientViewPanel={
           <EngagementClientViewPanel

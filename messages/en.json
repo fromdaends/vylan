@@ -2949,7 +2949,9 @@
     "item_service_creates": "Creates “{name}” on the Tasks step — {count} steps.",
     "invoice_mode_on_acceptance": "When the client accepts",
     "task_reorder": "Drag to reorder {title}",
-    "task_steps_done": "{done} of {total} steps done"
+    "task_steps_done": "{done} of {total} steps done",
+    "services_next_invoice": "Next invoice {date}",
+    "services_billing_paused": "Billing paused"
   },
   "Attention": {
     "metric_active": "Active",

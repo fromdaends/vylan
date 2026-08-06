@@ -2949,7 +2949,9 @@
     "item_service_creates": "Crée « {name} » à l'étape Tâches — {count} étapes.",
     "invoice_mode_on_acceptance": "À l'acceptation du client",
     "task_reorder": "Glisser pour réordonner {title}",
-    "task_steps_done": "{done} étape(s) sur {total} terminée(s)"
+    "task_steps_done": "{done} étape(s) sur {total} terminée(s)",
+    "services_next_invoice": "Prochaine facture le {date}",
+    "services_billing_paused": "Facturation en pause"
   },
   "Attention": {
     "metric_active": "Actifs",
