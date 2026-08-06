@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import {
   type ImportPreviewRow,
 } from "@/app/actions/clients";
 import { usePathname } from "@/i18n/navigation";
-import { IMPORT_HANDOFF_KEY } from "@/components/clients/client-import-card";
 
 const SAMPLE_CSV = `name,email,phone,type,language
 Boulangerie Lévis Inc.,compta@boulangerie.example,4185551111,business,fr
@@ -39,23 +38,6 @@ export function CsvImportClient({ locale }: { locale: "fr" | "en" }) {
   const router = useRouter();
   const pathname = usePathname();
   void pathname;
-
-  // A CSV dropped on the Import card two navigations ago. Read ONCE and
-  // deleted immediately — a stale paste reappearing on a later visit would
-  // look like the app remembering something you had already dealt with.
-  useEffect(() => {
-    let text: string | null = null;
-    try {
-      text = sessionStorage.getItem(IMPORT_HANDOFF_KEY);
-      if (text) sessionStorage.removeItem(IMPORT_HANDOFF_KEY);
-    } catch {
-      // Private mode. The paste box below is the fallback, and it is fine.
-    }
-    if (text) {
-      setCsv(text);
-      setPreview(parseClientCsv(text));
-    }
-  }, []);
 
   function handleFile(file: File) {
     const reader = new FileReader();

@@ -105,6 +105,7 @@ export function RequestTemplateBuilder({
   const [pending, startTransition] = useTransition();
 
   const [tab, setTab] = useState("details");
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(template.name);
@@ -133,21 +134,14 @@ export function RequestTemplateBuilder({
   const namedItems = items.filter((i) => (i.label_en || i.label_fr).trim());
 
   const TABS = [
-    {
-      key: "details",
-      label: t("tab_request_details" as TabKey),
-      description: t("step_desc_request_details" as TabKey),
-    },
+    { key: "details", label: t("tab_request_details" as TabKey) },
     {
       key: "documents",
       label: t("tab_request_documents" as TabKey),
-      description: t("step_desc_request_documents" as TabKey),
       // The one thing that makes this template worth having. A request that
       // asks for nothing is a request nobody can answer.
       incomplete: namedItems.length === 0,
     },
-    // Two steps normally. The workflow flag adds three more — a longer wizard,
-    // not a different one, which is the point of the steps box being data.
     ...(workflowsOn
       ? [
           { key: "automation", label: t("section_automation" as TabKey) },
@@ -226,37 +220,38 @@ export function RequestTemplateBuilder({
   return (
     <TemplateBuilderShell
       title={displayName}
-      kicker={t("kicker_request_template")}
       explainer={t("request_builder_explainer")}
       tabs={TABS}
       activeTab={tab}
       onTabChange={setTab}
-      // The save-back choice only exists when this flow came FROM one of the
-      // firm's own automations. Otherwise there is nothing to save back to.
-      headerActions={
-        workflowsOn && canSaveBack && provenance
+      actions={[
+        // The save-back choice only exists when this flow came FROM one of the
+        // firm's own automations. Otherwise there is nothing to save back to.
+        ...(workflowsOn && canSaveBack && provenance
           ? [
               {
-                label: t("save_back_named", {
-                  name: automationName(provenance),
-                }),
+                label: t("save_back_named", { name: automationName(provenance) }),
                 variant: "outline" as const,
                 disabled: pending,
                 onClick: () => save(true),
               },
             ]
-          : undefined
-      }
-      finalAction={{
-        label: pending ? tc("saving") : t("save_template"),
-        disabled: pending,
-        onClick: () => save(false),
-      }}
+          : []),
+        {
+          label: pending ? tc("saving") : tc("save"),
+          disabled: pending,
+          onClick: () => save(false),
+        },
+      ]}
       onClose={() => router.push("/templates/requests")}
-      previewLabel={t("request_preview_label")}
+      previewOpen={previewOpen}
+      onPreviewToggle={() => setPreviewOpen((v) => !v)}
       error={error}
       preview={
-        <div className="w-full space-y-3">
+        <div className="mx-auto max-w-md space-y-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("request_preview_label")}
+          </p>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
               <FileText className="size-3.5 text-muted-foreground" aria-hidden />

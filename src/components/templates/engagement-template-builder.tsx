@@ -32,7 +32,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
 import { useRouter } from "@/i18n/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,9 +51,8 @@ import {
   TemplateBuilderShell,
   Fieldset,
   Field,
-  Segmented,
+  RadioCard,
   ToggleRow,
-  WizardHint,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
 import { TermsSectionsEditor } from "@/components/engagements/terms-sections-editor";
@@ -78,48 +76,23 @@ import {
 import { saveEngagementAsTemplateAction } from "@/app/actions/engagement-templates";
 import type { EngagementTemplatePayload } from "@/lib/engagements/template-payload";
 
-// FIVE steps now, not four.
-//
-// "Basics" is new, and it is a split rather than an addition: naming the
-// template and shaping the engagements it makes used to share a tab with the
-// welcome message, the video and the brochure. Those are two different
-// questions — what this thing IS, and what greets your client — and putting
-// them in one scroll is what made the first screen of the old builder the
-// longest one.
-const TABS = [
-  "basics",
-  "introduction",
-  "services",
-  "terms",
-  "signatures",
-] as const;
+// Canopy's four tabs, in Canopy's order.
+const TABS = ["introduction", "services", "terms", "signatures"] as const;
 type Tab = (typeof TABS)[number];
 
 // Spelled out so a typo is a compile error rather than a `Templates.tab_x`
 // rendering on screen — next-intl fails silently and this repo has been bitten
 // by it twice.
 type TabKey =
-  | "tab_basics"
   | "tab_introduction"
   | "tab_services"
   | "tab_terms"
   | "tab_signatures";
 
-type StepDescKey =
-  | "step_desc_basics"
-  | "step_desc_introduction"
-  | "step_desc_services"
-  | "step_desc_terms"
-  | "step_desc_signatures";
-
-// Which of the CLIENT's four steps each firm-facing step is about. Written down
-// rather than assumed, because the two lists are allowed to diverge later —
-// and they already have: Basics and Introduction both point at the client's
-// first dot, since naming the job is part of the introduction from where the
-// client is standing.
+// Which of the CLIENT's four steps each firm-facing tab is about. Written down
+// rather than assumed, because the two lists are allowed to diverge later.
 const TAB_TO_STEP: Record<Tab, "introduction" | "services" | "terms" | "sign"> =
   {
-    basics: "introduction",
     introduction: "introduction",
     services: "services",
     terms: "terms",
@@ -175,7 +148,8 @@ export function EngagementTemplateBuilder({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [tab, setTab] = useState<Tab>("basics");
+  const [tab, setTab] = useState<Tab>("introduction");
+  const [previewOpen, setPreviewOpen] = useState(true);
 
   const [name, setName] = useState(initial?.name ?? "");
   const [access, setAccess] = useState<"team" | "private">(initial?.access ?? "team");
@@ -258,10 +232,8 @@ export function EngagementTemplateBuilder({
   // A template needs a name of its own AND a name for the engagements it makes.
   // Canopy marks both required, and it is right: without the second, every
   // engagement from this template would be called nothing.
-  // Both live on Basics now, which is where the red mark has to land — it used
-  // to point at Introduction because that is where the fields used to be.
-  const basicsIncomplete = name.trim().length === 0 || title.trim().length === 0;
-  const canSaveTemplate = !basicsIncomplete;
+  const introIncomplete = name.trim().length === 0 || title.trim().length === 0;
+  const canSaveTemplate = !introIncomplete;
   // A DRAFT is deliberately allowed to be incomplete — Canopy's own wording is
   // "store incomplete work". It needs only a name, because a draft you cannot
   // find again is not saved in any useful sense.
@@ -391,21 +363,7 @@ export function EngagementTemplateBuilder({
         );
         return;
       }
-      // Hand the listing three things: which tab this landed in, and which row
-      // to flash. A save that drops you on an unfiltered list of thirty makes
-      // you hunt for the thing you just made — and on the wrong tab it reads as
-      // a save that did not happen.
-      const landedIn = asDraft ? "draft" : access;
-      const params = new URLSearchParams({ tab: landedIn });
-      if (res.id) params.set("saved", res.id);
-      toast.success(
-        asDraft
-          ? t("draft_saved_toast")
-          : t("template_saved_toast", {
-              access: access === "team" ? t("access_team") : t("access_private"),
-            }),
-      );
-      router.push(`/templates/engagements?${params}`);
+      router.push("/templates/engagements");
     });
   }
 
@@ -414,10 +372,6 @@ export function EngagementTemplateBuilder({
 
   return (
     <TemplateBuilderShell
-      // The KIND above the name. "Create engagement template" on its own reads
-      // the same as the other three wizards at a glance; the kicker is what
-      // tells you which room you are in before you have read anything.
-      kicker={t("kicker_engagement_template")}
       title={
         initial
           ? t("edit_engagement_template")
@@ -431,29 +385,26 @@ export function EngagementTemplateBuilder({
       tabs={TABS.map((key) => ({
         key,
         label: t(`tab_${key}` as TabKey),
-        description: t(`step_desc_${key}` as StepDescKey),
-        incomplete: key === "basics" && basicsIncomplete,
+        incomplete: key === "introduction" && introIncomplete,
       }))}
       activeTab={tab}
       onTabChange={(key) => setTab(key as Tab)}
-      // Save draft is the only thing in the header, and only here: this is the
-      // one flow long enough that leaving half-way through is a normal thing
-      // to do rather than an abandonment.
-      headerActions={[
+      actions={[
         {
           label: t("save_draft"),
           variant: "outline" as const,
           disabled: !canSaveDraft || pending,
           onClick: () => save(true),
         },
+        {
+          label: t("save_template"),
+          disabled: !canSaveTemplate || pending,
+          onClick: () => save(false),
+        },
       ]}
-      finalAction={{
-        label: t("save_template"),
-        disabled: !canSaveTemplate || pending,
-        onClick: () => save(false),
-      }}
       onClose={() => router.push("/templates/engagements")}
-      previewLabel={t("preview_sample_label")}
+      previewOpen={previewOpen}
+      onPreviewToggle={() => setPreviewOpen((v) => !v)}
       error={
         error
           ? error === "needs_migration"
@@ -463,11 +414,14 @@ export function EngagementTemplateBuilder({
               : t("task_templates_save_failed")
           : null
       }
-      // The label lives on the preview CARD's header now — an unlabelled
-      // preview showing a client name reads as a real engagement, which is the
-      // exact confusion this screen is being made distinct from.
       preview={
-        <div className="flex w-full flex-col items-center">
+        <div className="mx-auto flex max-w-md flex-col items-center">
+          {/* Labelled, because an unlabelled preview showing a client name
+              reads as a real engagement — the exact confusion this screen is
+              being made distinct from. */}
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("preview_sample_label")}
+          </p>
           <ProposalPreview
             locale={locale}
             activeStep={TAB_TO_STEP[tab]}
@@ -510,47 +464,42 @@ export function EngagementTemplateBuilder({
         </div>
       }
     >
-            {tab === "basics" && (
+            {tab === "introduction" && (
               <>
                 <Fieldset title={t("template_details")}>
-                  {/* Two columns, because a name and a two-word access choice
-                      are one decision wide between them — the full-width stack
-                      they replace made naming a template feel like a form. */}
-                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-                    <Field
-                      label={t("template_name_label")}
-                      htmlFor="tpl-name"
-                      required
-                    >
-                      <Input
-                        id="tpl-name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={t("task_templates_name_placeholder")}
+                  <Field
+                    label={`${t("template_name_label")} *`}
+                    htmlFor="tpl-name"
+                  >
+                    <Input
+                      id="tpl-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={t("task_templates_name_placeholder")}
+                    />
+                  </Field>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(["team", "private"] as const).map((value) => (
+                      <RadioCard
+                        key={value}
+                        name="tpl-access"
+                        checked={access === value}
+                        onSelect={() => setAccess(value)}
+                        caption={t("template_access")}
+                        label={
+                          value === "team"
+                            ? t("access_team")
+                            : t("access_private")
+                        }
                       />
-                    </Field>
-                    <Field label={t("template_access")}>
-                      <Segmented
-                        value={access}
-                        onChange={setAccess}
-                        label={t("template_access")}
-                        options={[
-                          { value: "team" as const, label: t("access_team") },
-                          {
-                            value: "private" as const,
-                            label: t("access_private"),
-                          },
-                        ]}
-                      />
-                    </Field>
+                    ))}
                   </div>
                 </Fieldset>
 
                 <Fieldset title={t("engagement_details")}>
                   <Field
-                    label={t("engagement_name_label")}
+                    label={`${t("engagement_name_label")} *`}
                     htmlFor="tpl-title"
-                    required
                   >
                     <Input
                       id="tpl-title"
@@ -581,94 +530,76 @@ export function EngagementTemplateBuilder({
                     </div>
                   </Field>
 
-                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-                    <Field
-                      label={t("period_begins_on")}
-                      // No date picker, here or anywhere on a template. One
-                      // reused next season must not carry last season's start —
-                      // the RULE is stored, the date is asked for when an
-                      // engagement is created.
-                      hint={
-                        periodStartsOn === "custom"
-                          ? t("period_custom_hint")
-                          : undefined
-                      }
-                    >
-                      <Segmented
-                        value={periodStartsOn}
-                        onChange={setPeriodStartsOn}
-                        label={t("period_begins_on")}
-                        options={[
-                          {
-                            value: "acceptance" as const,
-                            label: t("period_acceptance"),
-                          },
-                          {
-                            value: "custom" as const,
-                            label: t("period_custom_date"),
-                          },
-                        ]}
-                      />
-                    </Field>
-
-                    <Field label={t("period_label")} htmlFor="tpl-period">
-                      <select
-                        id="tpl-period"
-                        value={periodMonths == null ? "" : String(periodMonths)}
-                        onChange={(e) =>
-                          setPeriodMonths(
-                            e.target.value === ""
-                              ? null
-                              : Number(e.target.value),
-                          )
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(["acceptance", "custom"] as const).map((value) => (
+                      <RadioCard
+                        key={value}
+                        name="tpl-period-start"
+                        checked={periodStartsOn === value}
+                        onSelect={() => setPeriodStartsOn(value)}
+                        caption={t("period_begins_on")}
+                        label={
+                          value === "acceptance"
+                            ? t("period_acceptance")
+                            : t("period_custom_date")
                         }
-                        className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[13.5px]"
+                      />
+                    ))}
+                  </div>
+                  {/* No date picker. A template reused next season must not
+                      carry last season's start — the rule is stored, the date
+                      is asked for when the engagement is created. */}
+                  {periodStartsOn === "custom" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("period_custom_hint")}
+                    </p>
+                  )}
+
+                  <Field label={t("period_label")} htmlFor="tpl-period">
+                    <select
+                      id="tpl-period"
+                      value={periodMonths == null ? "" : String(periodMonths)}
+                      onChange={(e) =>
+                        setPeriodMonths(
+                          e.target.value === "" ? null : Number(e.target.value),
+                        )
+                      }
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      {PERIOD_OPTIONS.map((months) => (
+                        <option
+                          key={months ?? "ongoing"}
+                          value={months == null ? "" : String(months)}
+                        >
+                          {periodLabel(months)}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {/* Hidden in a solo firm — there is nobody else to hand it
+                      to, so the control would be a dead end. */}
+                  {members.length > 0 && (
+                    <Field label={t("assignees_label")} htmlFor="tpl-assignee">
+                      <select
+                        id="tpl-assignee"
+                        value={assigneeIds[0] ?? ""}
+                        onChange={(e) =>
+                          setAssigneeIds(e.target.value ? [e.target.value] : [])
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                       >
-                        {PERIOD_OPTIONS.map((months) => (
-                          <option
-                            key={months ?? "ongoing"}
-                            value={months == null ? "" : String(months)}
-                          >
-                            {periodLabel(months)}
+                        <option value="">{tEng("task_assignee_none")}</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
                           </option>
                         ))}
                       </select>
                     </Field>
-
-                    {/* Hidden in a solo firm — there is nobody else to hand it
-                        to, so the control would be a dead end. */}
-                    {members.length > 0 && (
-                      <Field
-                        label={t("assignees_label")}
-                        htmlFor="tpl-assignee"
-                      >
-                        <select
-                          id="tpl-assignee"
-                          value={assigneeIds[0] ?? ""}
-                          onChange={(e) =>
-                            setAssigneeIds(
-                              e.target.value ? [e.target.value] : [],
-                            )
-                          }
-                          className="h-9 w-full rounded-lg border border-input bg-background px-2 text-[13.5px]"
-                        >
-                          <option value="">{tEng("task_assignee_none")}</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    )}
-                  </div>
+                  )}
                 </Fieldset>
-              </>
-            )}
 
-            {tab === "introduction" && (
-              <>
-                <WizardHint>{t("step_desc_introduction")}</WizardHint>
                 <Fieldset title={t("tab_introduction")}>
                   <ToggleRow
                     label={t("welcome_message")}

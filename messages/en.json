@@ -2119,20 +2119,7 @@
     "filter_show_label": "Show",
     "filter_active_only": "Active work only",
     "filter_include_archived": "Include archived",
-    "filter_clear": "Clear",
-    "create_forbidden": "You don't have permission to add clients.",
-    "quick_client_explainer": "The two things a client needs to exist. Everything else is on their page.",
-    "quick_name_placeholder": "e.g. Marie Tremblay, or Boulangerie Lévis Inc.",
-    "quick_email_placeholder": "name@example.com",
-    "quick_email_language": "Email language",
-    "quick_client_footnote": "That's it — phone, province, industry and who works on them can all be filled in from their profile later.",
-    "quick_created_toast": "{name} added to Clients",
-    "import_card_explainer": "Bring a list of clients in from a spreadsheet.",
-    "import_card_continue": "Review the rows",
-    "import_card_footnote": "Columns we'll look for: name, email, phone. You'll review every row before anything is created.",
-    "import_drop_title": "Drop a CSV here, or browse",
-    "import_drop_hint": "Exports from QuickBooks, Xero and Excel all work.",
-    "import_drop_ready": "Ready to review. Choose a different file if that's not the one."
+    "filter_clear": "Clear"
   },
   "Engagements": {
     "add_comment": "Add a comment",
@@ -2965,16 +2952,7 @@
     "task_steps_done": "{done} of {total} steps done",
     "services_next_invoice": "Next invoice {date}",
     "services_billing_paused": "Billing paused",
-    "services_billed_count": "· billed {count}×",
-    "kicker_engagement": "Engagement",
-    "wizard_explainer": "A job for one client — what you're doing, what it costs, and what they agree to.",
-    "wizard_step_desc_details": "Who this is for",
-    "wizard_step_desc_services": "What you sell, priced",
-    "wizard_step_desc_tasks": "The work inside it",
-    "wizard_step_desc_billing": "How it gets paid",
-    "wizard_step_desc_reminders": "Who gets chased, and when",
-    "wizard_step_desc_proposal": "What your client will read",
-    "preview_for_client": "Preview · {name}"
+    "services_billed_count": "· billed {count}×"
   },
   "Attention": {
     "metric_active": "Active",
@@ -3330,30 +3308,7 @@
     "terms_heading_placeholder": "Section name — e.g. Scope of work",
     "terms_body_placeholder": "What this section says.",
     "terms_move_up": "Move up",
-    "terms_move_down": "Move down",
-    "continue_step": "Continue",
-    "step_of": "Step {n} of {total}",
-    "kicker_engagement_template": "Engagement template",
-    "kicker_task_template": "Task template",
-    "kicker_request_template": "Document request",
-    "kicker_service": "Service",
-    "tab_basics": "Basics",
-    "step_desc_basics": "Name it and shape the job",
-    "step_desc_introduction": "What greets your client",
-    "step_desc_services": "What you sell, priced",
-    "step_desc_terms": "Your terms of service",
-    "step_desc_signatures": "Who signs before work begins",
-    "step_desc_task_details": "Name it and say what it covers",
-    "step_desc_task_steps": "The checklist inside the work",
-    "step_desc_task_documents": "What the client is asked to send",
-    "step_desc_request_details": "Name the checklist you reuse",
-    "step_desc_request_documents": "What you ask a client for",
-    "step_desc_service_service": "What you sell, and what it covers",
-    "step_desc_service_pricing": "What it costs, and how often",
-    "step_desc_service_work": "The work it brings with it",
-    "step_desc_service_letter": "The letter it goes out with",
-    "template_saved_toast": "Template saved — {access}",
-    "draft_saved_toast": "Draft saved"
+    "terms_move_down": "Move down"
   },
   "Status": {
     "pending": "Pending",
@@ -3620,10 +3575,7 @@
     "filter_period_30": "Last 30 days",
     "filter_period_month": "This month",
     "filter_period_custom": "Custom range",
-    "filter_active": "Filtered: {list}",
-    "new_invoice_pick_label": "Engagement to invoice",
-    "new_invoice_footnote": "Drafted, not sent — you set the amount on the engagement and review it before anything reaches your client.",
-    "new_invoice_draft": "Draft invoice"
+    "filter_active": "Filtered: {list}"
   },
   "Footer": {
     "based_in": "Built in Canada.",

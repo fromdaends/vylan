@@ -102,12 +102,7 @@ export function ProposalAcceptance({
         </p>
       )}
 
-      {/* The width cap lives HERE, not in ProposalPreview. The preview is also
-          rendered inside the builder's preview card, which is wider than this
-          and had 448px of proposal floating in the middle of it — so the
-          container decides, and this container is a client reading a document
-          on a phone or a laptop. */}
-      <div className="mx-auto w-full max-w-md">
+      <div className="flex justify-center">
         <ProposalPreview data={data} locale={locale} activeStep="sign" />
       </div>
 

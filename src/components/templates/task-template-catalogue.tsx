@@ -31,7 +31,6 @@ import { Plus, ListChecks } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { TaskTemplateRow } from "@/components/templates/task-template-row";
 import { SearchableTemplates } from "@/components/templates/searchable-templates";
-import { EmptyState } from "@/components/templates/templates-chrome";
 import { Button } from "@/components/ui/button";
 import type { TaskTemplate } from "@/lib/db/task-templates";
 
@@ -82,6 +81,7 @@ export function TaskTemplateCatalogue({
                 key={tpl.id}
                 id={tpl.id}
                 name={tpl.name}
+                isPrivate={tpl.access === "private"}
                 meta={[
                   tpl.payload.subtasks.map((x) => x.title).join(" · "),
                   tpl.payload.checklist.length > 0
@@ -96,19 +96,23 @@ export function TaskTemplateCatalogue({
             ),
           })),
           empty: (
-            <EmptyState
-              icon={ListChecks}
-              title={t("task_templates_empty")}
-              hint={t("task_templates_empty_hint")}
-              action={
-                <Button type="button" size="sm" asChild>
-                  <Link href="/templates/tasks/new">
-                    <Plus className="h-3.5 w-3.5" />
-                    {t("task_templates_new")}
-                  </Link>
-                </Button>
-              }
-            />
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <ListChecks className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-medium text-foreground">
+                {t("task_templates_empty")}
+              </p>
+              <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+                {t("task_templates_empty_hint")}
+              </p>
+              <Button type="button" size="sm" asChild>
+                <Link href="/templates/tasks/new">
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("task_templates_new")}
+                </Link>
+              </Button>
+            </div>
           ),
         },
       ]}

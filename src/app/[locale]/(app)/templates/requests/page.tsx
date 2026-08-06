@@ -133,20 +133,24 @@ export default async function RequestTemplatesPage({
             title: t("section_firm"),
             cards: yoursCards,
             empty: (
-              <EmptyState
-                icon={FilePlus2}
-                title={t("firm_empty")}
-                hint={t("templates_new_hint")}
-                action={
-                  <form action={createBlankTemplateAction}>
-                    <input type="hidden" name="__app_locale" value={locale} />
-                    <Button type="submit" size="sm">
-                      <Plus className="h-3.5 w-3.5" />
-                      {t("templates_new")}
-                    </Button>
-                  </form>
-                }
-              />
+              <EmptyState>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <FilePlus2 className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-medium text-foreground">
+                  {t("firm_empty")}
+                </p>
+                <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+                  {t("templates_new_hint")}
+                </p>
+                <form action={createBlankTemplateAction}>
+                  <input type="hidden" name="__app_locale" value={locale} />
+                  <Button type="submit" size="sm">
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("templates_new")}
+                  </Button>
+                </form>
+              </EmptyState>
             ),
           },
           { key: "builtin", title: t("section_builtin"), cards: builtInCards },

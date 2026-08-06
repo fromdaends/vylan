@@ -29,7 +29,6 @@ import { logoutAction } from "@/app/actions/auth";
 import { isNavItemActive, isPanelItemActive } from "@/lib/navigation/active-nav";
 import {
   RailFlyout,
-  RailPopover,
   type FlyoutAction,
   type FlyoutItem,
 } from "@/components/app/rail-flyout";
@@ -85,23 +84,12 @@ export function IconRail({
   footerItem,
   navLabel,
   labels,
-  panelStyle = "popover",
   userDisplayName,
   userEmail,
   userAvatarUrl,
   brandColor,
 }: {
   items: RailItem[];
-  /**
-   * How a section's menu opens.
-   *
-   * "popover" — a small box anchored to the tab, the size of its own contents.
-   *   The default, and the design handoff's shape.
-   * "panel" — the full-height second sidebar that pushes the page across.
-   *   Kept wired for rollback rather than deleted, so switching back is a prop
-   *   rather than a revert. See the note at the top of rail-flyout.tsx.
-   */
-  panelStyle?: "popover" | "panel";
   /**
    * What the + button opens. Absent → + stays a plain link to its href.
    *
@@ -148,9 +136,6 @@ export function IconRail({
   // follows this rather than the click, so a mouse user never picks up a
   // highlight on a row they only walked past.
   const [openedViaKeyboard, setOpenedViaKeyboard] = useState(false);
-  // Viewport Y of the trigger, read at click time. Only the popover uses it —
-  // the panel is full-height and has nothing to line up with.
-  const [anchorTop, setAnchorTop] = useState(0);
 
   // Narrowed once here so the render below can read item.panel without a
   // non-null assertion on every line.
@@ -175,9 +160,7 @@ export function IconRail({
   // panel is open; nothing else has to agree with it.
   useEffect(() => {
     const root = document.documentElement;
-    // A POPOVER pushes nothing — it floats over the page, so the content column
-    // must stay where it is. Only the panel earns the offset.
-    if (panelStyle !== "panel" || !panel?.panel) {
+    if (!panel?.panel) {
       root.style.removeProperty("--rail-flyout-offset");
       return;
     }
@@ -193,7 +176,7 @@ export function IconRail({
     return () => {
       root.style.removeProperty("--rail-flyout-offset");
     };
-  }, [panel, panelStyle]);
+  }, [panel]);
   // Logout submits through this ref: a submit button nested in a Radix
   // DropdownMenuItem has its click swallowed by the menu's selection handling,
   // so requestSubmit() from onSelect is what actually posts (carried over from
@@ -241,7 +224,6 @@ export function IconRail({
           type="button"
           onClick={(e) => {
             panelTriggerRef.current = e.currentTarget;
-            setAnchorTop(e.currentTarget.getBoundingClientRect().top);
             // detail === 0 means Enter/Space rather than a pointer — the same
             // modality test the section panels use, so a mouse user never picks
             // up a focus ring on a row they only walked past.
@@ -306,7 +288,6 @@ export function IconRail({
               item.panel
                 ? (el, viaKeyboard) => {
                     panelTriggerRef.current = el;
-                    setAnchorTop(el.getBoundingClientRect().top);
                     setOpenedViaKeyboard(viaKeyboard);
                     // Clicking the section you are already inside CLOSES it.
                     // Without this the only way out is the X, and a control
@@ -329,46 +310,7 @@ export function IconRail({
           transition from, so the very first open of a session would still snap
           into place — the bug this is fixing, surviving in the one case nobody
           would think to re-test. */}
-      {/* POPOVER MODE renders only the open one — it is a menu, and a menu that
-          is not open has nothing to animate FROM. (That reasoning is the
-          opposite of the panel's below, and both are right: the panel slides
-          from a previous frame, the popover expands from a point.) */}
-      {panelStyle === "popover" &&
-        panelItems
-          .filter((item) => panel?.href === item.href)
-          .map((item) => (
-            <RailPopover
-              key={item.href}
-              open
-              title={item.panel.title}
-              // Only the Create popover gets a kicker: it is the one whose rows
-              // are verbs rather than places, so it says what they all do once
-              // at the top instead of starting every row with "New".
-              kicker={
-                item.href === CREATE_PANEL_KEY ? item.panel.title : undefined
-              }
-              items={item.panel.items}
-              actions={item.panel.actions}
-              activeHref={
-                (item.panel.actions ?? []).find((a) =>
-                  isPanelItemActive(pathname, a.href),
-                )?.href ??
-                item.panel.items.find((i) =>
-                  isPanelItemActive(pathname, i.href),
-                )?.href ??
-                null
-              }
-              anchorTop={anchorTop}
-              autoFocus={openedViaKeyboard}
-              onClose={(opts) => {
-                setPanel(null);
-                if (opts?.restoreFocus) panelTriggerRef.current?.focus();
-              }}
-            />
-          ))}
-
-      {panelStyle === "panel" &&
-        panelItems.map((item) => (
+      {panelItems.map((item) => (
         <RailFlyout
           key={item.href}
           open={panel?.href === item.href}

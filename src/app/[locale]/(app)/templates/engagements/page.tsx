@@ -23,16 +23,10 @@ import {
  */
 export default async function EngagementTemplatesPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  /** `?saved=<id>` is set by the wizard on its way out — see the flash in
-   *  template-row.tsx. Read on the SERVER so the row arrives already marked
-   *  rather than lighting up a frame after the page settles. */
-  searchParams: Promise<{ saved?: string }>;
 }) {
   const { locale: rawLocale } = await params;
-  const { saved: savedId } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -116,24 +110,29 @@ export default async function EngagementTemplatesPage({
                   name={tmpl.name}
                   type={tmpl.payload.type ?? "custom"}
                   meta={metaFor(tmpl)}
-                  fresh={tmpl.id === savedId}
+                  isDraft={tmpl.payload.isDraft}
+                  isPrivate={tmpl.access === "private"}
                 />
               ),
             })),
             empty: (
-              <EmptyState
-                icon={FilePlus2}
-                title={t("engagement_templates_empty")}
-                hint={t("engagement_templates_empty_hint")}
-                action={
-                  <Link href="/templates/engagements/new">
-                    <Button size="sm">
-                      <Plus className="h-3.5 w-3.5" />
-                      {t("engagement_templates_new")}
-                    </Button>
-                  </Link>
-                }
-              />
+              <EmptyState>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <FilePlus2 className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-medium text-foreground">
+                  {t("engagement_templates_empty")}
+                </p>
+                <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
+                  {t("engagement_templates_empty_hint")}
+                </p>
+                <Link href="/templates/engagements/new">
+                  <Button size="sm">
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("engagement_templates_new")}
+                  </Button>
+                </Link>
+              </EmptyState>
             ),
           },
         ]}

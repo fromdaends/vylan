@@ -20,14 +20,15 @@ export function EngagementTemplateRow({
   name,
   type,
   meta,
-  fresh = false,
+  isDraft,
+  isPrivate,
 }: {
   id: string;
   name: string;
   type: string;
   meta: string;
-  /** Just saved from the wizard — flashes once. */
-  fresh?: boolean;
+  isDraft: boolean;
+  isPrivate: boolean;
 }) {
   const t = useTranslations("Templates");
   const router = useRouter();
@@ -41,12 +42,22 @@ export function EngagementTemplateRow({
       name={name}
       meta={meta}
       href={href}
-      fresh={fresh}
-      // NO access badge. The pills above the list already separate Team,
-      // Private and Drafts, so a "PRIVATE" chip on every row of the Private tab
-      // said the same word as many times as there were rows. Colour and chips
-      // are for EXCEPTIONS, and inside its own tab a private template is not
-      // one. (`isDraft` / `isPrivate` still decide which tab a row lands in.)
+      badges={
+        <>
+          {/* A DRAFT is called out first: reaching for a half-written template
+              is the mistake this badge exists to prevent. */}
+          {isDraft && (
+            <span className="shrink-0 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-destructive">
+              {t("draft_badge")}
+            </span>
+          )}
+          {isPrivate && (
+            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
+              {t("access_private")}
+            </span>
+          )}
+        </>
+      }
       actions={[
         { label: t("edit"), onSelect: () => router.push(href) },
         {
