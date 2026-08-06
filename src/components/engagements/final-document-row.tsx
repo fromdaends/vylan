@@ -80,7 +80,10 @@ export function FinalDocumentRow({
 // provider's trash — explicit, per delete, default OFF (founder decision
 // 2026-07-27). Replaces the old bare submit button, which deleted on a single
 // misclick with no confirm at all.
-function FinalDocumentDelete({
+// Exported for the floating task panel (design 2a): its deliverable rows are
+// drawn to the panel's spec but share THIS delete flow — confirmation plus the
+// filed-copy offer — rather than growing a second one.
+export function FinalDocumentDelete({
   id,
   engagementId,
   filename,
