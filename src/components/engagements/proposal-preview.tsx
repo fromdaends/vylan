@@ -27,7 +27,7 @@
 // builder has its own idea of how many screens it takes to fill in.
 
 import { useTranslations } from "next-intl";
-import { ChevronRight, FileText, PlayCircle, PenLine } from "lucide-react";
+import { ChevronRight, FileText, PlayCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/format";
 import { computeBillingTotals } from "@/lib/engagements/billing-totals";
@@ -129,7 +129,7 @@ export type ProposalPreviewData = {
 };
 
 /** The client's four steps through the document. */
-const STEPS = ["introduction", "services", "terms", "sign"] as const;
+const STEPS = ["introduction", "services", "terms", "acceptance"] as const;
 type BilledKey =
   | "preview_billed_once"
   | "preview_billed_weekly"
@@ -141,7 +141,7 @@ type StepKey =
   | "preview_step_introduction"
   | "preview_step_services"
   | "preview_step_terms"
-  | "preview_step_sign";
+  | "preview_step_acceptance";
 
 export function ProposalPreview({
   data,
@@ -689,12 +689,3 @@ function Empty({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-function SignerLine({ label }: { label: string }) {
-  return (
-    <p className="flex items-center gap-1.5 text-muted-foreground">
-      <PenLine className="size-3.5 shrink-0" aria-hidden />
-      <span className="truncate">{label}</span>
-      <span aria-hidden className="ml-1 h-px flex-1 bg-border" />
-    </p>
-  );
-}

@@ -81,12 +81,18 @@ type StageEngagementRow = {
   // the middle select tier below — which reads as "no workflow": legacy path.
   workflow?: unknown;
   stage_gates?: unknown;
+  // Acceptance (1640): when a PROPOSAL engagement's automation may begin
+  // (founder ruling — "when client accepts").
+  accepted_at?: string | null;
 };
 
 // Three select tiers, widest first, falling through on missing-schema errors —
 // the same shape quickbooks-suggestions uses across its migration windows.
+// accepted_at rides the wide tier (1640 predates 1560 on every environment
+// that matters; a database with workflows but no acceptance columns falls to
+// the FULL tier and runs legacy, which is the safe direction).
 const WORKFLOW_COLUMNS =
-  "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at, workflow, stage_gates";
+  "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at, workflow, stage_gates, accepted_at";
 const FULL_COLUMNS =
   "id, firm_id, client_id, status, completed_at, invoice_auto_mode, invoice_delay_days, invoice_locks_deliverables, stage, stage_history, preparation_started_at";
 // Pre-0690 fallback: everything except the stage columns.
@@ -261,7 +267,7 @@ async function loadWorkflowFacts(
     invoice: { status: string } | null;
   },
 ): Promise<WorkflowFacts> {
-  const [tasksRes, ledgerRes] = await Promise.all([
+  const [tasksRes, ledgerRes, itemsExistRes] = await Promise.all([
     sb
       .from("engagement_tasks")
       .select("workflow_stage, status")
@@ -272,6 +278,15 @@ async function loadWorkflowFacts(
       .select("stage")
       .eq("engagement_id", row.id)
       .eq("action", "materialize_tasks"),
+    // Does this engagement SELL something? A priced line makes it a proposal,
+    // and a proposal's automation waits for the client's yes (below). One row
+    // is all the answer needs; pre-1450 the table is absent and the read of
+    // "not a proposal" is the truth for that environment.
+    sb
+      .from("engagement_items")
+      .select("id")
+      .eq("engagement_id", row.id)
+      .limit(1),
   ]);
 
   const stageTasksOpen: Partial<Record<EngagementStage, number>> = {};
@@ -320,6 +335,14 @@ async function loadWorkflowFacts(
 
   return {
     ...base,
+    // FOUNDER RULING (workflows-accept-timing): a PROPOSAL's automation
+    // starts "when client accepts". An engagement with priced lines and no
+    // acceptance yet has no workflow position at all — the letter, the
+    // assignments, the tasks all wait for the yes. A plain document request
+    // (nothing sold) starts at send, exactly as before: there is nothing for
+    // the client to accept, and holding it would mean it never starts.
+    awaitingAcceptance:
+      ((itemsExistRes.data ?? []).length > 0) && row.accepted_at == null,
     gates: parseStageGates(row.stage_gates),
     signatureEverSent: sentRows.some((s) => !NOT_SENT.has(s.status)),
     completedSignatureCount: raws.sigs.filter((s) => s.status === "completed")

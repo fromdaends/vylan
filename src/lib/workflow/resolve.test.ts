@@ -39,6 +39,7 @@ function facts(overrides: Partial<WorkflowFacts> = {}): WorkflowFacts {
     hasFinalDocuments: false,
     finalDocumentsReleased: false,
     preparationStarted: false,
+    awaitingAcceptance: false,
     gates: {},
     signatureEverSent: false,
     completedSignatureCount: 0,
@@ -212,6 +213,45 @@ describe("the GST walk (manual trigger) and onboarding (triple skip)", () => {
     expect(
       resolveWorkflowStage(wf, facts({ ...APPROVED, gates: { in_review: GATE } })),
     ).toBe("completed");
+  });
+});
+
+describe("a proposal's automation waits for the client's yes", () => {
+  // Founder ruling (workflows-accept-timing): "when client accepts". An
+  // engagement that SELLS something has no workflow position until
+  // accepted_at lands — nothing fires, nothing advances, nothing prompts.
+  const wf = snap(returnTypeWorkflow());
+
+  it("has no position while the proposal sits with the client", () => {
+    expect(
+      resolveWorkflowStage(wf, facts({ awaitingAcceptance: true })),
+    ).toBeNull();
+    // Even a proposal whose documents somehow all verified stays parked —
+    // acceptance outranks every other fact.
+    expect(
+      resolveWorkflowStage(
+        wf,
+        facts({ ...APPROVED, awaitingAcceptance: true }),
+      ),
+    ).toBeNull();
+  });
+
+  it("prompts nobody for approvals while waiting", () => {
+    expect(
+      pendingConfirmGate(wf, facts({ ...APPROVED, awaitingAcceptance: true })),
+    ).toBeNull();
+  });
+
+  it("starts at collecting the moment acceptance lands", () => {
+    expect(
+      resolveWorkflowStage(wf, facts({ awaitingAcceptance: false })),
+    ).toBe("collecting");
+  });
+
+  it("plain document requests (nothing sold) still start at send", () => {
+    // awaitingAcceptance is false when there are no priced lines — the facts
+    // loader owns that rule; the resolver just honors the flag.
+    expect(resolveWorkflowStage(wf, facts())).toBe("collecting");
   });
 });
 

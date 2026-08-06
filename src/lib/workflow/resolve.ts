@@ -28,6 +28,12 @@ import {
 
 // Everything the walk needs beyond the legacy StageFacts.
 export type WorkflowFacts = StageFacts & {
+  // A proposal (priced lines) the client has not yet accepted. Founder
+  // ruling: the automation starts "when client accepts", so until then the
+  // engagement has NO workflow position — no letter, no assignment, no
+  // tasks. False for plain document requests (nothing to accept) and the
+  // moment accepted_at lands.
+  awaitingAcceptance: boolean;
   // Confirm-gate latches from engagements.stage_gates.
   gates: StageGates;
   // Any signature request that actually went OUT (sent / viewed / completed).
@@ -112,6 +118,12 @@ export function resolveWorkflowStage(
   f: WorkflowFacts,
 ): EngagementStage | null {
   if (f.status === "draft" || f.status === "cancelled") return null;
+  // The proposal is with the client. No position, no effects — the founder's
+  // ruling puts the whole automation behind their yes. (Effects fire on the
+  // null → collecting transition the acceptance sync produces, and the
+  // exactly-once ledger keeps anything that fired before this rule shipped
+  // from firing twice.)
+  if (f.awaitingAcceptance) return null;
 
   const order = workflowStageOrder(wf);
   let current: EngagementStage = order[0];

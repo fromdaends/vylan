@@ -30,7 +30,6 @@ import {
   Upload,
   UserPlus,
   AlertTriangle,
-  FileSignature,
   ScrollText,
 } from "lucide-react";
 import { ProposalPreview } from "@/components/engagements/proposal-preview";
@@ -205,7 +204,7 @@ const PERIOD_OPTIONS: (number | null)[] = [null, 1, 3, 6, 12, 24];
 
 const PREVIEW_STEP_FOR: Record<
   string,
-  "introduction" | "services" | "terms" | "sign"
+  "introduction" | "services" | "terms" | "acceptance"
 > = {
   // Who it is for and what it is called — the top of the client's document.
   details: "introduction",
@@ -217,7 +216,7 @@ const PREVIEW_STEP_FOR: Record<
   // Chasing is invisible to the client, so it highlights nothing new — the
   // introduction is the honest neutral, not a section reminders belong to.
   reminders: "introduction",
-  proposal: "sign",
+  proposal: "acceptance",
 };
 
 const WIZARD_STEPS = [
@@ -371,7 +370,7 @@ export function EngagementBuilder({
   const tc = useTranslations("Common");
   // Scope names live in the Clients namespace, shared with the profile card.
   const tClients = useTranslations("Clients");
-  // The Proposal step's labels — period, terms, who signs, deposit — already
+  // The Proposal step's labels — period, terms, deposit — already
   // exist in the Templates namespace, written for the template builder. They
   // are read from there rather than copied here: one label per concept, so the
   // engagement and the template that produced it can never word it differently.
@@ -610,8 +609,6 @@ export function EngagementBuilder({
   );
   // Canopy's Payment settings: the client saves a card on acceptance so a
   // recurring invoice can be charged without asking again.
-  /** Who settles the deposit — the client by default, or one of the named
-   *  signer roles. Canopy asks this; we were not asking at all. */
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(
     tpl?.requirePaymentMethod ?? false,
   );
@@ -1335,8 +1332,8 @@ export function EngagementBuilder({
             // engagement as a nameless entry.
             // ── THE PROPOSAL, FROZEN (1660) ──────────────────────────────
             // Built from the engagement template this started from, because
-            // that is the only place terms, the welcome message and the
-            // signature block exist. Sent as a SNAPSHOT so a client who agrees
+            // that is the only place terms and the welcome message exist.
+            // Sent as a SNAPSHOT so a client who agrees
             // in February keeps holding what they agreed to after the firm
             // edits its standard terms in March.
             //
