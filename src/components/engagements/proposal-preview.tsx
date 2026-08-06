@@ -114,9 +114,17 @@ export type ProposalPreviewData = {
   terms?: string | null;
   /** Terms as labelled sections. Takes precedence when present. */
   termsSections?: { heading: string; body: string }[];
-  clientSigns: boolean;
-  additionalSignerLabels: string[];
-  firmCountersigns: boolean;
+  /**
+   * RETIRED (the founder: "just get rid of signing in general for the
+   * contract"). Nothing collects or renders these any more.
+   *
+   * Kept on the type, and still read by the snapshot reader, because proposals
+   * frozen before this carry them — dropping the fields would make those rows
+   * fail to parse. Optional so nothing new has to supply them.
+   */
+  clientSigns?: boolean;
+  additionalSignerLabels?: string[];
+  firmCountersigns?: boolean;
   depositCents: number | null;
 };
 
@@ -556,6 +564,19 @@ export function ProposalPreview({
             </p>
           )}
 
+          {/* ── NO SIGNATURE RULES ────────────────────────────────────────
+              The founder: "just get rid of signing in general for the contract.
+              It'll be simpler... make more sense probably."
+
+              Right, and it is the honest shape. Nobody signs anything here:
+              accepting and paying IS the act (Ignition's model). Two ruled
+              lines under two names implied a ceremony that never happens, which
+              is the same thing a typed-name box would have been — a claim
+              wearing a signature's clothes.
+
+              So the block states WHO the parties are and nothing more. The
+              acceptance itself is recorded with its timestamp on the
+              engagement, which is the real evidence. */}
           <div
             className={cn(
               "grid gap-8 border-t border-foreground/15",
@@ -569,7 +590,6 @@ export function ProposalPreview({
               <p className={cn("font-medium", isDocument ? "mt-2 text-[15px]" : "text-[11px]")}>
                 {data.clientName}
               </p>
-              <div className="mt-2 border-t border-foreground/25" />
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -578,7 +598,6 @@ export function ProposalPreview({
               <p className={cn("font-medium", isDocument ? "mt-2 text-[15px]" : "text-[11px]")}>
                 {data.firmName ?? ""}
               </p>
-              <div className="mt-2 border-t border-foreground/25" />
             </div>
           </div>
         </Section>

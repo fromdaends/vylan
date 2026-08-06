@@ -91,7 +91,6 @@ const TABS = [
   "introduction",
   "services",
   "terms",
-  "signatures",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -102,15 +101,13 @@ type TabKey =
   | "tab_basics"
   | "tab_introduction"
   | "tab_services"
-  | "tab_terms"
-  | "tab_signatures";
+  | "tab_terms";
 
 type StepDescKey =
   | "step_desc_basics"
   | "step_desc_introduction"
   | "step_desc_services"
-  | "step_desc_terms"
-  | "step_desc_signatures";
+  | "step_desc_terms";
 
 // Which of the CLIENT's four steps each firm-facing step is about. Written down
 // rather than assumed, because the two lists are allowed to diverge later —
@@ -123,7 +120,6 @@ const TAB_TO_STEP: Record<Tab, "introduction" | "services" | "terms" | "sign"> =
     introduction: "introduction",
     services: "services",
     terms: "terms",
-    signatures: "sign",
   };
 
 // Canopy's period dropdown. Null is their "Ongoing", the honest default for
@@ -236,17 +232,7 @@ export function EngagementTemplateBuilder({
       : [];
   });
 
-  const [clientSigns, setClientSigns] = useState(initial?.payload.clientSigns ?? true);
-  const [additionalSignerLabels, setAdditionalSignerLabels] = useState<
-    string[]
-  >(initial?.payload.additionalSignerLabels ?? []);
-  const [firmCountersigns, setFirmCountersigns] = useState(initial?.payload.firmCountersigns ?? false);
   const [depositRequired, setDepositRequired] = useState(initial?.payload.depositCents != null);
-  /** Who settles the deposit — the client, or one of the named signer ROLES.
-   *  A template never names a person; the person is chosen at creation. */
-  const [depositPayer, setDepositPayer] = useState(
-    initial?.payload.depositPayer ?? "",
-  );
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(
     initial?.payload.requirePaymentMethod ?? false,
   );
@@ -368,14 +354,8 @@ export function EngagementTemplateBuilder({
           // writes so nothing has two places to disagree.
           termsText: "",
           termsSections,
-          clientSigns,
-          additionalSignerLabels: additionalSignerLabels
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0),
-          firmCountersigns,
           depositCents,
           requirePaymentMethod,
-          depositPayer,
           // The blocks are the authoring shape; `items` stays the flat source
           // of truth every other surface (totals, invoices) already reads.
           items: flattenBlocks(blocks),
@@ -506,11 +486,6 @@ export function EngagementTemplateBuilder({
                     : undefined,
               })),
               termsSections: termsEnabled ? termsSections : [],
-              clientSigns,
-              additionalSignerLabels: additionalSignerLabels.filter((x) =>
-                x.trim(),
-              ),
-              firmCountersigns,
               depositCents,
               priceVisibility: visibility,
             }}
@@ -897,35 +872,7 @@ export function EngagementTemplateBuilder({
                   </p>
                 </div>
 
-                {/* Canopy's "Signer responsible for making payment". A template
-                    names the ROLE, never a person — the same rule its signer
-                    slots follow. */}
-                {depositCents != null && (
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="tpl-payer"
-                      className="block text-sm font-medium"
-                    >
-                      {tEng("signer_pays_label")}
-                    </label>
-                    <select
-                      id="tpl-payer"
-                      value={depositPayer}
-                      onChange={(e) => setDepositPayer(e.target.value)}
-                      className="h-9 w-full max-w-[16rem] rounded-md border border-input bg-background px-2 text-sm"
-                    >
-                      <option value="">{tEng("signer_pays_client")}</option>
-                      {additionalSignerLabels
-                        .map((x) => x.trim())
-                        .filter(Boolean)
-                        .map((role) => (
-                          <option key={role} value={role}>
-                            {role}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
+
               </Fieldset>
             )}
 
@@ -1007,69 +954,7 @@ export function EngagementTemplateBuilder({
               </Fieldset>
             )}
 
-            {tab === "signatures" && (
-              <Fieldset title={t("who_signs")}>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  {t("who_signs_hint")}
-                </p>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={clientSigns}
-                    onChange={(e) => setClientSigns(e.target.checked)}
-                  />
-                  {t("signer_client")}
-                </label>
 
-                {additionalSignerLabels.map((label, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input
-                      value={label}
-                      onChange={(e) =>
-                        setAdditionalSignerLabels((prev) =>
-                          prev.map((s, i) => (i === idx ? e.target.value : s)),
-                        )
-                      }
-                      placeholder={t("signer_slot_placeholder")}
-                      aria-label={t("signer_slot_placeholder")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAdditionalSignerLabels((prev) =>
-                          prev.filter((_, i) => i !== idx),
-                        )
-                      }
-                      aria-label={t("remove")}
-                      className="text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    setAdditionalSignerLabels((prev) => [...prev, ""])
-                  }
-                >
-                  <Plus className="size-3.5" />
-                  {t("add_signer")}
-                </Button>
-
-                <label className="flex cursor-pointer items-center gap-2 border-t border-border/60 pt-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={firmCountersigns}
-                    onChange={(e) => setFirmCountersigns(e.target.checked)}
-                  />
-                  {t("signer_firm")}
-                </label>
-
-              </Fieldset>
-            )}
     </TemplateBuilderShell>
   );
 }
