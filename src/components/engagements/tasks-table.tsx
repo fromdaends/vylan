@@ -332,10 +332,20 @@ export function TasksTable({
   // newest to appear ontop always unless changed by filters and stuff." A task
   // you just made must be the one you can see — landing it in the middle of a
   // hundred rows sorted by due date is indistinguishable from it not saving.
-  const [sort, setSort] = useState<SortState>({
-    key: "created",
-    desc: true,
-  });
+  //
+  // ⚠️ EXCEPT ON CARDS, WHERE THE ORDER IS THE POINT. Drag-to-reorder writes
+  // order_index and the reader already returns rows in it — but this default
+  // then re-sorted them by creation date, so a drop persisted an order NOTHING
+  // read. The database was right and the screen never moved, which is exactly
+  // what the founder saw: "dragging doesnt work."
+  //
+  // An empty key means "leave the array as it arrived", which on an engagement
+  // is the manual order. The column menus can still sort on top; doing so just
+  // stops honouring the arrangement, which is the honest behaviour — you asked
+  // for by-due-date and that is what you get.
+  const [sort, setSort] = useState<SortState>(
+    layout === "cards" ? { key: "", desc: false } : { key: "created", desc: true },
+  );
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
@@ -499,6 +509,9 @@ export function TasksTable({
           )),
     );
     const key = sort.key;
+    // No key = the order the server sent, which is order_index. Sorting here
+    // would silently discard a manual arrangement.
+    if (!key) return filtered;
     const value = (r: TaskRow): string | number =>
       key === "created"
         ? // Missing timestamps sort OLDEST, so a row from before this column
@@ -1518,7 +1531,6 @@ function Row({
               taskStatus={task.status}
               assignees={assignees}
               subtasks={task.subtasks}
-              commentCount={commentCount}
               canDrag={canEdit && Boolean(drag)}
               dragging={drag?.isDragging}
               dragOver={drag?.isOver}
