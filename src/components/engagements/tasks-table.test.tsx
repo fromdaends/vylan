@@ -656,6 +656,21 @@ describe("TasksTable — cards, on an engagement", () => {
     ).toBe(cards().length);
   });
 
+  it("keeps the order the server sent instead of re-sorting by date", () => {
+    // ⚠️ THE BUG THAT MADE DRAGGING LOOK BROKEN. The drop wrote order_index
+    // correctly — the database really did reorder — but the grid then applied
+    // the table's newest-first default on top, so the arrangement was
+    // persisted and immediately discarded. The screen never moved, and the
+    // founder reported "dragging doesnt work" against code whose write was
+    // working perfectly.
+    //
+    // listEngagementTasks already returns rows in order_index, so the cards'
+    // job is simply not to touch that.
+    renderTable({ layout: "cards", variant: "job" });
+    const titles = cards().map((c) => c.querySelector("p")?.textContent?.trim());
+    expect(titles).toEqual(TASKS.map((t) => t.title));
+  });
+
   it("sends the WHOLE new order on a drop, not just the moved task", () => {
     // The server renumbers from the array. Sending "task X moved to slot 3"
     // would depend on order_index already being a dense sequence, which it has

@@ -41,7 +41,7 @@ import { type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { GripVertical, MessageSquare } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import { formatDue, isOverdue } from "@/lib/tasks/due";
 import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
 
@@ -56,7 +56,6 @@ export function TaskCard({
   taskStatus,
   assignees,
   subtasks,
-  commentCount,
   dragging,
   dragOver,
   canDrag,
@@ -76,7 +75,6 @@ export function TaskCard({
   taskStatus: string;
   assignees: { id: string; name: string }[];
   subtasks?: { status: string }[];
-  commentCount: number;
   dragging?: boolean;
   dragOver?: boolean;
   canDrag?: boolean;
@@ -195,12 +193,9 @@ export function TaskCard({
           {dueDate ? formatDue(dueDate) : "—"}
         </span>
         <span className="flex-1" />
-        {commentCount > 0 && (
-          <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
-            <MessageSquare className="size-3" aria-hidden />
-            {commentCount}
-          </span>
-        )}
+        {/* The count comes from the BUBBLE, which is also the thing you click
+            to open the thread. An extra read-only count beside it rendered the
+            number twice — "1  1" — on any task that had a comment. */}
         {children}
         {assignees.length > 0 ? (
           <span className="flex shrink-0 -space-x-1.5">
