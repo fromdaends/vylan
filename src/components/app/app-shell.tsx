@@ -15,6 +15,7 @@ import {
   BookOpen,
   BookOpenCheck,
   Building2,
+  ChartSpline,
   FileText,
   CircleCheckBig,
   FolderOpen,
@@ -57,6 +58,7 @@ type Labels = {
   // The firm's invoices to ITS clients. Not the Vylan subscription page, which
   // is in Settings.
   billing: string;
+  insights: string;
   bookkeeping: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
@@ -106,6 +108,7 @@ export function AppShell({
   isOwner = false,
   quickbooksConnected = false,
   xeroConnected = false,
+  showInsights = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -125,6 +128,11 @@ export function AppShell({
   // it appears once the firm has ANY bookkeeping connection (QuickBooks OR Xero),
   // since the drafts queue is a shared surface.
   xeroConnected?: boolean;
+  // Drives the Insights rail item (1750 build). Decided by the LAYOUT as
+  // can(user, "insights.view") && the time_insights flag — a CAPABILITY, not
+  // the owner rank (founder: "roles only"), which is why this is its own prop
+  // rather than reusing isOwner. A tab someone cannot open must not render.
+  showInsights?: boolean;
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
@@ -296,6 +304,14 @@ export function AppShell({
     // at /settings/billing — it moved there when this shipped, because two
     // things called Billing in one sidebar is how confusion starts.
     { href: "/billing", label: labels.billing, icon: Receipt },
+    // INSIGHTS (1750) — revenue, hours, estimated margins. Below Billing:
+    // money-in first, then what the money says about the work. Present only
+    // for insights.view HOLDERS (a role permission, never the owner rank) with
+    // the time_insights flag on; everyone else has no tab to wonder about,
+    // and the route notFounds them if they type the URL anyway.
+    ...(showInsights
+      ? [{ href: "/insights", label: labels.insights, icon: ChartSpline }]
+      : []),
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
     // hiding it would be a regression for a connected firm. Absent until a

@@ -61,6 +61,7 @@ import { usePrefersReducedMotion } from "@/lib/motion/use-reduced-motion";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { KpiAlertBell } from "@/components/dashboard/kpi-alert-dialog";
 import { ChartCard, KpiCard, seriesColor } from "@/components/dashboard/dashboard-cards";
+import { HoursByMemberChart } from "@/components/insights/hours-by-member-chart";
 import { taskKindLabelKey } from "@/lib/tasks/kinds";
 import type { AlertMetric } from "@/lib/dashboard/alert-eval";
 import {
@@ -90,7 +91,7 @@ export type DashboardEngagement = {
   dueDate: string | null;
 };
 
-type Tab = "tasks" | "engagements";
+type Tab = "tasks" | "engagements" | "capacity";
 
 // ── THE CHART ANIMATION, AND WHY IT CAME BACK SHORTER ─────────────────────
 //
@@ -120,6 +121,7 @@ export function WorkDashboard({
   statuses,
   today,
   alerts = [],
+  capacity = null,
 }: {
   tasks: MetricTask[];
   engagements: DashboardEngagement[];
@@ -128,6 +130,14 @@ export function WorkDashboard({
   alerts?: { id: string; name: string; surface: string; metric: string }[];
   /** Resolved in the FIRM's timezone by the page — never `new Date()` here. */
   today: string;
+  /**
+   * Canopy's third tab, finally real (this file's own header recorded the
+   * hole: "Vylan has no time tracking at all"). HOURS ONLY, drawn by the SAME
+   * HoursByMemberChart the owner-gated Insights Team tab renders — shared
+   * capacity is the founder's ruling, and one component is what keeps the two
+   * homes identical. Null = the time_insights flag is off; no tab exists.
+   */
+  capacity?: { name: string; minutes: number }[] | null;
 }) {
   const t = useTranslations("Dashboard");
   const router = useRouter();
@@ -250,12 +260,16 @@ export function WorkDashboard({
     ...p.byYear,
   }));
 
-  // Which card already carries a bell.
+  // Which card already carries a bell. The KPI strip renders only on the
+  // tasks/engagements tabs, so narrow the alert surface to those two — the
+  // capacity tab has no KPIs and no bells.
+  const alertSurface: "tasks" | "engagements" =
+    tab === "engagements" ? "engagements" : "tasks";
   const alertFor = (metric: string) =>
-    alerts.find((a) => a.surface === tab && a.metric === metric);
+    alerts.find((a) => a.surface === alertSurface && a.metric === metric);
   const bellFor = (metric: AlertMetric, label: string, value: number) => (
     <KpiAlertBell
-      surface={tab}
+      surface={alertSurface}
       metric={metric}
       metricLabel={label}
       currentValue={value}
@@ -280,9 +294,30 @@ export function WorkDashboard({
             label: t("dash_tab_engagements"),
             count: engagements.length,
           },
+          // Present only when the page passed hours — i.e. time tracking is
+          // on for the firm. Everyone in the firm sees it: hours are shared.
+          ...(capacity
+            ? [{ key: "capacity", label: t("dash_tab_capacity") }]
+            : []),
         ]}
       />
 
+      {tab === "capacity" && capacity ? (
+        <div className="grid gap-3 xl:grid-cols-2">
+          <ChartCard
+            title={t("dash_chart_capacity")}
+            exploreLabel={explore}
+            menuLabel={menu}
+            empty={capacity.length === 0 ? t("dash_empty_capacity") : undefined}
+          >
+            <HoursByMemberChart data={capacity} height={300} />
+          </ChartCard>
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            {t("dash_capacity_hint")}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* THE KPI WATCHLIST — Canopy's phrase for it, and their exact four. */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
@@ -521,6 +556,8 @@ export function WorkDashboard({
           </ResponsiveContainer>
         </ChartCard>
       </div>
+      </>
+      )}
     </div>
   );
 }

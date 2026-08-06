@@ -17,6 +17,7 @@ import { TrialBanner } from "@/components/app/demo-banner";
 import { TimerPill } from "@/components/time/timer-pill";
 import { getRunningEntry } from "@/lib/db/time-entries";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
+import { can } from "@/lib/auth/capabilities";
 import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
@@ -127,6 +128,9 @@ export default async function AppLayout({
       isOwner={dbUser.role === "owner"}
       quickbooksConnected={quickbooksHasAny}
       xeroConnected={xeroHasAny}
+      // The CAPABILITY, not the rank (founder: "roles only") — a senior
+      // manager granted insights.view through a role gets the tab.
+      showInsights={timeEnabled && can(dbUser, "insights.view")}
       topBar={
         // The strip exists when the banner fills it OR the time feature is on.
         // TimerPill mounts WHENEVER the feature is on — not only while a timer
@@ -181,6 +185,7 @@ export default async function AppLayout({
         // the same word, now pointing at the firm-level Billing section rather
         // than the Vylan subscription page it used to label.
         billing: t("nav_billing"),
+        insights: t("nav_insights"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
         engagementViews: {
