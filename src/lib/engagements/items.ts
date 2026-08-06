@@ -59,7 +59,40 @@ export type EngagementItem = {
   billingFrequency: BillingFrequency;
   /** Percentage (13 = 13%), or null to fall back to the firm's default. */
   taxPct: number | null;
+  /**
+   * WHEN this line bills, inherited from its billing block (1740).
+   *
+   * Its frequency says how OFTEN; this says when it STARTS or falls due — and
+   * without it "$4,000 due on acceptance" was a label with nothing behind it.
+   *
+   * NULL is the pre-1740 default and must stay meaningful: a one-time line
+   * bills when the firm's invoice settings say, and a recurring one starts at
+   * the engagement start. Every line written before this existed reads that way.
+   */
+  billingTiming?: BillingTiming | null;
+  /** Only read when billingTiming is 'custom_date'. ISO date. */
+  billingStartDate?: string | null;
 };
+
+/**
+ * When a line falls due. Mirrors billing-blocks.ts's BlockTiming exactly — the
+ * block chooses it and every line inside inherits it, the same way frequency
+ * already works.
+ */
+export const BILLING_TIMINGS = [
+  "on_acceptance",
+  "on_completion",
+  "engagement_start",
+  "custom_date",
+] as const;
+export type BillingTiming = (typeof BILLING_TIMINGS)[number];
+
+export function isBillingTiming(v: unknown): v is BillingTiming {
+  return (
+    typeof v === "string" &&
+    (BILLING_TIMINGS as readonly string[]).includes(v)
+  );
+}
 
 /** A draft row in the builder, before it has been saved and given an id. */
 export type EngagementItemDraft = Omit<EngagementItem, "id"> & { id?: string };

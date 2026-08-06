@@ -67,6 +67,14 @@ export type BillingBlock = {
   combineItems: boolean;
   /** A note shown to the client beside this block. */
   clientNote: string;
+  /**
+   * First charge date, only when timing is "custom_date" (1740).
+   *
+   * The picker offered "from a date you pick" with nowhere to pick one, so it
+   * silently meant "from the engagement start". ISO date; null falls back to
+   * exactly that old behaviour.
+   */
+  startDate?: string | null;
   items: EngagementItemDraft[];
 };
 
@@ -96,6 +104,7 @@ export function emptyBlock(billingType: BillingType = "one_time"): BillingBlock 
     frequency: "monthly",
     combineItems: false,
     clientNote: "",
+    startDate: null,
     items: [],
   };
 }
@@ -213,7 +222,25 @@ export function flattenBlocks(
   for (const block of meaningfulBlocks(blocks)) {
     const billingFrequency = blockItemFrequency(block);
     for (const item of block.items) {
-      out.push({ ...item, billingFrequency });
+      out.push({
+        ...item,
+        billingFrequency,
+        // ── THE TIMING RIDES ALONG TOO (1740) ──────────────────────────────
+        //
+        // This used to carry ONLY the frequency, so a block saying "$4,000, one
+        // time, ON ACCEPTANCE" was flattened into a line that knew it was a
+        // one-off and had no idea when it fell due. The block's own `timing`
+        // was dropped here and the frozen proposal kept no copy, which is why
+        // "on acceptance" charged nothing and the client's contract never said
+        // when the money was owed.
+        //
+        // Inherited exactly as frequency is, so a block stays losslessly
+        // reconstructable from its lines and nothing downstream learns a new
+        // concept.
+        billingTiming: block.timing,
+        billingStartDate:
+          block.timing === "custom_date" ? (block.startDate ?? null) : null,
+      });
     }
   }
   return out;
