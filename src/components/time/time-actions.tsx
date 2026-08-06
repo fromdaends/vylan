@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { parseDurationToMinutes } from "@/lib/time/duration";
+import { localDay } from "@/lib/time/dates";
 import {
   startTimerAction,
   logManualEntryAction,
@@ -102,7 +103,8 @@ export function LogTimeButton({
   const uid = useId();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
-  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  // localDay, NEVER toISOString: UTC's date is tomorrow every Quebec evening.
+  const [day, setDay] = useState(() => localDay());
   const [duration, setDuration] = useState("");
   const [durationBad, setDurationBad] = useState(false);
   const [engagementId, setEngagementId] = useState<string>(

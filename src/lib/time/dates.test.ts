@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { noonInTimeZone } from "./dates";
+import { localDay, noonInTimeZone } from "./dates";
 import { dateInTimeZone } from "@/lib/tasks/dates";
+
+describe("localDay", () => {
+  it("uses the browser's own calendar, not UTC's", () => {
+    // 23:30 local on the 6th. toISOString would say the 7th anywhere west of
+    // Greenwich; localDay must say the 6th.
+    const evening = new Date(2026, 7, 6, 23, 30);
+    expect(localDay(evening)).toBe("2026-08-06");
+  });
+
+  it("zero-pads month and day", () => {
+    expect(localDay(new Date(2026, 0, 5, 9, 0))).toBe("2026-01-05");
+  });
+});
 
 describe("noonInTimeZone", () => {
   it("keeps a Quebec entry on the chosen day in BOTH calendars", () => {

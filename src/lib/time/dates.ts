@@ -10,6 +10,15 @@
 // entry lands inside the chosen day in the firm's timezone AND in UTC for
 // every offset this side of the antimeridian.
 
+/** Today as YYYY-MM-DD in the BROWSER'S own timezone — for client-side date
+ *  defaults. `new Date().toISOString().slice(0, 10)` is the trap this exists
+ *  to avoid: toISOString is UTC, so every Quebec evening it says TOMORROW, and
+ *  a dialog defaulting to it would file tonight's hour on the wrong day. */
+export function localDay(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /** The UTC instant of 12:00 local time on the given YYYY-MM-DD in the given
  *  IANA timezone. Null for malformed input. */
 export function noonInTimeZone(day: string, timeZone: string): Date | null {

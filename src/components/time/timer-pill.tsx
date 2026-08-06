@@ -37,6 +37,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatElapsed, formatMinutes } from "@/lib/time/duration";
+import { localDay } from "@/lib/time/dates";
 import { stopTimerAction } from "@/app/actions/time-entries";
 import {
   EditEntryDialog,
@@ -124,7 +125,10 @@ function RunningPill({
         setOpen(false);
         const saved: EditableEntry = {
           id: entry.id,
-          day: new Date().toISOString().slice(0, 10),
+          // localDay, NEVER toISOString: the UTC date is tomorrow every
+          // Quebec evening, and saving the toast's Edit dialog unchanged
+          // would have quietly moved the entry a day forward.
+          day: localDay(),
           durationMinutes: res.value.durationMinutes,
           note: trimmed ? trimmed : null,
         };
