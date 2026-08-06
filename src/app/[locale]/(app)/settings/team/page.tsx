@@ -329,6 +329,10 @@ export default async function TeamPage({
                   name: firm.name,
                   brand_color: firm.brand_color,
                   locale_default: firm.locale_default === "en" ? "en" : "fr",
+                  // `?? null` rather than a bare read: this ships before
+                  // migration 1750 is applied, and a missing column has to mean
+                  // "not set" instead of blowing up the settings page.
+                  province: firm.province ?? null,
                 }}
                 firmLogoUrl={firmLogoUrl}
               />

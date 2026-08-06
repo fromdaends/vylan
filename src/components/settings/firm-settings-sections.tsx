@@ -19,11 +19,20 @@ import {
 } from "@/app/actions/profile";
 import { updateFirmSettings } from "@/app/actions/settings";
 import { type SettingsState } from "@/app/actions/settings.schema";
+// The rate is shown beside each province so the choice states its own
+// consequence — picking "Ontario" and discovering 13% later is a surprise.
+import {
+  PROVINCE_CODES,
+  provinceName,
+  taxPctForProvince,
+} from "@/lib/tax/canada";
 
 export type FirmInfo = {
   name: string;
   brand_color: string;
   locale_default: "fr" | "en";
+  /** Migration 1750. Null / absent = not set, which is a real state. */
+  province?: string | null;
 };
 
 // Firm logo + firm details (name, brand color, client-email language), extracted
@@ -213,6 +222,36 @@ function FirmSection({
           </SelectContent>
         </Select>
       </div>
+
+      {/* ── THE FIRM'S PROVINCE ──────────────────────────────────────────
+          What the sales tax on a service item falls back to when a client has
+          no province of their own. The CLIENT's always wins where it is known —
+          Canadian place-of-supply for services goes by the recipient — so this
+          is the "most of my clients are here" answer, not an override.
+
+          "Not set" is a real choice and the default. A guessed province is a
+          wrong rate on a real invoice; unset simply leaves the Tax % box empty,
+          exactly as it was before this existed. */}
+      <div className="space-y-2">
+        <Label htmlFor="province">{t("firm_province")}</Label>
+        <p className="text-xs text-muted-foreground">
+          {t("firm_province_hint")}
+        </p>
+        <Select name="province" defaultValue={initial.province ?? ""}>
+          <SelectTrigger id="province" className="max-w-sm">
+            <SelectValue placeholder={t("firm_province_none")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">{t("firm_province_none")}</SelectItem>
+            {PROVINCE_CODES.map((code) => (
+              <SelectItem key={code} value={code}>
+                {provinceName(code, "en")} ({taxPctForProvince(code)}%)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={pending}>
           {pending ? tc("saving") : tc("save")}

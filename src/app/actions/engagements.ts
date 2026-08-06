@@ -1032,6 +1032,28 @@ export async function revertEngagementToDraftAction(formData: FormData) {
 export async function completeEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
+  await completeOneEngagement(id);
+}
+
+/**
+ * Finish ONE engagement, everything it entails.
+ *
+ * ⚠️ EXTRACTED SO BULK CANNOT TAKE A SHORTCUT. The founder asked for a Mark
+ * done on the engagements bulk bar — "The only way you can mark an engagement
+ * done in, like, a bulk action is by clicking the change status button and
+ * then complete it. There should be a mark done button exactly like tasks."
+ *
+ * The obvious implementation is to reuse the existing bulk path and send
+ * stage: "completed". That would be WRONG in a way nobody would notice for
+ * weeks: completing an engagement also cancels its client reminders, notifies
+ * the firm, dispatches the invoice the engagement was set up to raise, and
+ * queues the cloud-storage filing pass. A stage change does none of it. Ten
+ * engagements finished from the bar would silently never bill.
+ *
+ * So the bulk action calls this, once per engagement, and the two paths cannot
+ * drift.
+ */
+async function completeOneEngagement(id: string) {
   // EVERYONE can mark work complete. There used to be an owner-sign-off gate
   // here, behind a firm switch, that silently RETURNED without completing and
   // without telling anyone — founder's call is that finishing work is not a
@@ -1753,6 +1775,8 @@ export async function bulkUpdateEngagementsAction(input: {
   engagementIds: string[];
   stage?: string;
   archive?: boolean;
+  /** Mark done, the same way the button on the engagement itself does. */
+  complete?: boolean;
 }): Promise<BulkEngagementResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
@@ -1767,7 +1791,10 @@ export async function bulkUpdateEngagementsAction(input: {
 
   for (const id of guarded.ids) {
     try {
-      if (input.archive) {
+      if (input.complete) {
+        // The WHOLE completion, not a stage write — see completeOneEngagement.
+        await completeOneEngagement(id);
+      } else if (input.archive) {
         await archiveEngagement(id, user.id);
         // Archived work must stop nagging the client — the same follow-through
         // the single-row archive does, and the reason this loops rather than

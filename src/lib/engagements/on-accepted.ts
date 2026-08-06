@@ -108,10 +108,17 @@ export async function applyAcceptedBilling(
         .from("engagements")
         .update({ invoice_amount_cents: dueCents })
         .eq("id", engagementId);
-      const invoice = await sendEngagementInvoice(engagementId);
+      // atAcceptance: the engagement is LIVE, not complete. Without it the
+      // sender's status gate rejects this outright — which is exactly what it
+      // did, silently, for every on-acceptance engagement ever created.
+      const invoice = await sendEngagementInvoice(engagementId, {
+        atAcceptance: true,
+      });
       out.invoiceRaised = invoice.ok;
     } else if (data?.invoice_auto_mode === "on_acceptance") {
-      const invoice = await sendEngagementInvoice(engagementId);
+      const invoice = await sendEngagementInvoice(engagementId, {
+        atAcceptance: true,
+      });
       out.invoiceRaised = invoice.ok;
     }
   } catch (e) {

@@ -973,7 +973,10 @@
       "invalid": "Cette adresse courriel ne semble pas valide.",
       "same_email": "C'est déjà votre courriel actuel.",
       "email_taken": "Ce courriel est déjà utilisé par un autre compte."
-    }
+    },
+    "firm_province": "Votre province",
+    "firm_province_hint": "Sert à la taxe de vente sur un élément de service lorsque le client n'a pas de province à sa fiche. La province du client a toujours priorité.",
+    "firm_province_none": "Non définie — laisser la taxe vide"
   },
   "Settings": {
     "statuses_link_hint": "Nommez les états par lesquels passe votre travail.",
@@ -3038,7 +3041,8 @@
     "services_billing_end": "Arrêter la facturation définitivement",
     "services_billing_end_confirm": "Oui — arrêter définitivement",
     "invoice_amount_from_services": "Calculé à partir de vos éléments de service — modifiable au besoin.",
-    "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)"
+    "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)",
+    "bulk_mark_done": "Marquer terminé"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3418,7 +3422,20 @@
     "step_desc_service_letter": "La lettre qui l'accompagne",
     "template_saved_toast": "Modèle enregistré — {access}",
     "draft_saved_toast": "Brouillon enregistré",
-    "remove_block": "Supprimer ce groupe de facturation"
+    "remove_block": "Supprimer ce groupe de facturation",
+    "doc_kicker": "Lettre de mission",
+    "doc_date_label": "Date",
+    "doc_prepared_for": "Préparée pour",
+    "doc_prepared_by": "Préparée par",
+    "doc_period_label": "Période du mandat",
+    "doc_services_heading": "Services et honoraires",
+    "doc_terms_heading": "Conditions du mandat",
+    "doc_acceptance_heading": "Acceptation",
+    "doc_accepted_by": "Accepté par",
+    "doc_col_service": "Service",
+    "doc_col_amount": "Montant",
+    "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette lettre. Votre acceptation est enregistrée avec la date et l'heure.",
+    "totals_determined_later": "Déterminé plus tard"
   },
   "Status": {
     "pending": "En attente",

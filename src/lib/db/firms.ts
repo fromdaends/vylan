@@ -10,6 +10,15 @@ export type Firm = {
   logo_url: string | null;
   brand_color: string;
   timezone: string;
+  /**
+   * The firm's own province (migration 1750) — the sales-tax FALLBACK for a
+   * service item when the client has none on file.
+   *
+   * Optional at runtime: the code ships before the migration is applied, and a
+   * missing column must read as "not set" rather than throw. Not set means the
+   * Tax % box stays empty, which is what it did before this existed.
+   */
+  province?: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   subscription_status: string | null;
