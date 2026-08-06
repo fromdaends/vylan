@@ -96,6 +96,21 @@ export async function sendEngagementInvoice(
     // below is what makes workflow + invoice_auto_mode overlap safe.
     atStage?: boolean;
     /**
+     * The client just ACCEPTED, and the firm chose to bill then (1720's
+     * invoice_auto_mode='on_acceptance', or an on-acceptance billing block).
+     *
+     * WITHOUT THIS FLAG THAT ENTIRE FEATURE WAS INERT. The status rule below
+     * demands a COMPLETE engagement for kind='engagement', and an engagement
+     * being accepted is 'sent'. So applyAcceptedBilling called this, got
+     * `not_complete`, and raised nothing — every single time. The founder
+     * accepted a $459.90 engagement billed on acceptance and was never asked
+     * for a cent; the row has zero payment_requests against it.
+     *
+     * Same live-status rule as atSpawn/atStage, and for the same reason:
+     * billing up front is the point, so "finished work only" is the wrong gate.
+     */
+    atAcceptance?: boolean;
+    /**
      * WHICH charge this is (migration 1680).
      *
      * 'engagement' — the job's invoice, everything this function meant before.
@@ -162,7 +177,7 @@ export async function sendEngagementInvoice(
   // engagement — the same rule as an at-spawn invoice, and the opposite of the
   // completion rule that governs the final bill.
   const statusOk =
-    opts.atSpawn || opts.atStage || kind === "deposit"
+    opts.atSpawn || opts.atStage || opts.atAcceptance || kind === "deposit"
       ? engagement.status === "sent" || engagement.status === "in_progress"
       : engagement.status === "complete";
   if (!statusOk) {
@@ -269,7 +284,7 @@ export async function sendEngagementInvoice(
     .eq("id", engagement.id)
     .maybeSingle();
   const freshOk =
-    opts.atSpawn || opts.atStage || kind === "deposit"
+    opts.atSpawn || opts.atStage || opts.atAcceptance || kind === "deposit"
       ? fresh?.status === "sent" || fresh?.status === "in_progress"
       : fresh?.status === "complete";
   if (!freshOk) {
