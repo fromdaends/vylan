@@ -118,7 +118,7 @@ export function ProposalAcceptance({
         <ProposalPreview
           data={data}
           locale={locale}
-          activeStep="sign"
+          activeStep="acceptance"
           // The client's copy: nothing clamped, no step rail, no inert chip.
           variant="document"
         />
