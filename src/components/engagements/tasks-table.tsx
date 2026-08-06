@@ -824,16 +824,35 @@ export function TasksTable({
               drag={{
                 isDragging: dragId === task.id,
                 isOver: overId === task.id && dragId !== task.id,
+                // ONLY the handle starts a drag.
                 handleProps: {
                   draggable: true,
-                  onDragStart: () => setDragId(task.id),
+                  onDragStart: (e) => {
+                    // ⚠️ setData IS REQUIRED. Safari refuses to begin a drag at
+                    // all without a payload on the dataTransfer, so the first
+                    // version simply did nothing there — founder: "dragging
+                    // doesnt work". Chrome is more forgiving, which is exactly
+                    // why this needs saying out loud.
+                    e.dataTransfer.setData("text/plain", task.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragId(task.id);
+                  },
                   onDragEnd: () => {
                     setDragId(null);
                     setOverId(null);
                   },
+                },
+                // ...but the WHOLE CARD accepts one. A 14px hover-only handle
+                // is not a target anybody can hit.
+                dropProps: {
                   onDragOver: (e) => {
+                    if (!dragId) return;
                     e.preventDefault();
-                    setOverId(task.id);
+                    e.dataTransfer.dropEffect = "move";
+                    if (overId !== task.id) setOverId(task.id);
+                  },
+                  onDragLeave: () => {
+                    if (overId === task.id) setOverId(null);
                   },
                   onDrop: (e) => {
                     e.preventDefault();
@@ -1347,6 +1366,7 @@ function Row({
     isDragging: boolean;
     isOver: boolean;
     handleProps: React.HTMLAttributes<HTMLSpanElement>;
+    dropProps: React.HTMLAttributes<HTMLDivElement>;
   };
   run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
 }) {
@@ -1503,6 +1523,7 @@ function Row({
               dragging={drag?.isDragging}
               dragOver={drag?.isOver}
               dragHandleProps={drag?.handleProps}
+              dropProps={drag?.dropProps}
               onOpen={() => (openable ? onOpenScreen?.(task.id) : onOpenDetail())}
               t={t}
               statusMenu={

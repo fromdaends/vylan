@@ -662,8 +662,18 @@ describe("TasksTable — cards, on an engagement", () => {
     // never been — createEngagementTask leaves gaps on every delete.
     renderTable({ layout: "cards", variant: "job" });
     const handles = screen.getAllByLabelText(/^Drag to reorder/);
-    fireEvent.dragStart(handles[0]);
-    fireEvent.drop(handles[1]);
+    // A stand-in for the real DataTransfer. setData is not decoration: Safari
+    // refuses to begin a drag without a payload, which is why the first
+    // version did nothing at all there.
+    const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(handles[0], { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalled();
+
+    // ⚠️ DROP ON THE CARD, not the handle. A handle is ~14px and only appears
+    // on hover, so requiring the release to land on one is why the founder
+    // said "dragging doesnt work".
+    fireEvent.dragOver(cards()[1], { dataTransfer });
+    fireEvent.drop(cards()[1], { dataTransfer });
 
     // Asserted through expect() rather than by casting mock.calls — the mock's
     // arg tuple is typed as empty, and casting past that is the exact thing
