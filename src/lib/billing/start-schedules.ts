@@ -27,6 +27,7 @@ import {
   isChargeFrequency,
   type ChargeFrequency,
 } from "@/lib/billing/recurring-charges";
+import { isAutoBillable } from "@/lib/billing/charge-recurring";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
 
@@ -42,20 +43,27 @@ import { isMissingSchema } from "@/lib/db/quickbooks";
 export type ScannableLine = {
   billing_frequency?: unknown;
   rate_cents?: unknown;
+  rate_type?: unknown;
   name?: unknown;
 };
 
 /**
  * The pure rule: which frequencies these lines can actually be billed on.
  *
- * Three exclusions, each of which would otherwise produce a schedule that
- * charges nothing forever:
+ * Four exclusions, each of which would otherwise produce a schedule that
+ * charges nothing forever — or worse, charges the wrong thing:
  *
  *   * "once" (and anything unrecognised) is not a schedule at all.
  *   * A line with NO RATE is "we will tell you later" — a real answer on a
  *     proposal, but there is nothing to charge, and a $0.00 monthly invoice
- *     has promised the work for free. Same rule hasStatableTotal enforces.
+ *     has promised the work for free.
+ *   * An HOURLY line has a rate PER HOUR and no known number of hours. Billing
+ *     it as a flat amount every month invents a figure nobody quoted. Same rule
+ *     hasStatableTotal enforces on every number the client sees.
  *   * An unnamed line is a blank row the accountant never filled in.
+ *
+ * Shares isAutoBillable with the charge itself, so a frequency that starts a
+ * schedule is always one that can actually produce an invoice.
  *
  * Deduplicated, because three monthly services are ONE monthly invoice.
  */
@@ -64,11 +72,9 @@ export function schedulableFrequencies(
 ): ChargeFrequency[] {
   const found = new Set<ChargeFrequency>();
   for (const line of lines) {
-    const cents = typeof line.rate_cents === "number" ? line.rate_cents : 0;
-    const named = String(line.name ?? "").trim().length > 0;
-    if (isChargeFrequency(line.billing_frequency) && cents > 0 && named) {
-      found.add(line.billing_frequency);
-    }
+    if (!isChargeFrequency(line.billing_frequency)) continue;
+    if (!isAutoBillable(line as Record<string, unknown>)) continue;
+    found.add(line.billing_frequency);
   }
   return [...found];
 }
@@ -79,7 +85,7 @@ export async function recurringFrequenciesFor(
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb
     .from("engagement_items")
-    .select("billing_frequency, rate_cents, name")
+    .select("billing_frequency, rate_cents, rate_type, name")
     .eq("engagement_id", engagementId);
   if (error) {
     if (!isMissingSchema(error)) {

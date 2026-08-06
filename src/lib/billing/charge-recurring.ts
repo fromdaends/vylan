@@ -348,9 +348,20 @@ export async function chargeSchedulePeriod(
 /**
  * The engagement's lines that bill at this frequency, as invoice line items.
  *
- * Lines with no rate ("we will tell you") are dropped rather than billed at
- * zero — a $0.00 line on an invoice has promised the work for free, which is
- * the same rule isMeaningful/hasStatableTotal enforce on the proposal.
+ * ── AN HOURLY LINE IS NEVER BILLED AUTOMATICALLY ───────────────────────────
+ *
+ * `rate_type = 'hour'` means the rate is PER HOUR and nobody yet knows how many.
+ * The proposal says so — the totals panel prints "hourly billing determined
+ * later" and hasStatableTotal() excludes it from every number the client sees.
+ *
+ * The first version of this read only `rate_cents`, so a "$150/hour" line was
+ * billed as a flat $150 every single month: a number nobody quoted, on a
+ * schedule nobody agreed to, contradicting the firm's own screen. The rule is
+ * hasStatableTotal's, applied here rather than re-invented — an hourly line
+ * becomes an invoice when a human says how many hours, and not before.
+ *
+ * Lines with no rate at all are dropped for the same reason: a $0.00 line has
+ * promised the work for free.
  */
 async function recurringLinesFor(
   engagementId: string,
@@ -361,7 +372,7 @@ async function recurringLinesFor(
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb
     .from("engagement_items")
-    .select("name, description, rate_cents, billing_frequency, order_index")
+    .select("name, description, rate_cents, rate_type, billing_frequency, order_index")
     .eq("engagement_id", engagementId)
     .eq("billing_frequency", frequency)
     .order("order_index", { ascending: true });
@@ -372,16 +383,33 @@ async function recurringLinesFor(
     return [];
   }
   return ((data ?? []) as Array<Record<string, unknown>>)
+    .filter(isAutoBillable)
     .map((row) => {
-      const cents = (row.rate_cents as number | null) ?? 0;
-      const name = String(row.name ?? "").trim();
-      return { name, cents };
-    })
-    .filter((l) => l.name.length > 0 && l.cents > 0)
-    .map((l) => ({
-      description: l.name,
-      quantity: 1,
-      unit_cents: l.cents,
-      amount_cents: l.cents,
-    }));
+      const cents = row.rate_cents as number;
+      return {
+        description: String(row.name).trim(),
+        quantity: 1,
+        unit_cents: cents,
+        amount_cents: cents,
+      };
+    });
+}
+
+/**
+ * Can this stored line be turned into an invoice line WITHOUT a human?
+ *
+ * Deliberately the same three questions hasStatableTotal + isMeaningful ask on
+ * the proposal, asked of a raw database row. Exported so the schedule-creation
+ * scan and the charge itself cannot drift: a frequency that starts a schedule
+ * must be one that can actually produce an invoice, or the schedule bills
+ * nothing forever.
+ */
+export function isAutoBillable(row: Record<string, unknown>): boolean {
+  const cents = row.rate_cents;
+  if (typeof cents !== "number" || cents <= 0) return false;
+  // Absent rate_type reads as 'item' — that is the column's default and what
+  // every row written before rate types existed meant.
+  const rateType = row.rate_type == null ? "item" : row.rate_type;
+  if (rateType !== "item") return false;
+  return String(row.name ?? "").trim().length > 0;
 }

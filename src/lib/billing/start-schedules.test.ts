@@ -75,3 +75,48 @@ describe("schedulableFrequencies", () => {
     expect(schedulableFrequencies([])).toEqual([]);
   });
 });
+
+describe("an hourly line is never put on a schedule", () => {
+  it("refuses an hourly line even when it carries a rate", () => {
+    // "$150/hour" is a rate PER HOUR with no known number of hours. Scheduling
+    // it bills a flat $150 every month — a figure nobody quoted, contradicting
+    // the firm's own screen, which says "hourly billing determined later".
+    expect(
+      schedulableFrequencies([
+        line({ rate_type: "hour", rate_cents: 15_000 }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("still accepts a fixed line, with or without an explicit rate type", () => {
+    // Absent rate_type reads as 'item' — the column default, and what every row
+    // written before rate types existed meant.
+    expect(schedulableFrequencies([line({ rate_type: "item" })])).toEqual([
+      "monthly",
+    ]);
+    expect(schedulableFrequencies([line({ rate_type: null })])).toEqual([
+      "monthly",
+    ]);
+    expect(schedulableFrequencies([line()])).toEqual(["monthly"]);
+  });
+
+  it("keeps the fixed line when an hourly one sits beside it", () => {
+    expect(
+      schedulableFrequencies([
+        line({ name: "Advisory", rate_type: "hour", rate_cents: 15_000 }),
+        line({ name: "Bookkeeping", rate_type: "item", rate_cents: 40_000 }),
+      ]),
+    ).toEqual(["monthly"]);
+  });
+
+  it("starts NO schedule when every recurring line is hourly", () => {
+    // The honest outcome: there is nothing that can be billed without a human
+    // saying how many hours, so no schedule should exist to bill it.
+    expect(
+      schedulableFrequencies([
+        line({ billing_frequency: "monthly", rate_type: "hour" }),
+        line({ billing_frequency: "quarterly", rate_type: "hour" }),
+      ]),
+    ).toEqual([]);
+  });
+});
