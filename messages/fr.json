@@ -2947,7 +2947,9 @@
     "price_visibility_blocks": "Afficher un sous-total par cycle de facturation",
     "price_visibility_total": "Afficher le total de l'engagement",
     "item_service_creates": "Crée « {name} » à l'étape Tâches — {count} étapes.",
-    "invoice_mode_on_acceptance": "À l'acceptation du client"
+    "invoice_mode_on_acceptance": "À l'acceptation du client",
+    "task_reorder": "Glisser pour réordonner {title}",
+    "task_steps_done": "{done} étape(s) sur {total} terminée(s)"
   },
   "Attention": {
     "metric_active": "Actifs",

@@ -16,11 +16,14 @@ vi.mock("sonner", () => ({
     success: (...a: unknown[]) => toastSuccess(...(a as [])),
   },
 }));
+const reorderTasksAction = vi.fn(async () => ({ ok: true }));
 const updateTaskAction = vi.fn(async () => ({ ok: true }));
 vi.mock("@/app/actions/engagement-tasks", () => ({
   updateTaskAction: (...a: unknown[]) => updateTaskAction(...(a as [])),
   deleteTaskAction: vi.fn(async () => ({ ok: true })),
   setTaskAssigneeAction: vi.fn(async () => ({ ok: true })),
+  bulkUpdateTasksAction: vi.fn(async () => ({ ok: true, done: 0 })),
+  reorderTasksAction: (...a: unknown[]) => reorderTasksAction(...(a as [])),
 }));
 // The detail panel this table opens now carries a comment thread that fetches
 // its own rows on mount; unmocked it reaches cookies() outside a request scope.
@@ -609,5 +612,67 @@ describe("TasksTable — a saved view lets go when you leave it", () => {
     // saved, so the tab must stop claiming otherwise.
     fireEvent.click(screen.getByText(en.Engagements.filters_clear));
     expect(tab.getAttribute("aria-selected")).toBe("false");
+  });
+});
+
+
+// ── THE CARD LAYOUT ─────────────────────────────────────────────────────────
+//
+// Founder, with Karbon's board open: "I'm very fond of the like box look... And
+// you should make the color of the task align with the status of the task, so
+// the colors can change depending on the status of it."
+//
+// These hold the two claims that matter: the cards are the SAME component in a
+// different skin, and the colour on a card is the firm's status colour rather
+// than anything this file invented.
+describe("TasksTable — cards, on an engagement", () => {
+  const cards = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[style*="--task-hue"]'));
+
+  it("draws a card per task and no table at all", () => {
+    renderTable({ layout: "cards", variant: "job" });
+    expect(document.querySelector("table")).toBeNull();
+    expect(cards().length).toBeGreaterThan(0);
+  });
+
+  it("paints each card in its own STATUS colour, not a palette of its own", () => {
+    // The point of keying colour to status: the hue is one the firm picked on
+    // the Task statuses page, so changing it there changes every card wearing
+    // it. A colour this file chose would be a second palette to keep in sync.
+    renderTable({ layout: "cards", variant: "job" });
+    const hues = cards().map((c) => c.style.getPropertyValue("--task-hue").trim());
+    expect(hues.every(Boolean)).toBe(true);
+    // Every hue on screen has to be one of the firm's.
+    const known = new Set(STATUSES.map((s) => s.color));
+    for (const h of hues) expect(known.has(h)).toBe(true);
+  });
+
+  it("keeps the row's own status menu rather than growing a second one", () => {
+    // Two controls that write a status is exactly the drift the founder
+    // complained about once already.
+    renderTable({ layout: "cards", variant: "job" });
+    expect(
+      screen.getAllByRole("button", { name: /^Change the status of/ }).length,
+    ).toBe(cards().length);
+  });
+
+  it("sends the WHOLE new order on a drop, not just the moved task", () => {
+    // The server renumbers from the array. Sending "task X moved to slot 3"
+    // would depend on order_index already being a dense sequence, which it has
+    // never been — createEngagementTask leaves gaps on every delete.
+    renderTable({ layout: "cards", variant: "job" });
+    const handles = screen.getAllByLabelText(/^Drag to reorder/);
+    fireEvent.dragStart(handles[0]);
+    fireEvent.drop(handles[1]);
+
+    // Asserted through expect() rather than by casting mock.calls — the mock's
+    // arg tuple is typed as empty, and casting past that is the exact thing
+    // only `tsc --noEmit` objects to (it passes vitest and next build happily).
+    const ids = TASKS.map((t) => t.id);
+    expect(reorderTasksAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderedIds: expect.arrayContaining([ids[0], ids[1]]),
+      }),
+    );
   });
 });

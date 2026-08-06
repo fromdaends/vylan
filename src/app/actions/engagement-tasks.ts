@@ -32,6 +32,7 @@ import {
   listTaskAssignees,
   restoreEngagementTask,
   purgeEngagementTask,
+  reorderEngagementTasks,
 } from "@/lib/db/engagement-tasks";
 import { listTaskStatuses } from "@/lib/db/task-statuses";
 import { revalidateAllLocales } from "@/lib/revalidate";
@@ -430,5 +431,42 @@ export async function purgeTaskAction(input: {
     return handle(err, "purge");
   }
   revalidateAllLocales("/work");
+  return { ok: true };
+}
+
+/**
+ * Reorder an engagement's tasks — the whole list, in the order the client is
+ * showing it.
+ *
+ * The client has already moved the card and is not waiting on this; the write
+ * just makes the arrangement survive a reload. So it reports failure and lets
+ * the caller put the list back rather than trying to be clever about which
+ * single row moved.
+ */
+export async function reorderTasksAction(input: {
+  engagementId: string;
+  orderedIds: string[];
+}): Promise<TaskActionResult> {
+  const g = await guard();
+  if ("error" in g) return { ok: false, error: g.error };
+
+  // Duplicates would give two tasks the same index and make the next read's
+  // order arbitrary — a dropped card that lands somewhere else on refresh.
+  const ids = [...new Set(input.orderedIds)].filter(
+    (id) => typeof id === "string" && id.length > 0,
+  );
+  if (ids.length === 0) return { ok: true };
+
+  try {
+    const res = await reorderEngagementTasks({
+      engagementId: input.engagementId,
+      firmId: g.firm.id,
+      orderedIds: ids,
+    });
+    if (!res.ok) return { ok: false, error: "failed" };
+  } catch (err) {
+    return handle(err, "reorder");
+  }
+  revalidateWork(input.engagementId);
   return { ok: true };
 }
