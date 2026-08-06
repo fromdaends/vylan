@@ -2979,7 +2979,9 @@
     "services_billing_pause": "Pause billing",
     "services_billing_resume": "Resume billing",
     "services_billing_end": "Stop billing for good",
-    "services_billing_end_confirm": "Yes — stop billing permanently"
+    "services_billing_end_confirm": "Yes — stop billing permanently",
+    "invoice_amount_from_services": "Calculated from your service items — change it if you need to.",
+    "invoice_amount_reset": "Use the calculated amount (${amount})"
   },
   "Attention": {
     "metric_active": "Active",
