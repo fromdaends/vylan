@@ -91,11 +91,14 @@ export function NewInvoicePicker({
           tabs={[{ key: "only", label: labels.title }]}
           activeTab="only"
           onTabChange={() => {}}
-          finalAction={{
-            label: labels.draft,
-            disabled: !picked,
-            onClick: draft,
-          }}
+          // No engagements left to invoice means no Draft button at all — the
+          // card is an explanation, not a form, and a permanently-greyed
+          // primary under it is a promise it cannot keep.
+          finalAction={
+            engagements.length === 0
+              ? undefined
+              : { label: labels.draft, disabled: !picked, onClick: draft }
+          }
           onClose={() => setOpen(false)}
         >
           {engagements.length === 0 ? (

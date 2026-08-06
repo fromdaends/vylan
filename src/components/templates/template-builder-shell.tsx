@@ -117,7 +117,17 @@ export function TemplateBuilderShell({
   /** Extra buttons in the step header — "Save draft" and nothing else so far.
    *  The primary save is `finalAction`, in the footer where the flow ends. */
   headerActions?: BuilderAction[];
-  finalAction: BuilderFinalAction;
+  /**
+   * What the last step's Continue becomes.
+   *
+   * OMITTED when the card has nothing to do — a flow whose list is empty
+   * ("every engagement already has an invoice") draws its explanation and NO
+   * primary button. The founder's rule, in their words: "there should be no
+   * buttons that don't work." A control disabled by a required field is fine,
+   * because typing turns it on; one that can never turn on is furniture that
+   * looks like a way forward.
+   */
+  finalAction?: BuilderFinalAction;
   onClose: () => void;
   /** The live preview card. Omit it and the wizard is one card — a builder with
    *  nothing to show must not open an empty panel next to itself. */
@@ -236,7 +246,8 @@ export function BuilderChrome({
   activeTab: string;
   onTabChange: (key: string) => void;
   headerActions?: BuilderAction[];
-  finalAction: BuilderFinalAction;
+  /** Absent when there is nothing this card can do — see the note above. */
+  finalAction?: BuilderFinalAction;
   /** Omitted when the container already draws a close control. */
   onClose?: () => void;
   error?: string | null;
@@ -353,16 +364,18 @@ export function BuilderChrome({
             <span />
           )}
           {last ? (
-            <Button
-              type="button"
-              size="sm"
-              disabled={finalAction.disabled}
-              onClick={finalAction.onClick}
-              className="h-[34px]"
-            >
-              <Check className="size-3.5" />
-              {finalAction.label}
-            </Button>
+            finalAction && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={finalAction.disabled}
+                onClick={finalAction.onClick}
+                className="h-[34px]"
+              >
+                <Check className="size-3.5" />
+                {finalAction.label}
+              </Button>
+            )
           ) : (
             <Button
               type="button"
