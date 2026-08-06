@@ -332,7 +332,16 @@ export function Timesheet({
         runningEntryId={null}
         runningLabel={null}
         onClose={() => setManualOpen(false)}
-        onStarted={() => setManualOpen(false)}
+        onStarted={() => {
+          setManualOpen(false);
+          // A manual entry always logs onto the VIEWER. If they were reading a
+          // colleague's week, saving would otherwise look like nothing
+          // happened (the entry lands on a week they are not looking at) —
+          // so land them on their own.
+          if (person !== currentUserId) {
+            router.push(href(weekStart, currentUserId));
+          }
+        }}
       />
     </div>
   );

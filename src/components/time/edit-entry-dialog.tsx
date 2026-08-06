@@ -16,7 +16,7 @@
 // parser ("1h 30m" parses to 90), so opening and saving unchanged is a no-op.
 
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import {
   parseDurationToMinutes,
 } from "@/lib/time/duration";
 import { updateTimeEntryAction } from "@/app/actions/time-entries";
+import { formatCurrency, type AppLocale } from "@/lib/format";
 
 export type EditableEntry = {
   id: string;
@@ -100,6 +101,7 @@ function EditEntryForm({
   onSaved: () => void;
 }) {
   const t = useTranslations("Time");
+  const locale = useLocale() as AppLocale;
   const [pending, startTransition] = useTransition();
   const [day, setDay] = useState(entry.day);
   const [duration, setDuration] = useState(() =>
@@ -177,11 +179,11 @@ function EditEntryForm({
         {valueCents != null && (
           <p className="text-xs text-muted-foreground">
             {t("entry_value_line", {
-              amount: new Intl.NumberFormat(undefined, {
-                style: "currency",
-                currency: "CAD",
-                maximumFractionDigits: 0,
-              }).format(valueCents / 100),
+              // The shared formatter, viewer's locale — Intl(undefined)
+              // formats with the SERVER's locale during SSR.
+              amount: formatCurrency(valueCents / 100, locale, {
+                fractionDigits: 0,
+              }),
             })}
           </p>
         )}

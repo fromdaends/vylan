@@ -312,12 +312,16 @@ export default async function EngagementDetailPage({
   const timeRates = canSeeTimeValue
     ? await listBillableRates(timeEntries.map((e) => e.id))
     : new Map<string, number>();
-  let timeValueCents = 0;
+  // "No rates recorded at all" is NULL, never $0 — 1780's own contract. A
+  // sum that starts at 0 and finds nothing prints "$0 value" on a job that
+  // may be deeply underwater, which is the exact lie the flat-fee line
+  // exists to prevent.
+  let timeValueCents: number | null = null;
   let timeUncostedMinutes = 0;
   for (const e of timeEntries) {
     const rate = timeRates.get(e.id);
     if (rate == null) timeUncostedMinutes += e.duration_minutes;
-    else timeValueCents += valueCents(e.duration_minutes, rate);
+    else timeValueCents = (timeValueCents ?? 0) + valueCents(e.duration_minutes, rate);
   }
   const timePerPerson = (() => {
     const byUser = new Map<string, number>();
@@ -1645,6 +1649,7 @@ export default async function EngagementDetailPage({
           uncostedMinutes={timeUncostedMinutes}
           flatFeeCents={engagement.invoice_amount_cents ?? null}
           perPerson={timePerPerson}
+          locale={locale}
         />
       )}
 

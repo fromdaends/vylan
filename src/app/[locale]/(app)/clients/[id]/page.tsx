@@ -492,10 +492,14 @@ export default async function ClientDetailPage({
   let clientTimeValueCents: number | null = null;
   if (timeEnabled && canSeeTimeValue && clientYearEntries.length > 0) {
     const rates = await listBillableRates(clientYearEntries.map((e) => e.id));
-    clientTimeValueCents = clientYearEntries.reduce((sum, e) => {
-      const rate = rates.get(e.id);
-      return rate == null ? sum : sum + valueCents(e.duration_minutes, rate);
-    }, 0);
+    // NULL when no entry carries a rate — "$0 value" on hours that merely
+    // predate the rates is the lie 1780's contract forbids.
+    if (rates.size > 0) {
+      clientTimeValueCents = clientYearEntries.reduce((sum, e) => {
+        const rate = rates.get(e.id);
+        return rate == null ? sum : sum + valueCents(e.duration_minutes, rate);
+      }, 0);
+    }
   }
   const tTime = await getTranslations("Time");
   const clientNameById = new Map(

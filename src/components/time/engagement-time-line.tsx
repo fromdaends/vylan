@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatMinutes } from "@/lib/time/duration";
+import { formatCurrency, type AppLocale } from "@/lib/format";
 
 export function EngagementTimeLine({
   totalMinutes,
@@ -29,6 +30,7 @@ export function EngagementTimeLine({
   uncostedMinutes,
   flatFeeCents,
   perPerson,
+  locale,
 }: {
   totalMinutes: number;
   /** Null = the viewer may not see values (or none are recorded). */
@@ -37,16 +39,16 @@ export function EngagementTimeLine({
   uncostedMinutes: number;
   flatFeeCents: number | null;
   perPerson: { name: string; minutes: number }[];
+  locale: AppLocale;
 }) {
   const t = useTranslations("Time");
   if (totalMinutes <= 0) return null;
 
+  // The shared formatter with the VIEWER's locale — Intl with `undefined`
+  // resolves to the SERVER's locale during SSR and the browser's after
+  // hydration: wrong French formatting AND a hydration mismatch, in one.
   const money = (cents: number) =>
-    new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: "CAD",
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
+    formatCurrency(cents / 100, locale, { fractionDigits: 0 });
 
   const underwater =
     valueCents != null && flatFeeCents != null && valueCents > flatFeeCents;

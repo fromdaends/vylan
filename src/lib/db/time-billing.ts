@@ -23,8 +23,13 @@ export function valueCents(durationMinutes: number, rateSnapshot: number): numbe
 /** SERVICE ROLE: freeze the member's CURRENT billable rate onto one saved
  *  entry. No rate set = no row (the entry reads "no value", never $0).
  *  Failure is swallowed after logging — losing a value degrades one number;
- *  failing the save would lose the HOUR. Idempotent via upsert: a re-save
- *  refreshes the snapshot deliberately (spec: "rate re-snapshots on edit"). */
+ *  failing the save would lose the HOUR.
+ *
+ *  FREEZE-FIRST: ignoreDuplicates keeps the FIRST snapshot. Stop is
+ *  idempotent (a second tab's stop replays it), and without this a replayed
+ *  stop after a rate change would quietly reprice a saved entry — the exact
+ *  history-rewrite the snapshot exists to prevent. v1 has no rate-edit UI, so
+ *  nothing legitimately re-snapshots. */
 export async function writeBillableSnapshotSR(input: {
   timeEntryId: string;
   firmId: string;
@@ -48,7 +53,7 @@ export async function writeBillableSnapshotSR(input: {
         user_id: input.userId,
         billable_rate_snapshot: Number(billable),
       },
-      { onConflict: "time_entry_id" },
+      { onConflict: "time_entry_id", ignoreDuplicates: true },
     );
     if (error && !isMissingSchema(error)) {
       console.error("[time-billing] snapshot failed:", error);

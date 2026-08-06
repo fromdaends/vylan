@@ -72,9 +72,34 @@ export function EngagementsBoard({
   const assigneeOf = (r: WorklistRow) =>
     moved.has(r.id) ? moved.get(r.id)! : r.assigneeUserId;
 
-  const columns: { id: string | null; name: string }[] = [
-    ...members.map((m) => ({ id: m.id as string | null, name: m.name })),
-    { id: null, name: t("board_unassigned") },
+  // DEPARTED ASSIGNEES STILL GET A COLUMN. Deactivating someone does NOT
+  // reassign their jobs (that is deliberate — team.ts keeps "work stays
+  // as-is"), and a board whose columns are only ACTIVE members would silently
+  // hide every one of those engagements on the exact view meant for
+  // redistributing them. Their columns are drop-proof: the server refuses
+  // reassignment TO a deactivated member anyway, so offering the target would
+  // only manufacture failed drags.
+  const memberIds = new Set(members.map((m) => m.id));
+  const formerColumns = new Map<string, string>();
+  for (const r of rows) {
+    const assignee = assigneeOf(r);
+    if (assignee && !memberIds.has(assignee)) {
+      formerColumns.set(assignee, r.assigneeName ?? "—");
+    }
+  }
+
+  const columns: { id: string | null; name: string; droppable: boolean }[] = [
+    ...members.map((m) => ({
+      id: m.id as string | null,
+      name: m.name,
+      droppable: true,
+    })),
+    ...[...formerColumns.entries()].map(([id, name]) => ({
+      id: id as string | null,
+      name: t("board_former_member", { name }),
+      droppable: false,
+    })),
+    { id: null, name: t("board_unassigned"), droppable: true },
   ];
 
   const drop = (columnId: string | null) => {
@@ -168,12 +193,13 @@ export function EngagementsBoard({
                   "border-accent bg-accent/5",
               )}
               onDragOver={(e) => {
-                if (!canReassign) return;
+                if (!canReassign || !col.droppable) return;
                 e.preventDefault();
                 setOverCol(col.id ?? "__u__");
               }}
               onDragLeave={() => setOverCol(null)}
               onDrop={(e) => {
+                if (!col.droppable) return;
                 e.preventDefault();
                 drop(col.id);
               }}
@@ -271,12 +297,12 @@ export function EngagementsBoard({
                           {tasks == null ? (
                             <p className="text-xs text-muted-foreground">…</p>
                           ) : tasks.length === 0 ? (
-                            // No tasks at all → the checklist-progress
-                            // fallback: the bar the row already carries.
+                            // No tasks at all — say that, plainly. (The old
+                            // fallback printed approvedPct as "checklist N%",
+                            // but approvedPct now MEANS tasks done, which is
+                            // definitionally 0 here — a made-up number.)
                             <p className="text-xs text-muted-foreground">
-                              {t("board_no_tasks", {
-                                percent: Math.round(row.approvedPct * 100),
-                              })}
+                              {t("board_no_tasks")}
                             </p>
                           ) : (
                             <>

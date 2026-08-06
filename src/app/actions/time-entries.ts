@@ -99,10 +99,19 @@ export async function startTimerAction(input: {
   if (!input.clientId) return { ok: false, error: "invalid" };
 
   try {
-    // Stop the current timer, if any. Its note stays as typed.
+    // Stop the current timer, if any. Its note stays as typed — and it gets
+    // its BILLABLE SNAPSHOT here, exactly as a hand-stopped timer would: this
+    // auto-stop IS that entry's save, and skipping the snapshot would leave
+    // every switched-away-from entry valueless forever (freeze-first, so a
+    // replay never reprices).
     const running = await getRunningEntry(user.id);
     if (running) {
       await stopEntry(running.id);
+      await writeBillableSnapshotSR({
+        timeEntryId: running.id,
+        firmId: firm.id,
+        userId: user.id,
+      });
       revalidateTime(running.engagement_id, running.client_id);
     }
 
@@ -117,7 +126,14 @@ export async function startTimerAction(input: {
       // Two tabs raced the stop. The DB's one-running-timer index caught it;
       // stop the straggler and try once more.
       const straggler = await getRunningEntry(user.id);
-      if (straggler) await stopEntry(straggler.id);
+      if (straggler) {
+        await stopEntry(straggler.id);
+        await writeBillableSnapshotSR({
+          timeEntryId: straggler.id,
+          firmId: firm.id,
+          userId: user.id,
+        });
+      }
       created = await insertTimerStart({
         firmId: firm.id,
         userId: user.id,
