@@ -153,7 +153,19 @@ export function TemplateBuilderShell({
   }, [onClose]);
 
   return (
-    <div className="wizard-overlay fixed inset-0 z-50 flex items-center justify-center gap-5 p-5">
+    // ⚠️ THE OVERLAY STOPS AT THE RAIL, it does not span the viewport.
+    //
+    // `inset-0` put it under the icon rail, and `justify-center` then centred
+    // the card against the FULL window width — so on any screen where the card
+    // plus its preview is wider than the space beside the rail, the left edge
+    // slid underneath the rail and was clipped in half. Founder, with a
+    // screenshot of exactly that: "all templates creation builder screens are
+    // fucked."
+    //
+    // Offsetting the left edge by --rail-width centres it in the space that is
+    // actually free. The rail is hidden below sm (the bottom tab bar takes
+    // over), so the offset is too.
+    <div className="wizard-overlay fixed inset-y-0 right-0 left-0 z-50 flex items-center justify-center gap-5 p-5 sm:left-[var(--rail-width)]">
       <div
         role="dialog"
         aria-modal="true"
