@@ -424,18 +424,29 @@ export function RailPopover({
 
       {actions && actions.length > 0 && (
         <>
+          {/* ⚠️ SOLID BLUE CIRCLES, NOT CARDS. These briefly became bordered
+              cards with a pale tinted circle inside; the founder wanted the
+              original back: "revert it back for task and client back to the
+              blue circles."
+
+              They are the panel's brand moment — the same filled accent discs
+              the Work fly-out uses — so the two surfaces stay one vocabulary.
+              A bordered card around them added a second frame inside a
+              popover that is already a frame. */}
           <div className="flex gap-1.5 px-2 pb-2.5">
             {actions.map((action) => (
               <Link
                 key={action.href}
                 href={action.href}
                 onClick={() => onClose()}
-                className="flex flex-1 flex-col items-center gap-1.5 rounded-[10px] border border-border py-2.5 transition-colors hover:border-accent/50 hover:bg-accent-subtle/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group flex flex-1 flex-col items-center gap-1.5 rounded-[10px] py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="grid size-[34px] place-items-center rounded-full bg-accent-subtle text-accent">
-                  <action.icon className="size-4" aria-hidden />
+                <span className="grid size-[38px] place-items-center rounded-full bg-accent text-accent-foreground transition-colors group-hover:bg-accent-hover">
+                  <action.icon className="size-[17px]" aria-hidden />
                 </span>
-                <span className="text-[11.5px] font-[550]">{action.label}</span>
+                <span className="text-[11.5px] font-[550] text-foreground">
+                  {action.label}
+                </span>
               </Link>
             ))}
           </div>
