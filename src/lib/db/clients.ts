@@ -7,6 +7,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 // function, and anything reachable from this file drags in next/headers.
 import type { ClientVisibility } from "@/lib/clients/visibility";
 import { addClientMember } from "@/lib/db/client-members";
+import { resumeSchedulesForClientSR } from "@/lib/db/billing-schedules";
 
 // New clients default to PRIVATE only when the firm opted in
 // (firms.clients_private_by_default, 0830) AND the creator is an OWNER — staff
@@ -367,6 +368,29 @@ export async function restoreClient(id: string): Promise<void> {
     .update({ archived_at: null })
     .eq("id", id);
   if (error) throw error;
+
+  // Bring their recurring billing back with them.
+  //
+  // The charge runner PAUSES a schedule when it finds its client archived —
+  // correct, since billing someone who has been shelved is worse than missing a
+  // month. Nothing un-paused it, so un-archiving silently ended that client's
+  // recurring revenue forever: no error, no banner, nothing on screen saying
+  // billing had stopped. The firm would find out when the money did not arrive.
+  //
+  // Lives HERE rather than in one action so every path that un-archives a
+  // client gets it — the archive side is already a property of the client, and
+  // the resume has to be too.
+  //
+  // Best-effort: an un-archive must not fail because a billing table is missing
+  // or a write hiccuped.
+  try {
+    const resumed = await resumeSchedulesForClientSR(id);
+    if (resumed > 0) {
+      console.info("[clients] resumed billing schedules on restore:", id, resumed);
+    }
+  } catch (e) {
+    console.error("[clients] schedule resume failed on restore:", e);
+  }
 }
 
 // A client can be reassigned only to an ACTIVE member of the SAME firm. Pure so

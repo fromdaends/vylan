@@ -28,9 +28,12 @@ import {
   type EngagementItemDraft,
 } from "@/lib/engagements/items";
 import { formatCurrency, formatDate, type AppLocale } from "@/lib/format";
+import { BillingScheduleMenu } from "@/components/engagements/billing-schedule-menu";
 
 /** What the live schedule for one frequency looks like on screen (1710). */
 export type ServiceScheduleState = {
+  /** Needed to act on it — pause, resume, end. */
+  id: string;
   frequency: string;
   /** ISO date of the next invoice, or null when it is paused/ended. */
   nextChargeOn: string | null;
@@ -126,6 +129,18 @@ export function EngagementServicesPanel({
                     {t("services_total_partial", {
                       count: String(total.unstatableCount),
                     })}
+                  </span>
+                )}
+                {/* Stop / pause / resume. Sits on the billing group it controls
+                    rather than anywhere central, and shows nothing at all when
+                    there is no schedule — a one-time group has no repeat to
+                    stop. */}
+                {schedule && (
+                  <span className="ml-2 inline-flex align-middle">
+                    <BillingScheduleMenu
+                      scheduleId={schedule.id}
+                      status={schedule.status}
+                    />
                   </span>
                 )}
               </span>

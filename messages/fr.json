@@ -2974,7 +2974,12 @@
     "wizard_step_desc_billing": "Comment c'est payé",
     "wizard_step_desc_reminders": "Qui est relancé, et quand",
     "wizard_step_desc_proposal": "Ce que votre client va lire",
-    "preview_for_client": "Aperçu · {name}"
+    "preview_for_client": "Aperçu · {name}",
+    "services_billing_menu": "Options de facturation",
+    "services_billing_pause": "Suspendre la facturation",
+    "services_billing_resume": "Reprendre la facturation",
+    "services_billing_end": "Arrêter la facturation définitivement",
+    "services_billing_end_confirm": "Oui — arrêter définitivement"
   },
   "Attention": {
     "metric_active": "Actifs",
