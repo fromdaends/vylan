@@ -598,15 +598,6 @@ export function EngagementBuilder({
   const [proposalPeriodMonths, setProposalPeriodMonths] = useState<number | null>(
     tpl?.periodMonths ?? null,
   );
-  const [proposalClientSigns, setProposalClientSigns] = useState(
-    tpl?.clientSigns ?? true,
-  );
-  const [proposalSigners, setProposalSigners] = useState<string[]>(
-    tpl?.additionalSignerLabels ?? [],
-  );
-  const [proposalFirmCountersigns, setProposalFirmCountersigns] = useState(
-    tpl?.firmCountersigns ?? false,
-  );
   const [proposalDeposit, setProposalDeposit] = useState(
     tpl?.depositCents != null ? String(tpl.depositCents / 100) : "",
   );
@@ -621,7 +612,6 @@ export function EngagementBuilder({
   // recurring invoice can be charged without asking again.
   /** Who settles the deposit — the client by default, or one of the named
    *  signer roles. Canopy asks this; we were not asking at all. */
-  const [proposalPayer, setProposalPayer] = useState("");
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(
     tpl?.requirePaymentMethod ?? false,
   );
@@ -1113,9 +1103,7 @@ export function EngagementBuilder({
         };
       }),
     termsSections: termsEnabled ? termsSections : [],
-    clientSigns: proposalClientSigns,
-    additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
-    firmCountersigns: proposalFirmCountersigns,
+
     depositCents: proposalDepositCents,
     priceVisibility,
   };
@@ -2429,32 +2417,6 @@ export function EngagementBuilder({
               </p>
             </div>
 
-            {/* Canopy's "Signer responsible for making payment". Only when a
-                deposit is actually being asked for — naming a payer for an
-                amount of nothing is a control with no question behind it. */}
-            {proposalDepositCents != null && (
-              <div className="space-y-1.5">
-                <Label htmlFor="engagement-payer" className="text-sm">
-                  {t("signer_pays_label")}
-                </Label>
-                <select
-                  id="engagement-payer"
-                  value={proposalPayer}
-                  onChange={(e) => setProposalPayer(e.target.value)}
-                  className="h-9 w-full max-w-[16rem] rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  <option value="">{t("signer_pays_client")}</option>
-                  {proposalSigners
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
@@ -3199,83 +3161,6 @@ export function EngagementBuilder({
               </CardContent>
             </Card>
 
-            {/* ── WHO SIGNS ────────────────────────────────────────────── */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <FileSignature
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  {tTpl("who_signs")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* NOT tTpl("who_signs_hint") — that one says "a template
-                    names the ROLES that sign, not the people", which is false
-                    on this screen. Here you are naming them for a real job. */}
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("proposal_who_signs_hint")}
-                </p>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={proposalClientSigns}
-                    onChange={(e) => setProposalClientSigns(e.target.checked)}
-                  />
-                  {tTpl("signer_client")}
-                </label>
-
-                {proposalSigners.map((label, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input
-                      value={label}
-                      onChange={(e) =>
-                        setProposalSigners((prev) =>
-                          prev.map((x, i) => (i === idx ? e.target.value : x)),
-                        )
-                      }
-                      placeholder={tTpl("signer_slot_placeholder")}
-                      aria-label={tTpl("signer_slot_placeholder")}
-                      className="max-w-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setProposalSigners((prev) =>
-                          prev.filter((_, i) => i !== idx),
-                        )
-                      }
-                      aria-label={tTpl("remove")}
-                      className="text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setProposalSigners((prev) => [...prev, ""])}
-                >
-                  <Plus className="size-3.5" />
-                  {tTpl("add_signer")}
-                </Button>
-
-                <label className="flex cursor-pointer items-center gap-2 border-t border-border/60 pt-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={proposalFirmCountersigns}
-                    onChange={(e) =>
-                      setProposalFirmCountersigns(e.target.checked)
-                    }
-                  />
-                  {tTpl("signer_firm")}
-                </label>
-
-              </CardContent>
-            </Card>
         </>
       )}
 

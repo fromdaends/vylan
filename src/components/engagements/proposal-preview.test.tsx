@@ -51,9 +51,6 @@ const base: ProposalPreviewData = {
     { heading: "Scope of work", body: "We prepare and file the returns listed above." },
     { heading: "Fees", body: "Fees are payable on the terms stated in this letter." },
   ],
-  clientSigns: true,
-  additionalSignerLabels: [],
-  firmCountersigns: false,
   depositCents: null,
 };
 
@@ -204,5 +201,38 @@ describe("the firm's side-pane preview stays a thumbnail", () => {
       "3. Terms of engagement",
       "4. Acceptance",
     ]);
+  });
+});
+
+describe("nobody signs a contract that is accepted, not signed", () => {
+  // Founder: "just get rid of signing in general for the contract. It'll be
+  // simpler... make more sense probably." Right — accepting and paying IS the
+  // act (Ignition's model), so drawing rules under two names implied a ceremony
+  // that never happens.
+
+  it("still names both parties", () => {
+    renderDoc();
+    expect(screen.getByText("Accepted by")).toBeTruthy();
+    expect(screen.getByText("Prepared by")).toBeTruthy();
+  });
+
+  it("draws no signature rules under them", () => {
+    const { container } = renderDoc();
+    // The two rules lived as bare bordered divs directly under each name. If a
+    // future change reintroduces a signature line, this is what catches it.
+    const rules = container.querySelectorAll("div.border-t.border-foreground\\/25");
+    expect(rules.length).toBe(0);
+  });
+
+  it("renders a proposal frozen BEFORE signing was removed", () => {
+    // Those rows still carry clientSigns / additionalSignerLabels /
+    // firmCountersigns. The reader keeps accepting them; nothing renders them.
+    const { container } = renderDoc({
+      clientSigns: true,
+      additionalSignerLabels: ["Spouse", "Second director"],
+      firmCountersigns: true,
+    });
+    expect(container.textContent).not.toMatch(/Second director/);
+    expect(screen.getByText("Accepted by")).toBeTruthy();
   });
 });
