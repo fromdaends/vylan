@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
 // ROUTER must be the i18n one. usePathname (i18n) returns a locale-STRIPPED path
 // ("/engagements"), and feeding that to next/navigation's router navigates to the
@@ -10,7 +9,6 @@ import { Search } from "lucide-react";
 // French accountant clicking a filter chip gets thrown back into English. The
 // i18n router re-applies the current locale prefix.
 import { useSearchParams } from "next/navigation";
-import { Input } from "@/components/ui/input";
 import {
   WorklistTable,
   type WorklistRow,
@@ -30,10 +28,16 @@ import {
   parseStageSort,
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
-import { ViewTabs } from "@/components/ui/view-tabs";
-import { EngagementsBoard } from "@/components/engagements/engagements-board";
-import { Columns3, List } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { CapacityBoard } from "@/components/engagements/board/capacity-board";
+import { EngagementFilterChips } from "@/components/engagements/board/engagement-filter-chips";
+import { BoardStatsBar } from "@/components/engagements/board/board-stats-bar";
+import { computeBoardStats } from "@/lib/engagements/board-stats";
+// From the NEUTRAL module, never from lib/db — that path reaches next/headers
+// and Turbopack refuses to put it in a client bundle.
+import {
+  EMPTY_BOARD_NUMBERS,
+  type BoardNumbers,
+} from "@/lib/engagements/board-numbers";
 import { localDay } from "@/lib/time/dates";
 import type { AppLocale } from "@/lib/format";
 
@@ -56,6 +60,8 @@ export function EngagementsView({
   badges,
   teamEnabled,
   assignMembers,
+  boardNumbers = {},
+  boardRateCents = null,
   firmId,
   savedViews = [],
   viewLinks = [],
@@ -70,6 +76,11 @@ export function EngagementsView({
   // Active teammates, so a row can be handed to somebody from its menu. Doubles
   // as the presence roster — the only source of names for a live face on a row.
   assignMembers?: { id: string; name: string }[];
+  /** Budget / actual / rank per engagement id, loaded on the server. */
+  boardNumbers?: Record<string, BoardNumbers>;
+  /** Hourly billable rate in cents, or NULL when this person may not see
+   *  money. Null is the safe default — see computeBoardStats. */
+  boardRateCents?: number | null;
   // Enables live presence on the rows. Absent → no subscription, no faces.
   firmId?: string | null;
   /** This person's saved filter sets for this list (1630). */
@@ -197,65 +208,33 @@ export function EngagementsView({
           Search rides the same row rather than sitting on its own. Since the
           two filter pickers came out, it was alone on a line with an empty half
           beside it — a band of nothing between the tabs and the table. */}
-      <div className="flex flex-col gap-3 border-b border-border sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <ViewTabs
-          className="flex-1 border-b-0"
-          ariaLabel={t("views_label")}
-          activeKey={view}
-          tabs={TAB_VIEWS.map((v) => ({
-            key: v,
-            label: t(viewLabelKey(v)),
-            href: hrefFor(v),
-            count: badgeFor(v),
-            // Recently deleted counts DOWN to a purge, so its number is a
-            // warning rather than a total. It keeps the destructive colour on
-            // the digits alone — the chip around them is what came out.
-            tone: v === "deleted" ? ("destructive" as const) : undefined,
-          }))}
-        />
-        <div className="flex items-center gap-1 pb-2">
-          {/* List | Board — two quiet icon buttons, the choice persisted. */}
-          <button
-            type="button"
-            onClick={() => pickMode("list")}
-            aria-pressed={viewMode === "list"}
-            aria-label={t("board_view_list")}
-            className={cn(
-              "rounded-md p-1.5 transition-colors",
-              viewMode === "list"
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <List className="size-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => pickMode("board")}
-            aria-pressed={viewMode === "board"}
-            aria-label={t("board_view_board")}
-            className={cn(
-              "rounded-md p-1.5 transition-colors",
-              viewMode === "board"
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Columns3 className="size-4" aria-hidden />
-          </button>
-        </div>
-        <div className="relative pb-2 sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-[calc(50%-0.25rem)] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={tDash("wl_search_placeholder")}
-            aria-label={tDash("wl_search_placeholder")}
-            className="h-9 pl-9"
-          />
-        </div>
-      </div>
+      {/* ── THE CONTROLS, AS CHIPS ────────────────────────────────────────
+          Six tabs became one chip that says where you are and opens the rest.
+          The reasoning, and why this is ONE row for both the list and the
+          board rather than two chromes, is at the top of
+          engagement-filter-chips.tsx. */}
+      <EngagementFilterChips
+        views={TAB_VIEWS.map((v) => ({
+          key: v,
+          label: t(viewLabelKey(v)),
+          href: hrefFor(v),
+          count: badgeFor(v),
+          tone: v === "deleted" ? ("destructive" as const) : undefined,
+        }))}
+        activeKey={view}
+        query={query}
+        onQueryChange={setQuery}
+        viewMode={viewMode}
+        onViewModeChange={pickMode}
+        labels={{
+          viewsLabel: t("views_label"),
+          searchPlaceholder: tDash("wl_search_placeholder"),
+          searchChip: t("filter_chip_search"),
+          clearSearch: t("filter_chip_clear"),
+          listView: t("board_view_list"),
+          boardView: t("board_view_board"),
+        }}
+      />
 
       {/* Recently Deleted: surface the 30-day recovery policy up front so a
           finding-it-here user isn't surprised by the eventual purge. */}
@@ -279,17 +258,18 @@ export function EngagementsView({
           after the column menus have filtered and only the table knows that. */}
 
       {viewMode === "board" ? (
-        // The BOARD (timer v2 Part B): same rows, same filters, same search —
-        // a different projection, never a different dataset. Columns per
-        // member; drag = the row menu's reassign. Overdue is judged against
-        // the BROWSER's day here (the accountant's own desk), a deliberate
-        // hair's difference from the table's server-fed day.
-        <EngagementsBoard
+        // The CAPACITY BOARD: same rows, same filters, same search — a
+        // different projection, never a different dataset. Columns per member;
+        // drag reassigns AND reorders. Overdue is judged against the BROWSER's
+        // day here (the accountant's own desk), a deliberate hair's difference
+        // from the table's server-fed day.
+        <BoardSurface
           rows={visible}
           members={assignMembers ?? []}
           locale={locale}
           canReassign={teamEnabled}
-          today={localDay()}
+          boardNumbers={boardNumbers}
+          boardRateCents={boardRateCents}
         />
       ) : (
       <WorklistTable
@@ -335,6 +315,99 @@ export function EngagementsView({
         }
       />
       )}
+    </div>
+  );
+}
+
+
+/**
+ * The board and the numbers above it.
+ *
+ * One component so the stats bar and the columns can never be looking at
+ * different card sets — the handoff is explicit that the bar "aggregates the
+ * currently visible (filtered) cards", and a bar fed from a different array is
+ * a bar quietly answering a different question.
+ */
+function BoardSurface({
+  rows,
+  members,
+  locale,
+  canReassign,
+  boardNumbers,
+  boardRateCents,
+}: {
+  rows: WorklistRow[];
+  members: { id: string; name: string }[];
+  locale: AppLocale;
+  canReassign: boolean;
+  boardNumbers: Record<string, BoardNumbers>;
+  boardRateCents: number | null;
+}) {
+  const t = useTranslations("Engagements");
+  const tStatus = useTranslations("Status");
+
+  const cards = rows.map((row) => ({
+    row,
+    ...(boardNumbers[row.id] ?? EMPTY_BOARD_NUMBERS),
+  }));
+  const stats = computeBoardStats(cards, boardRateCents);
+
+  // First paint only. A board that replayed its entrance on every drop would
+  // be exhausting, so the flag is TRUE for the first 1.4s and false forever
+  // after.
+  //
+  // No matchMedia here: reduced motion is handled in globals.css, where the
+  // .board-card-in / .board-chrome-in rules drop to `animation: none`. Asking
+  // JavaScript as well would mean starting `false` on the server and `true`
+  // after hydration — a className mismatch on every card.
+  const [animate, setAnimate] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAnimate(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="space-y-[18px]">
+      <div className={animate ? "board-chrome-in" : undefined}>
+        <BoardStatsBar
+          stats={stats}
+          locale={locale}
+          animate={animate}
+          labels={{
+            workItems: t("board_stat_work_items"),
+            budget: t("board_stat_budget"),
+            actual: t("board_stat_actual"),
+            remaining: t("board_stat_remaining"),
+            currency: "CAD",
+          }}
+        />
+      </div>
+
+      <CapacityBoard
+        cards={cards}
+        members={members}
+        locale={locale}
+        today={localDay()}
+        canReassign={canReassign}
+        showBudget
+        showEmptyColumns
+        animate={animate}
+        statusLabel={(s) => tStatus(s as "active")}
+        labels={{
+          unassigned: t("board_unassigned"),
+          dragHere: t("board_drag_here"),
+          moveFailed: t("board_move_failed"),
+          card: {
+            budget: t("board_stat_budget"),
+            actual: t("board_stat_actual"),
+            remaining: t("board_stat_remaining"),
+            noDueDate: t("board_no_due_date"),
+            overdue: t("board_overdue"),
+            docs: t("board_docs"),
+            tasks: t("board_tasks"),
+          },
+        }}
+      />
     </div>
   );
 }

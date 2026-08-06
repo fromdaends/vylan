@@ -21,11 +21,31 @@ import { cn } from "@/lib/cn";
 //
 // One capsule, every surface (Files home rows, Browse rows, Filing settings
 // hero) — per the cohesion rule, this is the only place the shape is defined.
+//
+// ── THE ONE EXCEPTION, AND WHY IT IS A VARIANT AND NOT A SECOND COMPONENT ──
+//
+// The capacity board's approved design uses FILLED pills — a blue-tinted "In
+// progress", an amber "Waiting on client". That is the thing the rule above
+// forbids, and the rule is not wrong: a board is precisely the wall of badges
+// it warns about, since every card carries a status.
+//
+// The founder has seen the design and asked for it, so `variant="filled"`
+// exists. It lives HERE rather than as a board-local pill, so the shape, the
+// dot and the tone vocabulary still have exactly one definition — the drift
+// this file was written to prevent is two pills, not two variants.
+//
+// Default is unchanged. Nothing outside the board is touched.
 
 const capsuleVariants = cva(
-  "inline-flex w-fit shrink-0 items-center rounded-full border border-border font-medium whitespace-nowrap",
+  "inline-flex w-fit shrink-0 items-center rounded-full font-medium whitespace-nowrap",
   {
     variants: {
+      variant: {
+        outline: "border border-border",
+        // Tint comes from the tone, below — this only removes the border the
+        // outline version carries.
+        filled: "border border-transparent",
+      },
       size: {
         // Home rows and the Filing-settings hero.
         default: "gap-1.5 py-0.5 pr-2.5 pl-2 text-xs",
@@ -33,7 +53,7 @@ const capsuleVariants = cva(
         sm: "gap-1.5 py-px pr-[9px] pl-[7px] text-[11.5px]",
       },
     },
-    defaultVariants: { size: "default" },
+    defaultVariants: { size: "default", variant: "outline" },
   },
 );
 
@@ -45,11 +65,28 @@ const DOT_TONE = {
   muted: "bg-muted-foreground",
 } as const;
 
+// The filled variant's tint and text, per tone.
+//
+// TOKENS, never the handoff's raw oklch() literals. Its palette was read off
+// the light theme, so writing those values in would give a board that is
+// unreadable in dark mode — and the handoff says so itself: "use the vars".
+// Opacity does the tinting, which both themes survive.
+const FILL_TONE = {
+  success: "bg-success/[0.12] text-success",
+  warning: "bg-warning/[0.13] text-warning",
+  destructive: "bg-destructive/10 text-destructive",
+  accent: "bg-accent-subtle text-accent",
+  // Inert states stay grey — colouring "On hold" would make a parked job as
+  // loud as a live one.
+  muted: "bg-secondary text-muted-foreground",
+} as const;
+
 export type StatusTone = keyof typeof DOT_TONE;
 
 export function StatusCapsule({
   tone,
   size,
+  variant,
   className,
   children,
   ...props
@@ -58,7 +95,11 @@ export function StatusCapsule({
   return (
     <span
       data-slot="status-capsule"
-      className={cn(capsuleVariants({ size }), className)}
+      className={cn(
+        capsuleVariants({ size, variant }),
+        variant === "filled" && FILL_TONE[tone],
+        className,
+      )}
       {...props}
     >
       <span

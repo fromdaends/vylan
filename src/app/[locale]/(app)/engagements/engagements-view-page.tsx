@@ -20,6 +20,9 @@ import {
 import { getEngagementBadges } from "@/lib/engagements/badges";
 import { listSavedViews } from "@/lib/db/saved-views";
 import { EngagementsView } from "@/components/engagements/engagements-view";
+import { loadBoardNumbers } from "@/lib/db/engagement-board";
+import { listUserRates } from "@/lib/db/user-rates";
+import { can } from "@/lib/auth/capabilities";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -53,6 +56,38 @@ export async function renderEngagementsView({
   ]);
   const t = await getTranslations("Engagements");
   const canDelete = user ? canDeleteEngagements(user.role) : false;
+
+  // ── THE CAPACITY BOARD'S NUMBERS ──────────────────────────────────────
+  //
+  // Loaded here, on the server, for the rows this view actually shows: budget
+  // assembled from each job's services, actual summed from real time entries.
+  const viewRows = selectView(view, rows);
+  const boardNumbers = await loadBoardNumbers(viewRows.map((r) => r.id));
+
+  // ⚠️ MONEY IS OWNERS-ONLY. The founder's ruling, and the rule the
+  // time-tracking work established: staff must never see a rate or a
+  // labour-cost number. Without `rates.manage` this stays null and the board
+  // renders hours alone — same four cells, one less number.
+  //
+  // The rate is the firm's own median-ish answer: the caller's billable rate
+  // where they have one. RLS already returns nothing to anyone who may not
+  // read rates, so this is belt AND braces.
+  let boardRateCents: number | null = null;
+  if (can(user, "rates.manage")) {
+    try {
+      const rates = await listUserRates();
+      const mine = rates.find((r) => r.user_id === user?.id);
+      const hourly =
+        mine?.billable_rate_hourly ??
+        rates.find((r) => r.billable_rate_hourly != null)?.billable_rate_hourly ??
+        null;
+      boardRateCents = hourly == null ? null : Math.round(hourly * 100);
+    } catch {
+      // user_rates predates 1750 on some databases. No rate simply means the
+      // board shows hours, which is the same thing staff see.
+      boardRateCents = null;
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -90,7 +125,9 @@ export async function renderEngagementsView({
                 : undefined,
         }))}
         view={view}
-        rows={selectView(view, rows)}
+        rows={viewRows}
+        boardNumbers={Object.fromEntries(boardNumbers)}
+        boardRateCents={boardRateCents}
         locale={locale}
         canDelete={canDelete}
         currentUserId={user?.id ?? null}

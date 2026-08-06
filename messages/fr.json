@@ -3151,7 +3151,19 @@
     "services_billing_end_confirm": "Oui — arrêter définitivement",
     "invoice_amount_from_services": "Calculé à partir de vos éléments de service — modifiable au besoin.",
     "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)",
-    "bulk_mark_done": "Marquer terminé"
+    "bulk_mark_done": "Marquer terminé",
+    "board_stat_work_items": "Éléments de travail",
+    "board_stat_budget": "Budget",
+    "board_stat_actual": "Réel",
+    "board_stat_remaining": "Restant",
+    "board_drag_here": "Glissez du travail ici",
+    "board_move_failed": "Impossible de déplacer cette carte. Remise à sa place.",
+    "board_no_due_date": "Aucune échéance",
+    "board_overdue": "en retard",
+    "board_docs": "documents",
+    "board_tasks": "tâches",
+    "filter_chip_search": "Recherche",
+    "filter_chip_clear": "Effacer la recherche"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3530,7 +3542,10 @@
     "doc_col_amount": "Montant",
     "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette lettre. Votre acceptation est enregistrée avec la date et l'heure.",
     "totals_determined_later": "Déterminé plus tard",
-    "preview_step_acceptance": "Acceptation"
+    "preview_step_acceptance": "Acceptation",
+    "service_budget_hours": "Heures habituellement requises",
+    "service_budget_hours_hint": "Sert à planifier la capacité. Le budget d'un mandat est la somme des services qu'il contient.",
+    "service_budget_hours_placeholder": "p. ex. 6"
   },
   "Status": {
     "pending": "En attente",
