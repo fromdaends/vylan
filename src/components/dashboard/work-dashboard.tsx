@@ -310,7 +310,7 @@ export function WorkDashboard({
             menuLabel={menu}
             empty={capacity.length === 0 ? t("dash_empty_capacity") : undefined}
           >
-            <HoursByMemberChart data={capacity} height={300} />
+            <HoursByMemberChart data={capacity} />
           </ChartCard>
           <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
             {t("dash_capacity_hint")}

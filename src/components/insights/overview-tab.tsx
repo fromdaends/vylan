@@ -115,7 +115,7 @@ export function OverviewTab({ data }: { data: InsightsPayload }) {
           menuLabel={t("card_menu")}
           empty={!data.hasPayments ? t("empty_revenue") : undefined}
         >
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={months} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
@@ -153,7 +153,11 @@ export function OverviewTab({ data }: { data: InsightsPayload }) {
             !data.hasPayments && !data.hasEntries ? t("empty_margin") : undefined
           }
         >
-          <div className="mb-2 flex items-center justify-end gap-2">
+          {/* Flex column inside the card's fixed plot box: the toggle takes
+              its row, the chart takes the rest — no hand-tuned pixel split to
+              drift out of sync with ChartCard's height. */}
+          <div className="flex h-full flex-col">
+          <div className="mb-2 flex shrink-0 items-center justify-end gap-2">
             <span className="text-xs text-muted-foreground">
               {t("after_subscription")}
             </span>
@@ -163,7 +167,8 @@ export function OverviewTab({ data }: { data: InsightsPayload }) {
               ariaLabel={t("after_subscription")}
             />
           </div>
-          <ResponsiveContainer width="100%" height={232}>
+          <div className="min-h-0 flex-1">
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={months} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
@@ -202,6 +207,8 @@ export function OverviewTab({ data }: { data: InsightsPayload }) {
               />
             </LineChart>
           </ResponsiveContainer>
+          </div>
+          </div>
         </ChartCard>
       </div>
     </div>

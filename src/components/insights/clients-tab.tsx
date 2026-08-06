@@ -51,11 +51,14 @@ export function ClientsTab({ data }: { data: InsightsPayload }) {
         exploreLabel={t("explore")}
         menuLabel={t("card_menu")}
         empty={points.length === 0 ? t("empty_quadrant") : undefined}
+        plotHeight="tall"
       >
         {/* Corner labels — quiet, muted, informational. "Costing you money"
             is bottom-right: high effort, low value. */}
-        <div className="relative">
-          <ResponsiveContainer width="100%" height={320}>
+        {/* h-full so the plot fills exactly the card's plot box (plotHeight
+            above) — a taller child inside the fixed wrapper silently clips. */}
+        <div className="relative h-full">
+          <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 16, right: 16, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis

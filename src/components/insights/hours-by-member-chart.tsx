@@ -32,10 +32,12 @@ export type MemberHoursDatum = { name: string; minutes: number };
 
 export function HoursByMemberChart({
   data,
-  height = 260,
+  height = "100%",
 }: {
   data: MemberHoursDatum[];
-  height?: number;
+  /** "100%" (default) fills the parent — both homes render inside ChartCard,
+   *  whose plot box owns the ONE height decision. */
+  height?: number | "100%";
 }) {
   const rows = data.map((d) => ({
     name: d.name,

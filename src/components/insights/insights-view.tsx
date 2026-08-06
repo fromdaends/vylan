@@ -11,6 +11,7 @@ import { X } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { FilterLinks } from "@/components/ui/filter-links";
+import { formatMinutes } from "@/lib/time/duration";
 import { OverviewTab } from "@/components/insights/overview-tab";
 import { ClientsTab } from "@/components/insights/clients-tab";
 import { TeamTab } from "@/components/insights/team-tab";
@@ -71,7 +72,7 @@ export function InsightsView({
         />
       </div>
 
-      {bannerVisible && (
+      {bannerVisible && data.missingRates.length > 0 && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
           <p className="text-muted-foreground">
             {t("missing_rates_banner", { count: data.missingRates.length })}{" "}
@@ -100,6 +101,27 @@ export function InsightsView({
         </div>
       )}
 
+      {/* THE TWO HONESTY LINES — never dismissible, because each names a way
+          the margins below are WRONG, not a task to acknowledge:
+          * uncosted hours: time logged before a rate existed carries no
+            snapshot, is excluded from cost (never counted as free), and would
+            otherwise overstate every margin invisibly — the natural onboarding
+            order (track first, set rates later) hits this for weeks.
+          * an incomplete cost read: a mid-pagination failure must not let the
+            page pass off partial labor cost as the whole story. */}
+      {data.totals.uncostedMinutes > 0 && (
+        <p className="rounded-lg border border-border bg-muted/40 px-4 py-2.5 text-sm text-muted-foreground">
+          {t("uncosted_note", {
+            duration: formatMinutes(data.totals.uncostedMinutes),
+          })}
+        </p>
+      )}
+      {data.costDataIncomplete && (
+        <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+          {t("cost_read_incomplete")}
+        </p>
+      )}
+
       <ViewTabs
         activeKey={tab}
         ariaLabel={t("tabs_label")}
@@ -111,9 +133,10 @@ export function InsightsView({
       />
 
       {/* Hours-dependent surfaces get an explainer instead of empty axes when
-          nothing is tracked yet; revenue-only charts still render if payment
-          data exists (the per-chart `empty` props handle the split). */}
-      {!data.hasEntries && tab !== "overview" && (
+          nothing is tracked yet — on EVERY tab, the Overview included (its
+          hours KPI and cost line depend on entries too); revenue-only charts
+          still render if payment data exists (per-chart `empty` props). */}
+      {!data.hasEntries && (
         <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
           {t("no_entries_explainer")}
         </p>

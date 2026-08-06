@@ -145,6 +145,7 @@ export function ChartCard({
   exploreLabel,
   menuLabel,
   empty,
+  plotHeight = "default",
 }: {
   title: string;
   legend?: { label: string; color: string }[];
@@ -155,6 +156,11 @@ export function ChartCard({
   /** Shown instead of the plot when there is nothing to draw. A chart with no
    *  bars reads as broken; a sentence saying why does not. */
   empty?: string;
+  /** The card's ONE size decision, kept here rather than leaking per-chart
+   *  pixel heights into pages (a child taller than the wrapper silently
+   *  clips — the Insights quadrant shipped at 320px inside this 260px box).
+   *  "tall" is for centerpiece plots like the quadrant. */
+  plotHeight?: "default" | "tall";
 }) {
   const isEmpty = Boolean(empty);
   return (
@@ -171,7 +177,12 @@ export function ChartCard({
       </div>
 
       {isEmpty ? (
-        <p className="flex h-[260px] items-center justify-center text-center text-sm text-muted-foreground">
+        <p
+          className={cn(
+            "flex items-center justify-center text-center text-sm text-muted-foreground",
+            plotHeight === "tall" ? "h-[340px]" : "h-[260px]",
+          )}
+        >
           {empty}
         </p>
       ) : (
@@ -196,7 +207,14 @@ export function ChartCard({
               ))}
             </ul>
           )}
-          <div className="mt-2 h-[260px] w-full">{children}</div>
+          <div
+            className={cn(
+              "mt-2 w-full",
+              plotHeight === "tall" ? "h-[340px]" : "h-[260px]",
+            )}
+          >
+            {children}
+          </div>
         </>
       )}
     </div>

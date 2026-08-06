@@ -54,7 +54,7 @@ export function TeamTab({ data }: { data: InsightsPayload }) {
           menuLabel={t("card_menu")}
           empty={services.length === 0 ? t("empty_hours") : undefined}
         >
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={services}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}

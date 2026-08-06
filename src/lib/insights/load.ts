@@ -97,33 +97,46 @@ export type InsightsPayload = {
   missingRates: { userId: string; name: string }[];
   hasEntries: boolean;
   hasPayments: boolean;
+  /** True when the cost-snapshot read failed mid-way or hit its cap — the
+   *  margins on screen are then missing labor cost and the page says so. */
+  costDataIncomplete: boolean;
 };
 
-/** time_entry_costs, as the caller. A map of entry id → rate snapshot. */
-async function loadCostSnapshots(): Promise<Map<string, number>> {
+/** time_entry_costs, as the caller. A map of entry id → rate snapshot, plus
+ *  an honesty flag: a mid-pagination failure or a truncated read must NOT
+ *  quietly demote costed hours to "uncosted" — the page prints a warning when
+ *  incomplete is true, because a margin computed from half the labor cost is
+ *  worse than no margin (an unapplied migration is NOT incomplete: no table
+ *  means no snapshots exist, which is the whole truth). */
+async function loadCostSnapshots(): Promise<{
+  costs: Map<string, number>;
+  incomplete: boolean;
+}> {
   const supabase = await getServerSupabase();
-  const out = new Map<string, number>();
+  const costs = new Map<string, number>();
   const PAGE = 1000;
-  for (let offset = 0; offset < 50_000; offset += PAGE) {
+  const MAX_ROWS = 50_000;
+  for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
     const { data, error } = await supabase
       .from("time_entry_costs")
       .select("time_entry_id, cost_rate_snapshot")
       .order("time_entry_id", { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) {
-      if (!isMissingSchema(error)) {
-        console.error("[insights] cost snapshots failed:", error);
-      }
-      return out;
+      if (isMissingSchema(error)) return { costs, incomplete: false };
+      console.error("[insights] cost snapshots failed:", error);
+      return { costs, incomplete: true };
     }
     const rows = (data ?? []) as {
       time_entry_id: string;
       cost_rate_snapshot: number | string;
     }[];
-    for (const r of rows) out.set(r.time_entry_id, Number(r.cost_rate_snapshot));
-    if (rows.length < PAGE) break;
+    for (const r of rows) costs.set(r.time_entry_id, Number(r.cost_rate_snapshot));
+    if (rows.length < PAGE) return { costs, incomplete: false };
   }
-  return out;
+  // Fell out of the loop = the cap bit. A firm with >50k costed entries gets
+  // the warning rather than an arbitrary subset presented as everything.
+  return { costs, incomplete: true };
 }
 
 const GENERAL: string | null = null;
@@ -136,7 +149,7 @@ export async function loadInsights(
   const start = rangeStart(range, firm.timezone, now);
   const startIso = start ? start.toISOString() : null;
 
-  const [entriesRaw, costByEntryId, paid, clients, users, engagements, serviceNames, rates] =
+  const [entriesRaw, costSnapshots, paid, clients, users, engagements, serviceNames, rates] =
     await Promise.all([
       listEntriesForInsights(startIso),
       loadCostSnapshots(),
@@ -155,6 +168,7 @@ export async function loadInsights(
       listUserRates(),
     ]);
 
+  const costByEntryId = costSnapshots.costs;
   const entries: InsightsEntry[] = entriesRaw.map((e) => ({
     id: e.id,
     userId: e.user_id,
@@ -170,8 +184,21 @@ export async function loadInsights(
   for (const [engId, names] of serviceNames) {
     if (names[0]) serviceByEngagement.set(engId, names[0]);
   }
+  // COMPLETED IN RANGE, not completed ever (spec: "for completed engagements
+  // in range"). Without the completed_at filter, every job ever finished that
+  // picked up one stray in-range entry contributed a truncated sliver as if
+  // it were the job's whole effort, dragging every average down. A job whose
+  // work STRADDLES the range start still shows only its in-range hours — a
+  // stated v1 limit, preferred over re-reading all-time entries per job.
   const completedIds = new Set(
-    engagements.filter((e) => e.status === "complete").map((e) => e.id),
+    engagements
+      .filter(
+        (e) =>
+          e.status === "complete" &&
+          (startIso == null ||
+            (e.completed_at != null && e.completed_at >= startIso)),
+      )
+      .map((e) => e.id),
   );
 
   const stats = buildClientStats(entries, costByEntryId, paid);
@@ -253,5 +280,6 @@ export async function loadInsights(
     ),
     hasEntries: entries.length > 0,
     hasPayments: paid.length > 0,
+    costDataIncomplete: costSnapshots.incomplete,
   };
 }
