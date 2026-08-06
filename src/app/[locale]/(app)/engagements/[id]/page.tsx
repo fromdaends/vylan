@@ -39,6 +39,9 @@ import { EngagementClientViewPanel } from "@/components/engagements/engagement-c
 import { EngagementDetailsCard } from "@/components/engagements/engagement-details-card";
 import { AgreementChip } from "@/components/engagements/agreement-chip";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
+import { WorkflowGateCard } from "@/components/engagements/workflow-gate-card";
+import { getPendingWorkflowGate } from "@/lib/engagements/stage-sync";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { CommentThread } from "@/components/engagements/comment-thread";
 // The key builders MUST come from the plain comment-keys module, NOT from
@@ -1631,6 +1634,12 @@ export default async function EngagementDetailPage({
         </Alert>
       )}
 
+      {/* The workflow's confirm gate, when one is waiting — the founder's tap
+          that lets an automation's confirm-mode transition pass. Its own tiny
+          server component so it loads nothing on the 99% of renders where no
+          gate is pending. */}
+      <WorkflowGateSection engagementId={engagement.id} />
+
       {/* Checklist + Signatures share one tab switch (Checklist is the default)
           so the page shows one section at a time instead of stacking both. Each
           tab keeps its own controls. The Activity feed lives in the Assistant
@@ -2380,4 +2389,18 @@ function itemBadgeVariant(
   if (status === "na") return "outline";
   if (status === "submitted") return "secondary";
   return "outline";
+}
+
+// The confirm-gate loader, split out so the main render never pays for it:
+// getPendingWorkflowGate short-circuits on no-workflow/flag-off engagements,
+// and rendering null keeps the page byte-identical for them.
+async function WorkflowGateSection({ engagementId }: { engagementId: string }) {
+  const gate = await getPendingWorkflowGate(
+    await getServerSupabase(),
+    engagementId,
+  );
+  if (!gate) return null;
+  return (
+    <WorkflowGateCard engagementId={engagementId} from={gate.from} to={gate.to} />
+  );
 }
