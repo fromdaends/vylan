@@ -191,6 +191,12 @@ begin
       );
   end if;
 
+  -- WITH CHECK pins the TARGET to the caller's firm, not only the row's
+  -- firm_id. Without the exists(), the platform-wide FK let a rates.manage
+  -- holder in firm A insert a row pairing firm A with a firm-B user's id —
+  -- and because the primary key is user_id alone, that squatted row would
+  -- have made firm B's own upsert fail forever (their session can neither
+  -- update nor replace a row whose firm_id is not theirs).
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'user_rates'
@@ -203,9 +209,53 @@ begin
       ) with check (
         firm_id = public.current_firm_id()
         and public.current_user_has_capability('rates.manage')
+        and exists (
+          select 1 from public.users tu
+          where tu.id = user_rates.user_id
+            and tu.firm_id = user_rates.firm_id
+        )
       );
   end if;
 end $$;
+
+-- ── FIRM-PIN HELPERS ───────────────────────────────────────────────────────
+-- Used by the time_entries write policies to pin every foreign key to the
+-- caller's own firm. SECURITY DEFINER on purpose, twice over:
+--   * a plain subquery in the policy would consult the target table's OWN RLS,
+--     so a client marked private mid-timer would make its author's rows
+--     unwritable (the exists() would see nothing);
+--   * privacy is not the question being asked — "is this MY FIRM'S client" is
+--     membership, and the private-client rule is enforced by its own arm.
+-- Self-scoping (current_firm_id() reads the caller's JWT), so invoking them
+-- directly via PostgREST answers only about your own firm — same safety
+-- argument as 0810's helpers.
+create or replace function public.client_in_my_firm(cid uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.clients
+    where id = cid and firm_id = public.current_firm_id()
+  )
+$$;
+
+create or replace function public.engagement_matches_client(eid uuid, cid uuid)
+  returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.engagements
+    where id = eid and client_id = cid
+      and firm_id = public.current_firm_id()
+  )
+$$;
+
+create or replace function public.task_matches_client(tid uuid, cid uuid)
+  returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.engagement_tasks
+    where id = tid and client_id = cid
+      and firm_id = public.current_firm_id()
+  )
+$$;
 
 -- ── TIME ENTRIES — HOURS, SHARED ───────────────────────────────────────────
 create table if not exists public.time_entries (
@@ -300,8 +350,20 @@ alter table public.time_entries enable row level security;
 -- together can see how long it is taking, which is shared work context rather
 -- than surveillance.
 --
--- client_is_private() is the security-definer helper from 0810; the arm reads
--- exactly like every other client-scoped table's.
+-- THREE ARMS, each there for a failure the adversarial review actually found:
+--
+--   * `user_id = auth.uid()` FIRST — you ALWAYS see your own entries, no
+--     matter what. Without this arm, marking a client private while somebody's
+--     timer ran on it hid the running row from its own author — the pill
+--     vanished, the one-per-user unique index still counted the invisible row,
+--     and every future "Start timer" failed firm-wide until an owner stopped
+--     it. Your own hours can never leak anything to you.
+--   * OUTSIDE COLLABORATORS (users.is_external, 1300) see ONLY their own.
+--     1300's own words: "the whole firm can see this exists" means the FIRM,
+--     and an outsider is not the firm. A contractor's capacity view is their
+--     own hours; entry notes routinely name the work.
+--   * Everyone else in the firm: everything except private clients, the
+--     standard 0810 arm.
 do $$
 begin
   if not exists (
@@ -313,8 +375,14 @@ begin
       for select using (
         firm_id = public.current_firm_id()
         and (
-          public.current_user_has_capability('clients.private')
-          or not public.client_is_private(client_id)
+          user_id = auth.uid()
+          or (
+            not public.current_user_is_external()
+            and (
+              public.current_user_has_capability('clients.private')
+              or not public.client_is_private(client_id)
+            )
+          )
         )
       );
   end if;
@@ -322,6 +390,13 @@ begin
   -- You log YOUR OWN time. Writing an hour onto a colleague's name is not a
   -- thing the product does, and an owner correcting somebody's entry goes
   -- through the update policy below, not through inserting as them.
+  --
+  -- The three *_in_my_firm guards pin every foreign key to the CALLER'S OWN
+  -- firm — the FKs alone only require the row to exist somewhere on the
+  -- platform, so without them a pasted foreign uuid could stitch firm A's
+  -- entry onto firm B's client. Security-definer helpers (below), not raw
+  -- subqueries: a raw subquery would consult clients' own RLS, and a client
+  -- going private mid-timer would have made the author's own rows unwritable.
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'time_entries'
@@ -331,6 +406,15 @@ begin
       for insert with check (
         firm_id = public.current_firm_id()
         and user_id = auth.uid()
+        and public.client_in_my_firm(client_id)
+        and (
+          engagement_id is null
+          or public.engagement_matches_client(engagement_id, client_id)
+        )
+        and (
+          task_id is null
+          or public.task_matches_client(task_id, client_id)
+        )
         and (
           public.current_user_has_capability('clients.private')
           or not public.client_is_private(client_id)
@@ -363,6 +447,17 @@ begin
         and (
           user_id = auth.uid()
           or public.current_user_has_capability('time.manage')
+        )
+        -- An edit may move the entry between engagements; the moved-to links
+        -- must obey the same firm pins as an insert.
+        and public.client_in_my_firm(client_id)
+        and (
+          engagement_id is null
+          or public.engagement_matches_client(engagement_id, client_id)
+        )
+        and (
+          task_id is null
+          or public.task_matches_client(task_id, client_id)
         )
       );
   end if;
@@ -440,22 +535,11 @@ begin
       );
   end if;
 
-  -- WRITES are narrower than reads: rates.manage only. A snapshot is written at
-  -- entry-creation time by the SERVICE ROLE (which bypasses RLS), not by the
-  -- staff member's own session — the alternative is granting every member
-  -- insert on a table whose whole purpose is to be invisible to them.
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public' and tablename = 'time_entry_costs'
-      and policyname = 'time_entry_costs_write'
-  ) then
-    create policy time_entry_costs_write on public.time_entry_costs
-      for all using (
-        firm_id = public.current_firm_id()
-        and public.current_user_has_capability('rates.manage')
-      ) with check (
-        firm_id = public.current_firm_id()
-        and public.current_user_has_capability('rates.manage')
-      );
-  end if;
+  -- NO WRITE POLICY AT ALL — deliberately. Every snapshot is written by the
+  -- SERVICE ROLE at entry-creation time (it bypasses RLS), and a snapshot is
+  -- FROZEN: the whole reason the column exists is that a later rate change
+  -- must not rewrite history. An authenticated write policy — even one gated
+  -- on rates.manage — would have let a holder "correct" frozen snapshots via
+  -- PostgREST, which is exactly the rewriting the freeze forbids. RLS enabled
+  -- + no policy = deny-all for every session, the 0002 jobs-table pattern.
 end $$;

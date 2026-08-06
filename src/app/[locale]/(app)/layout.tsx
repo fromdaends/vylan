@@ -101,6 +101,7 @@ export default async function AppLayout({
   // the 14 days are up. Surface an "upgrade" state in the banner when it's
   // reached. Only query usage for trial firms — paid firms skip the round trip.
   // Batched with the avatar signing rather than awaited after it.
+  const timeEnabled = isTimeInsightsEnabled(firm);
   const [avatarUrl, aiUsage, runningEntry] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
     firm.is_demo ? getFirmAiUsage(firm.id) : Promise.resolve(null),
@@ -108,9 +109,7 @@ export default async function AppLayout({
     // — a firm with the flag off pays nothing for it. Errors read as "no
     // timer" inside getRunningEntry, so a broken read can never take the
     // layout down.
-    isTimeInsightsEnabled(firm)
-      ? getRunningEntry(dbUser.id)
-      : Promise.resolve(null),
+    timeEnabled ? getRunningEntry(dbUser.id) : Promise.resolve(null),
   ]);
   const aiLimitReached = aiUsage ? aiUsage.isTrial && aiUsage.paused : false;
 
@@ -129,10 +128,14 @@ export default async function AppLayout({
       quickbooksConnected={quickbooksHasAny}
       xeroConnected={xeroHasAny}
       topBar={
-        // The sticky strip exists only when something fills it: the trial
-        // banner, the running-timer pill, or both stacked. `undefined` keeps
-        // the wrapper out of the tree entirely — no empty bar reserving space.
-        firm.is_demo || runningEntry ? (
+        // The strip exists when the banner fills it OR the time feature is on.
+        // TimerPill mounts WHENEVER the feature is on — not only while a timer
+        // runs — because it hosts the stop-toast's Edit dialog: unmounting it
+        // the moment the running entry disappears (which is exactly when the
+        // toast appears) would make the toast's Edit button dead on arrival.
+        // With no entry and no dialog open it renders nothing visible, and the
+        // empty sticky wrapper has zero height.
+        firm.is_demo || timeEnabled ? (
           <>
             {firm.is_demo && (
               <TrialBanner
@@ -141,15 +144,19 @@ export default async function AppLayout({
                 aiLimitReached={aiLimitReached}
               />
             )}
-            {runningEntry && (
+            {timeEnabled && (
               <TimerPill
-                entry={{
-                  id: runningEntry.id,
-                  startedAt: runningEntry.started_at,
-                  clientName: runningEntry.client_name,
-                  engagementTitle: runningEntry.engagement_title,
-                  note: runningEntry.note,
-                }}
+                entry={
+                  runningEntry
+                    ? {
+                        id: runningEntry.id,
+                        startedAt: runningEntry.started_at,
+                        clientName: runningEntry.client_name,
+                        engagementTitle: runningEntry.engagement_title,
+                        note: runningEntry.note,
+                      }
+                    : null
+                }
               />
             )}
           </>

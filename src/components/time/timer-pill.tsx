@@ -37,7 +37,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { formatElapsed, formatMinutes } from "@/lib/time/duration";
-import { localDay } from "@/lib/time/dates";
 import { stopTimerAction } from "@/app/actions/time-entries";
 import {
   EditEntryDialog,
@@ -125,10 +124,10 @@ function RunningPill({
         setOpen(false);
         const saved: EditableEntry = {
           id: entry.id,
-          // localDay, NEVER toISOString: the UTC date is tomorrow every
-          // Quebec evening, and saving the toast's Edit dialog unchanged
-          // would have quietly moved the entry a day forward.
-          day: localDay(),
+          // The SERVER'S answer, in the firm's calendar — the browser's
+          // "today" is wrong for an overnight timer, and even localDay()
+          // disagrees with the firm the moment someone works travelling.
+          day: res.value.day,
           durationMinutes: res.value.durationMinutes,
           note: trimmed ? trimmed : null,
         };

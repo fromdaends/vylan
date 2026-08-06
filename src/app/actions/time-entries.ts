@@ -25,6 +25,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { can } from "@/lib/auth/capabilities";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { noonInTimeZone } from "@/lib/time/dates";
+import { dateInTimeZone } from "@/lib/tasks/dates";
 import {
   getRunningEntry,
   insertTimerStart,
@@ -138,22 +139,32 @@ export async function startTimerAction(input: {
 }
 
 /** Stop a timer and save it. The entry id comes from the pill; RLS refuses the
- *  call for anyone who may not touch that entry. */
+ *  call for anyone who may not touch that entry. Already-stopped (a second tab
+ *  won the race) is a SUCCESS — stopEntry hands back the finished row either
+ *  way; null means the entry is genuinely gone. */
 export async function stopTimerAction(input: {
   entryId: string;
   note?: string | null;
-}): Promise<Result<{ id: string; durationMinutes: number }>> {
+}): Promise<Result<{ id: string; durationMinutes: number; day: string }>> {
   const g = await guard();
   if (!g.ok) return g;
   try {
     const stopped = await stopEntry(input.entryId, input.note);
-    // Already stopped (a second tab won the race) is a fine outcome — the
-    // hour is saved either way; report it as such rather than alarming.
     if (!stopped) return { ok: false, error: "failed" };
     revalidateTime(stopped.engagement_id, stopped.client_id);
     return {
       ok: true,
-      value: { id: stopped.id, durationMinutes: stopped.duration_minutes },
+      value: {
+        id: stopped.id,
+        durationMinutes: stopped.duration_minutes,
+        // The entry's day in the FIRM's calendar, for the toast's Edit dialog.
+        // Computed here because only the server knows the firm timezone — the
+        // browser's "today" is the wrong answer for an overnight timer and for
+        // any evening where the two calendars disagree.
+        day:
+          dateInTimeZone(stopped.started_at, g.firm.timezone) ??
+          stopped.started_at.slice(0, 10),
+      },
     };
   } catch (err) {
     if (err instanceof TimeEntriesUnsupportedError) {

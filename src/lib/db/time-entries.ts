@@ -171,20 +171,23 @@ export async function insertTimerStart(input: {
 
 /** Stop the caller's running entry: stamp the end, compute the minutes. Runs
  *  as the caller, so stopping somebody else's timer is refused by RLS unless
- *  they hold time.manage. Returns the finished entry, or null if it was
- *  already stopped (two tabs racing — the loser is a no-op, not an error). */
+ *  they hold time.manage.
+ *
+ *  IDEMPOTENT: stopping an entry a second tab already stopped returns the
+ *  FINISHED entry rather than an error — the hour is saved either way, and
+ *  the loser of that race did nothing wrong. Null only when the entry is
+ *  gone or not the caller's to see. */
 export async function stopEntry(
   entryId: string,
   note?: string | null,
 ): Promise<TimeEntry | null> {
   const supabase = await getServerSupabase();
-  // Read the start first: duration is derived server-side from the row, not
-  // trusted from the browser.
+  // Read WITHOUT the running filter: duration is derived server-side from the
+  // row, and an already-stopped row is the benign race, not a miss.
   const { data: row, error: readError } = await supabase
     .from("time_entries")
     .select(SELECT)
     .eq("id", entryId)
-    .is("ended_at", null)
     .is("deleted_at", null)
     .maybeSingle();
   if (readError || !row) {
@@ -193,7 +196,10 @@ export async function stopEntry(
     }
     return null;
   }
-  const startedAt = new Date((row as TimeEntry).started_at);
+  const current = row as unknown as TimeEntry;
+  if (current.ended_at != null) return current;
+
+  const startedAt = new Date(current.started_at);
   const endedAt = new Date();
   const minutes = Math.max(
     0,
@@ -215,7 +221,16 @@ export async function stopEntry(
     if (isMissingSchema(error)) throw new TimeEntriesUnsupportedError();
     throw error;
   }
-  return (data as unknown as TimeEntry) ?? null;
+  if (data) return data as unknown as TimeEntry;
+  // Lost the race between the read and the update — the other tab's stop won.
+  // Re-read once and hand back what it saved.
+  const { data: settled } = await supabase
+    .from("time_entries")
+    .select(SELECT)
+    .eq("id", entryId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (settled as unknown as TimeEntry) ?? null;
 }
 
 /** A manual entry: a chosen day, a typed duration, ended_at set immediately —
