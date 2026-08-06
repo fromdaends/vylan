@@ -260,7 +260,15 @@ export function TaskArtifactPanel({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/35 animate-in-fade" />
         <DialogPrimitive.Content
-          className="fixed inset-x-4 top-[max(env(safe-area-inset-top),6vh)] z-50 mx-auto max-h-[86dvh] w-auto max-w-[640px] overflow-y-auto rounded-2xl bg-card shadow-panel animate-modal-in focus-visible:outline-none sm:top-[110px] sm:max-h-[calc(100dvh-150px)]"
+          className={cn(
+            "fixed inset-x-4 top-[max(env(safe-area-inset-top),6vh)] z-50 mx-auto max-h-[86dvh] w-auto overflow-y-auto rounded-2xl bg-card shadow-panel animate-modal-in focus-visible:outline-none",
+            // The document request is the working panel — a review queue, not
+            // a status card — so it takes more room (founder request): wider,
+            // and pulled up so its list gets the height.
+            kind === "docs"
+              ? "max-w-[860px] sm:top-16 sm:max-h-[calc(100dvh-104px)]"
+              : "max-w-[640px] sm:top-[110px] sm:max-h-[calc(100dvh-150px)]",
+          )}
           aria-describedby={undefined}
         >
           <div className="px-[22px] pt-5">
