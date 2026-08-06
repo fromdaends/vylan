@@ -212,11 +212,6 @@ export function IconRail({
           width={46}
           height={46}
           priority
-          // The mark is small and sits on near-black, where Next's default 75%
-          // leaves visible ringing around the edges. It is one tiny asset —
-          // encode it losslessly rather than have the product's own logo be the
-          // softest thing in the chrome.
-          quality={100}
           className="size-[46px] object-contain transition-transform duration-[400ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:scale-[1.08] group-hover:-rotate-[4deg] motion-reduce:transition-none motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0"
         />
       </Link>
@@ -244,8 +239,8 @@ export function IconRail({
         >
           <Plus
             aria-hidden
-            // See RailLink for why every rail glyph carries this.
-            absoluteStrokeWidth
+            // 18px in a 24-unit box already paints an exact 1.5px stroke, so
+            // this one was crisp all along and is left alone.
             className={cn(
               "size-[18px] transition-transform duration-200",
               // Turns into an x. The button is the only way to shut the panel
@@ -261,7 +256,7 @@ export function IconRail({
           title={tHome("new_engagement")}
           className="mt-8 inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
-          <Plus className="size-[18px]" absoluteStrokeWidth aria-hidden />
+          <Plus className="size-[18px]" aria-hidden />
         </Link>
       )}
 
@@ -275,7 +270,7 @@ export function IconRail({
         title={tHome("search_label")}
         className="mt-2 inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] text-white/55 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
       >
-        <Search className="size-[19px]" absoluteStrokeWidth aria-hidden />
+        <Search className="size-[19px]" strokeWidth={1.895} aria-hidden />
       </button>
 
       <nav
@@ -484,13 +479,19 @@ function RailLink({
   );
   const inner = (
     <>
-      {/* absoluteStrokeWidth pins the stroke at 2px instead of letting lucide
-          scale it with the box. Without it the rail paints three different
-          weights — 1.83px here, 1.58px on Search, 1.5px on Plus — because each
-          icon's 24-unit stroke is squeezed into a smaller box. None of them land
-          on a whole pixel, so every glyph is drawn half-lit into its neighbours,
-          which is what makes the set look soft. Sizes are unchanged. */}
-      <Icon className="size-[22px]" absoluteStrokeWidth aria-hidden />
+      {/* lucide draws a 2-unit stroke inside a 24-unit box, so an icon sized by
+          CSS paints its lines at 2 x (size / 24) — a fraction of a pixel unless
+          the size divides cleanly. At 22px that is 1.833px, which on a 2x screen
+          is 3.67 device pixels: every line is drawn a third-lit into the pixel
+          beside it, and the whole set reads as slightly smeared. 2.182 here
+          paints exactly 2px (4 device pixels). Search does the same arithmetic
+          the other way, and Plus already landed clean.
+
+          NOT lucide's own `absoluteStrokeWidth`: it divides by the `size` PROP,
+          which this codebase never sets (sizes come from CSS classes), so it
+          computes 2 x 24/24 and changes nothing at all. It looks like the right
+          switch and is a no-op here. Sizes are unchanged. */}
+      <Icon className="size-[22px]" strokeWidth={2.182} aria-hidden />
       <span
         className={cn(
           // The body sets -webkit-font-smoothing: antialiased, which THINS
