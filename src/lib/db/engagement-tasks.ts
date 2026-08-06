@@ -342,6 +342,17 @@ export async function createEngagementTask(input: {
    *  ask for a due date and whatever relevant information. Not only after." */
   assigneeIds?: string[];
   createdBy?: string | null;
+  /**
+   * The workflow stage this task BELONGS to (1560, workflows-sync merge).
+   *
+   * Set on work an engagement's flow owns — the builder's Tasks step tags
+   * everything 'in_preparation' on flow-carrying engagements — so the
+   * stage_tasks_done advance condition counts it: the flow cannot invoice or
+   * complete while the real work list is still open. Omitted = a hand-made
+   * task the flow does not wait for, and the column stays out of the insert
+   * entirely (pre-1560 environments never see it).
+   */
+  workflowStage?: string | null;
   /** Appended, so a new step lands at the bottom rather than the top. */
   orderIndex: number;
   /** Makes this a SUBTASK of that task. client_id and engagement_id are then
@@ -362,6 +373,10 @@ export async function createEngagementTask(input: {
       order_index: input.orderIndex,
       parent_id: input.parentId ?? null,
       created_by: input.createdBy ?? null,
+      // Only when the flow owns this work — omitted entirely otherwise, so
+      // the insert is byte-identical to before on every non-flow path and on
+      // any environment without the column.
+      ...(input.workflowStage ? { workflow_stage: input.workflowStage } : {}),
     })
     .select("id")
     .single();
