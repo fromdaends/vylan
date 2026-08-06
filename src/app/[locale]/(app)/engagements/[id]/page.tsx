@@ -1644,6 +1644,7 @@ export default async function EngagementDetailPage({
             items={engagementItems}
             locale={locale}
             schedules={billingSchedules.map((s) => ({
+              id: s.id,
               frequency: s.frequency,
               nextChargeOn: s.next_charge_on,
               status: s.status,

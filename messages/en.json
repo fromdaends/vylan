@@ -2974,7 +2974,12 @@
     "wizard_step_desc_billing": "How it gets paid",
     "wizard_step_desc_reminders": "Who gets chased, and when",
     "wizard_step_desc_proposal": "What your client will read",
-    "preview_for_client": "Preview · {name}"
+    "preview_for_client": "Preview · {name}",
+    "services_billing_menu": "Billing options",
+    "services_billing_pause": "Pause billing",
+    "services_billing_resume": "Resume billing",
+    "services_billing_end": "Stop billing for good",
+    "services_billing_end_confirm": "Yes — stop billing permanently"
   },
   "Attention": {
     "metric_active": "Active",

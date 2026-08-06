@@ -180,6 +180,47 @@ export async function advanceBillingScheduleSR(
   }
 }
 
+/**
+ * Bring a client's billing back when they are un-archived.
+ *
+ * ── THE TRAP THIS CLOSES ───────────────────────────────────────────────────
+ *
+ * chargeSchedulePeriod PAUSES a schedule when its client is archived — right,
+ * because billing someone who has been shelved is worse than missing a month.
+ * But nothing ever un-paused it. Un-archiving a client silently ended their
+ * recurring revenue forever, with no error, no banner and nothing on screen
+ * saying billing had stopped. The firm would find out when the money did not
+ * arrive, months later, if at all.
+ *
+ * Only resumes what the ARCHIVE paused: an 'ended' schedule stayed ended (the
+ * engagement was cancelled, or its lines were deleted), and a schedule the firm
+ * paused deliberately would also be 'paused' — so this deliberately resumes
+ * those too rather than inventing a second pause reason to tell them apart. A
+ * firm that meant to stop it can stop it again in one click; a firm that never
+ * meant to stop it would otherwise never know.
+ *
+ * Best-effort: un-archiving a client must not fail because a billing table is
+ * missing or a write hiccuped.
+ */
+export async function resumeSchedulesForClientSR(
+  clientId: string,
+): Promise<number> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("engagement_billing_schedules")
+    .update({ status: "active" })
+    .eq("client_id", clientId)
+    .eq("status", "paused")
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[billing-schedules] resume failed:", error.message);
+    }
+    return 0;
+  }
+  return (data ?? []).length;
+}
+
 export async function setBillingScheduleStatusSR(
   scheduleId: string,
   status: BillingScheduleStatus,
