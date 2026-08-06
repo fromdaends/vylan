@@ -21,12 +21,10 @@ export function TaskTemplateRow({
   id,
   name,
   meta,
-  isPrivate,
 }: {
   id: string;
   name: string;
   meta: string;
-  isPrivate: boolean;
 }) {
   const t = useTranslations("Templates");
   const router = useRouter();
@@ -42,13 +40,9 @@ export function TaskTemplateRow({
       // editing are the same thing. It opens the builder on its own route now,
       // the same way an engagement template's row does.
       href={href}
-      badges={
-        isPrivate ? (
-          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase text-muted-foreground">
-            {t("access_private")}
-          </span>
-        ) : null
-      }
+      // NO access badge — the Team / Private pills above the list already say
+      // it, and repeating it per row said the same word once per template.
+      // `isPrivate` still decides which pill this row lands behind.
       actions={[
         { label: t("edit"), onSelect: () => router.push(href) },
         {

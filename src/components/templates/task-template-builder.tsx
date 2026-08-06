@@ -35,7 +35,7 @@ import {
   TemplateBuilderShell,
   Field,
   Fieldset,
-  RadioCard,
+  Segmented,
 } from "@/components/templates/template-builder-shell";
 import { saveTaskTemplateAction } from "@/app/actions/task-templates";
 import { TASK_KIND_META, taskKindLabelKey } from "@/lib/tasks/kinds";
@@ -50,6 +50,11 @@ type Tab = (typeof TABS)[number];
 // rendering on screen — next-intl fails silently, and this repo has shipped
 // that bug twice.
 type TabKey = "tab_task_details" | "tab_task_steps" | "tab_task_documents";
+
+type StepDescKey =
+  | "step_desc_task_details"
+  | "step_desc_task_steps"
+  | "step_desc_task_documents";
 
 export type RequestTemplateOption = {
   id: string;
@@ -80,7 +85,6 @@ export function TaskTemplateBuilder({
   const [pending, startTransition] = useTransition();
 
   const [tab, setTab] = useState<Tab>("details");
-  const [previewOpen, setPreviewOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(initial?.name ?? "");
@@ -140,31 +144,27 @@ export function TaskTemplateBuilder({
       title={
         initial ? t("edit_task_template") : t("create_task_template")
       }
+      kicker={t("kicker_task_template")}
       explainer={t("task_template_builder_explainer")}
       tabs={TABS.map((key) => ({
         key,
         label: t(`tab_task_${key}` as TabKey),
-        // Only the name stops you saving, so only its tab can be incomplete.
+        description: t(`step_desc_task_${key}` as StepDescKey),
+        // Only the name stops you saving, so only its step can be incomplete.
         incomplete: key === "details" && name.trim().length === 0,
       }))}
       activeTab={tab}
       onTabChange={(key) => setTab(key as Tab)}
-      actions={[
-        {
-          label: t("task_templates_save"),
-          disabled: !canSave || pending,
-          onClick: save,
-        },
-      ]}
+      finalAction={{
+        label: t("task_templates_save"),
+        disabled: !canSave || pending,
+        onClick: save,
+      }}
       onClose={() => router.push("/templates/tasks")}
-      previewOpen={previewOpen}
-      onPreviewToggle={() => setPreviewOpen((v) => !v)}
+      previewLabel={t("task_template_preview_label")}
       error={error}
       preview={
-        <div className="mx-auto max-w-md space-y-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t("task_template_preview_label")}
-          </p>
+        <div className="w-full space-y-4">
           {/* The work as it will land on an engagement. */}
           <div className="rounded-xl border border-border bg-card p-4">
             {/* Absent, not "a task called Template name". Echoing the field's
@@ -224,30 +224,30 @@ export function TaskTemplateBuilder({
       {tab === "details" && (
         <>
           <Fieldset title={t("template_details")}>
-            <Field
-              label={`${t("template_name_label")} *`}
-              htmlFor="task-tpl-name"
-            >
-              <Input
-                id="task-tpl-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t("task_templates_name_placeholder")}
-              />
-            </Field>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {(["team", "private"] as const).map((value) => (
-                <RadioCard
-                  key={value}
-                  name="task-tpl-access"
-                  checked={access === value}
-                  onSelect={() => setAccess(value)}
-                  caption={t("template_access")}
-                  label={
-                    value === "team" ? t("access_team") : t("access_private")
-                  }
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field
+                label={t("template_name_label")}
+                htmlFor="task-tpl-name"
+                required
+              >
+                <Input
+                  id="task-tpl-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t("task_templates_name_placeholder")}
                 />
-              ))}
+              </Field>
+              <Field label={t("template_access")}>
+                <Segmented
+                  value={access}
+                  onChange={setAccess}
+                  label={t("template_access")}
+                  options={[
+                    { value: "team" as const, label: t("access_team") },
+                    { value: "private" as const, label: t("access_private") },
+                  ]}
+                />
+              </Field>
             </div>
           </Fieldset>
 

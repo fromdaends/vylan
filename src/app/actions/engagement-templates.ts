@@ -141,6 +141,15 @@ type Result = {
   ok: boolean;
   needsMigration?: boolean;
   error?: "unauthenticated" | "invalid" | "empty" | "failed";
+  /**
+   * The row that was written. The listing uses it to scroll the new template
+   * to the top of the right tab and flash it once — without an id back, a save
+   * dumps you on a list of thirty and leaves you to find your own work.
+   *
+   * Absent on an UPDATE, deliberately: you already know where that row is,
+   * because you were just looking at it.
+   */
+  id?: string;
 };
 
 export async function saveEngagementAsTemplateAction(
@@ -176,7 +185,7 @@ export async function saveEngagementAsTemplateAction(
 
   revalidatePath("/engagements/new");
   revalidatePath("/templates/engagements");
-  return { ok: true };
+  return { ok: true, id: "id" in res ? res.id : undefined };
 }
 
 export async function archiveEngagementTemplateAction(

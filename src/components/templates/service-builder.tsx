@@ -72,6 +72,11 @@ type TabKey =
   | "tab_service_pricing"
   | "tab_service_work"
   | "tab_service_letter";
+type StepDescKey =
+  | "step_desc_service_service"
+  | "step_desc_service_pricing"
+  | "step_desc_service_work"
+  | "step_desc_service_letter";
 type FreqKey =
   | "item_freq_once"
   | "item_freq_weekly"
@@ -120,7 +125,6 @@ export function ServiceBuilder({
   const [pending, startTransition] = useTransition();
 
   const [tab, setTab] = useState<Tab>("service");
-  const [previewOpen, setPreviewOpen] = useState(true);
 
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -186,30 +190,26 @@ export function ServiceBuilder({
   return (
     <TemplateBuilderShell
       title={initial ? t("services_edit") : t("services_add")}
+      kicker={tT("kicker_service")}
       explainer={tT("service_builder_explainer")}
       tabs={TABS.map((key) => ({
         key,
         label: tT(`tab_service_${key}` as TabKey),
-        // Only the name stops you saving, so only its tab can be incomplete.
+        description: tT(`step_desc_service_${key}` as StepDescKey),
+        // Only the name stops you saving, so only its step can be incomplete.
         incomplete: key === "service" && name.trim().length === 0,
       }))}
       activeTab={tab}
       onTabChange={(key) => setTab(key as Tab)}
-      actions={[
-        {
-          label: t("services_save"),
-          disabled: !canSave || pending,
-          onClick: save,
-        },
-      ]}
+      finalAction={{
+        label: t("services_save"),
+        disabled: !canSave || pending,
+        onClick: save,
+      }}
       onClose={() => router.push("/templates/services")}
-      previewOpen={previewOpen}
-      onPreviewToggle={() => setPreviewOpen((v) => !v)}
+      previewLabel={tT("service_preview_label")}
       preview={
-        <div className="mx-auto max-w-md space-y-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {tT("service_preview_label")}
-          </p>
+        <div className="w-full space-y-4">
           {/* The service as a priced line on an engagement — which is the
               thing a service actually becomes. */}
           <div className="rounded-xl border border-border bg-card p-4">

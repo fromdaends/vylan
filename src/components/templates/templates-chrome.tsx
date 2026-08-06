@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 // The shared furniture of a Templates page.
 //
@@ -98,10 +99,41 @@ export function CardGrid({ children }: { children: ReactNode }) {
   );
 }
 
-export function EmptyState({ children }: { children: ReactNode }) {
+/**
+ * "You have none of these yet", in ONE shape.
+ *
+ * It used to take children, and every page built its own arrangement out of
+ * them — three listing pages, three slightly different icon tiles, three
+ * paragraph widths. The structure is props now, so a page supplies the WORDS
+ * and cannot supply a layout.
+ *
+ * It also stopped drawing its own dashed border. It lives INSIDE the list card
+ * now, and a bordered box inside a bordered box reads as a broken frame rather
+ * than as an empty list.
+ */
+export function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  /** One line on what this kind of template is FOR — an empty list is the one
+   *  moment somebody is definitely willing to read it. */
+  hint: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border-[1.5px] border-dashed border-border/90 bg-card px-6 py-11 text-center">
-      {children}
+    <div className="flex flex-col items-center gap-2.5 px-6 py-14 text-center">
+      <span className="grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <p className="text-sm font-[550] text-foreground">{title}</p>
+      <p className="max-w-[44ch] text-[12.5px] leading-relaxed text-muted-foreground">
+        {hint}
+      </p>
+      {action && <div className="mt-1">{action}</div>}
     </div>
   );
 }

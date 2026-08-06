@@ -159,8 +159,12 @@ export function ProposalPreview({
     (data.videoUrl?.trim().length ?? 0) > 0 ||
     (data.documentName?.trim().length ?? 0) > 0;
 
+  // No max-width of its own. It is ALWAYS inside something that has already
+  // decided how wide a proposal should be — the wizard's preview card, or the
+  // portal's accept page — and a 448px cap inside a 520px card just painted a
+  // stripe of empty wash down both sides.
   return (
-    <div className="w-full max-w-md space-y-4">
+    <div className="w-full space-y-4">
       {/* ── THE CLIENT'S PROGRESS ─────────────────────────────────────────
           A GRID of equal columns, with the connectors drawn between the
           circles rather than inside the steps.

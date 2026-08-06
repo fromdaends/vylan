@@ -54,6 +54,7 @@ export function TemplateRow({
   onSelect,
   actions = [],
   dimmed = false,
+  fresh = false,
 }: {
   icon: LucideIcon;
   name: string;
@@ -80,23 +81,35 @@ export function TemplateRow({
   actions?: TemplateRowAction[];
   /** Archived or otherwise inactive — same row, quieter. */
   dimmed?: boolean;
+  /**
+   * You just made this one. Flashes accent-subtle → transparent over 1.8s and
+   * then is an ordinary row forever.
+   *
+   * A one-shot animation rather than a state: the point is to catch your eye
+   * on arrival, and a row that stayed marked would still be marked tomorrow,
+   * when "new" has stopped being true.
+   */
+  fresh?: boolean;
 }) {
   const t = useTranslations("Templates");
 
   const body = (
     <>
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
-        <Icon className="size-[18px]" aria-hidden />
+      {/* NEUTRAL, not accent. Thirty accent-coloured tiles down a list is
+          thirty things asking for attention and nothing getting it — colour is
+          saved for the rows that are an exception to something. */}
+      <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-muted text-muted-foreground">
+        <Icon className="size-4" strokeWidth={1.8} aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-[14.5px] font-semibold leading-snug text-foreground">
+          <span className="truncate text-sm font-[520] leading-snug text-foreground">
             {name}
           </span>
           {badges}
         </span>
         {meta && (
-          <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
+          <span className="mt-px block truncate text-[12.5px] text-muted-foreground">
             {meta}
           </span>
         )}
@@ -107,8 +120,12 @@ export function TemplateRow({
   return (
     <li
       className={cn(
-        "group flex items-center gap-3 rounded-xl border border-border/70 bg-card px-[18px] py-3 transition-all duration-200",
-        "hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)]",
+        // Hairline between rows, drawn on the TOP of each so the card's own
+        // border is never doubled at the ends. The rows used to be separate
+        // bordered cards with a gap; one card with dividers is quieter and
+        // scans as a list rather than as a pile.
+        "group flex items-center gap-3.5 border-t border-border px-4 py-[13px] transition-colors first:border-t-0 hover:bg-muted/55",
+        fresh && "wizard-row-fresh",
         // Only when the row actually goes somewhere — a pointer on a row that
         // does nothing is a promise it cannot keep.
         (href || onSelect) && "cursor-pointer",
@@ -119,7 +136,7 @@ export function TemplateRow({
           cannot legally live inside an anchor, and nesting them is how a menu
           click starts navigating instead of opening. */}
       {href ? (
-        <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
+        <Link href={href} className="flex min-w-0 flex-1 items-center gap-3.5">
           {body}
         </Link>
       ) : onSelect ? (
@@ -128,12 +145,12 @@ export function TemplateRow({
         <button
           type="button"
           onClick={onSelect}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+          className="flex min-w-0 flex-1 items-center gap-3.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {body}
         </button>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-3.5">{body}</span>
       )}
 
       {actions.length > 0 && (
@@ -142,7 +159,7 @@ export function TemplateRow({
             <button
               type="button"
               aria-label={t("row_options")}
-              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="grid size-7 shrink-0 place-items-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <MoreHorizontal className="size-4" aria-hidden />
             </button>
@@ -167,7 +184,9 @@ export function TemplateRow({
   );
 }
 
-/** The list the rows sit in. One place for the gap between them. */
+/** The list the rows sit in. They divide themselves, so there is nothing left
+ *  here but the element — kept as a component because the card around it, the
+ *  dividers and the rows have to keep agreeing with each other. */
 export function TemplateRowList({ children }: { children: ReactNode }) {
-  return <ul className="space-y-2">{children}</ul>;
+  return <ul>{children}</ul>;
 }
