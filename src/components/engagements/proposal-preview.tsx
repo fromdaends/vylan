@@ -30,6 +30,7 @@ import { useTranslations } from "next-intl";
 import { ChevronRight, FileText, PlayCircle, PenLine } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { computeBillingTotals } from "@/lib/engagements/billing-totals";
+import { readTermsSections } from "@/lib/engagements/terms-sections";
 import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
 import type { BillingFrequency } from "@/lib/engagements/items";
 
@@ -82,7 +83,11 @@ export type ProposalPreviewData = {
    * doing.
    */
   priceVisibility?: { itemizedPrice: boolean; blockTotals: boolean; total: boolean };
-  terms: string | null;
+  /** LEGACY — a single block of terms. Still read so a proposal frozen before
+   *  sections existed renders exactly as it did. */
+  terms?: string | null;
+  /** Terms as labelled sections. Takes precedence when present. */
+  termsSections?: { heading: string; body: string }[];
   clientSigns: boolean;
   additionalSignerLabels: string[];
   firmCountersigns: boolean;
@@ -128,6 +133,12 @@ export function ProposalPreview({
       : t("period_months", { count: data.periodMonths });
 
   const namedServices = data.services.filter((s) => s.name.trim().length > 0);
+  // Sections when there are any, otherwise the legacy string upgraded — one
+  // reader, so the two shapes cannot render differently.
+  const termsSections =
+    readTermsSections(data.termsSections).length > 0
+      ? readTermsSections(data.termsSections)
+      : readTermsSections(data.terms ?? null);
   const showRates = data.priceVisibility?.itemizedPrice !== false;
   // Totalled from the LINES, not from a stored figure — the document computes
   // its own sum the same way the builder did, so the two cannot disagree.
@@ -355,10 +366,22 @@ export function ProposalPreview({
         </Section>
 
         <Section title={t("tab_terms")}>
-          {data.terms?.trim() ? (
-            <p className="line-clamp-6 whitespace-pre-wrap text-left text-xs leading-relaxed">
-              {data.terms}
-            </p>
+          {termsSections.length > 0 ? (
+            // Each section under its own heading — what the client actually
+            // reads. A legacy single block arrives here as one untitled
+            // section, so an already-signed proposal is unchanged.
+            <div className="space-y-2 text-left">
+              {termsSections.map((section, i) => (
+                <div key={i}>
+                  {section.heading.trim() && (
+                    <p className="text-xs font-medium">{section.heading}</p>
+                  )}
+                  <p className="line-clamp-6 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                    {section.body}
+                  </p>
+                </div>
+              ))}
+            </div>
           ) : (
             <Empty
               title={t("preview_no_terms")}

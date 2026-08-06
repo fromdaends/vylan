@@ -3299,7 +3299,13 @@
     "service_letter_removed": "Engagement letter removed",
     "service_letter_error_pdf": "The engagement letter has to be a PDF.",
     "service_letter_error_size": "That file is too large.",
-    "service_letter_error_save": "Couldn't save. Try again."
+    "service_letter_error_save": "Couldn't save. Try again.",
+    "terms_empty": "No terms yet. Add a section — Scope, Fees, Termination — and the client reads them in this order.",
+    "terms_add_section": "Add a section",
+    "terms_heading_placeholder": "Section name — e.g. Scope of work",
+    "terms_body_placeholder": "What this section says.",
+    "terms_move_up": "Move up",
+    "terms_move_down": "Move down"
   },
   "Status": {
     "pending": "Pending",

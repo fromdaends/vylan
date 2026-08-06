@@ -44,6 +44,11 @@ import {
   ToggleRow,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
+import { TermsSectionsEditor } from "@/components/engagements/terms-sections-editor";
+import {
+  termsToPlainText,
+  type TermsSection,
+} from "@/lib/engagements/terms-sections";
 import { MoneyInput } from "@/components/ui/money-input";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
@@ -505,9 +510,15 @@ export function EngagementBuilder({
   const [termsEnabled, setTermsEnabled] = useState(tpl?.termsEnabled ?? true);
   const [termsSaved, setTermsSaved] = useState(false);
 
-  const [proposalTerms, setProposalTerms] = useState(
-    tpl?.termsEnabled ? tpl.termsText : firmDefaultTerms,
-  );
+  // Sections, matching the template builder. Seeded from the template when
+  // there is one, from the firm's standard terms when there is not — the same
+  // head start the single textarea used to give, in the new shape.
+  const [termsSections, setTermsSections] = useState<TermsSection[]>(() => {
+    if (tpl && tpl.termsSections.length > 0) return tpl.termsSections;
+    return firmDefaultTerms.trim()
+      ? [{ heading: "", body: firmDefaultTerms }]
+      : [];
+  });
   const [proposalPeriodStartsOn, setProposalPeriodStartsOn] = useState<
     "acceptance" | "custom"
   >(tpl?.periodStartsOn ?? "acceptance");
@@ -979,7 +990,7 @@ export function EngagementBuilder({
           taxPct: i.taxPct,
         };
       }),
-    terms: termsEnabled ? proposalTerms.trim() || null : null,
+    termsSections: termsEnabled ? termsSections : [],
     clientSigns: proposalClientSigns,
     additionalSignerLabels: proposalSigners.map((x) => x.trim()).filter(Boolean),
     firmCountersigns: proposalFirmCountersigns,
@@ -2938,67 +2949,71 @@ export function EngagementBuilder({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {/* The SAME ToggleRow and the SAME two buttons as the template
-                    builder's Terms tab. The engagement had the textarea and
-                    neither the switch nor "save as my firm's standard terms",
-                    so a firm could write its terms once on an engagement and
-                    have no way to keep them. */}
+                {/* The SAME editor and the SAME two buttons as the template
+                    builder's Terms tab — labelled sections, not one box.
+                    The founder: "you can create boxes and label them
+                    differently." */}
                 <ToggleRow
                   label={tTpl("general_terms")}
                   hint={tTpl("general_terms_hint")}
                   on={termsEnabled}
                   onToggle={() => setTermsEnabled((v) => !v)}
                 >
-                  <div className="space-y-2">
-                    <Textarea
-                      value={proposalTerms}
-                      onChange={(e) => setProposalTerms(e.target.value)}
-                      placeholder={tTpl("general_terms_placeholder")}
-                      rows={10}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Offered only when it would change something — the box
-                          is already seeded with these. */}
-                      {firmDefaultTerms.trim() &&
-                        proposalTerms.trim() !== firmDefaultTerms.trim() && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setProposalTerms(firmDefaultTerms)}
-                          >
-                            {tTpl("use_firm_terms")}
-                          </Button>
+                  <TermsSectionsEditor
+                    sections={termsSections}
+                    onChange={setTermsSections}
+                    actions={
+                      <>
+                        {firmDefaultTerms.trim() &&
+                          !termsSections.some(
+                            (x) => x.body.trim() === firmDefaultTerms.trim(),
+                          ) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setTermsSections((prev) => [
+                                  ...prev,
+                                  { heading: "", body: firmDefaultTerms },
+                                ])
+                              }
+                            >
+                              {tTpl("use_firm_terms")}
+                            </Button>
+                          )}
+                        {/* Gated: writing terms on ONE engagement is not the
+                            same act as changing what every future one starts
+                            from. */}
+                        {canManageFirmTerms &&
+                          termsToPlainText(termsSections).trim() &&
+                          termsToPlainText(termsSections).trim() !==
+                            firmDefaultTerms.trim() && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={pending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  const res = await saveFirmDefaultTermsAction({
+                                    terms: termsToPlainText(termsSections).trim(),
+                                  });
+                                  setTermsSaved(res.ok);
+                                })
+                              }
+                            >
+                              {tTpl("save_as_firm_terms")}
+                            </Button>
+                          )}
+                        {termsSaved && (
+                          <span className="text-[11px] text-muted-foreground">
+                            {tTpl("firm_terms_saved")}
+                          </span>
                         )}
-                      {/* Gated: writing terms on ONE engagement is not the same
-                          act as changing what every future one starts from. */}
-                      {canManageFirmTerms &&
-                        proposalTerms.trim() &&
-                        proposalTerms.trim() !== firmDefaultTerms.trim() && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={pending}
-                            onClick={() =>
-                              startTransition(async () => {
-                                const res = await saveFirmDefaultTermsAction({
-                                  terms: proposalTerms.trim(),
-                                });
-                                setTermsSaved(res.ok);
-                              })
-                            }
-                          >
-                            {tTpl("save_as_firm_terms")}
-                          </Button>
-                        )}
-                      {termsSaved && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {tTpl("firm_terms_saved")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      </>
+                    }
+                  />
                 </ToggleRow>
               </CardContent>
             </Card>
