@@ -125,6 +125,12 @@ export type Firm = {
   // Possibly undefined at runtime until 0880 is applied — read as
   // `firm.performance_reset_at ?? null`. Owner-set via a service-role action.
   performance_reset_at?: string | null;
+  // Feature flag for time tracking + the Insights section (migration 1750).
+  // Deliberately NOT in the updateCurrentFirm whitelist — enabling is a
+  // deliberate rollout act, not a setting. Possibly undefined until 1750 is
+  // applied; NEVER read directly — go through isTimeInsightsEnabled()
+  // (lib/time/flags.ts), which owns the only-explicit-true-is-on polarity.
+  time_insights_enabled?: boolean | null;
   created_at: string;
 };
 

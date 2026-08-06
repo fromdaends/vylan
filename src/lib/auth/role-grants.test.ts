@@ -66,11 +66,41 @@ describe("what a role may grant", () => {
     expect(isGrantable(null)).toBe(false);
   });
 
-  it("accepts the two that are vetted", () => {
+  it("accepts exactly the vetted list", () => {
+    // This is the LOCK: widening what a role can grant must break this test so
+    // it is done deliberately, in a diff a reviewer sees, never as a side
+    // effect. The 1750 additions are the founder's own ruling ("roles only")
+    // and are RLS-backed via current_user_has_capability().
     expect(GRANTABLE_CAPABILITIES).toEqual([
       "billing.manage",
       "integrations.manage",
+      "rates.manage",
+      "insights.view",
+      "time.manage",
     ]);
     for (const c of GRANTABLE_CAPABILITIES) expect(isGrantable(c)).toBe(true);
+  });
+
+  it("grants the three time/insights capabilities through a role", () => {
+    // The full chain the founder asked for: a staff member wearing a
+    // "Senior manager" role holds the money-side capabilities without being an
+    // owner, and a plain staff member holds none of them.
+    const staff = { role: "staff" };
+    expect(can(staff, "rates.manage")).toBe(false);
+    expect(can(staff, "insights.view")).toBe(false);
+    expect(can(staff, "time.manage")).toBe(false);
+
+    const senior = {
+      role: "staff",
+      role_capabilities: ["rates.manage", "insights.view", "time.manage"],
+    };
+    expect(can(senior, "rates.manage")).toBe(true);
+    expect(can(senior, "insights.view")).toBe(true);
+    expect(can(senior, "time.manage")).toBe(true);
+
+    // An owner needs no grant — the rank resolves to everything.
+    expect(can({ role: "owner" }, "rates.manage")).toBe(true);
+    expect(can({ role: "owner" }, "insights.view")).toBe(true);
+    expect(can({ role: "owner" }, "time.manage")).toBe(true);
   });
 });

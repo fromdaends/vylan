@@ -270,6 +270,20 @@ create unique index if not exists time_entries_one_running_per_user_idx
   on public.time_entries (user_id)
   where ended_at is null and deleted_at is null;
 
+-- updated_at by trigger, the 1600 pattern — touch_updated_at() already exists
+-- there and is reused rather than redefined.
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'time_entries_touch_updated_at'
+  ) then
+    create trigger time_entries_touch_updated_at
+      before update on public.time_entries
+      for each row execute function public.touch_updated_at();
+  end if;
+end $$;
+
 comment on table public.time_entries is
   'Internal time tracking. NEVER billed — clients are invoiced flat amounts per '
   'engagement and nothing here reaches payment_requests. Hours are readable by '
