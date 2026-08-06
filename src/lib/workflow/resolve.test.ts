@@ -47,6 +47,7 @@ function facts(overrides: Partial<WorkflowFacts> = {}): WorkflowFacts {
     invoicePaid: false,
     stageTasksOpen: {},
     stageTasksMaterialized: {},
+    stageTasksAny: {},
     ...overrides,
   };
 }
@@ -179,6 +180,25 @@ describe("the bookkeeping walk (skip + stage tasks + invoice_sent)", () => {
       stageTasksOpen: {},
     });
     expect(resolveWorkflowStage(wf, justEntered)).toBe("in_preparation");
+  });
+
+  it("counts the BUILDER's work — created at creation, no materialization ledger", () => {
+    // The founder's merge: work authored on the creation screen (task
+    // templates + services) is the flow's work. Two open steps hold the
+    // stage; ticking them advances it — no ledger row involved.
+    const base = facts({
+      ...APPROVED,
+      gates: { in_review: GATE },
+      stageTasksAny: { in_preparation: true },
+      stageTasksOpen: { in_preparation: 2 },
+    });
+    expect(resolveWorkflowStage(wf, base)).toBe("in_preparation");
+    expect(
+      resolveWorkflowStage(wf, {
+        ...base,
+        stageTasksOpen: { in_preparation: 0 },
+      }),
+    ).toBe("awaiting_payment");
   });
 
   it("completes when the invoice is SENT — payment keeps being chased after", () => {

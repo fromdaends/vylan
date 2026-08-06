@@ -528,6 +528,25 @@ export async function createEngagementAction(
       doc_type: i.doc_type as DocType,
       required: i.required,
     }));
+    // THE FLOW OWNS INVOICE TIMING (founder's merge ruling). When this
+    // engagement's flow raises the invoice itself — a send_invoice entry
+    // action on any stage — a deferred per-engagement automation would be a
+    // SECOND owner of the same decision, firing on its own clock. Deferred
+    // modes therefore coerce to 'off' here. Two deliberate exceptions:
+    //   * the AMOUNT survives regardless (below) — it is what the flow bills;
+    //   * an explicit "create the invoice now" is immediate billing, a
+    //     different decision the flow does not make, and passes through
+    //     untouched (invoice_create_now, handled after creation).
+    const flowSendsInvoice =
+      workflowSnapshot != null &&
+      Object.values(workflowSnapshot.stages).some((s) =>
+        s.on_entry.includes("send_invoice"),
+      );
+    const effectiveAutoMode =
+      flowSendsInvoice && parsed.data.invoice_auto_mode !== "off"
+        ? "off"
+        : parsed.data.invoice_auto_mode;
+
     const input: CreateEngagementInput = {
       client_id: parsed.data.client_id,
       title: parsed.data.title,
@@ -535,7 +554,7 @@ export async function createEngagementAction(
       due_date: parsed.data.due_date,
       tax_year: parsed.data.tax_year ?? null,
       ai_enabled: parsed.data.ai_enabled,
-      invoice_auto_mode: parsed.data.invoice_auto_mode,
+      invoice_auto_mode: effectiveAutoMode,
       // What the proposal says is due on acceptance (1680). Its own column so
       // it can be INVOICED — a number buried in the frozen jsonb cannot be
       // charged. Dropped by the insert's retry ladder before the migration
@@ -545,11 +564,14 @@ export async function createEngagementAction(
       // 'off' engagement never stores a stray amount and 'on_completion' never
       // stores a delay.
       invoice_delay_days:
-        parsed.data.invoice_auto_mode === "delayed"
+        effectiveAutoMode === "delayed"
           ? (parsed.data.invoice_delay_days ?? null)
           : null,
+      // Keyed on what the USER chose, not the coerced mode: when the flow
+      // took ownership above, its send_invoice action still bills THIS
+      // amount — nulling it would turn the flow's invoice into no_amount.
       invoice_amount_cents:
-        parsed.data.invoice_auto_mode === "off"
+        parsed.data.invoice_auto_mode === "off" && !flowSendsInvoice
           ? null
           : (parsed.data.invoice_amount_cents ?? null),
       // Lock preference + description are carried onto a LATER (automated)
@@ -609,6 +631,12 @@ export async function createEngagementAction(
             kind: toTaskKind(task.kind),
             assigneeIds: task.assignee_ids ?? [],
             createdBy: creator?.id ?? null,
+            // THE FLOW OWNS THIS WORK (founder's merge ruling): on a
+            // flow-carrying engagement, everything the builder's Tasks step
+            // creates counts toward stage_tasks_done — the flow cannot
+            // invoice or complete while the real work list is open. Null on
+            // non-flow engagements: byte-identical behaviour to before.
+            workflowStage: workflowSnapshot ? "in_preparation" : null,
             // The order they were typed in is the order the work is meant to
             // happen in.
             orderIndex: index,
@@ -633,6 +661,9 @@ export async function createEngagementAction(
                 // carrying one would drive the same rows as its parent.
                 kind: "task",
                 createdBy: creator?.id ?? null,
+                // Steps are work too — an engagement is not done while any
+                // box under a task is unticked.
+                workflowStage: workflowSnapshot ? "in_preparation" : null,
                 orderIndex: subIndex,
                 parentId,
               });

@@ -290,11 +290,13 @@ async function loadWorkflowFacts(
   ]);
 
   const stageTasksOpen: Partial<Record<EngagementStage, number>> = {};
+  const stageTasksAny: Partial<Record<EngagementStage, boolean>> = {};
   for (const t of (tasksRes.data ?? []) as {
     workflow_stage: string;
     status: string;
   }[]) {
     const s = t.workflow_stage as EngagementStage;
+    stageTasksAny[s] = true;
     if (t.status !== "done") {
       stageTasksOpen[s] = (stageTasksOpen[s] ?? 0) + 1;
     }
@@ -354,6 +356,7 @@ async function loadWorkflowFacts(
     invoicePaid: raws.invoice?.status === "paid",
     stageTasksOpen,
     stageTasksMaterialized,
+    stageTasksAny,
   };
 }
 

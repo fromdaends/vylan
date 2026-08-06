@@ -46,13 +46,18 @@ export type WorkflowFacts = StageFacts & {
   // The single live invoice is PAID (waived/cancelled rows don't count either
   // way; a waived invoice is escaped via manual stage override, as today).
   invoicePaid: boolean;
-  // Per stage: workflow-materialized tasks not yet done.
+  // Per stage: workflow-owned tasks not yet done.
   stageTasksOpen: Partial<Record<EngagementStage, number>>;
   // Per stage: has task materialization run (the ledger row exists)? Without
   // this, stage_tasks_done would be vacuously true in the instant between
   // entering a stage and its tasks being created, and the walk would fall
   // straight through the stage.
   stageTasksMaterialized: Partial<Record<EngagementStage, boolean>>;
+  // Per stage: does ANY workflow-owned task exist, done or not? Work the
+  // BUILDER created at engagement creation (tagged in_preparation under the
+  // founder's merge ruling) is real without any materialization ledger row —
+  // the flow must wait on it all the same.
+  stageTasksAny: Partial<Record<EngagementStage, boolean>>;
 };
 
 function conditionMet(
@@ -85,8 +90,14 @@ function conditionMet(
       // means the client has been billed.
       return f.hasInvoice;
     case "stage_tasks_done":
+      // Two ways work becomes real: the flow materialized its own tasks (the
+      // ledger row), or the builder created work at engagement creation
+      // (rows tagged with the stage, no ledger). Either way, every one of
+      // them must be done — and a stage with NO work of either kind holds,
+      // never falls through (the vacuous-true guard).
       return (
-        f.stageTasksMaterialized[stage] === true &&
+        (f.stageTasksMaterialized[stage] === true ||
+          f.stageTasksAny[stage] === true) &&
         (f.stageTasksOpen[stage] ?? 0) === 0
       );
     case "manual":
