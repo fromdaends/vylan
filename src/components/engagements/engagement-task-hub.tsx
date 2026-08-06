@@ -79,7 +79,9 @@ export function EngagementTaskHub({
   locale,
   addTask,
   addDeliverable,
-  reviewDocuments,
+  preview,
+  addItem,
+  addSignature,
 }: {
   engagementId: string;
   tasks: HubTask[];
@@ -99,8 +101,13 @@ export function EngagementTaskHub({
   addTask: React.ReactNode;
   /** AddFinalDocumentDialog with the panel's drop-zone trigger. */
   addDeliverable: React.ReactNode;
-  /** The existing EngagementPreview door (full visual document review). */
-  reviewDocuments: React.ReactNode;
+  /** EngagementPreview — the visual review of everything uploaded, on the
+   *  card header beside Add task (founder request: out of the panel). */
+  preview: React.ReactNode;
+  /** AddItemDialog for the doc panel's progress row. */
+  addItem: React.ReactNode;
+  /** AddSignatureDialog for the signatures panel. */
+  addSignature: React.ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -245,7 +252,10 @@ export function EngagementTaskHub({
             </div>
           </>
         )}
-        <div className="ml-auto">{addTask}</div>
+        <div className="ml-auto flex items-center gap-2.5">
+          {preview}
+          {addTask}
+        </div>
       </div>
 
       {tasks.length === 0 ? (
@@ -376,7 +386,8 @@ export function EngagementTaskHub({
         canEdit={canEdit}
         locale={locale}
         addDeliverable={addDeliverable}
-        reviewDocuments={reviewDocuments}
+        addItem={addItem}
+        addSignature={addSignature}
       />
     </section>
   );

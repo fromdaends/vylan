@@ -95,18 +95,32 @@ const ITEMS = [
     label: "Bank statements",
     status: "submitted" as const,
     files: [{ id: "f-1", name: "rbc.pdf" }],
+    rejectionReason: null,
+    setAssessment: null,
   },
   {
     id: "i-2",
     label: "T5 slips",
     status: "approved" as const,
     files: [{ id: "f-2", name: "t5.pdf" }],
+    rejectionReason: null,
+    setAssessment: null,
   },
   {
     id: "i-3",
     label: "Payroll summary",
     status: "pending" as const,
     files: [],
+    rejectionReason: null,
+    setAssessment: null,
+  },
+  {
+    id: "i-4",
+    label: "Notice of assessment",
+    status: "rejected" as const,
+    files: [{ id: "f-4", name: "noa.pdf" }],
+    rejectionReason: "The document is missing page 2 of 2.",
+    setAssessment: null,
   },
 ];
 
@@ -129,7 +143,9 @@ function mount() {
         locale="en"
         addTask={null}
         addDeliverable={null}
-        reviewDocuments={null}
+        preview={null}
+        addItem={null}
+        addSignature={null}
       />
     </NextIntlClientProvider>,
   );
@@ -146,7 +162,7 @@ describe("EngagementTaskHub", () => {
   it("shows the live doc meta and opens the floating panel from the artifact row", async () => {
     mount();
     // 1 of 3 approved · 1 to review — computed from the item states.
-    expect(screen.getByText("1 of 3 approved · 1 to review")).toBeTruthy();
+    expect(screen.getByText("1 of 4 approved · 1 to review")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.click(screen.getByText("Collect year-end documents"));
@@ -156,6 +172,11 @@ describe("EngagementTaskHub", () => {
     // The uploaded file chip links through the authenticated proxy.
     const chip = screen.getByText("rbc.pdf").closest("a");
     expect(chip?.getAttribute("href")).toBe("/api/files/f-1");
+    // The AI's send-back reason is visible on the rejected row.
+    expect(
+      screen.getByText("The document is missing page 2 of 2."),
+    ).toBeTruthy();
+    expect(screen.getByText("Changes requested")).toBeTruthy();
   });
 
   it("cycles the checkbox without opening the panel (stopPropagation)", async () => {
@@ -189,7 +210,7 @@ describe("EngagementTaskHub", () => {
     fireEvent.click(screen.getByRole("button", { name: /Approve/ }));
     await waitFor(() => expect(approveItemAction).toHaveBeenCalled());
     // Both the panel progress AND the row meta read the same optimistic map.
-    expect(screen.getAllByText("2 of 3 approved").length).toBeGreaterThan(0);
-    expect(screen.queryByText("1 of 3 approved · 1 to review")).toBeNull();
+    expect(screen.getAllByText("2 of 4 approved").length).toBeGreaterThan(0);
+    expect(screen.queryByText("1 of 4 approved · 1 to review")).toBeNull();
   });
 });
