@@ -164,7 +164,7 @@ export function TaskTemplateBuilder({
       previewLabel={t("task_template_preview_label")}
       error={error}
       preview={
-        <div className="mx-auto max-w-md space-y-4">
+        <div className="w-full space-y-4">
           {/* The work as it will land on an engagement. */}
           <div className="rounded-xl border border-border bg-card p-4">
             {/* Absent, not "a task called Template name". Echoing the field's

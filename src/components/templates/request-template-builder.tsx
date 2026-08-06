@@ -256,7 +256,7 @@ export function RequestTemplateBuilder({
       previewLabel={t("request_preview_label")}
       error={error}
       preview={
-        <div className="mx-auto max-w-md space-y-3">
+        <div className="w-full space-y-3">
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
               <FileText className="size-3.5 text-muted-foreground" aria-hidden />

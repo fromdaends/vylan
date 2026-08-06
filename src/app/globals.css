@@ -1446,19 +1446,40 @@
   animation-duration: 420ms;
 }
 
-/* min() against the viewport so the preview card always has its 400px + gap.
-   Below `xl` the preview is hidden entirely (see .wizard-preview) and the
-   setup card takes the room back. */
+/* ── HOW BIG ────────────────────────────────────────────────────────────
+   Founder, on the first build: "enlarge the floating card and ensure you can
+   see the entire preview without having to scroll."
+   
+   They are right, and the handoff agreed with them — it asks for a preview
+   "sized so the whole preview is visible without scrolling in the common
+   case", which a 760px-tall card on a 1080p monitor is not. A proposal is a
+   tall document; capping the card at the mock's height left three hundred
+   pixels of empty desktop above it and a scrollbar down the side of the one
+   panel whose whole job is to be looked at.
+   
+   So both cards now take the viewport's height minus a 40px margin, capped
+   only where a card would get absurd on a very tall display. The cap is what
+   stops a 1440p screen drawing a 1300px column of mostly whitespace.
+   
+   min() against the viewport width so the preview card always has its own
+   width plus the gap. Below `xl` the preview is hidden entirely (see
+   .wizard-preview) and the setup card takes the room back. */
 .wizard-card-setup {
-  width: min(980px, 100vw - 48px);
+  width: min(1040px, 100vw - 40px);
   min-width: 0;
-  height: min(760px, 100vh - 48px);
+  height: min(1040px, 100vh - 40px);
 }
 
 @media (min-width: 80rem) {
   .wizard-card-setup {
-    width: min(980px, 100vw - 540px);
+    width: min(1040px, 100vw - 500px);
     min-width: 660px;
+  }
+}
+
+@media (min-width: 100rem) {
+  .wizard-card-setup {
+    width: min(1120px, 100vw - 600px);
   }
 }
 
@@ -1471,13 +1492,24 @@
   max-height: min(760px, 100vh - 48px);
 }
 
+/* The preview grows with the screen too. 400px was the mock's number and it
+   is a narrow column for a document with a services table in it — at 460 the
+   priced lines stop wrapping. */
 .wizard-preview {
   display: none;
+  width: 440px;
+  height: min(1040px, 100vh - 40px);
 }
 
 @media (min-width: 80rem) {
   .wizard-preview {
     display: flex;
+  }
+}
+
+@media (min-width: 100rem) {
+  .wizard-preview {
+    width: 520px;
   }
 }
 

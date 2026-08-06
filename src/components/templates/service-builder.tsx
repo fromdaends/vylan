@@ -209,7 +209,7 @@ export function ServiceBuilder({
       onClose={() => router.push("/templates/services")}
       previewLabel={tT("service_preview_label")}
       preview={
-        <div className="mx-auto max-w-md space-y-4">
+        <div className="w-full space-y-4">
           {/* The service as a priced line on an engagement — which is the
               thing a service actually becomes. */}
           <div className="rounded-xl border border-border bg-card p-4">

@@ -143,7 +143,7 @@ export function TemplateBuilderShell({
   }, [onClose]);
 
   return (
-    <div className="wizard-overlay fixed inset-0 z-50 flex items-center justify-center gap-6 p-6">
+    <div className="wizard-overlay fixed inset-0 z-50 flex items-center justify-center gap-5 p-5">
       <div
         role="dialog"
         aria-modal="true"
@@ -192,10 +192,7 @@ export function WizardPreviewCard({
   children: React.ReactNode;
 }) {
   return (
-    <aside
-      className="wizard-card wizard-card-preview wizard-preview w-[400px] shrink-0 flex-col overflow-hidden rounded-2xl bg-card"
-      style={{ height: "min(760px, 100vh - 48px)" }}
-    >
+    <aside className="wizard-card wizard-card-preview wizard-preview shrink-0 flex-col overflow-hidden rounded-2xl bg-card">
       {label && (
         <div className="shrink-0 border-b border-border px-5 py-3.5">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-muted-foreground">

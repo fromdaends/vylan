@@ -1453,7 +1453,7 @@ export function EngagementBuilder({
       // what your edits are doing to the document they will read. The step it
       // highlights follows where you are working.
       preview={
-        <div className="mx-auto w-full max-w-md space-y-4">
+        <div className="w-full space-y-4">
           <ProposalPreview
             data={proposalData}
             locale={locale}

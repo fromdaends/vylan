@@ -467,7 +467,7 @@ export function EngagementTemplateBuilder({
       // preview showing a client name reads as a real engagement, which is the
       // exact confusion this screen is being made distinct from.
       preview={
-        <div className="mx-auto flex max-w-md flex-col items-center">
+        <div className="flex w-full flex-col items-center">
           <ProposalPreview
             locale={locale}
             activeStep={TAB_TO_STEP[tab]}
