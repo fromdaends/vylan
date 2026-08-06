@@ -31,40 +31,44 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── TWO INDEPENDENT DRAINS, NEITHER ABLE TO KILL THE OTHER ───────────────
+  //
+  // This route runs two unrelated scheduled things: spawning the next occurrence
+  // of a repeating engagement, and raising the next period's invoice for an
+  // ongoing billing arrangement (1710).
+  //
+  // They MUST be isolated from each other, and the first version of this shipped
+  // with them nested — spawn ran inside the outer try, so a spawn throw jumped
+  // straight past the billing drain and skipped every recurring invoice for that
+  // hour. The comment beside it claimed that could not happen. It could, and a
+  // comment is not a guard. Each now has its own try/catch and the route only
+  // fails if BOTH fail.
+  const out: Record<string, unknown> = { ranAt: new Date().toISOString() };
+  let spawnFailed: unknown = null;
+  let billingFailed: unknown = null;
+
   try {
-    const summary = await spawnDueRecurrences();
-
-    // The OTHER kind of scheduled recurring thing (1710): a "$400/month" line
-    // on an accepted proposal raises one real invoice per period. It rides this
-    // cron rather than its own because "the scheduled things that should have
-    // happened by now, happen" is already what this route means — and because
-    // two crons would be two answers to where scheduled charges live.
-    //
-    // Its own try//catch: a billing hiccup must never stop engagements from
-    // spawning, and a spawn failure must never stop the billing.
-    let billing: Awaited<ReturnType<typeof drainDueRecurringCharges>> | null =
-      null;
-    try {
-      billing = await drainDueRecurringCharges();
-    } catch (e) {
-      console.error("[cron] recurring charges drain failed:", e);
-    }
-
-    return NextResponse.json({
-      ranAt: new Date().toISOString(),
-      ...summary,
-      billing: billing
-        ? { checked: billing.checked, charged: billing.charged }
-        : { error: "drain_failed" },
-    });
+    Object.assign(out, await spawnDueRecurrences());
   } catch (e) {
-    // A migration-not-applied environment (or a transient DB error) must
-    // return a clean 500 the founder can see in Vercel logs — never a crash
-    // page. The next hourly run retries naturally.
     console.error("[cron] spawn-recurrences failed:", e);
-    return NextResponse.json(
-      { error: (e as Error).message ?? String(e) },
-      { status: 500 },
-    );
+    spawnFailed = e;
+    out.spawn = { error: (e as Error)?.message ?? String(e) };
   }
+
+  try {
+    const billing = await drainDueRecurringCharges();
+    out.billing = { checked: billing.checked, charged: billing.charged };
+  } catch (e) {
+    console.error("[cron] recurring charges drain failed:", e);
+    billingFailed = e;
+    out.billing = { error: (e as Error)?.message ?? String(e) };
+  }
+
+  // Only a total failure is a 500 — a half-run did real work and its result has
+  // to reach the logs, not be swallowed by an error status. A partial failure is
+  // still visible: the failed half carries an `error` key in the body.
+  if (spawnFailed && billingFailed) {
+    return NextResponse.json(out, { status: 500 });
+  }
+  return NextResponse.json(out);
 }
