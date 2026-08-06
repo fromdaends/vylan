@@ -14,6 +14,9 @@ import { ChatLauncher } from "@/components/assistant/chat-launcher";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { TrialBanner } from "@/components/app/demo-banner";
+import { TimerPill } from "@/components/time/timer-pill";
+import { getRunningEntry } from "@/lib/db/time-entries";
+import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
@@ -98,9 +101,16 @@ export default async function AppLayout({
   // the 14 days are up. Surface an "upgrade" state in the banner when it's
   // reached. Only query usage for trial firms — paid firms skip the round trip.
   // Batched with the avatar signing rather than awaited after it.
-  const [avatarUrl, aiUsage] = await Promise.all([
+  const [avatarUrl, aiUsage, runningEntry] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
     firm.is_demo ? getFirmAiUsage(firm.id) : Promise.resolve(null),
+    // The running-timer pill's one question, asked only when the feature is on
+    // — a firm with the flag off pays nothing for it. Errors read as "no
+    // timer" inside getRunningEntry, so a broken read can never take the
+    // layout down.
+    isTimeInsightsEnabled(firm)
+      ? getRunningEntry(dbUser.id)
+      : Promise.resolve(null),
   ]);
   const aiLimitReached = aiUsage ? aiUsage.isTrial && aiUsage.paused : false;
 
@@ -119,12 +129,30 @@ export default async function AppLayout({
       quickbooksConnected={quickbooksHasAny}
       xeroConnected={xeroHasAny}
       topBar={
-        firm.is_demo ? (
-          <TrialBanner
-            expired={trialExpired}
-            daysLeft={trialDays}
-            aiLimitReached={aiLimitReached}
-          />
+        // The sticky strip exists only when something fills it: the trial
+        // banner, the running-timer pill, or both stacked. `undefined` keeps
+        // the wrapper out of the tree entirely — no empty bar reserving space.
+        firm.is_demo || runningEntry ? (
+          <>
+            {firm.is_demo && (
+              <TrialBanner
+                expired={trialExpired}
+                daysLeft={trialDays}
+                aiLimitReached={aiLimitReached}
+              />
+            )}
+            {runningEntry && (
+              <TimerPill
+                entry={{
+                  id: runningEntry.id,
+                  startedAt: runningEntry.started_at,
+                  clientName: runningEntry.client_name,
+                  engagementTitle: runningEntry.engagement_title,
+                  note: runningEntry.note,
+                }}
+              />
+            )}
+          </>
         ) : undefined
       }
       labels={{

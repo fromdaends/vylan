@@ -166,6 +166,11 @@ import {
   userDisplayLabel,
 } from "@/lib/db/users";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { can } from "@/lib/auth/capabilities";
+import { isTimeInsightsEnabled } from "@/lib/time/flags";
+import { listEntriesForEngagement } from "@/lib/db/time-entries";
+import { dateInTimeZone } from "@/lib/tasks/dates";
+import { TimePanel } from "@/components/time/time-panel";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
 import { normalizeReminderSettings } from "@/lib/reminder-settings";
@@ -288,6 +293,13 @@ export default async function EngagementDetailPage({
     listBillingSchedulesForEngagement(engagement.id),
   ]);
   const collectionItems = items.filter((i) => i.kind !== "signature");
+
+  // Time tracking (1750) — fetched only when the flag is on; a firm with it
+  // off pays nothing and sees no tab. Hours only: the type carries no rate.
+  const timeEnabled = isTimeInsightsEnabled(firm);
+  const timeEntries = timeEnabled
+    ? await listEntriesForEngagement(engagement.id)
+    : [];
 
   // SECOND batch: everything keyed off engagement/firm fields, fanned out in
   // parallel. Each thunk chains its own dependents internally (statuses →
@@ -1658,6 +1670,35 @@ export default async function EngagementDetailPage({
             magicToken={engagement.magic_token}
             sent={Boolean(engagement.sent_at)}
           />
+        }
+        // Time (1750): null keeps the tab out of the strip entirely when the
+        // flag is off. Same shape as the two panels above — the page owns the
+        // data, the strip only switches.
+        timePanel={
+          timeEnabled ? (
+            <TimePanel
+              entries={timeEntries.map((e) => ({
+                id: e.id,
+                userId: e.user_id,
+                day:
+                  dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ??
+                  e.started_at.slice(0, 10),
+                durationMinutes: e.duration_minutes,
+                note: e.note,
+                engagementId: e.engagement_id,
+                clientId: e.client_id,
+              }))}
+              members={activeMembers}
+              currentUserId={user?.id ?? ""}
+              canManage={can(user, "time.manage")}
+              locale={locale}
+              context={{
+                clientId: engagement.client_id,
+                clientName: client?.display_name ?? null,
+                engagementId: engagement.id,
+              }}
+            />
+          ) : null
         }
         // Every task on this job, in order — ONE list, drawn by the same
         // component the firm-wide Tasks page uses. The three built-in kinds are

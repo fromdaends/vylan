@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { setMemberPermissions } from "@/app/actions/team";
 import { GRANTABLE_CAPABILITIES } from "@/lib/auth/grantable";
+import { capabilityLabelKey } from "@/lib/auth/capability-labels";
+import type { Capability } from "@/lib/auth/capabilities";
 import { roleTextClass } from "@/lib/roles/palette";
 
 // USER ACCESS — what one person is allowed to do, and WHERE EACH PIECE CAME
@@ -97,10 +99,10 @@ export function MemberPermissions({
     });
   };
 
-  const label = (cap: string) =>
-    cap === "billing.manage"
-      ? t("permissions_cap_billing")
-      : t("permissions_cap_integrations");
+  // One shared key mapper (capability-labels.ts) — this was a local ternary,
+  // duplicated in roles-workbench, and both would have mislabeled every
+  // capability added after the first two.
+  const label = (cap: Capability) => t(capabilityLabelKey(cap));
 
   // Which role grants what. First role wins the attribution — naming all of
   // them turns a one-line answer into a list nobody reads.
