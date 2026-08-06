@@ -21,6 +21,10 @@ import {
   type PriceVisibility,
 } from "@/lib/engagements/billing-blocks";
 import {
+  readTermsSections,
+  type TermsSection,
+} from "@/lib/engagements/terms-sections";
+import {
   BILLING_FREQUENCIES,
   RATE_TYPES,
   type BillingFrequency,
@@ -135,7 +139,21 @@ export type EngagementTemplatePayload = {
   assigneeIds: string[];
   /** Canopy's Terms tab: general terms, on or off, and the text itself. */
   termsEnabled: boolean;
+  /**
+   * LEGACY. Kept so a template written before sections still reads, and so
+   * nothing that consumes a plain string breaks mid-rollout. New writes leave
+   * it empty; `termsSections` is the truth.
+   */
   termsText: string;
+  /**
+   * Terms as labelled sections — the founder: "you can have multiple sections
+   * for the terms... you can create boxes and label them differently."
+   *
+   * A legacy `termsText` upgrades into ONE untitled section on read, so an
+   * existing template renders byte-identically and gains no heading it never
+   * had.
+   */
+  termsSections: TermsSection[];
   /** Canopy's Signatures tab: require a deposit before the work starts. */
   depositRequired: boolean;
   /** Cents, like every other money field in this repo. Null = not set, never 0. */
@@ -200,6 +218,7 @@ export function emptyPayload(): EngagementTemplatePayload {
     assigneeIds: [],
     termsEnabled: false,
     termsText: "",
+    termsSections: [],
     depositRequired: false,
     depositCents: null,
     requirePaymentMethod: false,
@@ -407,6 +426,12 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
     ],
     termsEnabled: o.termsEnabled === true,
     termsText: str(o.termsText),
+    // Sections when present; otherwise the legacy string, upgraded. Never both
+    // — two sources for one contract is how they drift.
+    termsSections:
+      readTermsSections(o.termsSections).length > 0
+        ? readTermsSections(o.termsSections)
+        : readTermsSections(o.termsText),
     depositRequired: o.depositRequired === true,
     depositCents: readCents(o.depositCents),
     // Absent reads as TRUE — see emptyPayload. Only literal `false` turns the

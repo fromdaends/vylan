@@ -55,6 +55,11 @@ import {
   ToggleRow,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
+import { TermsSectionsEditor } from "@/components/engagements/terms-sections-editor";
+import {
+  termsToPlainText,
+  type TermsSection,
+} from "@/lib/engagements/terms-sections";
 import { MoneyInput } from "@/components/ui/money-input";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import {
@@ -195,9 +200,15 @@ export function EngagementTemplateBuilder({
   );
   // A NEW template starts from the firm's standard terms; an existing one keeps
   // its own, because its terms may already be what a client agreed to.
-  const [termsText, setTermsText] = useState(
-    initial ? initial.payload.termsText : firmDefaultTerms,
-  );
+  // Sections, not one box. A NEW template starts from the firm's standard
+  // terms as a single untitled section — the same head start the old single
+  // textarea gave, in the new shape.
+  const [termsSections, setTermsSections] = useState<TermsSection[]>(() => {
+    if (initial) return initial.payload.termsSections;
+    return firmDefaultTerms.trim()
+      ? [{ heading: "", body: firmDefaultTerms }]
+      : [];
+  });
 
   const [clientSigns, setClientSigns] = useState(initial?.payload.clientSigns ?? true);
   const [additionalSignerLabels, setAdditionalSignerLabels] = useState<
@@ -317,7 +328,10 @@ export function EngagementTemplateBuilder({
           documentPath,
           assigneeIds,
           termsEnabled,
-          termsText: termsText.trim(),
+          // Sections are the truth; the legacy string is left empty on new
+          // writes so nothing has two places to disagree.
+          termsText: "",
+          termsSections,
           clientSigns,
           additionalSignerLabels: additionalSignerLabels
             .map((s) => s.trim())
@@ -437,7 +451,7 @@ export function EngagementTemplateBuilder({
                     ? linkedWork.flatMap((w) => w.steps)
                     : undefined,
               })),
-              terms: termsEnabled ? termsText : null,
+              termsSections: termsEnabled ? termsSections : [],
               clientSigns,
               additionalSignerLabels: additionalSignerLabels.filter((x) =>
                 x.trim(),
@@ -846,58 +860,72 @@ export function EngagementTemplateBuilder({
                   on={termsEnabled}
                   onToggle={() => setTermsEnabled((v) => !v)}
                 >
-                  <div className="space-y-2">
-                    <Textarea
-                      value={termsText}
-                      onChange={(e) => setTermsText(e.target.value)}
-                      placeholder={t("general_terms_placeholder")}
-                      rows={10}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Load the firm's standard terms. Shown only when there
-                          are some AND the box does not already hold them, so
-                          it never offers to do nothing. */}
-                      {firmDefaultTerms.trim() &&
-                        termsText.trim() !== firmDefaultTerms.trim() && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setTermsText(firmDefaultTerms)}
-                          >
-                            {t("use_firm_terms")}
-                          </Button>
+                  {/* Labelled SECTIONS, not one box. The founder: "you can have
+                      multiple sections for the terms... you can create boxes
+                      and label them differently."
+
+                      The same editor the engagement builder's Proposal step
+                      renders — one component, so the two cannot drift. */}
+                  <TermsSectionsEditor
+                    sections={termsSections}
+                    onChange={setTermsSections}
+                    actions={
+                      <>
+                        {/* Load the firm's standard terms as a section. Shown
+                            only when there are some and they are not already
+                            here, so it never offers to do nothing. */}
+                        {firmDefaultTerms.trim() &&
+                          !termsSections.some(
+                            (x) => x.body.trim() === firmDefaultTerms.trim(),
+                          ) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setTermsSections((prev) => [
+                                  ...prev,
+                                  { heading: "", body: firmDefaultTerms },
+                                ])
+                              }
+                            >
+                              {t("use_firm_terms")}
+                            </Button>
+                          )}
+                        {/* Save these AS the firm standard. Gated: writing
+                            terms on one template is not the same act as
+                            changing what every future one starts from.
+                            Flattened to text, because the firm default is a
+                            single string until it earns its own shape. */}
+                        {canManageFirmTerms &&
+                          termsToPlainText(termsSections).trim() &&
+                          termsToPlainText(termsSections).trim() !==
+                            firmDefaultTerms.trim() && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={pending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  const res = await saveFirmDefaultTermsAction({
+                                    terms: termsToPlainText(termsSections).trim(),
+                                  });
+                                  setTermsSaved(res.ok);
+                                })
+                              }
+                            >
+                              {t("save_as_firm_terms")}
+                            </Button>
+                          )}
+                        {termsSaved && (
+                          <span className="text-[11px] text-muted-foreground">
+                            {t("firm_terms_saved")}
+                          </span>
                         )}
-                      {/* Save these AS the firm standard. Gated: writing terms
-                          on one template is not the same act as changing what
-                          every future template starts from. */}
-                      {canManageFirmTerms &&
-                        termsText.trim() &&
-                        termsText.trim() !== firmDefaultTerms.trim() && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={pending}
-                            onClick={() =>
-                              startTransition(async () => {
-                                const res = await saveFirmDefaultTermsAction({
-                                  terms: termsText.trim(),
-                                });
-                                setTermsSaved(res.ok);
-                              })
-                            }
-                          >
-                            {t("save_as_firm_terms")}
-                          </Button>
-                        )}
-                      {termsSaved && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {t("firm_terms_saved")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      </>
+                    }
+                  />
                 </ToggleRow>
               </Fieldset>
             )}

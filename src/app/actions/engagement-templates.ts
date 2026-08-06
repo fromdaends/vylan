@@ -67,6 +67,17 @@ const PayloadSchema = z.object({
   // Terms.
   termsEnabled: z.boolean().optional(),
   termsText: z.string().trim().max(20000).optional(),
+  // Labelled sections. Bounded, but loose about content — readTermsSections
+  // normalises and caps, and this exists to stop an unbounded blob.
+  termsSections: z
+    .array(
+      z.object({
+        heading: z.string().trim().max(200).optional(),
+        body: z.string().trim().max(20000).optional(),
+      }),
+    )
+    .max(30)
+    .optional(),
   // Signatures. A template names ROLES, not people — see the payload reader.
   clientSigns: z.boolean().optional(),
   additionalSignerLabels: z.array(z.string().trim().max(120)).max(10).optional(),

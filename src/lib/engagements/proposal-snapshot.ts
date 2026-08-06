@@ -11,6 +11,7 @@
 
 import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
 import { BILLING_FREQUENCIES as FREQUENCIES, type BillingFrequency } from "@/lib/engagements/items";
+import { readTermsSections } from "@/lib/engagements/terms-sections";
 
 function obj(v: unknown): Record<string, unknown> | null {
   return v != null && typeof v === "object" && !Array.isArray(v)
@@ -94,6 +95,13 @@ export function readProposalSnapshot(
       })
       .filter((x) => x != null),
     terms: textOrNull(o?.terms),
+    // Sections when the snapshot has them, otherwise the legacy string
+    // upgraded into one untitled section — a contract already agreed to reads
+    // exactly as it did the day it was signed.
+    termsSections:
+      readTermsSections(o?.termsSections).length > 0
+        ? readTermsSections(o?.termsSections)
+        : readTermsSections(o?.terms ?? null),
     // Absent reads as TRUE. A proposal whose signature block failed to read
     // should still ask the client to sign — the other default would present a
     // contract with no signature line and no explanation.
@@ -127,6 +135,6 @@ export function proposalIsPresentable(p: ProposalPreviewData): boolean {
   return (
     p.engagementName.length > 0 ||
     p.services.length > 0 ||
-    (p.terms?.length ?? 0) > 0
+    (p.termsSections?.length ?? 0) > 0
   );
 }

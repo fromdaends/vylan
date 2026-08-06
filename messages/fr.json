@@ -3297,7 +3297,13 @@
     "service_letter_removed": "Lettre de mission retirée",
     "service_letter_error_pdf": "La lettre de mission doit être un PDF.",
     "service_letter_error_size": "Ce fichier est trop volumineux.",
-    "service_letter_error_save": "Impossible d'enregistrer. Réessayez."
+    "service_letter_error_save": "Impossible d'enregistrer. Réessayez.",
+    "terms_empty": "Aucune condition pour l'instant. Ajoutez une section — Portée, Honoraires, Résiliation — et le client les lira dans cet ordre.",
+    "terms_add_section": "Ajouter une section",
+    "terms_heading_placeholder": "Nom de la section — p. ex. Portée du mandat",
+    "terms_body_placeholder": "Ce que dit cette section.",
+    "terms_move_up": "Monter",
+    "terms_move_down": "Descendre"
   },
   "Status": {
     "pending": "En attente",
