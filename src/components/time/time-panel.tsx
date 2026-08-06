@@ -18,6 +18,7 @@ import {
   type TimeListEntry,
 } from "@/components/time/time-entries-list";
 import { formatMinutes } from "@/lib/time/duration";
+import type { AppLocale } from "@/lib/format";
 
 export function TimePanel({
   entries,
@@ -32,7 +33,7 @@ export function TimePanel({
   members: { id: string; name: string }[];
   currentUserId: string;
   canManage: boolean;
-  locale: string;
+  locale: AppLocale;
   context: TimeContext;
   showEngagement?: boolean;
 }) {

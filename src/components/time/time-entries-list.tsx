@@ -25,7 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { formatDate } from "@/lib/format";
+import { formatDate, type AppLocale } from "@/lib/format";
 import { formatMinutes } from "@/lib/time/duration";
 import { deleteTimeEntryAction } from "@/app/actions/time-entries";
 import {
@@ -58,7 +58,7 @@ export function TimeEntriesList({
   members: { id: string; name: string }[];
   currentUserId: string;
   canManage: boolean;
-  locale: string;
+  locale: AppLocale;
   showEngagement?: boolean;
 }) {
   const t = useTranslations("Time");

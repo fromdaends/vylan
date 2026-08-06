@@ -7,11 +7,15 @@
 // transient toast, and the list rows re-render under an inline edit. Small,
 // three fields, no steps.
 //
+// The form is KEYED by entry id, so opening a different entry remounts it with
+// fresh state — state-reset-by-key instead of a re-seeding effect, per the
+// React Compiler rules this repo enforces.
+//
 // Duration is typed the way it was logged — "1:30", "1.5", "90m" — through the
 // same parser the manual dialog uses. formatMinutes() round-trips through that
 // parser ("1h 30m" parses to 90), so opening and saving unchanged is a no-op.
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -49,23 +53,45 @@ export function EditEntryDialog({
   onSaved: () => void;
 }) {
   const t = useTranslations("Time");
+
+  return (
+    <Dialog open={entry != null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{t("edit_title")}</DialogTitle>
+        </DialogHeader>
+        {entry && (
+          <EditEntryForm
+            key={entry.id}
+            entry={entry}
+            onClose={onClose}
+            onSaved={onSaved}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditEntryForm({
+  entry,
+  onClose,
+  onSaved,
+}: {
+  entry: EditableEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const t = useTranslations("Time");
   const [pending, startTransition] = useTransition();
-  const [day, setDay] = useState("");
-  const [duration, setDuration] = useState("");
-  const [note, setNote] = useState("");
+  const [day, setDay] = useState(entry.day);
+  const [duration, setDuration] = useState(() =>
+    formatMinutes(entry.durationMinutes),
+  );
+  const [note, setNote] = useState(entry.note ?? "");
   const [durationBad, setDurationBad] = useState(false);
 
-  // Re-seed the form whenever a different entry opens.
-  useEffect(() => {
-    if (!entry) return;
-    setDay(entry.day);
-    setDuration(formatMinutes(entry.durationMinutes));
-    setNote(entry.note ?? "");
-    setDurationBad(false);
-  }, [entry]);
-
   const save = () => {
-    if (!entry) return;
     const minutes = parseDurationToMinutes(duration);
     if (minutes == null) {
       setDurationBad(true);
@@ -90,61 +116,56 @@ export function EditEntryDialog({
   };
 
   return (
-    <Dialog open={entry != null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t("edit_title")}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="time-edit-day">{t("log_date")}</Label>
-              <Input
-                id="time-edit-day"
-                type="date"
-                value={day}
-                onChange={(e) => setDay(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="time-edit-duration">{t("log_duration")}</Label>
-              <Input
-                id="time-edit-duration"
-                value={duration}
-                onChange={(e) => {
-                  setDuration(e.target.value);
-                  setDurationBad(false);
-                }}
-                placeholder={t("log_duration_placeholder")}
-                aria-invalid={durationBad}
-              />
-              {durationBad && (
-                <p className="text-xs text-destructive">
-                  {t("log_duration_invalid")}
-                </p>
-              )}
-            </div>
-          </div>
+    <>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <Label htmlFor="time-edit-note">{t("log_note")}</Label>
-            <Textarea
-              id="time-edit-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={t("popover_note_placeholder")}
-              rows={2}
+            <Label htmlFor="time-edit-day">{t("log_date")}</Label>
+            <Input
+              id="time-edit-day"
+              type="date"
+              value={day}
+              onChange={(e) => setDay(e.target.value)}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="time-edit-duration">{t("log_duration")}</Label>
+            <Input
+              id="time-edit-duration"
+              value={duration}
+              onChange={(e) => {
+                setDuration(e.target.value);
+                setDurationBad(false);
+              }}
+              placeholder={t("log_duration_placeholder")}
+              aria-invalid={durationBad}
+            />
+            {durationBad && (
+              <p className="text-xs text-destructive">
+                {t("log_duration_invalid")}
+              </p>
+            )}
+          </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={pending}>
-            {t("cancel")}
-          </Button>
-          <Button onClick={save} disabled={pending}>
-            {t("edit_save")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-1.5">
+          <Label htmlFor="time-edit-note">{t("log_note")}</Label>
+          <Textarea
+            id="time-edit-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t("popover_note_placeholder")}
+            rows={2}
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose} disabled={pending}>
+          {t("cancel")}
+        </Button>
+        <Button onClick={save} disabled={pending}>
+          {t("edit_save")}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

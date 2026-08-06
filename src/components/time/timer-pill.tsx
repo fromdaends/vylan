@@ -14,11 +14,15 @@
 // lose.
 //
 // On stop the entry saves immediately and a toast offers Edit — no modal in
-// the way (the spec's own words). The edit dialog is HOSTED HERE and stays
-// mounted after the pill hides, because the toast's Edit button outlives the
-// running state that drew the pill.
+// the way (the spec's own words). The edit dialog is HOSTED by the OUTER
+// component and stays mounted after the pill hides, because the toast's Edit
+// button outlives the running state that drew the pill.
+//
+// The inner pill is KEYED by entry id: switching timers remounts it, which is
+// what resets the note draft and the clock — state-reset-by-key instead of
+// set-state-in-effect, per the React Compiler rules this repo enforces.
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -48,137 +52,23 @@ export type RunningEntry = {
 };
 
 export function TimerPill({ entry }: { entry: RunningEntry | null }) {
-  const t = useTranslations("Time");
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState(entry?.note ?? "");
-  // The toast's Edit target — survives the pill unmounting on stop.
+  // The toast's Edit target — outlives the pill, so it lives out here.
   const [editing, setEditing] = useState<EditableEntry | null>(null);
-  // Ticks only after mount so the server render never disagrees with the
-  // client's clock (hydration).
-  const [elapsed, setElapsed] = useState<number | null>(null);
-  const entryId = entry?.id ?? null;
-  const startedAt = entry?.startedAt ?? null;
-  const noteRef = useRef(note);
-  noteRef.current = note;
-
-  useEffect(() => {
-    // A NEW running entry (switched timers) resets the note draft.
-    setNote((prev) => (entryId ? prev : ""));
-    if (!startedAt) {
-      setElapsed(null);
-      return;
-    }
-    const started = new Date(startedAt).getTime();
-    const tick = () => setElapsed((Date.now() - started) / 1000);
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [entryId, startedAt]);
-
-  const stop = () => {
-    if (!entryId) return;
-    startTransition(async () => {
-      const res = await stopTimerAction({
-        entryId,
-        note: noteRef.current.trim() ? noteRef.current.trim() : null,
-      });
-      if (res.ok) {
-        setOpen(false);
-        const saved: EditableEntry = {
-          id: entryId,
-          day: new Date().toISOString().slice(0, 10),
-          durationMinutes: res.value.durationMinutes,
-          note: noteRef.current.trim() ? noteRef.current.trim() : null,
-        };
-        toast.success(
-          t("entry_saved", {
-            duration: formatMinutes(res.value.durationMinutes),
-          }),
-          {
-            action: {
-              label: t("entry_saved_edit"),
-              onClick: () => setEditing(saved),
-            },
-          },
-        );
-        router.refresh();
-      } else {
-        toast.error(t("error_generic"));
-      }
-    });
-  };
 
   return (
     <>
       {entry && (
-        <div className="pointer-events-none flex justify-end px-4 pt-2 sm:px-6">
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-3 pr-1 shadow-sm">
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={t("pill_open_aria")}
-                >
-                  <span
-                    aria-hidden
-                    className="size-2 shrink-0 rounded-full bg-accent motion-safe:animate-pulse"
-                  />
-                  <span className="font-medium tabular-nums">
-                    {elapsed == null ? "" : formatElapsed(elapsed)}
-                  </span>
-                  {entry.clientName && (
-                    <span className="max-w-[180px] truncate text-muted-foreground">
-                      {entry.clientName}
-                    </span>
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 space-y-3">
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">
-                    {entry.clientName ?? t("popover_title")}
-                  </p>
-                  {entry.engagementTitle && (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {entry.engagementTitle}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="timer-note">{t("popover_note_label")}</Label>
-                  <Textarea
-                    id="timer-note"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder={t("popover_note_placeholder")}
-                    rows={2}
-                  />
-                </div>
-                <Button
-                  onClick={stop}
-                  disabled={pending}
-                  className="w-full"
-                  size="sm"
-                >
-                  {t("pill_stop")}
-                </Button>
-              </PopoverContent>
-            </Popover>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={stop}
-              disabled={pending}
-              aria-label={t("pill_stop")}
-              className={cn("size-7 rounded-full", pending && "opacity-60")}
-            >
-              <Square className="size-3.5 fill-current" aria-hidden />
-            </Button>
-          </div>
-        </div>
+        <RunningPill
+          key={entry.id}
+          entry={entry}
+          onSaved={(saved) => {
+            setEditing(null);
+            router.refresh();
+            return saved;
+          }}
+          onEdit={setEditing}
+        />
       )}
       <EditEntryDialog
         entry={editing}
@@ -189,5 +79,139 @@ export function TimerPill({ entry }: { entry: RunningEntry | null }) {
         }}
       />
     </>
+  );
+}
+
+function RunningPill({
+  entry,
+  onSaved,
+  onEdit,
+}: {
+  entry: RunningEntry;
+  onSaved: (saved: EditableEntry) => void;
+  onEdit: (saved: EditableEntry) => void;
+}) {
+  const t = useTranslations("Time");
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState(entry.note ?? "");
+  // "Now", advanced by an interval — never set synchronously in the effect
+  // body. Until the first callback fires the readout is blank for well under
+  // a second, which is cheaper than a hydration mismatch.
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const raf = requestAnimationFrame(update);
+    const id = window.setInterval(update, 1000);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const started = new Date(entry.startedAt).getTime();
+  const elapsed = now == null ? null : (now - started) / 1000;
+
+  const stop = () => {
+    startTransition(async () => {
+      const trimmed = note.trim();
+      const res = await stopTimerAction({
+        entryId: entry.id,
+        note: trimmed ? trimmed : null,
+      });
+      if (res.ok) {
+        setOpen(false);
+        const saved: EditableEntry = {
+          id: entry.id,
+          day: new Date().toISOString().slice(0, 10),
+          durationMinutes: res.value.durationMinutes,
+          note: trimmed ? trimmed : null,
+        };
+        toast.success(
+          t("entry_saved", {
+            duration: formatMinutes(res.value.durationMinutes),
+          }),
+          {
+            action: {
+              label: t("entry_saved_edit"),
+              onClick: () => onEdit(saved),
+            },
+          },
+        );
+        onSaved(saved);
+      } else {
+        toast.error(t("error_generic"));
+      }
+    });
+  };
+
+  return (
+    <div className="pointer-events-none flex justify-end px-4 pt-2 sm:px-6">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-3 pr-1 shadow-sm">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={t("pill_open_aria")}
+            >
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-full bg-accent motion-safe:animate-pulse"
+              />
+              <span className="font-medium tabular-nums">
+                {elapsed == null ? "" : formatElapsed(elapsed)}
+              </span>
+              {entry.clientName && (
+                <span className="max-w-[180px] truncate text-muted-foreground">
+                  {entry.clientName}
+                </span>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80 space-y-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">
+                {entry.clientName ?? t("popover_title")}
+              </p>
+              {entry.engagementTitle && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {entry.engagementTitle}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="timer-note">{t("popover_note_label")}</Label>
+              <Textarea
+                id="timer-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={t("popover_note_placeholder")}
+                rows={2}
+              />
+            </div>
+            <Button
+              onClick={stop}
+              disabled={pending}
+              className="w-full"
+              size="sm"
+            >
+              {t("pill_stop")}
+            </Button>
+          </PopoverContent>
+        </Popover>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={stop}
+          disabled={pending}
+          aria-label={t("pill_stop")}
+          className={cn("size-7 rounded-full", pending && "opacity-60")}
+        >
+          <Square className="size-3.5 fill-current" aria-hidden />
+        </Button>
+      </div>
+    </div>
   );
 }
