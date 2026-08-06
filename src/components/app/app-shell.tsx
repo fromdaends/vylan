@@ -235,10 +235,11 @@ export function AppShell({
             label: labels.workDashboard,
             description: labels.workDashboardHint,
           },
-          // The weekly timesheet (timer v2) — where every logged hour lives
-          // now that the per-page entry lists are gone.
+          // Every logged hour. The route moved from /work/time to /time when
+          // the page was redesigned (week / day / month); the old path still
+          // resolves, so nothing bookmarked breaks — see its redirect.
           {
-            href: "/work/time",
+            href: "/time",
             label: labels.workTime,
             description: labels.workTimeHint,
           },

@@ -20,7 +20,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import {
   daysForView,
@@ -45,14 +51,21 @@ export function TimePageView({
   view,
   today,
   locale,
-  personName,
+  members,
+  person,
+  isSelf,
 }: {
   cards: TimeCard[];
   anchor: string;
   view: TimeView;
   today: string;
   locale: string;
-  personName: string;
+  /** Everyone whose week you may look at. */
+  members: { id: string; name: string }[];
+  person: string;
+  /** Whether `person` is you. The Stop button only exists on your own timer —
+   *  see the note where the running entry is loaded. */
+  isSelf: boolean;
 }) {
   const t = useTranslations("Time");
   const router = useRouter();
@@ -85,6 +98,7 @@ export function TimePageView({
   }
 
   const running = cards.find((c) => c.running) ?? null;
+  const activeName = members.find((m) => m.id === person)?.name ?? "";
 
   // ── THE TICK ────────────────────────────────────────────────────────────
   // DERIVED from started_at, never counted. An interval that increments a
@@ -108,11 +122,18 @@ export function TimePageView({
   const byDay = useMemo(() => groupByDay(cards), [cards]);
   const rangeTotal = totalMinutes(cards, dayset, elapsed);
 
-  const go = (next: Partial<{ view: TimeView; anchor: string }>) => {
+  const go = (
+    next: Partial<{ view: TimeView; anchor: string; person: string }>,
+  ) => {
     const params = new URLSearchParams({
       view: next.view ?? view,
       date: next.anchor ?? anchor,
     });
+    // Only when looking at somebody else — a URL carrying your own id every
+    // time is noise in a link you might paste to a colleague.
+    const who = next.person ?? person;
+    if (who && !isSelf) params.set("person", who);
+    if (next.person) params.set("person", next.person);
     router.push(`/time?${params}`);
   };
 
@@ -182,12 +203,34 @@ export function TimePageView({
         </h1>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-border px-2.5 text-[12.5px]">
-            <span className="grid size-5 place-items-center rounded-full bg-accent text-[9px] font-semibold text-accent-foreground">
-              {personName.slice(0, 1).toUpperCase()}
-            </span>
-            {t("person_you", { name: personName })}
-          </span>
+          {/* Whose week. A real switcher, not a decoration — the page it
+              replaced could look at a colleague's timesheet and losing that in
+              the move would be a regression dressed as a redesign. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-border px-2.5 text-[12.5px] transition-colors hover:border-accent/50"
+              >
+                <span className="grid size-5 place-items-center rounded-full bg-accent text-[9px] font-semibold text-accent-foreground">
+                  {(activeName || "?").slice(0, 1).toUpperCase()}
+                </span>
+                {isSelf ? t("person_you", { name: activeName }) : activeName}
+                <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              {members.map((m) => (
+                <DropdownMenuItem
+                  key={m.id}
+                  onSelect={() => go({ person: m.id })}
+                  className={cn(m.id === person && "font-semibold")}
+                >
+                  {m.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <div className="flex overflow-hidden rounded-lg border border-border">
             {(["day", "week", "month"] as const).map((v) => (

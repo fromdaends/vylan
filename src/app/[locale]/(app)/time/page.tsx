@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, listActiveFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import {
   getRunningEntry,
@@ -29,14 +29,22 @@ export default async function TimePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ view?: string; date?: string }>;
+  searchParams: Promise<{ view?: string; date?: string; person?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  const [user, firm, activeMembers] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    listActiveFirmUsers(),
+  ]);
+  const members = activeMembers.map((m) => ({
+    id: m.id,
+    name: userDisplayLabel(m),
+  }));
   const tz = firm?.timezone ?? "America/Toronto";
   const today = localDay();
 
@@ -44,6 +52,13 @@ export default async function TimePage({
     sp.view === "day" || sp.view === "month" ? sp.view : "week";
   // A malformed ?date must not throw the page — it falls back to today.
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : today;
+
+  // Whose week. Validated against the real member list so a hand-typed id
+  // cannot ask for somebody outside the firm; anything unknown falls back to
+  // you. This is the capability the old /work/time page had, and losing it in
+  // the move would have been a regression dressed as a redesign.
+  const person =
+    user && members.some((m) => m.id === sp.person) ? sp.person! : (user?.id ?? "");
 
   const days = daysForView(view, anchor);
   const first = days[0];
@@ -59,10 +74,14 @@ export default async function TimePage({
           // to give us noon; the range wants midnight.
           new Date(startIso.getTime() - 12 * 3600_000).toISOString(),
           new Date(endIso.getTime() - 12 * 3600_000).toISOString(),
-          user?.id,
+          person || undefined,
         )
       : Promise.resolve([]),
-    user ? getRunningEntry(user.id) : Promise.resolve(null),
+    // The running timer is always YOURS — you cannot stop somebody else's, and
+    // showing theirs with a Stop button would offer exactly that.
+    user && person === user.id
+      ? getRunningEntry(user.id)
+      : Promise.resolve(null),
   ]);
 
   const dayOf = (iso: string) =>
@@ -119,7 +138,9 @@ export default async function TimePage({
         view={view}
         today={today}
         locale={locale}
-        personName={user?.display_name ?? user?.name ?? user?.email ?? ""}
+        members={members}
+        person={person}
+        isSelf={person === user?.id}
       />
     </div>
   );
