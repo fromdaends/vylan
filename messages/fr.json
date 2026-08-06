@@ -3367,7 +3367,20 @@
     "step_desc_service_letter": "La lettre qui l'accompagne",
     "template_saved_toast": "Modèle enregistré — {access}",
     "draft_saved_toast": "Brouillon enregistré",
-    "remove_block": "Supprimer ce groupe de facturation"
+    "remove_block": "Supprimer ce groupe de facturation",
+    "doc_kicker": "Lettre de mission",
+    "doc_date_label": "Date",
+    "doc_prepared_for": "Préparée pour",
+    "doc_prepared_by": "Préparée par",
+    "doc_period_label": "Période du mandat",
+    "doc_services_heading": "Services et honoraires",
+    "doc_terms_heading": "Conditions du mandat",
+    "doc_acceptance_heading": "Acceptation",
+    "doc_accepted_by": "Accepté par",
+    "doc_col_service": "Service",
+    "doc_col_amount": "Montant",
+    "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette lettre. Votre acceptation est enregistrée avec la date et l'heure.",
+    "totals_determined_later": "Déterminé plus tard"
   },
   "Status": {
     "pending": "En attente",

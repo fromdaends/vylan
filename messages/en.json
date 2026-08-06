@@ -3367,7 +3367,20 @@
     "step_desc_service_letter": "The letter it goes out with",
     "template_saved_toast": "Template saved — {access}",
     "draft_saved_toast": "Draft saved",
-    "remove_block": "Remove this billing group"
+    "remove_block": "Remove this billing group",
+    "doc_kicker": "Engagement letter",
+    "doc_date_label": "Date",
+    "doc_prepared_for": "Prepared for",
+    "doc_prepared_by": "Prepared by",
+    "doc_period_label": "Engagement period",
+    "doc_services_heading": "Services and fees",
+    "doc_terms_heading": "Terms of engagement",
+    "doc_acceptance_heading": "Acceptance",
+    "doc_accepted_by": "Accepted by",
+    "doc_col_service": "Service",
+    "doc_col_amount": "Amount",
+    "doc_acceptance_body": "By accepting below, {client} agrees to the services, fees and terms set out in this letter. Your acceptance is recorded with the date and time you accept.",
+    "totals_determined_later": "Determined later"
   },
   "Status": {
     "pending": "Pending",
