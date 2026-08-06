@@ -385,21 +385,34 @@ export function EngagementBuilder({
   const [clientId, setClientId] = useState<string | null>(
     initialClientId ?? null,
   );
-  const [templateId, setTemplateId] = useState<string>(
-    initialTemplate?.id ?? "",
-  );
   // A saved engagement chosen BEFORE arriving — "Use" on the Templates page,
   // via ?engagement_template=. Matched against the loaded list rather than
   // trusted: a stale id, or one private to somebody else, resolves to undefined
   // and the builder simply opens normally with the start chooser.
   //
-  // Its four fields seed the state directly rather than being applied by an
-  // effect after mount. A mount effect would have to call four setters — which
+  // Its fields seed the state directly rather than being applied by an
+  // effect after mount. A mount effect would have to call the setters — which
   // is a render-then-correct flash, and the React Compiler rejects it outright.
+  // (Declared before templateId below, which seeds from it.)
   const initialEngagementTemplate =
     initialEngagementTemplateId != null
       ? engagementTemplates.find((x) => x.id === initialEngagementTemplateId)
       : undefined;
+  // The engagement template remembers which DOCUMENT template it was built
+  // from (payload.documentTemplateId, workflows-sync fix). Restoring that
+  // selection is what routes the document template's AUTOMATION onto
+  // engagements created from an engagement template — without it they all
+  // fell to the family default flow. Validated against the loaded list; a
+  // stale id seeds nothing.
+  const payloadDocTemplateId =
+    initialEngagementTemplate?.payload.documentTemplateId ?? null;
+  const [templateId, setTemplateId] = useState<string>(
+    initialTemplate?.id ??
+      (payloadDocTemplateId &&
+      templates.some((tt) => tt.id === payloadDocTemplateId)
+        ? payloadDocTemplateId
+        : ""),
+  );
   const seededTitle =
     initialEngagementTemplate?.payload.title.trim() ? initialEngagementTemplate.payload.title : "";
 
@@ -834,6 +847,16 @@ export function EngagementBuilder({
     const tpl = engagementTemplates.find((x) => x.id === id);
     if (!tpl) return;
     const p = tpl.payload;
+    // Same restoration as the ?engagement_template= arrival path: the saved
+    // document-template selection routes the right automation. Chooser and
+    // deep link must land identically or the flow depends on which door you
+    // came through.
+    if (
+      p.documentTemplateId &&
+      templates.some((tt) => tt.id === p.documentTemplateId)
+    ) {
+      setTemplateId(p.documentTemplateId);
+    }
     if (p.title.trim() !== "") {
       setTitle(p.title);
       // Marked touched so the auto-title does not overwrite what the template
@@ -1398,6 +1421,10 @@ export function EngagementBuilder({
     return readPayload({
       title,
       type: selectedTemplate?.type ?? null,
+      // Which document template the checklist (and therefore the automation)
+      // came from — the link that makes engagements built from this template
+      // run the SAME flow as this one (workflows-sync fix).
+      documentTemplateId: selectedTemplate?.id ?? null,
       items: serviceItems,
       billingBlocks: blocks,
       priceVisibility,

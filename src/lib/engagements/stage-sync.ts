@@ -156,16 +156,20 @@ async function loadStageFacts(
       .from("signature_requests")
       .select("status")
       .eq("engagement_id", engagementId),
-    // 0610 allows at most one non-cancelled invoice per engagement; take the
-    // newest and ignore cancelled (waived) rows entirely — a waived invoice is
-    // not owed and must not hold the engagement at awaiting_payment.
+    // 0610 allows at most one non-cancelled ENGAGEMENT invoice; 1680 added
+    // deposits alongside it. Fetch the non-cancelled rows and pick the
+    // engagement's own invoice below — a DEPOSIT must never stand in for it
+    // (the audit's finding: the newest-row shortcut let a proposal's deposit
+    // read as "the invoice", satisfying invoice_sent/invoice_paid and
+    // auto-completing flows that end on invoicing). `kind` is requested
+    // tolerantly: pre-1680 rows/environments have no column and every row is
+    // the engagement invoice, which the filter below treats as exactly that.
     sb
       .from("payment_requests")
-      .select("status, locks_deliverables, override_unlocked")
+      .select("status, locks_deliverables, override_unlocked, kind")
       .eq("engagement_id", engagementId)
       .neq("status", "canceled")
-      .order("created_at", { ascending: false })
-      .limit(1),
+      .order("created_at", { ascending: false }),
     sb
       .from("final_documents")
       .select("storage_path")
@@ -178,14 +182,25 @@ async function loadStageFacts(
   // that environment.
   const items = (itemsRes.data ?? []) as StageChecklistItem[];
   const sigs = (sigRes.data ?? []) as { status: string }[];
+  // Pre-1680 the kind column is missing and the select above errors — retry
+  // without it rather than reading "no invoice" on an engagement that has one.
+  let payRows = (payRes.data ?? []) as {
+    status: "requested" | "paid" | "failed" | "canceled";
+    locks_deliverables?: boolean;
+    override_unlocked?: boolean;
+    kind?: string | null;
+  }[];
+  if (payRes.error && isMissingSchema(payRes.error)) {
+    const { data: legacy } = await sb
+      .from("payment_requests")
+      .select("status, locks_deliverables, override_unlocked")
+      .eq("engagement_id", engagementId)
+      .neq("status", "canceled")
+      .order("created_at", { ascending: false });
+    payRows = (legacy ?? []) as typeof payRows;
+  }
   const invoice =
-    ((payRes.data ?? [])[0] as
-      | {
-          status: "requested" | "paid" | "failed" | "canceled";
-          locks_deliverables?: boolean;
-          override_unlocked?: boolean;
-        }
-      | undefined) ?? null;
+    payRows.find((r) => (r.kind ?? "engagement") !== "deposit") ?? null;
   const docs = (docRes.data ?? []) as { storage_path: string }[];
 
   // Invoice attachments live in final_documents under /invoices/ but are NOT
@@ -496,6 +511,46 @@ export async function syncEngagementStage(
     return next;
   } catch (e) {
     console.error("[stage-sync] sync failed:", e);
+    return null;
+  }
+}
+
+/**
+ * The confirm-gate the engagement is currently WAITING on, if any — the
+ * founder's tap. Null when there is no workflow, the firm switch is off, or
+ * nothing is held. Read-only: the engagement page renders this as the
+ * approval card, whose button calls approveWorkflowGateAction.
+ *
+ * This was the engine's missing limb (coherence audit, confirmed twice):
+ * every built-in flow puts a confirm gate on in_review, the gate machinery
+ * existed end to end, and no surface ever ASKED the human — so every flag-on
+ * engagement parked at In review forever.
+ */
+export async function getPendingWorkflowGate(
+  sb: SupabaseClient,
+  engagementId: string,
+): Promise<{ from: EngagementStage; to: EngagementStage } | null> {
+  try {
+    const loaded = await loadEngagementRow(sb, engagementId);
+    if (!loaded?.hasStageColumns) return null;
+    const { row } = loaded;
+    const wf = row.workflow != null ? parseWorkflowSnapshot(row.workflow) : null;
+    if (!wf) return null;
+    if (
+      !(await isWorkflowsEnabledForFirm(getServiceRoleSupabase(), row.firm_id))
+    ) {
+      return null;
+    }
+    const { facts, items, sigs, invoice } = await loadStageFacts(sb, row);
+    const wfFacts = await loadWorkflowFacts(sb, row, facts, {
+      items,
+      sigs,
+      invoice,
+    });
+    const { pendingConfirmGate } = await import("@/lib/workflow/resolve");
+    return pendingConfirmGate(wf, wfFacts);
+  } catch (e) {
+    console.error("[stage-sync] pending gate read failed:", e);
     return null;
   }
 }
