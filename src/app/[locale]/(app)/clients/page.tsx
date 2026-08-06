@@ -9,8 +9,6 @@ import { deriveEngagementStatus } from "@/lib/attention";
 // Real-time data: never serve a cached version after Mark complete /
 // archive / etc.
 export const dynamic = "force-dynamic";
-import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/navigation";
 import { ClientsListView } from "@/components/clients/clients-list-view";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
 import {
@@ -25,7 +23,8 @@ import { can } from "@/lib/auth/capabilities";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { buildClientEngagementIndex } from "@/lib/clients/engagement-index";
 import type { ClientEngagementSummary } from "@/components/clients/clients-table";
-import { ClientFormDialog } from "@/components/clients/client-form-dialog";
+import { ClientQuickCreate } from "@/components/clients/client-quick-create";
+import { ClientImportCard } from "@/components/clients/client-import-card";
 import { assertLocale } from "@/lib/locale";
 import { Upload } from "lucide-react";
 import { hasActiveTeam } from "@/lib/team/mode";
@@ -242,29 +241,13 @@ export default async function ClientsPage({
             </>
           ) : (
             <>
-              <Link href="/clients/import">
-                <Button
-                  variant="ghost"
-                  className="h-[42px] gap-[7px] rounded-[10px] px-3.5 text-sm font-medium text-muted-foreground"
-                >
-                  <Upload className="h-4 w-4" />
-                  {t("import_csv")}
-                </Button>
-              </Link>
-              <ClientFormDialog
-                mode="create"
-                defaultOpen={sp.new === "1"}
-                locale={locale}
-                teammates={
-                  teamEnabled
-                    ? members
-                        .filter(
-                          (m) => !m.deactivated_at && m.id !== currentUser?.id,
-                        )
-                        .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))
-                    : []
-                }
-              />
+              <ClientImportCard />
+              {/* The handoff's single-card flow. It replaced the full profile
+                  editor here rather than sitting beside it — two ways to add a
+                  client is the drift CLAUDE.md's cohesion rule names, and the
+                  fields it drops are all still on the client's own page, which
+                  is where you are standing when you know their timezone. */}
+              <ClientQuickCreate locale={locale} defaultOpen={sp.new === "1"} />
             </>
           )}
     </>

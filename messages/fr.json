@@ -2119,7 +2119,20 @@
     "filter_show_label": "Afficher",
     "filter_active_only": "Travail en cours seulement",
     "filter_include_archived": "Inclure les archivés",
-    "filter_clear": "Effacer"
+    "filter_clear": "Effacer",
+    "create_forbidden": "Vous n'avez pas la permission d'ajouter des clients.",
+    "quick_client_explainer": "Les deux choses dont un client a besoin pour exister. Le reste est sur sa fiche.",
+    "quick_name_placeholder": "p. ex. Marie Tremblay, ou Boulangerie Lévis Inc.",
+    "quick_email_placeholder": "nom@exemple.com",
+    "quick_email_language": "Langue des courriels",
+    "quick_client_footnote": "C'est tout — téléphone, province, secteur et qui s'en occupe peuvent être remplis plus tard sur sa fiche.",
+    "quick_created_toast": "{name} ajouté aux clients",
+    "import_card_explainer": "Importez une liste de clients depuis un tableur.",
+    "import_card_continue": "Réviser les lignes",
+    "import_card_footnote": "Colonnes recherchées : nom, courriel, téléphone. Vous réviserez chaque ligne avant qu'un client soit créé.",
+    "import_drop_title": "Déposez un CSV ici, ou parcourez",
+    "import_drop_hint": "Les exports de QuickBooks, Xero et Excel fonctionnent tous.",
+    "import_drop_ready": "Prêt à réviser. Choisissez un autre fichier si ce n'est pas le bon."
   },
   "Engagements": {
     "add_comment": "Ajouter un commentaire",
@@ -3607,7 +3620,10 @@
     "filter_period_30": "30 derniers jours",
     "filter_period_month": "Ce mois-ci",
     "filter_period_custom": "Période personnalisée",
-    "filter_active": "Filtré : {list}"
+    "filter_active": "Filtré : {list}",
+    "new_invoice_pick_label": "Mandat à facturer",
+    "new_invoice_footnote": "Une ébauche, pas un envoi — vous fixez le montant sur le mandat et le révisez avant qu'il parvienne à votre client.",
+    "new_invoice_draft": "Créer l'ébauche"
   },
   "Footer": {
     "based_in": "Construit au Canada.",

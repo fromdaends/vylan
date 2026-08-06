@@ -34,6 +34,9 @@ export async function NewInvoiceButton() {
         empty: t("new_invoice_none"),
         search: t("new_invoice_search"),
         cancel: t("cancel"),
+        pick: t("new_invoice_pick_label"),
+        footnote: t("new_invoice_footnote"),
+        draft: t("new_invoice_draft"),
       }}
     />
   );
