@@ -24,7 +24,7 @@
 //
 // ── WHY ALL FOUR TABS ──────────────────────────────────────────────────────
 //
-// Terms and Signatures were parked with the proposal. The founder un-parked
+// Terms were parked with the proposal. The founder un-parked
 // them — "Build the full canopy thing... this is going to lead into the
 // proposal creation too" — and that reframing is the reason: these tabs are not
 // decoration ahead of the proposal, they are where the proposal's contents get
@@ -114,7 +114,7 @@ type StepDescKey =
 // and they already have: Basics and Introduction both point at the client's
 // first dot, since naming the job is part of the introduction from where the
 // client is standing.
-const TAB_TO_STEP: Record<Tab, "introduction" | "services" | "terms" | "sign"> =
+const TAB_TO_STEP: Record<Tab, "introduction" | "services" | "terms" | "acceptance"> =
   {
     basics: "introduction",
     introduction: "introduction",

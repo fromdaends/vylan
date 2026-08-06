@@ -180,14 +180,17 @@ describe("the firm's side-pane preview stays a thumbnail", () => {
   it("keeps the step rail, which orients the FIRM against its tabs", () => {
     renderPreview();
     expect(screen.getByText("Introduction")).toBeTruthy();
-    expect(screen.getByText("Sign")).toBeTruthy();
+    // "Acceptance", not "Sign" — the rail was the last place on screen where
+    // the removed signing ceremony was still named.
+    expect(screen.getAllByText("Acceptance").length).toBeGreaterThan(0);
   });
 
   it("does NOT show the step rail on the client's copy", () => {
     // Four numbered circles announcing "step 4 of 4" over a contract whose
-    // sections are all visible at once is app furniture.
+    // sections are all visible at once is app furniture. The document has one
+    // "Acceptance" — its section heading — and not the rail's second copy.
     renderDoc();
-    expect(screen.queryByText("Sign")).toBeNull();
+    expect(screen.getAllByText(/Acceptance/).length).toBe(1);
   });
 
   it("renders the same document structure in both variants", () => {
