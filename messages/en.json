@@ -3338,7 +3338,9 @@
     "step_desc_service_service": "What you sell, and what it covers",
     "step_desc_service_pricing": "What it costs, and how often",
     "step_desc_service_work": "The work it brings with it",
-    "step_desc_service_letter": "The letter it goes out with"
+    "step_desc_service_letter": "The letter it goes out with",
+    "template_saved_toast": "Template saved — {access}",
+    "draft_saved_toast": "Draft saved"
   },
   "Status": {
     "pending": "Pending",

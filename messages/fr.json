@@ -3338,7 +3338,9 @@
     "step_desc_service_service": "Ce que vous vendez, et ce qu'il couvre",
     "step_desc_service_pricing": "Son prix, et à quelle fréquence",
     "step_desc_service_work": "Le travail qu'il entraîne",
-    "step_desc_service_letter": "La lettre qui l'accompagne"
+    "step_desc_service_letter": "La lettre qui l'accompagne",
+    "template_saved_toast": "Modèle enregistré — {access}",
+    "draft_saved_toast": "Brouillon enregistré"
   },
   "Status": {
     "pending": "En attente",
