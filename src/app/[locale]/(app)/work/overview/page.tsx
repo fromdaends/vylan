@@ -18,7 +18,10 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { isTimeInsightsEnabled } from "@/lib/time/flags";
+import { listEntriesForInsights } from "@/lib/db/time-entries";
+import { hoursByMember, rangeStart } from "@/lib/insights/metrics";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmTasks } from "@/lib/db/engagement-tasks";
 import { listEngagements } from "@/lib/db/engagements";
@@ -67,6 +70,31 @@ export default async function WorkDashboardPage({
   // overdue count would be wrong.
   const today = todayInTimeZone(firm?.timezone ?? "America/Toronto");
 
+  // CAPACITY (1750): this year's hours by member, when time tracking is on.
+  // HOURS ONLY — the same shared chart the Insights Team tab draws, fed by
+  // the same aggregation, visible to the whole firm per the founder's shared-
+  // capacity ruling. "This year" matches Insights' default range so the two
+  // homes of one number cannot quietly disagree.
+  let capacity: { name: string; minutes: number }[] | null = null;
+  if (firm && isTimeInsightsEnabled(firm)) {
+    const start = rangeStart("this_year", firm.timezone, new Date());
+    const [entries, members] = await Promise.all([
+      listEntriesForInsights(start ? start.toISOString() : null),
+      listFirmUsers(),
+    ]);
+    const names = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
+    capacity = hoursByMember(
+      entries.map((e) => ({
+        id: e.id,
+        userId: e.user_id,
+        clientId: e.client_id,
+        engagementId: e.engagement_id,
+        startedAt: e.started_at,
+        durationMinutes: e.duration_minutes,
+      })),
+    ).map((h) => ({ name: names.get(h.userId) ?? "—", minutes: h.minutes }));
+  }
+
   const stageLabel = (stage: string | null): string =>
     stage && isEngagementStage(stage)
       ? tStage(`stage_${stage}` as "stage_collecting")
@@ -102,6 +130,7 @@ export default async function WorkDashboardPage({
         engagements={engagementRows}
         statuses={statuses}
         today={today}
+        capacity={capacity}
         alerts={alerts.map((a) => ({
           id: a.id,
           name: a.name,

@@ -53,6 +53,29 @@ type PaidRow = {
 // un-migrated DB it falls back to the RLS-scoped read (which undercounts private
 // clients for staff until 0820 is applied). The RPC redacts the private client's
 // id for staff, so private invoices count in the totals but can't be named.
+/** The raw collected-payments read, for INSIGHTS (1750 build). Exported so
+ *  the Insights revenue math reads the SAME rows the billing surfaces do —
+ *  the alternative was a second query with its own slightly different idea of
+ *  "paid", which is exactly the drift this module's header warns about. Keeps
+ *  the RPC-with-RLS-fallback behaviour ("count but don't name" for private
+ *  clients) untouched. */
+export async function listPaidInvoices(
+  startIso: string | null,
+): Promise<{ clientId: string | null; paidAt: string; amountCents: number }[]> {
+  const sb = await getServerSupabase();
+  const rows = await fetchPaid(sb, {
+    range: "all_time",
+    startIso,
+  } as ResolvedRange);
+  return rows
+    .filter((r) => r.paid_at != null)
+    .map((r) => ({
+      clientId: r.client_id,
+      paidAt: r.paid_at as string,
+      amountCents: r.amount_cents,
+    }));
+}
+
 async function fetchPaid(
   sb: SupabaseClient,
   range: ResolvedRange,

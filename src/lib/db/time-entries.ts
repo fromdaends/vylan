@@ -135,6 +135,64 @@ export async function listEntriesForClient(
   return ((data ?? []) as unknown as JoinedRow[]).map(withNames);
 }
 
+/** Every FINISHED entry in the firm since `startIso` (null = all time) — the
+ *  Insights aggregation read. Slim columns on purpose: no note (nothing in
+ *  Insights renders one) and, as everywhere in this module, no dollar field.
+ *  Paginated because "all time" on a busy firm outgrows one page; capped far
+ *  above any real firm so a runaway can't loop forever. */
+export async function listEntriesForInsights(
+  startIso: string | null,
+): Promise<
+  {
+    id: string;
+    user_id: string;
+    client_id: string;
+    engagement_id: string | null;
+    started_at: string;
+    duration_minutes: number;
+  }[]
+> {
+  const supabase = await getServerSupabase();
+  const PAGE = 1000;
+  const MAX_ROWS = 50_000;
+  type Row = {
+    id: string;
+    user_id: string;
+    client_id: string;
+    engagement_id: string | null;
+    started_at: string;
+    duration_minutes: number;
+  };
+  // ASCENDING + dedupe-by-id: offset pagination over a DESC sort shifts every
+  // page when a teammate saves an entry mid-load, double-counting rows. Oldest
+  // first, new inserts land past the end — worst case the very newest entry is
+  // missed for one render, never counted twice. The map is the belt to that
+  // suspender.
+  const byId = new Map<string, Row>();
+  for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
+    let q = supabase
+      .from("time_entries")
+      .select("id, user_id, client_id, engagement_id, started_at, duration_minutes")
+      .is("deleted_at", null)
+      .not("ended_at", "is", null)
+      .order("started_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (startIso) q = q.gte("started_at", startIso);
+    const { data, error } = await q;
+    if (error) {
+      if (!isMissingSchema(error)) {
+        console.error("[time-entries] insights list failed:", error);
+      }
+      return [...byId.values()];
+    }
+    const rows = (data ?? []) as Row[];
+    for (const r of rows) byId.set(r.id, r);
+    if (rows.length < PAGE) break;
+  }
+  return [...byId.values()];
+}
+
 /** Start a timer for the caller. The action layer stops any running timer
  *  first; the DB's partial unique index is the backstop the action cannot
  *  race. 23505 from that index surfaces as `conflict` so the action can stop
