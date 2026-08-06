@@ -50,12 +50,11 @@ import {
 // at the cost of the exact latency the founder complained about on the client
 // page's tabs.
 
-type Panel = "tasks" | "services" | "client" | "time";
+type Panel = "tasks" | "services" | "client";
 
 export function EngagementTabs({
   servicesPanel,
   clientViewPanel,
-  timePanel = null,
   itemCount,
   tasks,
   members,
@@ -75,9 +74,6 @@ export function EngagementTabs({
   servicesPanel: ReactNode;
   /** Canopy's Client View tab. */
   clientViewPanel: ReactNode;
-  /** The Time tab (1750) — actions + list, rendered by the page like the two
-   *  above. Null = the time_insights flag is off and the tab does not exist. */
-  timePanel?: ReactNode | null;
   /** Shown on the Services tab, so its emptiness is visible before clicking. */
   itemCount: number;
   /** Every task on this job, in order. Empty is the ordinary state of a new
@@ -167,10 +163,6 @@ export function EngagementTabs({
             // rather than a count worth reading.
             count: itemCount > 0 ? itemCount : undefined,
           },
-          // Time exists only when the page passed a panel — i.e. the
-          // time_insights flag is on for the firm. Before Client view, which
-          // stays last as the "step outside" tab.
-          ...(timePanel ? [{ key: "time", label: t("panel_time") }] : []),
           { key: "client", label: t("panel_client_view") },
         ]}
       />
@@ -178,8 +170,6 @@ export function EngagementTabs({
       {tab !== "tasks" ? (
         tab === "services" ? (
           servicesPanel
-        ) : tab === "time" && timePanel ? (
-          timePanel
         ) : (
           clientViewPanel
         )

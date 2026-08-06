@@ -14,7 +14,7 @@ import { ChatLauncher } from "@/components/assistant/chat-launcher";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { TrialBanner } from "@/components/app/demo-banner";
-import { TimerPill } from "@/components/time/timer-pill";
+import { TimerDock } from "@/components/time/timer-dock";
 import { getRunningEntry } from "@/lib/db/time-entries";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { can } from "@/lib/auth/capabilities";
@@ -132,38 +132,15 @@ export default async function AppLayout({
       // manager granted insights.view through a role gets the tab.
       showInsights={timeEnabled && can(dbUser, "insights.view")}
       topBar={
-        // The strip exists when the banner fills it OR the time feature is on.
-        // TimerPill mounts WHENEVER the feature is on — not only while a timer
-        // runs — because it hosts the stop-toast's Edit dialog: unmounting it
-        // the moment the running entry disappears (which is exactly when the
-        // toast appears) would make the toast's Edit button dead on arrival.
-        // With no entry and no dialog open it renders nothing visible, and the
-        // empty sticky wrapper has zero height.
-        firm.is_demo || timeEnabled ? (
-          <>
-            {firm.is_demo && (
-              <TrialBanner
-                expired={trialExpired}
-                daysLeft={trialDays}
-                aiLimitReached={aiLimitReached}
-              />
-            )}
-            {timeEnabled && (
-              <TimerPill
-                entry={
-                  runningEntry
-                    ? {
-                        id: runningEntry.id,
-                        startedAt: runningEntry.started_at,
-                        clientName: runningEntry.client_name,
-                        engagementTitle: runningEntry.engagement_title,
-                        note: runningEntry.note,
-                      }
-                    : null
-                }
-              />
-            )}
-          </>
+        // Back to banner-only (timer v2): the timer moved OUT of the top bar
+        // and into the dock beside the Chats launcher — one control, bottom
+        // right, every screen.
+        firm.is_demo ? (
+          <TrialBanner
+            expired={trialExpired}
+            daysLeft={trialDays}
+            aiLimitReached={aiLimitReached}
+          />
         ) : undefined
       }
       labels={{
@@ -186,6 +163,8 @@ export default async function AppLayout({
         // than the Vylan subscription page it used to label.
         billing: t("nav_billing"),
         insights: t("nav_insights"),
+        workTime: t("nav_work_time"),
+        workTimeHint: t("nav_work_time_hint"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
         engagementViews: {
@@ -212,6 +191,26 @@ export default async function AppLayout({
       }}
     >
       {children}
+      {/* THE one timer control (v2): docked beside the launcher, on every
+          screen. Mounted whenever the feature is on so the stop flow's save
+          sheet survives the running state ending. */}
+      {timeEnabled && (
+        <TimerDock
+          entry={
+            runningEntry
+              ? {
+                  id: runningEntry.id,
+                  startedAt: runningEntry.started_at,
+                  clientId: runningEntry.client_id,
+                  engagementId: runningEntry.engagement_id,
+                  clientName: runningEntry.client_name,
+                  engagementTitle: runningEntry.engagement_title,
+                  note: runningEntry.note,
+                }
+              : null
+          }
+        />
+      )}
       <ChatLauncher
         locale={locale === "fr" ? "fr" : "en"}
         userId={dbUser.id}

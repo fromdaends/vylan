@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
@@ -31,7 +31,16 @@ import {
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { EngagementsBoard } from "@/components/engagements/engagements-board";
+import { Columns3, List } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { localDay } from "@/lib/time/dates";
 import type { AppLocale } from "@/lib/format";
+
+// The user's list-vs-board choice, remembered per browser (spec: persist per
+// user). localStorage rather than a users column: the choice is a viewing
+// habit, not firm data, and it must not cost a write per toggle.
+const VIEW_MODE_KEY = "engagements_view_mode";
 
 // One All-Engagements sub-page. The server has already loaded + filtered the
 // rows for `view`; this renders the in-page view switcher (pills — the primary
@@ -74,6 +83,31 @@ export function EngagementsView({
   const tStage = useTranslations("Stage");
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
+  // List | Board (timer v2 Part B). Starts as "list" on both server and
+  // client, then a post-hydration frame restores the saved choice — the
+  // banner/pill pattern, because a localStorage read in the initializer
+  // would make the server render disagree with the browser.
+  const [viewMode, setViewMode] = useState<"list" | "board">("list");
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      try {
+        if (window.localStorage.getItem(VIEW_MODE_KEY) === "board") {
+          setViewMode("board");
+        }
+      } catch {
+        // Storage unavailable — stay on list.
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const pickMode = (mode: "list" | "board") => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // Storage unavailable — the choice just doesn't persist.
+    }
+  };
 
   // Read-only now. Nothing on this page WRITES ?stage= or ?sort= any more —
   // both became column menus on the table — but a link shared before that still
@@ -179,6 +213,37 @@ export function EngagementsView({
             tone: v === "deleted" ? ("destructive" as const) : undefined,
           }))}
         />
+        <div className="flex items-center gap-1 pb-2">
+          {/* List | Board — two quiet icon buttons, the choice persisted. */}
+          <button
+            type="button"
+            onClick={() => pickMode("list")}
+            aria-pressed={viewMode === "list"}
+            aria-label={t("board_view_list")}
+            className={cn(
+              "rounded-md p-1.5 transition-colors",
+              viewMode === "list"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <List className="size-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => pickMode("board")}
+            aria-pressed={viewMode === "board"}
+            aria-label={t("board_view_board")}
+            className={cn(
+              "rounded-md p-1.5 transition-colors",
+              viewMode === "board"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Columns3 className="size-4" aria-hidden />
+          </button>
+        </div>
         <div className="relative pb-2 sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-[calc(50%-0.25rem)] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -213,6 +278,20 @@ export function EngagementsView({
           moved INTO the table (countLabel below), because it has to be counted
           after the column menus have filtered and only the table knows that. */}
 
+      {viewMode === "board" ? (
+        // The BOARD (timer v2 Part B): same rows, same filters, same search —
+        // a different projection, never a different dataset. Columns per
+        // member; drag = the row menu's reassign. Overdue is judged against
+        // the BROWSER's day here (the accountant's own desk), a deliberate
+        // hair's difference from the table's server-fed day.
+        <EngagementsBoard
+          rows={visible}
+          members={assignMembers ?? []}
+          locale={locale}
+          canReassign={teamEnabled}
+          today={localDay()}
+        />
+      ) : (
       <WorklistTable
         savedViews={savedViews}
         viewLinks={viewLinks}
@@ -255,6 +334,7 @@ export function EngagementsView({
             : undefined
         }
       />
+      )}
     </div>
   );
 }

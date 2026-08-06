@@ -16,7 +16,7 @@
 // parser ("1h 30m" parses to 90), so opening and saving unchanged is a no-op.
 
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import {
   parseDurationToMinutes,
 } from "@/lib/time/duration";
 import { updateTimeEntryAction } from "@/app/actions/time-entries";
+import { formatCurrency, type AppLocale } from "@/lib/format";
 
 export type EditableEntry = {
   id: string;
@@ -45,10 +46,19 @@ export type EditableEntry = {
 
 export function EditEntryDialog({
   entry,
+  valueCents = null,
+  notice = null,
   onClose,
   onSaved,
 }: {
   entry: EditableEntry | null;
+  /** The entry's value at its billable-rate snapshot (timer v2) — shown, not
+   *  editable; null = no rate recorded, rendered as its own honest line. Only
+   *  passed where the caller may see it (the RLS on the billing table decides
+   *  who that is). */
+  valueCents?: number | null;
+  /** One-line context above the fields — the 12h auto-stop explanation. */
+  notice?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -60,10 +70,16 @@ export function EditEntryDialog({
         <DialogHeader>
           <DialogTitle>{t("edit_title")}</DialogTitle>
         </DialogHeader>
+        {notice && (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            {notice}
+          </p>
+        )}
         {entry && (
           <EditEntryForm
             key={entry.id}
             entry={entry}
+            valueCents={valueCents}
             onClose={onClose}
             onSaved={onSaved}
           />
@@ -75,14 +91,17 @@ export function EditEntryDialog({
 
 function EditEntryForm({
   entry,
+  valueCents = null,
   onClose,
   onSaved,
 }: {
   entry: EditableEntry;
+  valueCents?: number | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const t = useTranslations("Time");
+  const locale = useLocale() as AppLocale;
   const [pending, startTransition] = useTransition();
   const [day, setDay] = useState(entry.day);
   const [duration, setDuration] = useState(() =>
@@ -157,6 +176,17 @@ function EditEntryForm({
             rows={2}
           />
         </div>
+        {valueCents != null && (
+          <p className="text-xs text-muted-foreground">
+            {t("entry_value_line", {
+              // The shared formatter, viewer's locale — Intl(undefined)
+              // formats with the SERVER's locale during SSR.
+              amount: formatCurrency(valueCents / 100, locale, {
+                fractionDigits: 0,
+              }),
+            })}
+          </p>
+        )}
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={pending}>
