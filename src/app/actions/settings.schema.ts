@@ -19,6 +19,20 @@ export const SettingsSchema = z.object({
   // whatever is in the patch.
   timezone: z.string().min(2, "required").optional(),
   locale_default: z.enum(["fr", "en"]),
+  // The firm's province (1750), the sales-tax fallback. Optional for the same
+  // reason as timezone above — a form that does not render the control must
+  // not blank the column by omission. "" is the "Not set" option and clears it
+  // deliberately.
+  province: z
+    .preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+      z
+        .enum([
+          "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT",
+        ])
+        .nullable(),
+    )
+    .optional(),
   // Owned by the Documents tab, which saves via POST /api/firm/auto-reject —
   // same arrangement as timezone above. The form using THIS schema renders no
   // auto-reject control, so the key must stay absent from the parsed output:

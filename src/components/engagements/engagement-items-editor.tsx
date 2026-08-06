@@ -319,21 +319,38 @@ export function EngagementItemsEditor({
                       <Label htmlFor={`item-tax-${idx}`} className="text-xs">
                         {t("item_tax")}
                       </Label>
+                      {/* ── IT SHOWS THE RATE THAT IS ACTUALLY CHARGED ────
+                          `taxPct: null` has always meant "use the screen's
+                          default", and the totals have always honoured it —
+                          but the box drew that default as a GREY PLACEHOLDER,
+                          which reads as empty. With the default finally being a
+                          real number (the client's province, or the firm's),
+                          that gap is the whole of the founder's "can't see the
+                          change": the tax was being applied and the field
+                          looked blank.
+
+                          So the value falls back the same way the arithmetic
+                          does. Clearing the box therefore redisplays the rate
+                          rather than emptying it — which is honest, because
+                          clearing it never stopped the tax being charged. To
+                          charge none, type 0. */}
                       <Input
                         id={`item-tax-${idx}`}
                         inputMode="decimal"
-                        value={item.taxPct == null ? "" : String(item.taxPct)}
+                        value={
+                          (item.taxPct ?? fallbackTaxPct) == null
+                            ? ""
+                            : String(item.taxPct ?? fallbackTaxPct)
+                        }
                         onChange={(e) => {
                           const v = e.target.value.trim();
-                          // Empty = "use the firm's default", which is a
-                          // different statement from an explicit 0.
+                          // Empty = "use the default", which is a different
+                          // statement from an explicit 0.
                           patch(idx, {
                             taxPct: v === "" ? null : Number(v) || 0,
                           });
                         }}
-                        placeholder={
-                          fallbackTaxPct == null ? "—" : String(fallbackTaxPct)
-                        }
+                        placeholder="—"
                         className="mt-1"
                       />
                     </div>
