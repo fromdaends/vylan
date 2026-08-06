@@ -433,6 +433,38 @@ async function spawnOccurrence(
     .select("id")
     .single();
 
+  // Carry the priced service lines onto the occurrence (workflows-sync fix).
+  // Without them a spawned engagement has no service, so the per-service
+  // engagement letter (1700) could never fire on recurring work — the exact
+  // case the letter's year-key was designed around — and the occurrence's
+  // Services panel read empty. Copied from the SOURCE engagement, service_id
+  // provenance included; best-effort and tolerant of pre-1450 environments,
+  // because losing the lines must never cost the spawn itself.
+  if (engagement && series.source_engagement_id) {
+    try {
+      const { data: srcItems } = await sb
+        .from("engagement_items")
+        .select(
+          "name, description, service_id, rate_cents, rate_type, billing_frequency, tax_pct, order_index",
+        )
+        .eq("engagement_id", series.source_engagement_id)
+        .order("order_index", { ascending: true });
+      if (srcItems && srcItems.length > 0) {
+        const { error: itemsErr } = await sb.from("engagement_items").insert(
+          (srcItems as Record<string, unknown>[]).map((r) => ({
+            ...r,
+            engagement_id: engagement.id,
+          })),
+        );
+        if (itemsErr) {
+          console.error("[recurring] item carry failed:", itemsErr);
+        }
+      }
+    } catch (e) {
+      console.error("[recurring] item carry failed:", e);
+    }
+  }
+
   if (engErr || !engagement) {
     // Compensate: free the period so the next run can retry. If THIS delete
     // fails too, the period stays burned — logged loudly, never duplicated.

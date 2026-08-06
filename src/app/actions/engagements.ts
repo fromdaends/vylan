@@ -969,6 +969,11 @@ export async function acceptOnBehalfAction(formData: FormData) {
   // The SAME billing consequences the client's own Accept triggers — a deposit
   // is owed because they agreed, not because of which button recorded it.
   await applyAcceptedBilling(id);
+  // Acceptance is a workflow event (workflows-sync fix): a flag-on engagement
+  // whose stage was never synced after acceptance sat with its entry effects
+  // deferred until some unrelated event happened along. Facts-based and
+  // idempotent, so this is a no-op when nothing moved.
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidatePath(`/engagements/${id}`);
   revalidatePath("/engagements");
 }
@@ -987,6 +992,9 @@ export async function activateEngagementAction(formData: FormData) {
   // a pointless write and a misleading audit line.
   await activateEngagement(id);
   await logUserActivity(engagement.firm_id, id, "engagement_activated", {});
+  // Same workflow-event rule as acceptance above: work-may-begin is exactly
+  // the moment stage entry effects should get their chance to fire.
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidatePath(`/engagements/${id}`);
   revalidatePath("/engagements");
 }

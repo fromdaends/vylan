@@ -46,6 +46,19 @@ export type EngagementTemplatePayload = {
   /** The engagement's own title, not the template's name. */
   title: string;
   type: string | null;
+  /**
+   * WHICH document-request template this was built from (workflows-sync fix).
+   *
+   * This is the missing link the coherence audit found: the AUTOMATION an
+   * engagement runs is copied from its document template's workflow, and the
+   * builder passes template_id at submit — but a payload that forgot which
+   * document template it came from routed every engagement built from an
+   * engagement template to the family default (which, engagements.type being
+   * mostly 'custom', meant the Tax return flow for everything). An id whose
+   * template has since been deleted resolves to nothing and the builder opens
+   * plain — same rule as taskTemplateIds.
+   */
+  documentTemplateId: string | null;
   /** Priced scope, flat. Kept as the source of truth for totals and invoices —
    *  blocks below are the AUTHORING shape and flatten into this. */
   items: EngagementItemDraft[];
@@ -203,6 +216,7 @@ export function emptyPayload(): EngagementTemplatePayload {
   return {
     title: "",
     type: null,
+    documentTemplateId: null,
     periodStartsOn: "acceptance",
     periodMonths: null,
     introMessage: "",
@@ -399,6 +413,7 @@ export function readPayload(raw: unknown): EngagementTemplatePayload {
   return {
     title: str(o.title),
     type: strOrNull(o.type),
+    documentTemplateId: strOrNull(o.documentTemplateId),
     // Anything that is not literally "custom" is acceptance — the safe default,
     // because a template whose start rule failed to read should begin when the
     // client agrees rather than on a date nobody chose.

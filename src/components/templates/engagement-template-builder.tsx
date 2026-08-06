@@ -341,6 +341,14 @@ export function EngagementTemplateBuilder({
         name: name.trim(),
         access,
         payload: {
+          // ⚠️ MERGE OVER THE EXISTING PAYLOAD, never rebuild from only this
+          // screen's fields. A template saved from the engagement WIZARD
+          // carries things this builder does not edit — the checklist, the
+          // document-template link, invoice and reminder settings, its type —
+          // and rebuilding from scratch silently wiped all of them on every
+          // edit-save (the coherence audit's confirmed data-loss finding).
+          // Whatever this screen does edit overwrites below.
+          ...(initial?.payload ?? {}),
           title: title.trim(),
           periodStartsOn,
           periodMonths,
