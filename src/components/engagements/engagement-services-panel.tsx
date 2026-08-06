@@ -94,6 +94,18 @@ export function EngagementServicesPanel({
                     })}
                   </span>
                 )}
+                {/* How many periods have actually been billed. The count was
+                    already being queried and then rendered nowhere, which is the
+                    worst of both — paying for the read and showing nothing. It
+                    is also the only place a firm can see that the arrangement is
+                    really running rather than merely scheduled. */}
+                {schedule != null && schedule.chargesSoFar > 0 && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {t("services_billed_count", {
+                      count: String(schedule.chargesSoFar),
+                    })}
+                  </span>
+                )}
                 {schedule?.status === "paused" && (
                   <span className="text-xs font-normal text-muted-foreground">
                     {t("services_billing_paused")}

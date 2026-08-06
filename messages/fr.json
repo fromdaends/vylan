@@ -2951,7 +2951,8 @@
     "task_reorder": "Glisser pour réordonner {title}",
     "task_steps_done": "{done} étape(s) sur {total} terminée(s)",
     "services_next_invoice": "Prochaine facture le {date}",
-    "services_billing_paused": "Facturation en pause"
+    "services_billing_paused": "Facturation en pause",
+    "services_billed_count": "· facturé {count} fois"
   },
   "Attention": {
     "metric_active": "Actifs",

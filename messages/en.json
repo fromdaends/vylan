@@ -2951,7 +2951,8 @@
     "task_reorder": "Drag to reorder {title}",
     "task_steps_done": "{done} of {total} steps done",
     "services_next_invoice": "Next invoice {date}",
-    "services_billing_paused": "Billing paused"
+    "services_billing_paused": "Billing paused",
+    "services_billed_count": "· billed {count}×"
   },
   "Attention": {
     "metric_active": "Active",
