@@ -1428,9 +1428,16 @@
 }
 
 .wizard-overlay {
+  --rail-space: 0px;
   background: rgb(9 10 16 / 0.46);
   backdrop-filter: blur(2.5px);
   animation: wizard-overlay-in 180ms both;
+}
+
+@media (min-width: 40rem) {
+  .wizard-overlay {
+    --rail-space: var(--rail-width);
+  }
 }
 
 .wizard-card {
@@ -1463,30 +1470,38 @@
    
    min() against the viewport width so the preview card always has its own
    width plus the gap. Below `xl` the preview is hidden entirely (see
-   .wizard-preview) and the setup card takes the room back. */
+   .wizard-preview) and the setup card takes the room back.
+
+   ⚠️ EVERY WIDTH SUBTRACTS THE RAIL. 100vw is the whole window, INCLUDING the
+   92px icon rail the card can never occupy — so a card sized against it was
+   always one rail too wide, and the overlay's centring pushed the overflow off
+   the left edge and under the rail. Founder, with a screenshot of a builder
+   clipped in half: "all templates creation builder screens are fucked."
+   --rail-space is 0 below sm, where the rail is replaced by the bottom tab
+   bar. */
 .wizard-card-setup {
-  width: min(1040px, 100vw - 40px);
+  width: min(1040px, 100vw - var(--rail-space) - 40px);
   min-width: 0;
   height: min(1040px, 100vh - 40px);
 }
 
 @media (min-width: 80rem) {
   .wizard-card-setup {
-    width: min(1040px, 100vw - 500px);
+    width: min(1040px, 100vw - var(--rail-space) - 500px);
     min-width: 660px;
   }
 }
 
 @media (min-width: 100rem) {
   .wizard-card-setup {
-    width: min(1120px, 100vw - 600px);
+    width: min(1120px, 100vw - var(--rail-space) - 600px);
   }
 }
 
 /* Client / invoice / import have one step and no preview: no rail, and the
    card shrinks to something the size of what it actually asks for. */
 .wizard-card-single {
-  width: min(560px, 100vw - 48px);
+  width: min(560px, 100vw - var(--rail-space) - 48px);
   min-width: 0;
   height: auto;
   max-height: min(760px, 100vh - 48px);
