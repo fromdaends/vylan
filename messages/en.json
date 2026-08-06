@@ -3530,7 +3530,10 @@
     "doc_col_amount": "Amount",
     "doc_acceptance_body": "By accepting below, {client} agrees to the services, fees and terms set out in this letter. Your acceptance is recorded with the date and time you accept.",
     "totals_determined_later": "Determined later",
-    "preview_step_acceptance": "Acceptance"
+    "preview_step_acceptance": "Acceptance",
+    "service_budget_hours": "Hours it usually takes",
+    "service_budget_hours_hint": "Used to plan capacity. An engagement's budget is the sum of the services on it.",
+    "service_budget_hours_placeholder": "e.g. 6"
   },
   "Status": {
     "pending": "Pending",

@@ -3,6 +3,7 @@ import {
   computeBoardStats,
   formatHoursShort,
   formatMinutes,
+  resolveBudgetMinutes,
 } from "./board-stats";
 
 const card = (budgetMinutes: number | null, actualMinutes: number) => ({
@@ -77,5 +78,47 @@ describe("formatHoursShort", () => {
     expect(formatHoursShort(4620)).toBe("77h");
     expect(formatHoursShort(0)).toBe("0h");
     expect(formatHoursShort(-120)).toBe("−2h");
+  });
+});
+
+describe("resolveBudgetMinutes — the catalogue proposes, the engagement may differ", () => {
+  it("sums the durations of the services actually picked", () => {
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: null, serviceMinutes: [120, 240] }),
+    ).toBe(360);
+  });
+
+  it("lets an engagement-level override win outright", () => {
+    // Somebody looked at this particular job and disagreed with the sum.
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: 90, serviceMinutes: [120, 240] }),
+    ).toBe(90);
+  });
+
+  it("honours an override of zero rather than falling through to the sum", () => {
+    // 0 is a real statement ("this one is free of time"), and `?? ` would have
+    // treated it as absent.
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: 0, serviceMinutes: [120] }),
+    ).toBe(0);
+  });
+
+  it("⚠️ returns NULL, not 0, when nothing knows the duration", () => {
+    // 0h would say the work takes no time and would inflate the board's
+    // Remaining as though capacity had been freed.
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: null, serviceMinutes: [] }),
+    ).toBeNull();
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: null, serviceMinutes: [null, null] }),
+    ).toBeNull();
+  });
+
+  it("still totals when only some services are timed", () => {
+    // A partial plan beats no plan, and refusing to total would hide the
+    // catalogue work already done.
+    expect(
+      resolveBudgetMinutes({ overrideMinutes: null, serviceMinutes: [120, null] }),
+    ).toBe(120);
   });
 });

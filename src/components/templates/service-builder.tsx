@@ -113,6 +113,7 @@ export function ServiceBuilder({
     billingFrequency: BillingFrequency;
     taxPct: number | null;
     taskTemplateId: string | null;
+    budgetMinutes?: number | null;
   };
 }) {
   // Field labels (item_rate, item_tax…) are shared with the engagement items
@@ -142,6 +143,16 @@ export function ServiceBuilder({
   /** Steps typed here instead of picking a template. Not stored on the service
    *  — they become a real task template on save. */
   const [newWorkSteps, setNewWorkSteps] = useState<string[]>([]);
+  /**
+   * How long this service usually takes, as TYPED — hours, in a text box.
+   *
+   * Stored in minutes (1790) but asked for in hours, because "6" is what an
+   * accountant says and "360" is what a database wants. The conversion happens
+   * once, on save, rather than making the field fight the person using it.
+   */
+  const [budgetHours, setBudgetHours] = useState<string>(
+    initial?.budgetMinutes != null ? String(initial.budgetMinutes / 60) : "",
+  );
 
   const canSave = name.trim().length > 0;
   const picked = taskTemplates.find((x) => x.id === taskTemplateId);
@@ -171,6 +182,15 @@ export function ServiceBuilder({
         taxPct,
         taskTemplateId,
         newWorkSteps,
+        // Blank stays NULL, never 0. "Nobody has timed this service" and "this
+        // service takes no time" are different claims, and only one of them is
+        // safe to add into a capacity board's totals.
+        budgetMinutes: (() => {
+          const h = Number(budgetHours.replace(",", "."));
+          return budgetHours.trim() === "" || !Number.isFinite(h) || h < 0
+            ? null
+            : Math.round(h * 60);
+        })(),
       };
       const res = initial
         ? await updateFirmServiceAction(initial.id, payload)
@@ -327,6 +347,24 @@ export function ServiceBuilder({
                   </option>
                 ))}
               </select>
+            </Field>
+            {/* ── HOW LONG IT TAKES ────────────────────────────────────
+                What the capacity board's Budget column is assembled from: an
+                engagement's planned hours are the sum across the services it
+                picked. Sitting beside the price because they are the same
+                sentence — what you charge, and what it costs you in time. */}
+            <Field
+              label={tT("service_budget_hours")}
+              htmlFor="svc-budget"
+              hint={tT("service_budget_hours_hint")}
+            >
+              <Input
+                id="svc-budget"
+                inputMode="decimal"
+                value={budgetHours}
+                onChange={(e) => setBudgetHours(e.target.value)}
+                placeholder={tT("service_budget_hours_placeholder")}
+              />
             </Field>
             <Field label={t("item_billing_frequency")} htmlFor="svc-freq">
               <select

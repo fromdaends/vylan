@@ -3530,7 +3530,10 @@
     "doc_col_amount": "Montant",
     "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette lettre. Votre acceptation est enregistrée avec la date et l'heure.",
     "totals_determined_later": "Déterminé plus tard",
-    "preview_step_acceptance": "Acceptation"
+    "preview_step_acceptance": "Acceptation",
+    "service_budget_hours": "Heures habituellement requises",
+    "service_budget_hours_hint": "Sert à planifier la capacité. Le budget d'un mandat est la somme des services qu'il contient.",
+    "service_budget_hours_placeholder": "p. ex. 6"
   },
   "Status": {
     "pending": "En attente",

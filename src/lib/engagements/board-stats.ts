@@ -99,3 +99,44 @@ export function formatHoursShort(minutes: number): string {
   const h = Math.round(Math.abs(minutes) / 60);
   return `${negative ? "−" : ""}${h}h`;
 }
+
+// ── WHERE A CARD'S BUDGET COMES FROM ───────────────────────────────────────
+//
+// The founder's ruling: assemble it from the services, not from a number typed
+// per engagement. So the catalogue carries a duration per service
+// (`firm_services.budget_minutes`, migration 1790) and an engagement's budget
+// is the sum across the services it actually picked.
+//
+// The engagement keeps an override for the job that is genuinely unusual. This
+// is the same catalogue-suggests / engagement-owns pair the price and the tax
+// rate already use, and it behaves identically: editing the catalogue never
+// rewrites a job under way, and a job that disagreed stays disagreeing.
+
+export type BudgetSource = {
+  /** `engagements.budget_minutes` — set only when somebody overrode the sum. */
+  overrideMinutes: number | null;
+  /** Duration of each service on this engagement, `null` where the catalogue
+   *  does not say. Not pre-summed: the difference between "no services" and
+   *  "services nobody has timed" is the difference between 0h and "—". */
+  serviceMinutes: (number | null)[];
+};
+
+/**
+ * The planned minutes for one engagement, or null when nothing can say.
+ *
+ * ⚠️ NULL AND ZERO ARE DIFFERENT ANSWERS. Null means nobody knows how long this
+ * takes and the card shows "—". Zero would be a claim that it takes no time,
+ * which no one has made — and it would drag the board's Remaining total up as
+ * though capacity had been freed.
+ *
+ * A partially-timed engagement DOES return a number: three services where only
+ * two are timed is still a better plan than no plan, and the alternative
+ * (refuse to total until every service is timed) hides the work that has been
+ * done to fill the catalogue in.
+ */
+export function resolveBudgetMinutes(src: BudgetSource): number | null {
+  if (src.overrideMinutes != null) return src.overrideMinutes;
+  const known = src.serviceMinutes.filter((m): m is number => m != null);
+  if (known.length === 0) return null;
+  return known.reduce((a, b) => a + b, 0);
+}

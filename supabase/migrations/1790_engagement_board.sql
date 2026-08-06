@@ -19,13 +19,48 @@
 --
 -- What is genuinely missing is a planned budget and a manual ordering.
 
+-- ── HOW LONG A SERVICE TAKES ───────────────────────────────────────────────
+--
+-- The founder's ruling when asked where a card's Budget comes from: assemble it
+-- from services now, not from a number typed per engagement.
+--
+-- That needs the catalogue to know something it did not: `firm_services` stores
+-- a PRICE and the work a service implies, but never a duration. So it gets one,
+-- and an engagement's budget is the sum of its picked services' durations.
+--
+-- NULL = nobody has said how long this service takes, and it contributes
+-- NOTHING to a budget rather than zero. A firm that has not filled the
+-- catalogue in sees "—" on its cards, which is true, instead of "0h", which
+-- would be a plan.
+alter table public.firm_services
+  add column if not exists budget_minutes integer;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'firm_services_budget_minutes_check'
+  ) then
+    alter table public.firm_services
+      add constraint firm_services_budget_minutes_check
+      check (budget_minutes is null or budget_minutes >= 0);
+  end if;
+end $$;
+
+comment on column public.firm_services.budget_minutes is
+  'How long this service usually takes, in minutes. Summed across an engagement''s services to give it a budget. NULL = unknown, contributes nothing (never 0).';
+
 -- Hours PLANNED for this engagement, in minutes.
+--
+-- An OVERRIDE, not the source. NULL means "assemble it from my services",
+-- which is the normal case; a number here means somebody looked at this
+-- particular job and disagreed with the sum. Same shape as every other
+-- catalogue-suggests / engagement-owns pair in this codebase (price, tax): the
+-- catalogue proposes and the engagement may differ, and neither silently
+-- rewrites the other.
 --
 -- Minutes, not hours: every other duration in this codebase is stored in
 -- minutes (time_entries) and a second unit is a rounding bug waiting to be
--- introduced at the boundary. NULL = nobody has budgeted this job, which is a
--- real state and reads as "—" rather than as zero — a job with no budget is not
--- a job with no time to spend on it.
+-- introduced at the boundary.
 alter table public.engagements
   add column if not exists budget_minutes integer;
 
@@ -55,6 +90,6 @@ begin
 end $$;
 
 comment on column public.engagements.budget_minutes is
-  'Planned hours for this engagement, in minutes. NULL = not budgeted (renders "—", never 0). Actual is summed from time_entries, never stored here.';
+  'OVERRIDE for this engagement''s planned minutes. NULL = assemble from the picked services'' firm_services.budget_minutes. Actual is summed from time_entries, never stored here.';
 comment on column public.engagements.board_rank is
   'Manual order within a capacity-board column. NULL = never dragged; sorts last and falls back to the list ordering. Double so a drop can take the midpoint of its neighbours.';
