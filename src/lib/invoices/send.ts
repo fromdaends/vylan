@@ -35,6 +35,12 @@ import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { formatCurrency } from "@/lib/format";
 import { dueDateFrom, todayIsoDay } from "@/lib/invoices/terms";
 import { invoiceAfterDeposit } from "@/lib/engagements/activation";
+import { oneTimeInvoiceLines } from "@/lib/billing/acceptance-lines";
+
+/** What a settled deposit is called on the invoice that credits it. Not
+ *  translated: the stored line text is literal and frozen onto the document,
+ *  the same as every other line description the builder writes. */
+const DEPOSIT_CREDIT_LABEL = "Less deposit paid";
 
 /**
  * How much of this engagement's deposit has actually been collected.
@@ -176,10 +182,20 @@ export async function sendEngagementInvoice(
   // deducting it would bill the client less than they owe.
   let amountCents: number | null;
   let depositCreditCents = 0;
+  // Read ONCE, here, because the lines are the source of truth for BOTH the
+  // amount and the document. Deriving the gate from invoice_amount_cents while
+  // building the document from the lines let a large itemised invoice be killed
+  // by a small stale number typed on another tab — the two must not be able to
+  // disagree, so only one of them decides.
+  const serviceLines =
+    kind === "deposit" ? [] : await oneTimeInvoiceLines(engagementId);
   if (kind === "deposit") {
     amountCents = depositCents;
   } else {
-    const gross = engagement.invoice_amount_cents as number | null;
+    const gross =
+      serviceLines.length > 0
+        ? serviceLines.reduce((sum, l) => sum + l.amount_cents, 0)
+        : (engagement.invoice_amount_cents as number | null);
     depositCreditCents = await paidDepositCentsSR(sb, engagementId);
     amountCents =
       gross != null && depositCreditCents > 0
@@ -270,13 +286,52 @@ export async function sendEngagementInvoice(
   let invoiceFields: Partial<CreatePaymentRequestInput> = {};
   let chargeCents = amountCents;
   if (settings) {
-    const line = {
-      description: invoiceDescription ?? "",
-      quantity: 1,
-      unit_cents: amountCents,
-      amount_cents: amountCents,
-    };
-    const computed = computeInvoiceTotals([line], {
+    // ── A REAL INVOICE DOCUMENT, NOT ONE FLAT LINE ────────────────────────
+    //
+    // The founder: "theres no like actual generate invoice document. When we
+    // have a whole invoice generator inside of vylan already."
+    //
+    // Right. This built ONE line from a typed number with a free-text
+    // description, so a client who agreed to four priced services received a
+    // single-line bill matching none of them — from a product that already
+    // computes per-line taxes, numbering and terms.
+    //
+    // The engagement's own one-time service lines ARE the invoice now: the
+    // things the client read and agreed to. A deposit already collected appears
+    // as a visible CREDIT line rather than silent arithmetic, so the client can
+    // see why the total is what it is.
+    //
+    // Tax is computed on the SUBTOTAL (see computeInvoiceTotals), so a negative
+    // credit line reduces the taxable base correctly — which is also the right
+    // accounting answer.
+    //
+    // Falls back to the single flat line whenever there are no priced service
+    // lines (a deposit invoice, or an engagement billed by a typed number), so
+    // nothing that invoices correctly today changes.
+    const lines =
+      serviceLines.length > 0
+        ? [
+            ...serviceLines,
+            ...(depositCreditCents > 0
+              ? [
+                  {
+                    description: DEPOSIT_CREDIT_LABEL,
+                    quantity: 1,
+                    unit_cents: -depositCreditCents,
+                    amount_cents: -depositCreditCents,
+                  },
+                ]
+              : []),
+          ]
+        : [
+            {
+              description: invoiceDescription ?? "",
+              quantity: 1,
+              unit_cents: amountCents,
+              amount_cents: amountCents,
+            },
+          ];
+    const computed = computeInvoiceTotals(lines, {
       province: settings.province,
       taxesEnabled: settings.default_taxes_enabled,
       enabledComponents: null, // all of the province's components

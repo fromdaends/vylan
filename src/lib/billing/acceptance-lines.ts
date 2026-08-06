@@ -97,3 +97,58 @@ export async function acceptanceDueLines(
 export function acceptanceDueCents(lines: readonly AcceptanceLine[]): number {
   return lines.reduce((sum, l) => sum + l.amount_cents, 0);
 }
+
+/**
+ * EVERY one-time line this engagement bills, whatever its timing.
+ *
+ * ── WHY THE INVOICE NEEDS THIS ─────────────────────────────────────────────
+ *
+ * The automated invoice built exactly ONE line — a flat number typed on the
+ * Billing tab, with a free-text description. So a client who agreed to four
+ * priced services received a single-line bill that matched none of them, from a
+ * product that already contains a full invoice generator with per-line taxes and
+ * numbering. The founder: "theres no like actual generate invoice document. When
+ * we have a whole invoice generator inside of vylan already."
+ *
+ * These are the lines the client READ and AGREED TO, so these are the lines the
+ * invoice states. Same billability rule as everywhere else — no rate and hourly
+ * are both excluded, because neither can become a number without a human.
+ *
+ * Recurring lines are deliberately absent: they are billed per period by their
+ * own schedule (1710), and putting them on the engagement invoice as well would
+ * charge the first month twice.
+ */
+export async function oneTimeInvoiceLines(
+  engagementId: string,
+): Promise<AcceptanceLine[]> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("engagement_items")
+    .select("name, rate_cents, rate_type, billing_frequency, order_index")
+    .eq("engagement_id", engagementId)
+    .eq("billing_frequency", "once")
+    .order("order_index", { ascending: true });
+  if (error) {
+    if (!isMissingSchema(error) && error.code !== "42703") {
+      console.error("[billing] one-time lines read failed:", error.message);
+    }
+    return [];
+  }
+  return ((data ?? []) as Array<Record<string, unknown>>)
+    .filter((row) => {
+      const cents = row.rate_cents;
+      if (typeof cents !== "number" || cents <= 0) return false;
+      const rateType = row.rate_type == null ? "item" : row.rate_type;
+      if (rateType !== "item") return false;
+      return String(row.name ?? "").trim().length > 0;
+    })
+    .map((row) => {
+      const cents = row.rate_cents as number;
+      return {
+        description: String(row.name).trim(),
+        quantity: 1,
+        unit_cents: cents,
+        amount_cents: cents,
+      };
+    });
+}

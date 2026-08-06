@@ -27,6 +27,11 @@ const engagement = {
 // fills it.
 let paidDepositRows: Array<{ amount_cents: number | null }> = [];
 
+// The engagement's priced one-time service lines. Empty by default, so every
+// existing assertion still describes the pre-1740 single-flat-line invoice —
+// which is exactly the fallback those tests were written against.
+let serviceLineRows: Array<Record<string, unknown>> = [];
+
 const serviceRole = {
   from(table: string) {
     return {
@@ -38,14 +43,17 @@ const serviceRole = {
         // awaitable.
         const builder = {
           eq: () => builder,
-          then(
-            resolve: (v: {
-              data: Array<{ amount_cents: number | null }>;
-              error: null;
-            }) => unknown,
-          ) {
+          // The invoice now reads the engagement's one-time service lines, which
+          // orders them — so the stub has to be orderable as well as filterable.
+          order: () => builder,
+          then(resolve: (v: { data: unknown[]; error: null }) => unknown) {
             return Promise.resolve({
-              data: table === "payment_requests" ? paidDepositRows : [],
+              data:
+                table === "payment_requests"
+                  ? paidDepositRows
+                  : table === "engagement_items"
+                    ? serviceLineRows
+                    : [],
               error: null,
             }).then(resolve);
           },
@@ -442,5 +450,90 @@ describe("the deposit comes off the final invoice", () => {
     expect(createPaymentRequest).toHaveBeenCalledWith(
       expect.objectContaining({ amount_cents: 10_000, kind: "deposit" }),
     );
+  });
+});
+
+describe("the invoice is built FROM the agreed service lines", () => {
+  beforeEach(() => {
+    paidDepositRows = [];
+    serviceLineRows = [];
+    getFirmInvoiceSettingsSR.mockResolvedValue(QC_SETTINGS);
+    allocateInvoiceSeqSR.mockResolvedValue(7);
+  });
+
+  it("states each agreed service as its own line, not one flat amount", async () => {
+    // Founder: "theres no like actual generate invoice document. When we have a
+    // whole invoice generator inside of vylan already." A client who agreed to
+    // four priced services was receiving a single-line bill matching none.
+    serviceLineRows = [
+      { name: "T2 Preparation", rate_cents: 400_000, rate_type: "item", billing_frequency: "once" },
+      { name: "Bookkeeping cleanup", rate_cents: 120_000, rate_type: "item", billing_frequency: "once" },
+    ];
+    await sendEngagementInvoice("e1");
+    const input = createPaymentRequest.mock.calls[0][0] as {
+      line_items: Array<{ description: string; amount_cents: number }>;
+      subtotal_cents: number;
+    };
+    expect(input.line_items.map((l) => l.description)).toEqual([
+      "T2 Preparation",
+      "Bookkeeping cleanup",
+    ]);
+    expect(input.subtotal_cents).toBe(520_000);
+  });
+
+  it("shows a settled deposit as a visible CREDIT line, not silent arithmetic", async () => {
+    serviceLineRows = [
+      { name: "T2 Preparation", rate_cents: 400_000, rate_type: "item", billing_frequency: "once" },
+    ];
+    paidDepositRows = [{ amount_cents: 100_000 }];
+    await sendEngagementInvoice("e1");
+    const input = createPaymentRequest.mock.calls[0][0] as {
+      line_items: Array<{ description: string; amount_cents: number }>;
+      subtotal_cents: number;
+    };
+    expect(input.line_items).toHaveLength(2);
+    expect(input.line_items[1].description).toMatch(/deposit/i);
+    expect(input.line_items[1].amount_cents).toBe(-100_000);
+    // Tax is computed on the SUBTOTAL, so the credit reduces the taxable base —
+    // which is also the right accounting answer.
+    expect(input.subtotal_cents).toBe(300_000);
+  });
+
+  it("excludes an hourly line, which has no knowable amount", async () => {
+    serviceLineRows = [
+      { name: "T2 Preparation", rate_cents: 400_000, rate_type: "item", billing_frequency: "once" },
+      { name: "Advisory", rate_cents: 15_000, rate_type: "hour", billing_frequency: "once" },
+    ];
+    await sendEngagementInvoice("e1");
+    const input = createPaymentRequest.mock.calls[0][0] as {
+      line_items: Array<{ description: string }>;
+    };
+    expect(input.line_items.map((l) => l.description)).toEqual(["T2 Preparation"]);
+  });
+
+  it("falls back to the single flat line when there are no priced services", async () => {
+    // Nothing that invoices correctly today changes.
+    serviceLineRows = [];
+    await sendEngagementInvoice("e1");
+    const input = createPaymentRequest.mock.calls[0][0] as {
+      line_items: Array<{ amount_cents: number }>;
+    };
+    expect(input.line_items).toHaveLength(1);
+    expect(input.line_items[0].amount_cents).toBe(25_000);
+  });
+
+  it("does not itemise a DEPOSIT invoice — it is one agreed amount", async () => {
+    engagement.status = "in_progress";
+    serviceLineRows = [
+      { name: "T2 Preparation", rate_cents: 400_000, rate_type: "item", billing_frequency: "once" },
+    ];
+    await sendEngagementInvoice("e1", { kind: "deposit" });
+    const input = createPaymentRequest.mock.calls[0][0] as {
+      line_items: Array<{ amount_cents: number }>;
+      kind: string;
+    };
+    expect(input.kind).toBe("deposit");
+    expect(input.line_items).toHaveLength(1);
+    expect(input.line_items[0].amount_cents).toBe(10_000);
   });
 });
