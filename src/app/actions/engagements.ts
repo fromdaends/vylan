@@ -501,7 +501,18 @@ export async function createEngagementAction(
     // hands.
     const limits = await getFirmLimits();
     if (limits && !limits.canCreateEngagement) {
-      return { error: "plan_limit_reached" };
+      // ── TWO DIFFERENT WALLS, TWO DIFFERENT MESSAGES ────────────────────
+      //
+      // canCreateEngagement is false for either of two unrelated reasons: the
+      // free trial has lapsed, or the plan's active-engagement cap is full.
+      // They need completely different actions — book a call vs finish some
+      // work — and collapsing them into one code sent the founder chasing the
+      // wrong one for an hour, with me leading the way.
+      //
+      // The limits object already knows which. Say which.
+      return {
+        error: limits.trialExpired ? "trial_expired" : "plan_limit_reached",
+      };
     }
   }
 
