@@ -671,6 +671,19 @@ describe("TasksTable — cards, on an engagement", () => {
     expect(titles).toEqual(TASKS.map((t) => t.title));
   });
 
+  it("can be selected, so the bulk bar is reachable from cards too", () => {
+    // The cards inherited the table's bulk bar and then had no way to feed it.
+    // Founder: "theres no way to like select them like before on the left side
+    // with the dot to select."
+    renderTable({ layout: "cards", variant: "job" });
+    const boxes = screen.getAllByRole("checkbox", { name: /^Select / });
+    expect(boxes).toHaveLength(cards().length);
+    fireEvent.click(boxes[0]);
+    // The bar only exists once something is ticked, so its appearance IS the
+    // proof the selection reached the table's state.
+    expect(screen.getByText(/1 selected/i)).toBeTruthy();
+  });
+
   it("sends the WHOLE new order on a drop, not just the moved task", () => {
     // The server renumbers from the array. Sending "task X moved to slot 3"
     // would depend on order_index already being a dense sequence, which it has
