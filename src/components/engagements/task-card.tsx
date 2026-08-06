@@ -64,6 +64,7 @@ export function TaskCard({
   statusMenu,
   children,
   dragHandleProps,
+  dropProps,
   t,
 }: {
   title: string;
@@ -85,7 +86,13 @@ export function TaskCard({
   statusMenu: ReactNode;
   /** The comment bubble, same. */
   children?: ReactNode;
+  /** Goes on the HANDLE — the only draggable part. */
   dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
+  /** Goes on the WHOLE CARD. ⚠️ The drop target has to be the card, not the
+   *  handle: a handle is ~14px and only appears on hover, so requiring the
+   *  release to land on one made dragging impossible in practice. Founder,
+   *  on the first version: "dragging doesnt work." */
+  dropProps?: React.HTMLAttributes<HTMLDivElement>;
   t: ReturnType<typeof useTranslations<"Engagements">>;
 }) {
   const overdue = isOverdue(dueDate, taskStatus);
@@ -99,6 +106,7 @@ export function TaskCard({
       // Enter and Space are wired below so it stays reachable without a mouse.
       role="button"
       tabIndex={0}
+      {...dropProps}
       onClick={onOpen}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
