@@ -3161,7 +3161,9 @@
     "board_no_due_date": "No due date",
     "board_overdue": "overdue",
     "board_docs": "docs",
-    "board_tasks": "tasks"
+    "board_tasks": "tasks",
+    "filter_chip_search": "Search",
+    "filter_chip_clear": "Clear the search"
   },
   "Attention": {
     "metric_active": "Active",
