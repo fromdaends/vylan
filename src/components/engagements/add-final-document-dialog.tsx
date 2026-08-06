@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -27,8 +28,12 @@ import { Upload, FileUp } from "lucide-react";
 // picker that posts to the server action.
 export function AddFinalDocumentDialog({
   engagementId,
+  trigger,
 }: {
   engagementId: string;
+  /** Overrides the default outline button — the floating task panel opens
+   *  this same dialog from its drop-zone (one uploader, two doors). */
+  trigger?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -70,10 +75,12 @@ export function AddFinalDocumentDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <FileUp className="size-4" />
-          {t("final_upload")}
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" size="sm">
+            <FileUp className="size-4" />
+            {t("final_upload")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
