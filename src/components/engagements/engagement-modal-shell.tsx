@@ -183,7 +183,10 @@ export function EngagementModalShell({
           </div>
           {/* The dim, inside the same element as the scenery it dims — so the
               two can never be separated by a stacking rule again. */}
-          <div className="absolute inset-0 bg-background/30 dark:bg-background/35" />
+          {/* Light dim. The BLUR is what separates the dialog from the page;
+              the dim only takes the edge off. Heavier values washed the scenery
+              back out to nothing, which is the bug this kept shipping. */}
+          <div className="absolute inset-0 bg-background/20 dark:bg-background/30" />
         </div>
 
         <div className={sheet}>
