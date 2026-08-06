@@ -3361,7 +3361,8 @@
     "step_desc_service_work": "Le travail qu'il entraîne",
     "step_desc_service_letter": "La lettre qui l'accompagne",
     "template_saved_toast": "Modèle enregistré — {access}",
-    "draft_saved_toast": "Brouillon enregistré"
+    "draft_saved_toast": "Brouillon enregistré",
+    "remove_block": "Supprimer ce groupe de facturation"
   },
   "Status": {
     "pending": "En attente",
