@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Archive, Milestone, UserRound, X } from "lucide-react";
+import { Archive, CheckCircle2, Milestone, UserRound, X } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   DropdownMenu,
@@ -81,7 +81,7 @@ export function BulkAssignBar({
   // clients use — so "Assign to" is one control in this product, not three
   // that resemble each other.
   const runUpdate = (
-    patch: { stage?: string; archive?: boolean },
+    patch: { stage?: string; archive?: boolean; complete?: boolean },
     label: string,
   ) => {
     if (pending) return;
@@ -111,6 +111,24 @@ export function BulkAssignBar({
       busy={pending}
       onClear={onClear}
       actions={[
+        // FIRST, and on its own — exactly where tasks put theirs. Founder:
+        // "you can select it and then you can click that mark done button.
+        // That doesn't exist for engagements... The only way you can mark an
+        // engagement done in a bulk action is by clicking the change status
+        // button and then complete it. There should be a mark done button
+        // exactly like tasks."
+        //
+        // ⚠️ It does NOT send stage: "completed". Completing an engagement also
+        // cancels the client's reminders, notifies the firm, dispatches the
+        // invoice and queues the filing pass; a stage write does none of that.
+        // See completeOneEngagement — the bulk path calls the same function the
+        // button on the engagement itself does.
+        {
+          key: "complete",
+          label: t("bulk_mark_done"),
+          icon: CheckCircle2,
+          onSelect: () => runUpdate({ complete: true }, t("bulk_mark_done")),
+        },
         {
           key: "assign",
           label: t("bulk_assign_to"),

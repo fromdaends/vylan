@@ -2983,7 +2983,8 @@
     "services_billing_end": "Arrêter la facturation définitivement",
     "services_billing_end_confirm": "Oui — arrêter définitivement",
     "invoice_amount_from_services": "Calculé à partir de vos éléments de service — modifiable au besoin.",
-    "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)"
+    "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)",
+    "bulk_mark_done": "Marquer terminé"
   },
   "Attention": {
     "metric_active": "Actifs",
