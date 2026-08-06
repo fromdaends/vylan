@@ -168,7 +168,7 @@ export function RailFlyout({
           aria-label={closeLabel}
           className="-mr-1 shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <X className="size-[15px]" aria-hidden />
+          <X className="size-[15px]" absoluteStrokeWidth aria-hidden />
         </button>
       </div>
 
@@ -200,7 +200,7 @@ export function RailFlyout({
                       "ring-2 ring-accent ring-offset-2 ring-offset-card",
                   )}
                 >
-                  <action.icon className="size-[21px]" aria-hidden />
+                  <action.icon className="size-[21px]" absoluteStrokeWidth aria-hidden />
                 </span>
                 <span
                   className={cn(
@@ -267,7 +267,7 @@ export function RailFlyout({
                 )}
               >
                 <span className="min-w-0 truncate">{item.label}</span>
-                <ChevronRight aria-hidden className="size-3.5 shrink-0" />
+                <ChevronRight aria-hidden absoluteStrokeWidth className="size-3.5 shrink-0" />
               </span>
               {item.description && (
                 <span className="mt-1 block text-[11.5px] leading-[1.4] text-muted-foreground">
