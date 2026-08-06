@@ -603,3 +603,46 @@ export async function listDeletedFirmTasks(): Promise<FirmTask[]> {
   }
   return out;
 }
+
+/**
+ * Set the order of an engagement's tasks.
+ *
+ * The founder, on the card view: "drag to reorder within the engagement is
+ * cool." The order IS the order you work in, so it has to survive a reload.
+ *
+ * ⚠️ EVERY ID IS REWRITTEN, not just the two that swapped. order_index has
+ * never been maintained as a dense sequence — createEngagementTask sets it to
+ * the list length at the time, so deletions leave gaps and two tasks made in
+ * the same second can collide. Renumbering the whole list from the order the
+ * client just showed is the only version that is correct regardless of what
+ * the column held before, and an engagement's task list is small enough that
+ * "the whole list" is a handful of rows.
+ *
+ * Scoped by engagement AND firm: an id from another engagement in the array
+ * simply matches nothing rather than being reordered into this one.
+ */
+export async function reorderEngagementTasks(input: {
+  engagementId: string;
+  firmId: string;
+  orderedIds: string[];
+}): Promise<{ ok: boolean }> {
+  const supabase = await getServerSupabase();
+
+  const results = await Promise.all(
+    input.orderedIds.map((id, index) =>
+      supabase
+        .from("engagement_tasks")
+        .update({ order_index: index })
+        .eq("id", id)
+        .eq("engagement_id", input.engagementId)
+        .eq("firm_id", input.firmId),
+    ),
+  );
+
+  const failed = results.find((r) => r.error);
+  if (failed?.error) {
+    console.error("[engagement-tasks] reorder failed:", failed.error);
+    return { ok: false };
+  }
+  return { ok: true };
+}

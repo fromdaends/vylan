@@ -181,11 +181,17 @@ export function EngagementTabs({
         </h2>
         {addTask}
       </div>
-      {/* THE SAME TABLE the firm-wide Tasks page draws, minus the Client column
-          — every row on a job has the same client, and a column with one value
-          is decoration. The founder's complaint was exactly this: "the task view
+      {/* THE SAME COMPONENT the firm-wide Tasks page draws, in its CARDS
+          layout. The founder's complaint was once exactly this: "the task view
           for a specific engagement ... doesnt match with the actual tasks
-          screen." One component is the only durable answer to that. */}
+          screen." One component is still the only durable answer — a card here
+          and a row there are two skins over one brain, so a menu added to the
+          table appears on the card the same day.
+
+          Cards HERE and a table there is deliberate, and the founder's call: "I
+          want to change how tasks are look at" on the engagement specifically.
+          A job's handful of tasks is a board you arrange; a firm's hundreds are
+          a spreadsheet you filter. */}
       <TasksTable
         tasks={tasks}
         members={members}
@@ -193,6 +199,7 @@ export function EngagementTabs({
         statuses={statuses}
         currentUserId={currentUserId}
         variant="job"
+        layout="cards"
         onOpen={setOpen}
       />
       </>

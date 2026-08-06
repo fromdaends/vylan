@@ -90,7 +90,9 @@ import { TaskDetailPanel } from "@/components/engagements/task-detail-panel";
 import { ColumnMenu, type SortState } from "@/components/ui/column-menu";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { taskKindLabelKey, taskKindHasScreen } from "@/lib/tasks/kinds";
+import { formatDue, isOverdue } from "@/lib/tasks/due";
 import { TaskKindIcon } from "@/components/engagements/task-kind-icon";
+import { TaskCard } from "@/components/engagements/task-card";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -109,9 +111,17 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useRowSelection } from "@/lib/bulk/use-row-selection";
 import { BULK_MAX } from "@/lib/bulk/selection";
 import { ListViewsMenu, type ListSavedView } from "@/components/ui/list-views-menu";
-import { bulkUpdateTasksAction } from "@/app/actions/engagement-tasks";
+import {
+  bulkUpdateTasksAction,
+  reorderTasksAction,
+} from "@/app/actions/engagement-tasks";
 
 type TaskStatus = "todo" | "doing" | "done";
+
+/** How a task list draws itself. The engagement page asks for cards; the
+ *  firm-wide list stays a table, because a job's handful of tasks is a board
+ *  and a firm's hundreds are a spreadsheet. */
+export type TaskLayout = "table" | "cards";
 export type TaskPriority = "none" | "low" | "medium" | "high";
 
 /** A status the firm named, as the table needs it. */
@@ -194,6 +204,7 @@ export function TasksTable({
   currentUserId,
   statuses,
   variant = "firm",
+  layout = "table",
   initialView = "active",
   savedViews = [],
   deletedMode = false,
@@ -211,6 +222,8 @@ export function TasksTable({
   currentUserId: string;
   /** "job" drops the Client column — one value in it is decoration. */
   variant?: "firm" | "job";
+  /** Cards on an engagement, table everywhere else. See TaskLayout. */
+  layout?: TaskLayout;
   /**
    * Which saved view opens first.
    *
@@ -248,11 +261,21 @@ export function TasksTable({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const [rows, patch] = useOptimistic(tasks, (state: TaskRow[], p: Patch) =>
-    p.remove
+  const [rows, patch] = useOptimistic(tasks, (state: TaskRow[], p: Patch) => {
+    if ("reorder" in p) {
+      const at = new Map(p.reorder.map((id, i) => [id, i]));
+      // Anything not named keeps its relative place at the end, so a patch
+      // built from a FILTERED view cannot drop the rows it could not see.
+      return [...state].sort(
+        (a, b) =>
+          (at.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (at.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+    }
+    return p.remove
       ? state.filter((r) => r.id !== p.id)
-      : state.map((r) => (r.id === p.id ? { ...r, ...p } : r)),
-  );
+      : state.map((r) => (r.id === p.id ? { ...r, ...p } : r));
+  });
 
   // "active" everywhere the table is the page. The engagements list's panel
   // passes "all", because you get there by clicking a total.
@@ -260,6 +283,17 @@ export function TasksTable({
   // by hand — a tab that stays lit while the list no longer matches it is
   // worse than no tab at all.
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  // ── DRAG TO REORDER ────────────────────────────────────────────────────────
+  //
+  // Founder: "drag to reorder within the engagement is cool." Not between
+  // columns — an engagement's tasks all belong to one job, so there is nothing
+  // to move them between. The order is just the order you work in.
+  //
+  // The handle is the only draggable part (see TaskCard): making a whole card
+  // draggable turns every attempted click on a trackpad into a drag.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   // Applying a saved view REPLACES every filter, including clearing the ones it
   // does not name. A view that only added filters would drift depending on what
@@ -499,6 +533,43 @@ export function TasksTable({
   // count and the tabs never disagree with each other.
   const visible = maxRows ? shown.slice(0, maxRows) : shown;
 
+  /**
+   * Drop the dragged card at `index` in the CURRENTLY VISIBLE order.
+   *
+   * The list moves first and the write follows, like every other edit in this
+   * app — a card that snaps back for a round trip before landing is worse than
+   * one that never moved. A failure puts the order back and says so.
+   *
+   * ⚠️ It sends the whole visible order, not "task X moved to slot 3". The
+   * server renumbers from the array, which is the only version that is right
+   * regardless of the gaps createEngagementTask leaves in order_index.
+   */
+  function dropOn(index: number) {
+    if (!dragId) return;
+    const from = visible.findIndex((r) => r.id === dragId);
+    setDragId(null);
+    setOverId(null);
+    if (from === -1 || from === index) return;
+
+    const next = [...visible];
+    const [moved] = next.splice(from, 1);
+    next.splice(index, 0, moved);
+
+    // Reordering only means anything within ONE engagement, which is the only
+    // place this layout is used.
+    const engagementId = moved.engagementId;
+    if (!engagementId) return;
+
+    const orderedIds = next.map((r) => r.id);
+    // Through the SAME runner as every other edit: it patches optimistically,
+    // refreshes on success and toasts on failure. A second write path here
+    // would be a second set of rules about what happens when the server says
+    // no.
+    run({ reorder: orderedIds }, () =>
+      reorderTasksAction({ engagementId, orderedIds }),
+    );
+  }
+
   // The bulk runner. One place so every action reports the same way — and says
   // "8 of 10" when some rows fail rather than claiming a clean sweep.
   const runBulk = (
@@ -721,6 +792,68 @@ export function TasksTable({
         </div>
       )}
 
+      {/* ── THE CARD GRID ───────────────────────────────────────────────────
+          The engagement page's shape. Founder: "I'm very fond of the like box
+          look... represent a task as like a box with the name and the relevant
+          information to that task."
+
+          It renders the SAME <Row> the table does, in its cards layout — so
+          every menu, every optimistic write and every filter above applies
+          identically. Only the markup differs. */}
+      {layout === "cards" ? (
+        <div
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          onDragOver={(e) => e.preventDefault()}
+        >
+          {visible.map((task, i) => (
+            <Row
+              key={task.id}
+              task={task}
+              commentCount={commentCounts[task.id] ?? 0}
+              isSelected={selection.isSelected(task.id)}
+              onSelectToggle={() => selection.toggle(task.id)}
+              status={statusOf(task)}
+              statusOptions={statusOptions}
+              firmWide={firmWide}
+              canEdit={canEdit}
+              members={members}
+              nameById={nameById}
+              kindLabel={kindLabel}
+              t={t}
+              layout="cards"
+              drag={{
+                isDragging: dragId === task.id,
+                isOver: overId === task.id && dragId !== task.id,
+                handleProps: {
+                  draggable: true,
+                  onDragStart: () => setDragId(task.id),
+                  onDragEnd: () => {
+                    setDragId(null);
+                    setOverId(null);
+                  },
+                  onDragOver: (e) => {
+                    e.preventDefault();
+                    setOverId(task.id);
+                  },
+                  onDrop: (e) => {
+                    e.preventDefault();
+                    dropOn(i);
+                  },
+                },
+              }}
+              onOpenDetail={() => setDetailId(task.id)}
+              onOpenScreen={onOpen}
+              run={run}
+            />
+          ))}
+          {visible.length === 0 && (
+            <p className="col-span-full py-12 text-center text-sm text-muted-foreground">
+              {t("tasks_empty")}
+            </p>
+          )}
+        </div>
+      ) : (
+      <>
       {/* THE HEADER ROW ALWAYS RENDERS. Founder: "when there is no tasks the
           top sorting bars are gone... They should be there no matter what."
           Right — the controls that got you to an empty result are the ones you
@@ -898,6 +1031,8 @@ export function TasksTable({
             </tbody>
           </table>
       </div>
+      </>
+      )}
 
       {/* CANOPY'S ACTION SET, cut to what Vylan can already do one row at a
           time: Status, Priority, Assignee on the bar; Delete behind More
@@ -1061,6 +1196,9 @@ export function TasksTable({
 }
 
 type Patch =
+  // Reordering is a whole-list operation, so it carries the order rather than
+  // an id — the only patch that is not about one task.
+  | { reorder: string[] }
   | { id: string; remove: true }
   | ({ id: string; remove?: false } & Partial<
       Pick<
@@ -1074,6 +1212,98 @@ type Patch =
         | "priority"
       >
     >);
+
+/**
+ * The status control, extracted so the ROW and the CARD share one.
+ *
+ * It was inline in the row until the engagement page went to cards. Two copies
+ * of a menu that writes a status is precisely the drift the founder called out
+ * once already — "the task view for a specific engagement ... doesnt match with
+ * the actual tasks screen" — so it became a component the moment there was a
+ * second caller rather than the moment it got painful.
+ */
+function StatusPill({
+  task,
+  status,
+  statusOptions,
+  canEdit,
+  run,
+  t,
+}: {
+  task: TaskRow;
+  status: FirmStatus;
+  statusOptions: FirmStatus[];
+  canEdit: boolean;
+  run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
+  t: ReturnType<typeof useTranslations<"Engagements">>;
+}) {
+  return (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild disabled={!canEdit}>
+      <button
+        type="button"
+        onClick={(e) => e.stopPropagation()}
+        aria-label={t("work_toggle", { title: task.title })}
+        className="flex items-center gap-1.5 rounded-full border border-transparent bg-muted px-2 py-0.5 text-xs transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      >
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: status.color }}
+          aria-hidden
+        />
+        <span className="truncate">{status.name}</span>
+      </button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent
+      align="start"
+      className="w-52"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {statusOptions.map((option) => (
+        <DropdownMenuItem
+          key={option.id}
+          className="gap-2"
+          onSelect={() =>
+            run(
+              {
+                id: task.id,
+                status: option.bucket,
+                statusId: option.id.startsWith("bucket:")
+                  ? null
+                  : option.id,
+              },
+              () =>
+                updateTaskAction({
+                  taskId: task.id,
+                  engagementId: task.engagementId,
+                  // The BUCKET is written by a database trigger from the
+                  // status, so sending it too would be a second writer
+                  // for one fact. Only the choice goes over the wire.
+                  statusId: option.id.startsWith("bucket:")
+                    ? null
+                    : option.id,
+                  status: option.id.startsWith("bucket:")
+                    ? option.bucket
+                    : undefined,
+                }),
+            )
+          }
+        >
+          <span
+            className="size-2 shrink-0 rounded-full"
+            style={{ backgroundColor: option.color }}
+            aria-hidden
+          />
+          {option.name}
+          {option.id === status.id && (
+            <Check className="ml-auto size-3.5" aria-hidden />
+          )}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuContent>
+  </DropdownMenu>
+  );
+}
 
 function Row({
   task,
@@ -1090,6 +1320,8 @@ function Row({
   t,
   onOpenDetail,
   onOpenScreen,
+  layout,
+  drag,
   run,
 }: {
   task: TaskRow;
@@ -1108,6 +1340,14 @@ function Row({
   t: ReturnType<typeof useTranslations<"Engagements">>;
   onOpenDetail: () => void;
   onOpenScreen?: (taskId: string) => void;
+  /** "cards" swaps ONLY the markup — every handler above is shared. */
+  layout?: TaskLayout;
+  /** Supplied by the card grid. Absent on the table, which does not reorder. */
+  drag?: {
+    isDragging: boolean;
+    isOver: boolean;
+    handleProps: React.HTMLAttributes<HTMLSpanElement>;
+  };
   run: (p: Patch, call: () => Promise<TaskActionResult>) => void;
 }) {
   const assignees = task.assigneeIds
@@ -1235,8 +1475,62 @@ function Row({
         ]
       : []),
   ];
-  const overdue =
-    task.dueDate && task.status !== "done" && task.dueDate < today();
+  const overdue = isOverdue(task.dueDate, task.status);
+
+  // ── THE CARD SHAPE ────────────────────────────────────────────────────────
+  //
+  // Everything above this line — the menu, the comment entry, the status
+  // options, the optimistic runner — is computed once and used by BOTH shapes.
+  // Only the markup differs, which is the whole reason the card lives on this
+  // side of the function rather than in a component of its own with its own
+  // copy of the handlers.
+  if (layout === "cards") {
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div>
+            <TaskCard
+              title={task.title}
+              kind={task.kind}
+              kindLabel={kindLabel(task.kind)}
+              status={status}
+              dueDate={task.dueDate}
+              taskStatus={task.status}
+              assignees={assignees}
+              subtasks={task.subtasks}
+              commentCount={commentCount}
+              canDrag={canEdit && Boolean(drag)}
+              dragging={drag?.isDragging}
+              dragOver={drag?.isOver}
+              dragHandleProps={drag?.handleProps}
+              onOpen={() => (openable ? onOpenScreen?.(task.id) : onOpenDetail())}
+              t={t}
+              statusMenu={
+                <StatusPill
+                  task={task}
+                  status={status}
+                  statusOptions={statusOptions}
+                  canEdit={canEdit}
+                  run={run}
+                  t={t}
+                />
+              }
+            >
+              <RowCommentBubble
+                target={{ kind: "task", taskId: task.id }}
+                commentKey={commentKeyForTask(task.id)}
+                initialCount={commentCount}
+                quotedText={task.title}
+              />
+            </TaskCard>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-56">
+          <RowMenuItems items={menuItems} parts={CONTEXT_MENU_PARTS} />
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  }
 
   return (
     // RIGHT-CLICK REACHES THE COMMENT COMPOSER. Founder: "you can't right click
@@ -1289,70 +1583,14 @@ function Row({
       </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!canEdit}>
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              aria-label={t("work_toggle", { title: task.title })}
-              className="flex items-center gap-1.5 rounded-full border border-transparent bg-muted px-2 py-0.5 text-xs transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-            >
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: status.color }}
-                aria-hidden
-              />
-              <span className="truncate">{status.name}</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="w-52"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {statusOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.id}
-                className="gap-2"
-                onSelect={() =>
-                  run(
-                    {
-                      id: task.id,
-                      status: option.bucket,
-                      statusId: option.id.startsWith("bucket:")
-                        ? null
-                        : option.id,
-                    },
-                    () =>
-                      updateTaskAction({
-                        taskId: task.id,
-                        engagementId: task.engagementId,
-                        // The BUCKET is written by a database trigger from the
-                        // status, so sending it too would be a second writer
-                        // for one fact. Only the choice goes over the wire.
-                        statusId: option.id.startsWith("bucket:")
-                          ? null
-                          : option.id,
-                        status: option.id.startsWith("bucket:")
-                          ? option.bucket
-                          : undefined,
-                      }),
-                  )
-                }
-              >
-                <span
-                  className="size-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: option.color }}
-                  aria-hidden
-                />
-                {option.name}
-                {option.id === status.id && (
-                  <Check className="ml-auto size-3.5" aria-hidden />
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <StatusPill
+          task={task}
+          status={status}
+          statusOptions={statusOptions}
+          canEdit={canEdit}
+          run={run}
+          t={t}
+        />
         </div>
       </td>
 
@@ -1641,16 +1879,5 @@ function PriorityCell({
   );
 }
 
-/** Today in the user's own timezone, as YYYY-MM-DD — the same shape due_date is
- *  stored in, so "overdue" is a string comparison and never a timezone bug. */
-function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
-/** Rendered from the parts, never `new Date(str)`: a bare YYYY-MM-DD is parsed
- *  as UTC midnight, which prints as the day BEFORE for anyone west of London. */
-function formatDue(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y.slice(2)}`;
-}
+

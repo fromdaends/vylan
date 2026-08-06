@@ -2947,7 +2947,9 @@
     "price_visibility_blocks": "Show a subtotal per billing cycle",
     "price_visibility_total": "Show the engagement total",
     "item_service_creates": "Creates “{name}” on the Tasks step — {count} steps.",
-    "invoice_mode_on_acceptance": "When the client accepts"
+    "invoice_mode_on_acceptance": "When the client accepts",
+    "task_reorder": "Drag to reorder {title}",
+    "task_steps_done": "{done} of {total} steps done"
   },
   "Attention": {
     "metric_active": "Active",
