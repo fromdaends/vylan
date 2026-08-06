@@ -22,7 +22,7 @@ import {
 import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { readDepositState } from "@/lib/engagements/deposit-state";
-import { isAwaitingDeposit } from "@/lib/engagements/activation";
+import { isAwaitingPayment } from "@/lib/engagements/activation";
 import type { EngagementStage } from "@/lib/engagements/stage";
 import { BUCKET } from "@/lib/storage";
 import {
@@ -621,12 +621,12 @@ export async function loadPortalContext(
     // portal can never disagree with the engagement's own state — a client
     // looking at a payment screen for work that already started, or a working
     // portal for work that was never paid for.
-    awaiting_deposit: isAwaitingDeposit({
+    awaiting_deposit: isAwaitingPayment({
       ...depositState,
       acceptedAt: depositState.acceptedAt,
     })
       ? {
-          amountCents: depositState.depositCents ?? 0,
+          amountCents: depositState.dueNowCents ?? 0,
           paymentRequestId: depositState.paymentRequestId,
         }
       : null,

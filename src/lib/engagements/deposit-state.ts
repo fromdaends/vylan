@@ -17,7 +17,7 @@ import {
 } from "@/lib/engagements/activation";
 
 export type DepositState = ActivationFacts & {
-  /** The deposit invoice, once one has been raised. */
+  /** The invoice the client should pay first, once one has been raised. */
   paymentRequestId: string | null;
   acceptedAt: string | null;
 };
@@ -35,9 +35,8 @@ export async function readDepositState(
   engagementId: string,
 ): Promise<DepositState> {
   const safe: DepositState = {
-    depositCents: null,
+    dueNowCents: null,
     canCollectPayment: false,
-    depositPaid: false,
     paymentRequestId: null,
     acceptedAt: null,
   };
@@ -57,29 +56,31 @@ export async function readDepositState(
     } | null;
     if (!eng) return safe;
 
-    const depositCents =
-      typeof eng.deposit_cents === "number" && eng.deposit_cents > 0
-        ? eng.deposit_cents
-        : null;
     const acceptedAt = eng.accepted_at ?? null;
 
-    // No deposit means nothing else matters — skip both remaining reads, which
-    // is the overwhelmingly common path (most engagements ask for nothing up
-    // front) and this runs on every portal render.
-    if (depositCents == null) {
-      return { ...safe, acceptedAt, canCollectPayment: false };
+    // ── WHAT IS ACTUALLY OUTSTANDING ──────────────────────────────────────
+    //
+    // Not "is there a deposit column" — what does the client still OWE right
+    // now. That is the sum of every live, unpaid invoice on the engagement:
+    // the deposit AND an on-acceptance engagement invoice both qualify, and
+    // reading only the deposit column let a $459.90 on-acceptance engagement
+    // through the gate untouched.
+    //
+    // Nothing accepted yet means nothing has been raised yet, so skip the
+    // remaining reads — this runs on every portal render.
+    if (acceptedAt == null) {
+      return { ...safe, acceptedAt: null };
     }
 
-    const [rails, deposit] = await Promise.all([
+    const [rails, outstanding] = await Promise.all([
       readRails(sb, eng.firm_id),
-      readDepositInvoice(sb, engagementId),
+      readOutstanding(sb, engagementId),
     ]);
 
     return {
-      depositCents,
+      dueNowCents: outstanding.cents > 0 ? outstanding.cents : null,
       canCollectPayment: rails,
-      depositPaid: deposit.paid,
-      paymentRequestId: deposit.id,
+      paymentRequestId: outstanding.firstId,
       acceptedAt,
     };
   } catch (e) {
@@ -125,23 +126,34 @@ async function readRails(sb: Sb, firmId: string): Promise<boolean> {
   ).any;
 }
 
-async function readDepositInvoice(
+/**
+ * Every live invoice on this engagement that is still owed.
+ *
+ * `status = 'requested'` is the open state; paid, failed and cancelled are all
+ * excluded — a failed attempt is retried against the same row, and a cancelled
+ * invoice is a decision the firm made, not a debt.
+ *
+ * Ordered oldest-first so `firstId` matches what the portal's checkout will
+ * actually charge (getOldestOpenPaymentRequestForEngagementSR), rather than
+ * naming one invoice on screen and charging another.
+ */
+async function readOutstanding(
   sb: Sb,
   engagementId: string,
-): Promise<{ id: string | null; paid: boolean }> {
+): Promise<{ cents: number; firstId: string | null }> {
   const { data, error } = await sb
     .from("payment_requests")
-    .select("id, status")
+    .select("id, amount_cents, status")
     .eq("engagement_id", engagementId)
-    .eq("kind", "deposit")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  // Pre-1680 there is no `kind` column, so no deposit can exist and none can
-  // have been paid. Reporting "unpaid" there would gate a portal on an invoice
-  // that cannot be raised, so the caller's rails check is what saves it — but
-  // be explicit rather than relying on that.
-  if (error || !data) return { id: null, paid: false };
-  const row = data as { id: string; status: string };
-  return { id: row.id, paid: row.status === "paid" };
+    .eq("status", "requested")
+    .order("created_at", { ascending: true });
+  if (error || !data) return { cents: 0, firstId: null };
+  const rows = data as Array<{ id: string; amount_cents: number | null }>;
+  return {
+    cents: rows.reduce(
+      (sum, r) => sum + (typeof r.amount_cents === "number" ? r.amount_cents : 0),
+      0,
+    ),
+    firstId: rows[0]?.id ?? null,
+  };
 }
