@@ -3,6 +3,8 @@ import {
   computeBillingTotals,
   hasBillingTotals,
   FREQUENCY_ORDER,
+  invoiceAmountFromTotals,
+  type BillingTotals,
 } from "./billing-totals";
 import type { EngagementItemDraft } from "./items";
 
@@ -214,5 +216,56 @@ describe("the headline total is the ONE-TIME money only", () => {
     expect(totals.oneTimeTotalCents).toBe(400_000);
     // The cross-frequency `determined` is still false, correctly.
     expect(totals.determined).toBe(false);
+  });
+});
+
+describe("invoiceAmountFromTotals — what Amount to bill fills itself with", () => {
+  const totals = (over: Partial<BillingTotals>): BillingTotals =>
+    ({
+      groups: [],
+      determined: true,
+      subtotalCents: 0,
+      taxCents: 0,
+      totalCents: 0,
+      oneTimeSubtotalCents: 0,
+      oneTimeTaxCents: 0,
+      oneTimeTotalCents: 0,
+      oneTimeDetermined: true,
+      dueOnAcceptanceCents: null,
+      ...over,
+    }) as BillingTotals;
+
+  it("gives the one-time total, tax included, as the input's string", () => {
+    expect(
+      invoiceAmountFromTotals(totals({ oneTimeTotalCents: 1150 })),
+    ).toBe("11.50");
+    expect(
+      invoiceAmountFromTotals(totals({ oneTimeTotalCents: 400_000 })),
+    ).toBe("4000.00");
+  });
+
+  it("⚠️ ignores totalCents, which is not a price anyone pays", () => {
+    // $4,000 once + $500/month. The invoice is 4000, never 4500.
+    expect(
+      invoiceAmountFromTotals(
+        totals({ oneTimeTotalCents: 400_000, totalCents: 450_000 }),
+      ),
+    ).toBe("4000.00");
+  });
+
+  it("says nothing rather than half a total", () => {
+    // A one-time line with no rate yet. Filling in the part we know would put a
+    // number in a money field that no line adds up to.
+    expect(
+      invoiceAmountFromTotals(
+        totals({ oneTimeTotalCents: 1000, oneTimeDetermined: false }),
+      ),
+    ).toBe("");
+  });
+
+  it("says nothing when there is nothing billed up front", () => {
+    // Purely recurring work: the invoice is raised each period by the
+    // recurring-charge job, not once here.
+    expect(invoiceAmountFromTotals(totals({ oneTimeTotalCents: 0 }))).toBe("");
   });
 });

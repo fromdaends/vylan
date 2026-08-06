@@ -9,6 +9,7 @@ import {
   formatRateMilliPct,
   provinceName,
   isProvinceCode,
+  taxPctForProvince,
 } from "./canada";
 
 describe("province → components map (the spec table)", () => {
@@ -180,5 +181,51 @@ describe("labels", () => {
     expect(isProvinceCode("QC")).toBe(true);
     expect(isProvinceCode("XX")).toBe(false);
     expect(isProvinceCode(null)).toBe(false);
+  });
+});
+
+describe("taxPctForProvince — the single-box rate", () => {
+  it("gives the HST rate in HST provinces", () => {
+    expect(taxPctForProvince("ON")).toBe(13);
+    expect(taxPctForProvince("NS")).toBe(14);
+    expect(taxPctForProvince("NB")).toBe(15);
+  });
+
+  it("gives 5 where there is no provincial tax at all", () => {
+    for (const code of ["AB", "NT", "NU", "YT"]) {
+      expect(taxPctForProvince(code)).toBe(5);
+    }
+  });
+
+  it("adds the components up where a province has its own tax", () => {
+    expect(taxPctForProvince("QC")).toBe(14.975); // 5 GST + 9.975 QST
+    expect(taxPctForProvince("BC")).toBe(12); // 5 + 7 PST
+    expect(taxPctForProvince("MB")).toBe(12); // 5 + 7 RST
+    expect(taxPctForProvince("SK")).toBe(11); // 5 + 6 PST
+  });
+
+  it("cannot drift from the component table it is derived from", () => {
+    // The whole point of deriving rather than duplicating: change
+    // PROVINCE_TAXES and this follows. A second hand-written map would not.
+    for (const code of PROVINCE_CODES) {
+      const summed =
+        PROVINCE_TAXES[code].reduce((s, c) => s + c.rateMilliPct, 0) / 1000;
+      expect(taxPctForProvince(code)).toBe(summed);
+    }
+  });
+
+  it("returns NULL rather than guessing", () => {
+    // A client with no province on file leaves the box empty. Inventing 5%
+    // would put a number on a proposal that no rule produced.
+    expect(taxPctForProvince(null)).toBeNull();
+    expect(taxPctForProvince(undefined)).toBeNull();
+    expect(taxPctForProvince("")).toBeNull();
+    expect(taxPctForProvince("XX")).toBeNull();
+    expect(taxPctForProvince("Ontario")).toBeNull();
+  });
+
+  it("is forgiving about how the code was stored", () => {
+    expect(taxPctForProvince("qc")).toBe(14.975);
+    expect(taxPctForProvince(" on ")).toBe(13);
   });
 });

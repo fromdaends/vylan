@@ -68,10 +68,18 @@ export default async function EditEngagementTemplatePage({
           ?.default_engagement_terms ?? ""
       }
       canManageFirmTerms={can(viewer, "firm.settings")}
-      fallbackTaxPct={
-        (firm as { default_tax_pct?: number | null } | null)?.default_tax_pct ??
-        null
-      }
+      // NO TAX RATE ON A TEMPLATE, deliberately.
+      //
+      // The rate comes from the CLIENT's province (lib/tax/canada.ts) and a
+      // template has no client — it is reused for an Ontario client and a
+      // Quebec one, and baking 13% into it would put the wrong tax on every
+      // engagement made from it in the other province. The engagement builder
+      // fills the box in once a client is picked.
+      //
+      // This used to read `firm.default_tax_pct` through a cast. That column
+      // exists in no migration, so it was always undefined — the cast was the
+      // only thing stopping the compiler from saying so.
+      fallbackTaxPct={null}
       initial={{
         id: template.id,
         name: template.name,
