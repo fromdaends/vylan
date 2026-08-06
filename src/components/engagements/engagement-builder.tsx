@@ -439,9 +439,26 @@ export function EngagementBuilder({
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
-  const [invoiceMode, setInvoiceMode] = useState<InvoiceTiming>(
-    connectReady ? invoiceDefaultMode : "off",
-  );
+  // ── BILLED WHEN THEY ACCEPT, BY DEFAULT ────────────────────────────────
+  //
+  // Founder: "have it so the 'invoice' is always on bill you client after they
+  // accept."
+  //
+  // Acceptance is the moment the agreement becomes real, the deposit is taken
+  // and the portal opens — so it is also when the bill should go out. It used to
+  // default to the firm's saved mode, which for every firm that never opened
+  // Settings is 'off', so the invoice quietly never went at all.
+  //
+  // The other timings stay available: on completion and delayed are how plenty
+  // of tax work is genuinely billed, and removing them would break firms who
+  // chose them deliberately. A firm that has SAVED a preference keeps it — that
+  // is a decision somebody made — and everyone else now starts on acceptance.
+  const [invoiceMode, setInvoiceMode] = useState<InvoiceTiming>(() => {
+    if (!connectReady) return "off";
+    return invoiceDefaultMode && invoiceDefaultMode !== "off"
+      ? invoiceDefaultMode
+      : "on_acceptance";
+  });
   const [invoiceDelayDays, setInvoiceDelayDays] = useState<string>(
     invoiceDefaultDelayDays != null ? String(invoiceDefaultDelayDays) : "7",
   );

@@ -164,12 +164,20 @@ export function EngagementItemsEditor({
           </Button>
         </div>
       ) : (
-        <ul className="space-y-3">
+        /* ── ONE BOX, NOT A BOX PER ITEM ──────────────────────────────
+           Founder: "Clean up the ui its just boxes upon boxes."
+
+           They were counting correctly. A single service line sat inside FOUR
+           nested bordered boxes: the step's card, the billing block's card,
+           this per-item card, and the combine-items panel below it. Each border
+           was individually defensible and together they read as packaging.
+
+           Items are now hairline-separated ROWS inside the block that already
+           frames them — the same treatment every list in this app uses. The
+           fields are unchanged; only the chrome around them is gone. */
+        <ul className="divide-y divide-border/60">
           {items.map((item, idx) => (
-            <li
-              key={idx}
-              className="rounded-lg border border-border/60 bg-background/40 p-4"
-            >
+            <li key={idx} className="py-4 first:pt-0 last:pb-0">
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1 space-y-3">
                   <div>

@@ -154,7 +154,10 @@ export function BillingBlocksEditor({
         return (
           <section
             key={idx}
-            className="space-y-3 rounded-xl border border-border bg-card p-4"
+            // Border only, no raised fill: this already sits inside the step's
+            // own card, and a card-on-card was one of the layers the founder
+            // was counting.
+            className="space-y-3 rounded-xl border border-border p-4"
           >
             <div className="flex flex-wrap items-center gap-2">
               {/* HOW it bills. Changing this resets a timing the new type has
@@ -218,14 +221,30 @@ export function BillingBlocksEditor({
                 </select>
               )}
 
-              <button
-                type="button"
-                onClick={() => onChange(blocks.filter((_, i) => i !== idx))}
-                aria-label={t("remove")}
-                className="ml-auto text-muted-foreground transition-colors hover:text-destructive"
-              >
-                <Trash2 className="size-4" />
-              </button>
+              {/* ── ONLY ONE BIN IS EVER MEANINGFUL ────────────────────────
+                  Founder: "why is there two delete/garbage bins when they do
+                  the same thing."
+
+                  With a single block they DID do the same thing. This one
+                  removes the whole billing group; the one on each row removes
+                  that service. When there is one group holding one service,
+                  both leave you with nothing — two identical icons, forty
+                  pixels apart, with different meanings you cannot see.
+
+                  So the group bin appears only once there are groups to choose
+                  between. With one group the row bins are the only controls,
+                  and they are unambiguous. */}
+              {blocks.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onChange(blocks.filter((_, i) => i !== idx))}
+                  aria-label={t("remove_block")}
+                  title={t("remove_block")}
+                  className="ml-auto text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </div>
 
             {/* The SAME priced-scope editor the engagement builder uses. The
