@@ -239,3 +239,23 @@ describe("nobody signs a contract that is accepted, not signed", () => {
     expect(screen.getByText("Accepted by")).toBeTruthy();
   });
 });
+
+describe("the engagement period states the period and nothing else", () => {
+  // Founder: "get rid of 'beginning when the client accepts'. keep just
+  // 'Ongoing'." On the CLIENT's own copy that suffix addressed them in the
+  // third person, and restated what the Acceptance section says properly.
+
+  it('reads "Ongoing", not "Ongoing, beginning when the client accepts"', () => {
+    renderDoc({ periodMonths: null, periodStartsOn: "acceptance" });
+    expect(screen.getByText("Ongoing")).toBeTruthy();
+    const { container } = renderDoc({ periodMonths: null });
+    expect(container.textContent).not.toMatch(/beginning when the client accepts/i);
+  });
+
+  it("states a fixed term the same way", () => {
+    renderDoc({ periodMonths: 12, periodStartsOn: "custom" });
+    expect(screen.getByText("12 months")).toBeTruthy();
+    const { container } = renderDoc({ periodMonths: 12, periodStartsOn: "custom" });
+    expect(container.textContent).not.toMatch(/beginning on a date you pick/i);
+  });
+});

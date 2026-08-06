@@ -3358,8 +3358,6 @@
     "template_empty_error": "Donnez un nom au modèle et au mandat avant d'enregistrer.",
     "preview_sample_client": "Client Exemple inc.",
     "preview_untitled": "Mandat sans nom",
-    "preview_begins_acceptance": "{period}, à compter de l'acceptation du client",
-    "preview_begins_custom": "{period}, à compter d'une date choisie",
     "preview_no_intro": "Aucun élément d'introduction",
     "preview_no_intro_hint": "Votre message de bienvenue apparaîtra ici",
     "preview_no_services": "Aucun service",
