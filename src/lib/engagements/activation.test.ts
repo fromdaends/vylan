@@ -25,13 +25,14 @@ describe("acceptanceActivatesImmediately", () => {
     );
   });
 
-  it("holds it for an ON-ACCEPTANCE INVOICE, not only a deposit", () => {
-    // The bug this rule was widened for. The founder accepted a $459.90
-    // engagement billed 'on_acceptance' with NO deposit set and walked straight
-    // into the portal: "you just click accept and it brings you to the portal.
-    // Even though the engagement was supposed to be five hundred dollars."
+  it("is agnostic about WHICH money — it only asks whether any is due", () => {
+    // This function does not know what a deposit is, deliberately. Its caller
+    // (deposit-state.ts) decides what counts as due-now, and today that is the
+    // unpaid DEPOSIT only, per the founder: "its simply for the deposit that
+    // you must pay right away."
     //
-    // The gate now counts what is OUTSTANDING, whatever kind of invoice it is.
+    // Keeping the rule agnostic is what let that policy change be a one-line
+    // filter in the reader rather than a rewrite here.
     expect(acceptanceActivatesImmediately(facts({ dueNowCents: 45_990 }))).toBe(
       false,
     );
@@ -125,5 +126,39 @@ describe("invoiceAfterDeposit", () => {
 
   it("keeps everything in whole cents", () => {
     expect(invoiceAfterDeposit(500_000, 33_333.4)).toBe(466_667);
+  });
+});
+
+describe("ONLY a deposit gates the portal", () => {
+  // The founder's rule, verbatim: "if theres a deposit its paid right away. If
+  // it isnt, the actual contract amount can be payed through the client portal
+  // at any time. Its simply for the deposit that you must pay right away."
+  //
+  // These read as duplicates of the cases above, and that is the point: the
+  // RULE is unchanged, but what feeds `dueNowCents` narrowed from "every
+  // outstanding invoice" to "the unpaid deposit". The reader is what enforces
+  // it (deposit-state.ts filters kind='deposit'), so these pin the contract
+  // between the two: whatever is passed in gates, and nothing else is passed in.
+
+  it("holds the portal for an unpaid deposit", () => {
+    expect(acceptanceActivatesImmediately(facts({ dueNowCents: 100_000 }))).toBe(
+      false,
+    );
+  });
+
+  it("lets the client in when the deposit is settled, even mid-contract", () => {
+    // A $4,000 contract balance may still be outstanding here. It is theirs to
+    // pay whenever they like, and it must not keep them out of their own portal.
+    expect(acceptanceActivatesImmediately(facts({ dueNowCents: null }))).toBe(
+      true,
+    );
+  });
+
+  it("lets the client straight in when there is no deposit at all", () => {
+    // The commonest case, and the one my widened gate broke: an engagement
+    // billed on acceptance with no deposit locked the client out entirely.
+    expect(
+      isAwaitingPayment({ ...facts(), acceptedAt: "2026-08-06T00:00:00Z" }),
+    ).toBe(false);
   });
 });
