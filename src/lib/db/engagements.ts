@@ -29,6 +29,21 @@ export type Engagement = {
   accepted_by?: "client" | "firm" | null;
   /** When work was allowed to begin — a separate decision from acceptance. */
   activated_at?: string | null;
+  /**
+   * Sent AS a proposal: the client must agree before anything else (1650/1660).
+   *
+   * Already selected by `select("*")` and already the flag the portal branches
+   * on; it simply was not declared here, so every reader outside portal.ts had
+   * to cast to reach it. Optional because a pre-1650 row has no column, and
+   * absent must read as "not a proposal" — the safe direction, since the whole
+   * proposal flow is gated on it being explicitly true.
+   */
+  requires_acceptance?: boolean | null;
+  /**
+   * What the proposal says is due the moment the client accepts (1680). Integer
+   * cents; NULL means no deposit, which is not the same as 0.
+   */
+  deposit_cents?: number | null;
   client_id: string;
   title: string;
   type: EngagementType;

@@ -28,7 +28,6 @@ import {
   getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
-import { listRequestItems } from "@/lib/db/request-items";
 import { createEngagementTask, toTaskKind } from "@/lib/db/engagement-tasks";
 import { logUserActivity } from "@/lib/db/activity";
 import {
@@ -69,7 +68,12 @@ import { purgeOneEngagement } from "@/lib/engagements/purge";
 import { BULK_ASSIGN_MAX } from "@/lib/engagements/bulk-assign";
 import { normalizeHandoffNote } from "@/lib/engagements/handoff-note";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
-import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
+import {
+  buildEngagementInviteEmail,
+  buildProposalInviteEmail,
+  sendEmail,
+} from "@/lib/email";
+import { formatCurrency } from "@/lib/format";
 import { BUCKET, getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { hasActiveTeam } from "@/lib/team/mode";
@@ -761,12 +765,19 @@ export async function createEngagementAction(
 export async function sendEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
-  // Backstop for the no-documents rule: an engagement with no requested
-  // items has nothing for the client to upload. The detail page disables
-  // the Send button in this case, but guard the action too in case it's
-  // hit directly.
-  const items = await listRequestItems(id);
-  if (items.length === 0) return;
+  // NO documents gate — same reasoning as createEngagement's send path, which
+  // dropped it when every engagement became a proposal.
+  //
+  // This one survived there and made the founder's instruction only half true:
+  // an engagement with services, terms and a signature but no document requests
+  // could be CREATED and then never SENT. Three places enforced it — this
+  // action, the disabled Send button, and a red banner telling the accountant to
+  // add a document — so removing any two of them left the other still lying.
+  //
+  // What the client lands on is the thing they are being asked to agree to. An
+  // engagement that asks for nothing at all is still a real state (advisory
+  // work, a fixed-fee review, anything billed without a file changing hands),
+  // and it is the accountant's call, not this function's.
   const limits = await getFirmLimits();
   if (limits && !limits.canCreateEngagement) {
     // Soft block — caller's UI should have prevented this anyway, but be safe.
@@ -802,15 +813,45 @@ async function deliverInviteEmail(engagementId: string): Promise<void> {
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     const url = `${appUrl}/r/${engagement.magic_token}`;
     const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
-    const { subject, html, text } = buildEngagementInviteEmail({
-      clientName: client.display_name,
-      firmName: firm.name,
-      firmLogoUrl,
-      engagementTitle: engagement.title,
-      url,
-      dueDate: engagement.due_date,
-      locale: client.locale,
-    });
+
+    // ── WHICH EMAIL ────────────────────────────────────────────────────────
+    //
+    // An engagement the client must AGREE to is not a document request, and
+    // sending "we need a few documents" for a contract was the client's first
+    // and worst impression of the whole proposal flow. Branch on the same flag
+    // the portal branches on (requires_acceptance), so the email and the page it
+    // opens can never describe two different things.
+    //
+    // Everything else — a plain document request, and every spawned occurrence
+    // of a repeating engagement — keeps the original email unchanged.
+    const isProposal = engagement.requires_acceptance === true;
+
+    const { subject, html, text } = isProposal
+      ? buildProposalInviteEmail({
+          clientName: client.display_name,
+          firmName: firm.name,
+          firmLogoUrl,
+          engagementTitle: engagement.title,
+          url,
+          // Named up front so agreeing is never the moment a client discovers
+          // there is money due. Formatted here because this is where the
+          // client's locale is known.
+          depositAmount:
+            typeof engagement.deposit_cents === "number" &&
+            engagement.deposit_cents > 0
+              ? formatCurrency(engagement.deposit_cents / 100, client.locale)
+              : null,
+          locale: client.locale,
+        })
+      : buildEngagementInviteEmail({
+          clientName: client.display_name,
+          firmName: firm.name,
+          firmLogoUrl,
+          engagementTitle: engagement.title,
+          url,
+          dueDate: engagement.due_date,
+          locale: client.locale,
+        });
     await sendEmail({ to: client.email, subject, html, text });
   } catch (e) {
     // Email is best-effort; never block the send flow on email failure.

@@ -2,11 +2,98 @@ import { describe, it, expect } from "vitest";
 import {
   personalSignOff,
   buildEngagementInviteEmail,
+  buildProposalInviteEmail,
   buildConfirmEmail,
   buildSignedCopyReturnedEmail,
   buildReminderEmail,
   resolveSender,
 } from "./email";
+
+describe("buildProposalInviteEmail", () => {
+  const base = {
+    clientName: "Marie Tremblay",
+    firmName: "Cabinet Tremblay & Associés",
+    engagementTitle: "T1 — Particulier — 2026",
+    url: "https://vylan.app/r/abcdefg",
+    depositAmount: null,
+  } as const;
+
+  it("does NOT talk about documents — that was the whole bug", () => {
+    // Every send used the document-request email, so a client sent a contract
+    // read "needs a few documents" and landed on something to agree to.
+    for (const locale of ["en", "fr"] as const) {
+      const { subject, html, text } = buildProposalInviteEmail({
+        ...base,
+        locale,
+      });
+      for (const s of [subject, html, text]) {
+        expect(s).not.toMatch(/needs a few documents|besoin de quelques documents/);
+      }
+    }
+  });
+
+  it("says what the click does, in English", () => {
+    const { subject, html, text } = buildProposalInviteEmail({
+      ...base,
+      locale: "en",
+    });
+    expect(subject).toMatch(/has sent you an engagement letter/);
+    expect(html).toContain("Hi Marie Tremblay");
+    expect(html).toContain("Review and accept");
+    expect(text).toContain("Review and accept:");
+  });
+
+  it("says what the click does, in French", () => {
+    const { subject, html, text } = buildProposalInviteEmail({
+      ...base,
+      locale: "fr",
+    });
+    expect(subject).toMatch(/lettre de mission/);
+    expect(html).toContain("Bonjour Marie Tremblay");
+    expect(html).toContain("Lire et accepter");
+    expect(text).toContain("Lire et accepter :");
+  });
+
+  it("names the deposit up front, and says it comes off the final invoice", () => {
+    // Agreeing must never be the moment a client discovers there is money due.
+    const en = buildProposalInviteEmail({
+      ...base,
+      depositAmount: "$1,000.00",
+      locale: "en",
+    });
+    expect(en.html).toContain("$1,000.00");
+    expect(en.html).toMatch(/comes off your final invoice/);
+    expect(en.text).toContain("$1,000.00");
+
+    const fr = buildProposalInviteEmail({
+      ...base,
+      depositAmount: "1 000,00 $",
+      locale: "fr",
+    });
+    expect(fr.html).toContain("1 000,00 $");
+    expect(fr.html).toMatch(/déduit de votre facture finale/);
+  });
+
+  it("prints no deposit sentence at all when there is none", () => {
+    for (const locale of ["en", "fr"] as const) {
+      const { html, text } = buildProposalInviteEmail({ ...base, locale });
+      expect(html).not.toMatch(/deposit|acompte/i);
+      expect(text).not.toMatch(/deposit|acompte/i);
+    }
+  });
+
+  it("escapes the firm name rather than injecting it as markup", () => {
+    const { html } = buildProposalInviteEmail({ ...base, locale: "en" });
+    expect(html).toContain("Cabinet Tremblay &amp; Associés");
+    expect(html).not.toContain("Tremblay & Associés</strong>");
+  });
+
+  it("carries the portal link in both the button and as plain text", () => {
+    const { html, text } = buildProposalInviteEmail({ ...base, locale: "en" });
+    expect(html).toContain('href="https://vylan.app/r/abcdefg"');
+    expect(text).toContain("https://vylan.app/r/abcdefg");
+  });
+});
 
 describe("buildEngagementInviteEmail", () => {
   const base = {
