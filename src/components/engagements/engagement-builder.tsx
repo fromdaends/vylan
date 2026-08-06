@@ -259,6 +259,7 @@ export function EngagementBuilder({
   initialEngagementTemplateId,
   locale,
   includeQuebecForms = true,
+  firmProvince = null,
   servicePrices = {},
   services = [],
   engagementTemplates = [],
@@ -294,6 +295,16 @@ export function EngagementBuilder({
   // Firm-wide setting (migration 0350). When false, the Quebec-only RL slips
   // never appear in this firm's checklists, whatever the client's province.
   includeQuebecForms?: boolean;
+  /**
+   * The firm's own province (1750) — the sales-tax fallback when the CLIENT has
+   * none on file, which on production is 99 clients out of 103.
+   *
+   * The client's own province always wins where it is known: Canadian
+   * place-of-supply for services goes by the recipient, so a Montreal firm
+   * billing an Ontario client charges 13% and not 14.975%. This only answers
+   * the case where nobody has filled one in.
+   */
+  firmProvince?: string | null;
   // Per-service default prices in cents (firms.service_prices), keyed by
   // engagement type — pre-fills the invoice amount.
   servicePrices?: Record<string, number>;
@@ -926,6 +937,17 @@ export function EngagementBuilder({
   // clients get the RL slips; everyone else (or province not set) doesn't.
   const selectedProvince =
     clients.find((c) => c.id === clientId)?.province ?? null;
+
+  // ── THE RATE THIS ENGAGEMENT'S LINES SHOULD CARRY ─────────────────────
+  //
+  // Client first, firm second. The client's province is the CORRECT basis and
+  // the firm's is the useful one — shipping only the correct one is why the
+  // founder said "can't see the change": it was right for four clients and
+  // silent for ninety-nine.
+  //
+  // Null when neither is known, and null stays null: the box is left empty
+  // rather than filled with a rate no address produced.
+  const engagementTaxPct = taxPctForProvince(selectedProvince ?? firmProvince);
 
   // The firm's saved default price (cents) for this engagement type — pre-fills
   // the invoice amount. Null if no default set for the type.
@@ -1901,7 +1923,7 @@ export function EngagementBuilder({
               //
               // Still a SUGGESTION: a line that carries its own rate wins, the
               // same rule the service catalogue already follows.
-              fallbackTaxPct={taxPctForProvince(selectedProvince)}
+              fallbackTaxPct={engagementTaxPct}
             />
           </CardContent>
         </Card>

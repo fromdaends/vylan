@@ -124,6 +124,10 @@ export default async function NewEngagementPage({
         initialEngagementTemplateId={sp.engagement_template}
         locale={locale}
         includeQuebecForms={firm?.include_quebec_forms ?? true}
+        // The sales-tax FALLBACK (1750), for the 96% of clients with no
+        // province of their own. `?? null` because this ships before the
+        // migration is applied and a missing column must read as "not set".
+        firmProvince={firm?.province ?? null}
         servicePrices={firm?.service_prices ?? {}}
         connectReady={firm?.connect_charges_enabled === true}
         invoiceDefaultMode={firm?.default_invoice_auto_mode ?? "off"}
