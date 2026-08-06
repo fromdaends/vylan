@@ -10,6 +10,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { applyAcceptedBilling } from "@/lib/engagements/on-accepted";
+import { ensureProposalForSend } from "@/lib/engagements/ensure-proposal";
 import {
   createEngagementWithItems,
   sendEngagement,
@@ -822,6 +823,23 @@ export async function sendEngagementAction(formData: FormData) {
     // Soft block — caller's UI should have prevented this anyway, but be safe.
     return;
   }
+  // ── REBUILD THE PROPOSAL BEFORE IT GOES OUT ──────────────────────────────
+  //
+  // `proposal` used to be written in exactly ONE place: creation. So sending
+  // never captured what the engagement currently says, and the founder — having
+  // pulled one back to draft, edited it and re-sent — reported "the email hasnt
+  // changed and neither the portal." It could not: send only flipped a status.
+  //
+  // Now the document is rebuilt from what the engagement actually contains, so
+  // editing and re-sending reaches the client, and every engagement created
+  // before proposals were being saved repairs itself the first time it is sent
+  // again.
+  //
+  // Never touches an ACCEPTED agreement — see ensureProposalForSend. Runs BEFORE
+  // deliverInviteEmail, because that branches on requires_acceptance to choose
+  // between the engagement-letter email and the document-request one, and it
+  // must read the flag this may have just set.
+  await ensureProposalForSend(id);
   const sent = await sendEngagement(id);
   await deliverInviteEmail(id);
   if (sent.sent_at) {
