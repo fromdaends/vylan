@@ -55,6 +55,7 @@ export function BoardCard({
   labels,
   statusLabel,
   onPointerDown,
+  onOpen,
   dragging = false,
   entranceDelayMs,
 }: {
@@ -78,6 +79,15 @@ export function BoardCard({
    *  get its own translator for a vocabulary three surfaces share. */
   statusLabel: string;
   onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /**
+   * A clean CLICK — opens the engagement page (founder: "when you click on it
+   * it doesn't bring you to its engagement page"). The board owns the
+   * click-vs-drag distinction and simply does not call this after a drag, so
+   * this component stays ignorant of drag mechanics. Also fired by
+   * Enter/Space, because the root is role="button" and a button that ignores
+   * its keyboard is a div in a costume.
+   */
+  onOpen?: () => void;
   /** The card being carried. Kept in the DOM but hidden, so the column keeps
    *  its scroll height while the ghost is out. */
   dragging?: boolean;
@@ -104,6 +114,13 @@ export function BoardCard({
       role="button"
       tabIndex={0}
       onPointerDown={onPointerDown}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (onOpen && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
       style={
         entranceDelayMs == null
           ? undefined
