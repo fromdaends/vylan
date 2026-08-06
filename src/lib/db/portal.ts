@@ -486,6 +486,7 @@ export async function loadPortalContext(
   // Sign the proposal's uploaded intro files, if it has any. Only reached for an
   // engagement carrying a proposal, and skipped entirely when nothing was
   // uploaded — which is most of them.
+  let firmLogoForProposal: string | null = null;
   const introHrefByPath = new Map<string, string>();
   {
     const snap = (engagement as Record<string, unknown>).proposal as
@@ -494,15 +495,25 @@ export async function loadPortalContext(
     const introPaths = [snap?.videoPath, snap?.documentPath].filter(
       (x): x is string => typeof x === "string" && x.trim().length > 0,
     );
-    if (introPaths.length > 0) {
+    // The firm's logo rides the SAME batch — it is another private storage
+    // object and there is no reason to sign it separately.
+    const logoPath = (firm as { logo_url?: string | null }).logo_url ?? null;
+    const allPaths = [
+      ...introPaths,
+      ...(typeof logoPath === "string" && logoPath.trim().length > 0
+        ? [logoPath]
+        : []),
+    ];
+    if (allPaths.length > 0) {
       const { data: signed } = await sb.storage
         .from(BUCKET)
-        .createSignedUrls(introPaths, 60 * 60 * 4);
+        .createSignedUrls(allPaths, 60 * 60 * 4);
       for (const row of signed ?? []) {
         if (row.signedUrl && !row.error && row.path) {
           introHrefByPath.set(row.path, row.signedUrl);
         }
       }
+      if (logoPath) firmLogoForProposal = introHrefByPath.get(logoPath) ?? null;
     }
   }
   if (
@@ -612,6 +623,22 @@ export async function loadPortalContext(
           ...data,
           videoHref: introHrefByPath.get(data.videoPath ?? "") ?? null,
           documentHref: introHrefByPath.get(data.documentPath ?? "") ?? null,
+          // ── LETTERHEAD ──────────────────────────────────────────────────
+          //
+          // The firm's own mark, colour and the date it went out. Without
+          // these the document had no sender: it opened straight into a title
+          // with nothing identifying who had written it, which is most of why
+          // it read as an app screen rather than a letter.
+          //
+          // Deliberately NOT frozen into the proposal snapshot: a firm that
+          // rebrands should see its current identity on an unaccepted
+          // proposal, and the snapshot exists to freeze what was AGREED — the
+          // scope, the prices, the terms — not the letterhead around it.
+          firmName: (firm as Firm).name,
+          firmLogoUrl: firmLogoForProposal,
+          brandColor:
+            (firm as { brand_color?: string | null }).brand_color ?? null,
+          sentDate: engagement.sent_at ?? null,
         },
         declinedAt: typeof e.declined_at === "string" ? e.declined_at : null,
       };

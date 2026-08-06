@@ -80,24 +80,19 @@ export function ProposalAcceptance({
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
-      <header className="mb-8 text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          {firmName}
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-          {t("proposal_title")}
-        </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-          {t("proposal_intro")}
-        </p>
-      </header>
-
+    // A wash behind the sheet, so the document reads as a page sitting on a
+    // desk rather than a panel bolted into an app.
+    <div className="w-full bg-muted/30 px-0 py-0 sm:px-4 sm:py-12">
+      {/* The centred firm eyebrow + "Proposal" + intro line that used to sit
+          here are GONE. The document now carries its own letterhead, title and
+          addressed-to block — having both meant the page announced itself
+          twice, in two different visual languages, before you reached the
+          thing you came to read. */}
       {declinedAt && (
         // Not a dead end. A declined proposal is still readable, and they can
         // still accept — people change their minds, and a firm that revises
         // after a "no" wants the yes to be one click away.
-        <p className="mb-6 rounded-xl border border-border bg-muted/40 px-4 py-3 text-center text-sm text-muted-foreground">
+        <p className="mx-auto mb-4 w-full max-w-[47rem] rounded-xl border border-border bg-card px-4 py-3 text-center text-sm text-muted-foreground">
           {t("proposal_declined_note")}
         </p>
       )}
@@ -114,18 +109,26 @@ export function ProposalAcceptance({
           which is the giveaway that the number came from somewhere else. This is
           the widest thing on the page because it is the thing they are here to
           read. */}
-      <div className="w-full">
+      {/* ── THE SHEET ──────────────────────────────────────────────────────
+          A page on a wash, not a card in an app. Edge-to-edge on a phone,
+          floating from sm: up, with a soft lift that reads as paper. 47rem is
+          a document measure — long enough for a priced table, short enough
+          that a terms clause is still readable. */}
+      <div className="mx-auto w-full max-w-[47rem] overflow-hidden bg-card px-5 py-10 shadow-[0_1px_2px_rgba(0,0,0,.05),0_16px_48px_-20px_rgba(0,0,0,.22)] sm:rounded-xl sm:px-14 sm:py-14">
         <ProposalPreview
           data={data}
           locale={locale}
           activeStep="sign"
-          // The client's copy: nothing clamped, no inert "Get started" chip.
+          // The client's copy: nothing clamped, no step rail, no inert chip.
           variant="document"
         />
       </div>
 
-      {/* ── THE DECISION ───────────────────────────────────────────────── */}
-      <div className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-6">
+      {/* ── THE DECISION ─────────────────────────────────────────────────
+          Same measure as the sheet above it, so the page has ONE column. It
+          used to be wider than the contract it was accepting, which is the
+          detail that made the contract look like a preview of itself. */}
+      <div className="mx-auto mt-6 w-full max-w-[47rem] rounded-2xl border border-border bg-card p-5 sm:p-6">
         {!confirming && !declining && (
           <>
             <p className="text-sm leading-relaxed">{t("proposal_agree_note")}</p>
