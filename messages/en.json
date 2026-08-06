@@ -2722,7 +2722,8 @@
       "invoice_amount_required": "Enter an amount to bill before setting up the invoice.",
       "invoice_attachment_too_large": "That invoice document is too large. The limit is 25 MB.",
       "invoice_attachment_type": "Attach a PDF or image file.",
-      "invoice_attachment_upload_error": "The invoice document could not be uploaded. Please try again."
+      "invoice_attachment_upload_error": "The invoice document could not be uploaded. Please try again.",
+      "plan_limit_reached": "Your free trial has ended, so new engagements are paused. Book a call to keep going — everything already here stays exactly as it is."
     },
     "builder_tax_year_label": "Tax year",
     "builder_tax_year_hint": "Used to file and check documents. Optional.",

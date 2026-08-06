@@ -2722,7 +2722,8 @@
       "invoice_amount_required": "Entrez un montant à facturer avant de configurer la facture.",
       "invoice_attachment_too_large": "Ce document de facture est trop volumineux. La limite est de 25 Mo.",
       "invoice_attachment_type": "Joignez un fichier PDF ou une image.",
-      "invoice_attachment_upload_error": "Impossible de téléverser le document de facture. Veuillez réessayer."
+      "invoice_attachment_upload_error": "Impossible de téléverser le document de facture. Veuillez réessayer.",
+      "plan_limit_reached": "Votre essai gratuit est terminé : la création d'engagements est en pause. Réservez un appel pour continuer — tout ce qui existe déjà reste intact."
     },
     "builder_tax_year_label": "Année d'imposition",
     "builder_tax_year_hint": "Utilisée pour classer et vérifier les documents. Facultatif.",
