@@ -547,6 +547,24 @@ export async function createEngagementAction(
       start_date: parsed.data.start_date,
       intro_message: parsed.data.intro_message,
       service_items: parsed.data.service_items,
+      // ⚠️ THE LINE THE WHOLE PROPOSAL FLOW HANGS ON.
+      //
+      // The builder sends it, the schema above validates it, and this object —
+      // the ONLY thing createEngagementWithItems ever sees — used to leave it
+      // out. So `proposal` was never written, `requires_acceptance` (which
+      // createEngagementWithItems sets from it) was never true, and EVERY
+      // surface gated on that flag was unreachable in production:
+      //
+      //   * the client got the old "we need a few documents" email;
+      //   * the portal showed the document checklist instead of the contract;
+      //   * nothing could be accepted, so the deposit never gated anything and
+      //     no recurring schedule ever started.
+      //
+      // Nothing errored anywhere. The field was simply dropped on the floor
+      // between a schema that accepted it and a database that never heard of
+      // it, and tsc cannot see the omission because every field here is
+      // optional on CreateEngagementInput.
+      proposal: parsed.data.proposal ?? null,
       reminder_settings: parsed.data.reminder_settings,
       assigned_user_id: assignedUserId,
       workflow: workflowSnapshot ?? undefined,
