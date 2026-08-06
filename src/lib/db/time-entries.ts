@@ -193,6 +193,36 @@ export async function listEntriesForInsights(
   return [...byId.values()];
 }
 
+/** One week of FINISHED entries, firm-wide (shared hours — the standing
+ *  ruling), for the Work → Time timesheet. The week is [startIso, endIso);
+ *  bounds come from the page, computed in the FIRM's timezone. */
+export async function listEntriesForWeek(
+  startIso: string,
+  endIso: string,
+): Promise<TimeEntryWithNames[]> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select(`${SELECT}, clients(display_name), engagements(title)`)
+    .is("deleted_at", null)
+    .not("ended_at", "is", null)
+    .gte("started_at", startIso)
+    .lt("started_at", endIso)
+    .order("started_at", { ascending: true })
+    .limit(2000);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[time-entries] week list failed:", error);
+    }
+    return [];
+  }
+  return ((data ?? []) as unknown as JoinedRow[]).map(withNames);
+}
+
+/** A forgotten timer stops at 12 HOURS, clamped — nobody bills a sleeping
+ *  laptop. Exported so the action layer and the dock agree on the number. */
+export const TIMER_MAX_MINUTES = 12 * 60;
+
 /** Start a timer for the caller. The action layer stops any running timer
  *  first; the DB's partial unique index is the backstop the action cannot
  *  race. 23505 from that index surfaces as `conflict` so the action can stop
@@ -258,11 +288,18 @@ export async function stopEntry(
   if (current.ended_at != null) return current;
 
   const startedAt = new Date(current.started_at);
-  const endedAt = new Date();
-  const minutes = Math.max(
+  // THE 12-HOUR CLAMP: a forgotten timer saves as 12h ending 12h after it
+  // started, not as a three-day entry ending now. The save sheet then invites
+  // a correction; the clamp only decides what "auto-stopped" means.
+  const rawMinutes = Math.max(
     0,
-    Math.round((endedAt.getTime() - startedAt.getTime()) / 60_000),
+    Math.round((Date.now() - startedAt.getTime()) / 60_000),
   );
+  const clamped = rawMinutes > TIMER_MAX_MINUTES;
+  const minutes = clamped ? TIMER_MAX_MINUTES : rawMinutes;
+  const endedAt = clamped
+    ? new Date(startedAt.getTime() + TIMER_MAX_MINUTES * 60_000)
+    : new Date();
   const patch: Record<string, unknown> = {
     ended_at: endedAt.toISOString(),
     duration_minutes: minutes,

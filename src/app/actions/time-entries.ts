@@ -40,6 +40,14 @@ import {
   getCostRateForUserSR,
   writeCostSnapshotSR,
 } from "@/lib/db/user-rates";
+import {
+  listBillableRates,
+  valueCents,
+  writeBillableSnapshotSR,
+} from "@/lib/db/time-billing";
+import { listClients, getClient } from "@/lib/db/clients";
+import { listEngagements, getEngagement } from "@/lib/db/engagements";
+import { TIMER_MAX_MINUTES } from "@/lib/db/time-entries";
 import { logUserActivity } from "@/lib/db/activity";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
@@ -145,25 +153,48 @@ export async function startTimerAction(input: {
 export async function stopTimerAction(input: {
   entryId: string;
   note?: string | null;
-}): Promise<Result<{ id: string; durationMinutes: number; day: string }>> {
+}): Promise<
+  Result<{
+    id: string;
+    durationMinutes: number;
+    day: string;
+    /** True when the 12h clamp decided the end, not the click. */
+    clamped: boolean;
+    /** The saved entry's value at the member's billable rate, or null when no
+     *  rate is set (shown as "no value", never $0). Own entry → always
+     *  visible to its author, by the billing table's own RLS. */
+    valueCents: number | null;
+  }>
+> {
   const g = await guard();
   if (!g.ok) return g;
   try {
     const stopped = await stopEntry(input.entryId, input.note);
     if (!stopped) return { ok: false, error: "failed" };
+    // VALUE at save (timer v2): freeze the member's billable rate onto the
+    // entry, then read it back as the caller for the save sheet. The write is
+    // service-role (the table has no session write path, by design).
+    await writeBillableSnapshotSR({
+      timeEntryId: stopped.id,
+      firmId: stopped.firm_id,
+      userId: stopped.user_id,
+    });
+    const rates = await listBillableRates([stopped.id]);
+    const rate = rates.get(stopped.id) ?? null;
     revalidateTime(stopped.engagement_id, stopped.client_id);
     return {
       ok: true,
       value: {
         id: stopped.id,
         durationMinutes: stopped.duration_minutes,
-        // The entry's day in the FIRM's calendar, for the toast's Edit dialog.
-        // Computed here because only the server knows the firm timezone — the
-        // browser's "today" is the wrong answer for an overnight timer and for
-        // any evening where the two calendars disagree.
+        // The entry's day in the FIRM's calendar, for the save sheet — the
+        // browser's "today" is the wrong answer for an overnight timer.
         day:
           dateInTimeZone(stopped.started_at, g.firm.timezone) ??
           stopped.started_at.slice(0, 10),
+        clamped: stopped.duration_minutes >= TIMER_MAX_MINUTES,
+        valueCents:
+          rate == null ? null : valueCents(stopped.duration_minutes, rate),
       },
     };
   } catch (err) {
@@ -171,6 +202,134 @@ export async function stopTimerAction(input: {
       return { ok: false, error: "unsupported" };
     }
     console.error("[time] stop failed:", err);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Discard the caller's RUNNING timer without saving — the "discard" arm of
+ *  the start-a-second-timer prompt. A soft delete like any other, so a
+ *  mis-click is recoverable in the database even though the UI treats it as
+ *  gone. Refuses (via RLS) to touch anything that is not the caller's own. */
+export async function discardRunningTimerAction(input: {
+  entryId: string;
+}): Promise<Result> {
+  const g = await guard();
+  if (!g.ok) return g;
+  try {
+    const running = await getRunningEntry(g.user.id);
+    // Only the caller's CURRENT running entry may be discarded through this
+    // path — a stale id from a previous render must not delete a saved entry.
+    if (!running || running.id !== input.entryId) {
+      return { ok: false, error: "failed" };
+    }
+    const deleted = await softDeleteEntry(input.entryId, g.user.id);
+    if (!deleted) return { ok: false, error: "failed" };
+    await logUserActivity(g.firm.id, running.engagement_id, "time_entry_deleted", {
+      time_entry_id: input.entryId,
+      client_id: running.client_id,
+      discarded_running: true,
+    });
+    revalidateTime(running.engagement_id, running.client_id);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof TimeEntriesUnsupportedError) {
+      return { ok: false, error: "unsupported" };
+    }
+    console.error("[time] discard failed:", err);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Resolve the page the user is standing on into timer prefill — the ONE
+ *  "detection" the spec allows: a single route-context read at press time.
+ *  RLS-scoped reads, so a client the caller may not see resolves to nothing. */
+export async function getTimeContextAction(input: {
+  clientId?: string | null;
+  engagementId?: string | null;
+}): Promise<
+  Result<{
+    clientId: string | null;
+    clientName: string | null;
+    engagementId: string | null;
+    engagementTitle: string | null;
+  }>
+> {
+  const g = await guard();
+  if (!g.ok) return g;
+  try {
+    if (input.engagementId) {
+      const engagement = await getEngagement(input.engagementId);
+      if (engagement) {
+        const client = await getClient(engagement.client_id);
+        return {
+          ok: true,
+          value: {
+            clientId: engagement.client_id,
+            clientName: client?.display_name ?? null,
+            engagementId: engagement.id,
+            engagementTitle: engagement.title,
+          },
+        };
+      }
+    }
+    if (input.clientId) {
+      const client = await getClient(input.clientId);
+      if (client) {
+        return {
+          ok: true,
+          value: {
+            clientId: client.id,
+            clientName: client.display_name,
+            engagementId: null,
+            engagementTitle: null,
+          },
+        };
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        clientId: null,
+        clientName: null,
+        engagementId: null,
+        engagementTitle: null,
+      },
+    };
+  } catch (err) {
+    console.error("[time] context failed:", err);
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Picker data for the ask-on-start sheet, loaded WHEN THE SHEET OPENS rather
+ *  than on every page render (the shell must not pay for a closed sheet).
+ *  Clients always; engagements only once a client is chosen. */
+export async function listTimePickerDataAction(input: {
+  clientId?: string | null;
+}): Promise<
+  Result<{
+    clients: { id: string; name: string }[];
+    engagements: { id: string; title: string }[];
+  }>
+> {
+  const g = await guard();
+  if (!g.ok) return g;
+  try {
+    const [clients, engagements] = await Promise.all([
+      listClients({}),
+      input.clientId
+        ? listEngagements({ client_id: input.clientId })
+        : Promise.resolve([]),
+    ]);
+    return {
+      ok: true,
+      value: {
+        clients: clients.map((c) => ({ id: c.id, name: c.display_name })),
+        engagements: engagements.map((e) => ({ id: e.id, title: e.title })),
+      },
+    };
+  } catch (err) {
+    console.error("[time] picker data failed:", err);
     return { ok: false, error: "failed" };
   }
 }
@@ -214,6 +373,13 @@ export async function logManualEntryAction(input: {
       note: input.note?.trim() ? input.note.trim() : null,
     });
     await snapshotCost(entry);
+    // A manual entry IS its save — the billable snapshot freezes here, same
+    // moment a timer's freezes at stop.
+    await writeBillableSnapshotSR({
+      timeEntryId: entry.id,
+      firmId: entry.firm_id,
+      userId: entry.user_id,
+    });
     await logUserActivity(firm.id, entry.engagement_id, "time_entry_created", {
       time_entry_id: entry.id,
       client_id: entry.client_id,

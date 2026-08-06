@@ -37,6 +37,12 @@ const ChatLauncherPanel = dynamic(
 // usePathname), so /en/... and /fr/... both match.
 const LAUNCHER_HIDDEN_ON: readonly RegExp[] = [/^\/engagements\/new(\/|$)/];
 
+// The timer dock parks beside the launcher and inherits the same collision
+// rule: where the corner belongs to the page, BOTH bubbles clear out.
+// Exported under the timer's name so the dock does not reach into launcher
+// internals for anything else.
+export const TIMER_HIDDEN_ON: readonly RegExp[] = LAUNCHER_HIDDEN_ON;
+
 // The global chat launcher, built on the SignWell pattern (founder spec): a
 // bottom-right button that pops a compact panel ABOVE itself. The button stays
 // put and becomes a round collapse arrow while the panel is open — so there is

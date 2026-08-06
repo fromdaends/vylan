@@ -7,8 +7,10 @@ import {
   Maximize2,
   MessagesSquare,
   Sparkles,
+  Timer,
   type LucideProps,
 } from "lucide-react";
+import { openStartSheet } from "@/components/time/timer-store";
 import { cn } from "@/lib/cn";
 import { ClientMessagesTab } from "@/components/assistant/client-messages-tab";
 import { LauncherAiChat } from "@/components/assistant/launcher-ai-chat";
@@ -167,6 +169,18 @@ export function ChatLauncherPanel({
                 label={t("tab_ai_chat")}
               />
             </div>
+            {/* The timer's in-panel start button (timer v2): the OTHER corner,
+                mirroring Expand. It only asks the dock to open the same
+                ask-on-start sheet — the dock owns the whole flow; this is a
+                doorbell, not a second timer. */}
+            <button
+              type="button"
+              onClick={() => openStartSheet()}
+              aria-label={t("launcher_start_timer")}
+              className="absolute left-0 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-chat-header-foreground/70 transition-colors hover:text-chat-header-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Timer className="size-4" aria-hidden />
+            </button>
             {/* Expand lives quietly in the corner so the toggle stays centred. */}
             {mode === "messages" && (
               <button

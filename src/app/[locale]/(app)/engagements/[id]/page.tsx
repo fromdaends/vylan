@@ -172,8 +172,8 @@ import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { can } from "@/lib/auth/capabilities";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { listEntriesForEngagement } from "@/lib/db/time-entries";
-import { dateInTimeZone } from "@/lib/tasks/dates";
-import { TimePanel } from "@/components/time/time-panel";
+import { listBillableRates, valueCents } from "@/lib/db/time-billing";
+import { EngagementTimeLine } from "@/components/time/engagement-time-line";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
 import { normalizeReminderSettings } from "@/lib/reminder-settings";
@@ -297,12 +297,42 @@ export default async function EngagementDetailPage({
   ]);
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
-  // Time tracking (1750) — fetched only when the flag is on; a firm with it
-  // off pays nothing and sees no tab. Hours only: the type carries no rate.
+  // Time tracking (1750, reshaped by timer v2) — the Time TAB is gone; what
+  // remains here is the flat-fee reality check line. Hours are firm-shared;
+  // the VALUE half is computed only for viewers the billing table's RLS
+  // answers (insights.view / rates.manage / their own rows), and a staff
+  // member's partial read is NOT summed — a number missing colleagues' hours
+  // posing as the engagement's value would be worse than no number.
   const timeEnabled = isTimeInsightsEnabled(firm);
   const timeEntries = timeEnabled
     ? await listEntriesForEngagement(engagement.id)
     : [];
+  const canSeeTimeValue =
+    can(user, "insights.view") || can(user, "rates.manage");
+  const timeRates = canSeeTimeValue
+    ? await listBillableRates(timeEntries.map((e) => e.id))
+    : new Map<string, number>();
+  let timeValueCents = 0;
+  let timeUncostedMinutes = 0;
+  for (const e of timeEntries) {
+    const rate = timeRates.get(e.id);
+    if (rate == null) timeUncostedMinutes += e.duration_minutes;
+    else timeValueCents += valueCents(e.duration_minutes, rate);
+  }
+  const timePerPerson = (() => {
+    const byUser = new Map<string, number>();
+    for (const e of timeEntries) {
+      byUser.set(e.user_id, (byUser.get(e.user_id) ?? 0) + e.duration_minutes);
+    }
+    const names = new Map(activeMembers.map((m) => [m.id, m.name]));
+    return [...byUser.entries()]
+      .map(([id, minutes]) => ({ name: names.get(id) ?? "—", minutes }))
+      .sort((a, b) => b.minutes - a.minutes);
+  })();
+  const timeTotalMinutes = timeEntries.reduce(
+    (sum, e) => sum + e.duration_minutes,
+    0,
+  );
 
   // SECOND batch: everything keyed off engagement/firm fields, fanned out in
   // parallel. Each thunk chains its own dependents internally (statuses →
@@ -1603,6 +1633,21 @@ export default async function EngagementDetailPage({
         statusChip={<AgreementChip status={agreementStatus} />}
       />
 
+      {/* THE FLAT-FEE REALITY CHECK (timer v2): this engagement's hours and
+          their value at billable rates, beside what was actually charged.
+          Quiet, near the details, renders nothing until time exists. Staff
+          see the hours half only — their RLS read gave no rates, and a
+          partial sum posing as the value would be a lie. */}
+      {timeEnabled && (
+        <EngagementTimeLine
+          totalMinutes={timeTotalMinutes}
+          valueCents={canSeeTimeValue ? timeValueCents : null}
+          uncostedMinutes={timeUncostedMinutes}
+          flatFeeCents={engagement.invoice_amount_cents ?? null}
+          perPerson={timePerPerson}
+        />
+      )}
+
       {/* Billing → New invoice arrives as ?panel=invoice. Mounted HERE, at page
           level, rather than inside the header kebab: Radix unmounts the menu's
           content while it is closed, so the kebab's own copy of this dialog
@@ -1679,35 +1724,6 @@ export default async function EngagementDetailPage({
             magicToken={engagement.magic_token}
             sent={Boolean(engagement.sent_at)}
           />
-        }
-        // Time (1750): null keeps the tab out of the strip entirely when the
-        // flag is off. Same shape as the two panels above — the page owns the
-        // data, the strip only switches.
-        timePanel={
-          timeEnabled ? (
-            <TimePanel
-              entries={timeEntries.map((e) => ({
-                id: e.id,
-                userId: e.user_id,
-                day:
-                  dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ??
-                  e.started_at.slice(0, 10),
-                durationMinutes: e.duration_minutes,
-                note: e.note,
-                engagementId: e.engagement_id,
-                clientId: e.client_id,
-              }))}
-              members={activeMembers}
-              currentUserId={user?.id ?? ""}
-              canManage={can(user, "time.manage")}
-              locale={locale}
-              context={{
-                clientId: engagement.client_id,
-                clientName: client?.display_name ?? null,
-                engagementId: engagement.id,
-              }}
-            />
-          ) : null
         }
         // Every task on this job, in order — ONE list, drawn by the same
         // component the firm-wide Tasks page uses. The three built-in kinds are

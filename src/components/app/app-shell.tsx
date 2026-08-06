@@ -59,6 +59,8 @@ type Labels = {
   // is in Settings.
   billing: string;
   insights: string;
+  workTime: string;
+  workTimeHint: string;
   bookkeeping: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
@@ -232,6 +234,13 @@ export function AppShell({
             href: "/work/overview",
             label: labels.workDashboard,
             description: labels.workDashboardHint,
+          },
+          // The weekly timesheet (timer v2) — where every logged hour lives
+          // now that the per-page entry lists are gone.
+          {
+            href: "/work/time",
+            label: labels.workTime,
+            description: labels.workTimeHint,
           },
         ],
       },

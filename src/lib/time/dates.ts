@@ -19,6 +19,21 @@ export function localDay(now: Date = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/** The MONDAY of the week containing the given YYYY-MM-DD — the timesheet's
+ *  anchor. Pure calendar math at UTC noon (DST-proof, the lib/tasks/dates
+ *  parseDay trick). Malformed input returns itself so a bad ?week= param
+ *  degrades to a strange-but-rendered week rather than a crash. */
+export function mondayOf(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return day;
+  const d = new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, 12));
+  if (Number.isNaN(d.getTime())) return day;
+  const dow = d.getUTCDay(); // 0 = Sunday
+  const shift = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + shift);
+  return d.toISOString().slice(0, 10);
+}
+
 /** The UTC instant of 12:00 local time on the given YYYY-MM-DD in the given
  *  IANA timezone. Null for malformed input. */
 export function noonInTimeZone(day: string, timeZone: string): Date | null {

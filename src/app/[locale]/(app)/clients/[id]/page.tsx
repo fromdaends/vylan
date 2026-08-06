@@ -66,7 +66,7 @@ import {
   restoreClientAction,
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
-import { formatDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { Plus, Lock, FileText } from "lucide-react";
 import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
@@ -78,8 +78,9 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { can } from "@/lib/auth/capabilities";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { listEntriesForClient } from "@/lib/db/time-entries";
-import { dateInTimeZone } from "@/lib/tasks/dates";
-import { TimePanel } from "@/components/time/time-panel";
+import { dateInTimeZone, todayInTimeZone } from "@/lib/tasks/dates";
+import { listBillableRates, valueCents } from "@/lib/db/time-billing";
+import { formatMinutes } from "@/lib/time/duration";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -457,14 +458,14 @@ export default async function ClientDetailPage({
         openRequests: close.openRequests,
       };
     })(),
-    // Time tracking (1750) — OVERVIEW only, and only when the firm's flag is
-    // on. getCurrentFirm is React.cache'd, so asking again here shares the
-    // batch's own query. HOURS only; no dollar reaches this page.
+    // Time tracking (timer v2) — OVERVIEW only, and only when the firm's flag
+    // is on. Enough rows for a year's stat; the full list lives on the
+    // Work → Time timesheet now.
     (async () => {
       if (tab !== "overview") return [];
       const currentFirm = await getCurrentFirm();
       if (!isTimeInsightsEnabled(currentFirm)) return [];
-      return listEntriesForClient(id, 30);
+      return listEntriesForClient(id, 1000);
     })(),
   ]);
 
@@ -473,6 +474,30 @@ export default async function ClientDetailPage({
   const { clientPayments, paymentByEng } = moneyData;
   const me = viewer;
   const timeEnabled = isTimeInsightsEnabled(firm);
+  // This year's minutes (firm calendar) + value where the viewer's RLS read
+  // answers. A staff member's partial rate read is not summed into a fake
+  // total: value renders only for insights.view / rates.manage holders.
+  const thisYear = todayInTimeZone(firm?.timezone ?? "UTC").slice(0, 4);
+  const clientYearEntries = clientTimeEntries.filter(
+    (e) =>
+      (dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ?? "").slice(0, 4) ===
+      thisYear,
+  );
+  const clientTimeMinutesThisYear = clientYearEntries.reduce(
+    (sum, e) => sum + e.duration_minutes,
+    0,
+  );
+  const canSeeTimeValue =
+    can(me, "insights.view") || can(me, "rates.manage");
+  let clientTimeValueCents: number | null = null;
+  if (timeEnabled && canSeeTimeValue && clientYearEntries.length > 0) {
+    const rates = await listBillableRates(clientYearEntries.map((e) => e.id));
+    clientTimeValueCents = clientYearEntries.reduce((sum, e) => {
+      const rate = rates.get(e.id);
+      return rate == null ? sum : sum + valueCents(e.duration_minutes, rate);
+    }, 0);
+  }
+  const tTime = await getTranslations("Time");
   const clientNameById = new Map(
     allClients.map((c) => [c.id, c.display_name]),
   );
@@ -1136,46 +1161,31 @@ export default async function ClientDetailPage({
         </Panel>
       )}
 
-      {/* TIME (1750) — this client's logged hours and the two ways to add
-          more. Flag-gated, HOURS ONLY (no permission gate: shared capacity is
-          the founder's ruling, and no dollar figure exists on this surface to
-          need one). Renders when empty like its neighbours — the empty state
-          is how someone finds out where time tracking lives. */}
+      {/* TIME (timer v2) — a small STAT, not a list: hours this year, plus
+          value for viewers the billing RLS answers. The start buttons are
+          gone by doctrine (ONE global control at the launcher) and the entry
+          list lives on the Work → Time timesheet. */}
       {tab === "overview" && timeEnabled && (
         <Panel
-          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
+          className="min-h-[90px] min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
           title={t("time_title")}
         >
-          <TimePanel
-            entries={clientTimeEntries.map((e) => ({
-              id: e.id,
-              userId: e.user_id,
-              day:
-                dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ??
-                e.started_at.slice(0, 10),
-              durationMinutes: e.duration_minutes,
-              note: e.note,
-              engagementId: e.engagement_id,
-              clientId: e.client_id,
-              engagementTitle: e.engagement_title,
-            }))}
-            members={firmUsers.map((u) => ({
-              id: u.id,
-              name: userDisplayLabel(u),
-            }))}
-            currentUserId={me?.id ?? ""}
-            canManage={can(me, "time.manage")}
-            locale={locale}
-            context={{
-              clientId: client.id,
-              clientName: client.display_name,
-              engagementChoices: engagements.map((e) => ({
-                id: e.id,
-                title: e.title,
-              })),
-            }}
-            showEngagement
-          />
+          <p className="py-3 text-sm text-muted-foreground">
+            {clientTimeMinutesThisYear > 0
+              ? tTime("client_stat", {
+                  duration: formatMinutes(clientTimeMinutesThisYear),
+                }) + (clientTimeValueCents != null
+                  ? " · " +
+                    tTime("client_stat_value", {
+                      amount: formatCurrency(
+                        clientTimeValueCents / 100,
+                        locale,
+                        { fractionDigits: 0 },
+                      ),
+                    })
+                  : "")
+              : tTime("client_stat_empty")}
+          </p>
         </Panel>
       )}
 
