@@ -47,12 +47,25 @@ export type ProposalPreviewData = {
    * Storage paths for an UPLOADED video / document, when the firm attached a
    * file instead of pasting a link.
    *
-   * Not rendered here — the panel shows the link or the file's name. They are
-   * carried so the frozen snapshot knows which file the client was promised;
-   * dropping them would make the uploader write to nothing.
+   * The file's NAME is derived from these so an uploaded intro is at least
+   * visible. They are also what the frozen snapshot uses to know which file the
+   * client was promised; dropping them would make the uploader write to nothing.
    */
   videoPath?: string | null;
   documentPath?: string | null;
+  /**
+   * Short-lived signed URLs for those uploads, resolved by whoever renders this.
+   *
+   * Absent in the BUILDER's preview — the firm is looking at a thumbnail and the
+   * file is theirs already. Present on the CLIENT's copy, signed by
+   * loadPortalContext alongside the client's own files, using the same batch
+   * signer rather than a new file route: no second way to hand out a storage
+   * object, and no new surface to get the authorisation wrong on.
+   *
+   * Absent renders as plain text, never a dead link.
+   */
+  videoHref?: string | null;
+  documentHref?: string | null;
   /**
    * The priced lines, each with the WORK it brings (1620).
    *
@@ -175,10 +188,19 @@ export function ProposalPreview({
     })),
     { depositCents: data.depositCents },
   );
+  // ── AN UPLOADED FILE COUNTS AS AN INTRODUCTION ─────────────────────────
+  //
+  // This asked only about a pasted LINK and a document NAME. A firm that
+  // UPLOADED a welcome video therefore had an introduction the client was shown
+  // literally nothing of — and if the video was the only thing in it, they got
+  // the "no introduction" empty state instead. The founder asked for real file
+  // uploads, not just links; the upload worked and the render never learned.
+  const videoLabel = data.videoUrl?.trim() || fileLabel(data.videoPath);
+  const documentLabel = data.documentName?.trim() || fileLabel(data.documentPath);
   const hasIntro =
     (data.welcome?.trim().length ?? 0) > 0 ||
-    (data.videoUrl?.trim().length ?? 0) > 0 ||
-    (data.documentName?.trim().length ?? 0) > 0;
+    videoLabel.length > 0 ||
+    documentLabel.length > 0;
 
   // No max-width of its own. It is ALWAYS inside something that has already
   // decided how wide a proposal should be — the wizard's preview card, or the
@@ -272,17 +294,21 @@ export function ProposalPreview({
                   {data.welcome}
                 </p>
               )}
-              {data.videoUrl?.trim() && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <PlayCircle className="size-3.5 shrink-0" aria-hidden />
-                  <span className="truncate">{data.videoUrl}</span>
-                </p>
+              {videoLabel && (
+                <IntroFile
+                  icon={<PlayCircle className="size-3.5 shrink-0" aria-hidden />}
+                  label={videoLabel}
+                  // A pasted link is already openable; an uploaded file needs
+                  // the portal to have signed a URL for it.
+                  href={data.videoUrl?.trim() || data.videoHref || null}
+                />
               )}
-              {data.documentName?.trim() && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <FileText className="size-3.5 shrink-0" aria-hidden />
-                  <span className="truncate">{data.documentName}</span>
-                </p>
+              {documentLabel && (
+                <IntroFile
+                  icon={<FileText className="size-3.5 shrink-0" aria-hidden />}
+                  label={documentLabel}
+                  href={data.documentHref ?? null}
+                />
               )}
             </div>
           ) : (
@@ -473,6 +499,50 @@ export function ProposalPreview({
         )}
       </div>
     </div>
+  );
+}
+
+/** A file's own name, from its storage path. Used when nothing friendlier was
+ *  recorded — better than showing the client a bare path, or nothing. */
+function fileLabel(path: string | null | undefined): string {
+  const raw = (path ?? "").trim();
+  if (raw.length === 0) return "";
+  return decodeURIComponent(raw.split("/").pop() ?? "").trim();
+}
+
+/** One line of the introduction: an icon, a name, and a link when there is
+ *  something to open. Plain text otherwise, never a dead anchor. */
+function IntroFile({
+  icon,
+  label,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  href: string | null;
+}) {
+  const body = (
+    <>
+      {icon}
+      <span className="truncate">{label}</span>
+    </>
+  );
+  if (!href) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {body}
+      </p>
+    );
+  }
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      {body}
+    </a>
   );
 }
 
