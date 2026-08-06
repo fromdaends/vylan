@@ -15,6 +15,25 @@ describe("localDay", () => {
   });
 });
 
+describe("mondayOf", () => {
+  it("finds the Monday of any weekday", async () => {
+    const { mondayOf } = await import("./dates");
+    expect(mondayOf("2026-08-06")).toBe("2026-08-03"); // Thursday
+    expect(mondayOf("2026-08-03")).toBe("2026-08-03"); // Monday itself
+    expect(mondayOf("2026-08-09")).toBe("2026-08-03"); // Sunday → back 6
+  });
+
+  it("crosses month and year boundaries", async () => {
+    const { mondayOf } = await import("./dates");
+    expect(mondayOf("2026-01-01")).toBe("2025-12-29");
+  });
+
+  it("returns malformed input unchanged rather than crashing", async () => {
+    const { mondayOf } = await import("./dates");
+    expect(mondayOf("garbage")).toBe("garbage");
+  });
+});
+
 describe("noonInTimeZone", () => {
   it("keeps a Quebec entry on the chosen day in BOTH calendars", () => {
     const instant = noonInTimeZone("2026-08-06", "America/Toronto");

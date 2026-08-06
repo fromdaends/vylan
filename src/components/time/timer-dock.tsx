@@ -53,6 +53,7 @@ import {
   subscribeTimer,
 } from "@/components/time/timer-store";
 import { TIMER_HIDDEN_ON } from "@/components/assistant/chat-launcher";
+import { parseRouteContext } from "@/lib/time/route-context";
 
 export type DockEntry = {
   id: string;
@@ -64,23 +65,6 @@ export type DockEntry = {
   note: string | null;
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** The route read: /clients/[id] and /engagements/[id] (except /new). */
-function parseRouteContext(pathname: string): {
-  clientId: string | null;
-  engagementId: string | null;
-} {
-  const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] === "clients" && parts[1] && UUID_RE.test(parts[1])) {
-    return { clientId: parts[1], engagementId: null };
-  }
-  if (parts[0] === "engagements" && parts[1] && UUID_RE.test(parts[1])) {
-    return { clientId: null, engagementId: parts[1] };
-  }
-  return { clientId: null, engagementId: null };
-}
 
 export function TimerDock({ entry }: { entry: DockEntry | null }) {
   const t = useTranslations("Time");
