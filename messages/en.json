@@ -2983,7 +2983,8 @@
     "services_billing_end": "Stop billing for good",
     "services_billing_end_confirm": "Yes — stop billing permanently",
     "invoice_amount_from_services": "Calculated from your service items — change it if you need to.",
-    "invoice_amount_reset": "Use the calculated amount (${amount})"
+    "invoice_amount_reset": "Use the calculated amount (${amount})",
+    "bulk_mark_done": "Mark done"
   },
   "Attention": {
     "metric_active": "Active",
