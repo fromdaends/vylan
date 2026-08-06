@@ -171,3 +171,27 @@ export function computeBillingTotals(
 export function hasBillingTotals(totals: BillingTotals): boolean {
   return totals.groups.length > 0;
 }
+
+/**
+ * What "Amount to bill" should say, from the priced lines.
+ *
+ * Founder: "why do you have to enter an amount to bill twice? ... It should
+ * just be automatically calculated based on the service items."
+ *
+ * Returned as the STRING the money input shows ("11.50"), because that is what
+ * the field holds and a caller converting a number back would be a second place
+ * for the rounding to be decided.
+ *
+ * ⚠️ `oneTimeTotalCents`, NOT `totalCents`. See the warning on `totalCents`
+ * above: it adds every frequency together and is not a price anyone pays. A
+ * $4,000 setup plus $500/month is not a $4,500 invoice.
+ *
+ * EMPTY STRING when there is nothing it can honestly state — no priced one-time
+ * line, or one still missing its rate. Half a total is a wrong number, and a
+ * wrong number in a money field is worse than an empty one.
+ */
+export function invoiceAmountFromTotals(totals: BillingTotals): string {
+  if (!totals.oneTimeDetermined) return "";
+  if (totals.oneTimeTotalCents <= 0) return "";
+  return (totals.oneTimeTotalCents / 100).toFixed(2);
+}

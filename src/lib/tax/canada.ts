@@ -200,3 +200,49 @@ export function computeTaxLines(
 export function sumTaxCents(lines: readonly TaxLine[]): number {
   return lines.reduce((acc, l) => acc + l.amountCents, 0);
 }
+
+// ── The combined rate, for the places that carry ONE number ─────────────────
+//
+// The engine above models tax as COMPONENTS because that is what an invoice
+// prints: "GST (5%) $5.00 / QST (9.975%) $9.98", two lines a client can check
+// against their own records.
+//
+// An engagement's service item is not an invoice. It carries a single
+// `taxPct` — one box on the proposal builder — and it always has. This turns
+// the component list into that one number so the two cannot disagree: there is
+// still exactly ONE province → rate table in this codebase, and a rate change
+// still lands in one line of PROVINCE_TAXES rather than in two places that
+// must be remembered together.
+//
+// ⚠️ IT IS THE FULL COMBINED RATE, and that is deliberate. Whether a given
+// provincial tax reaches a given professional service is the accountant's call
+// — the design rule at the top of this file says so, and the invoice engine
+// answers it with a per-component toggle. A single box has nowhere to put a
+// toggle, so it gets the province's headline rate and the accountant edits it
+// where their judgement differs. Vylan supplies the default; it does not sign
+// the return.
+
+/**
+ * Province code → the combined rate as a PERCENT (13, 5, 14.975), or null when
+ * the code is missing or unrecognised.
+ *
+ * NULL IS A REAL ANSWER and every caller must keep it. A client with no
+ * province on file leaves the Tax % box empty, which is honest — inventing 5%
+ * for somebody whose address nobody has entered would put a number on a
+ * proposal that no rule produced.
+ */
+export function taxPctForProvince(
+  province: string | null | undefined,
+): number | null {
+  if (!province) return null;
+  const code = province.trim().toUpperCase();
+  if (!isProvinceCode(code)) return null;
+  const milli = PROVINCE_TAXES[code].reduce(
+    (sum, c) => sum + c.rateMilliPct,
+    0,
+  );
+  // 14975 → 14.975, and 13000 → 13 rather than 13.000. The Tax % input parses
+  // with Number(), so a trailing-zero string would round-trip differently from
+  // what was stored.
+  return milli / 1000;
+}

@@ -97,7 +97,19 @@ export function isBillingTiming(v: unknown): v is BillingTiming {
 /** A draft row in the builder, before it has been saved and given an id. */
 export type EngagementItemDraft = Omit<EngagementItem, "id"> & { id?: string };
 
-export function emptyItem(): EngagementItemDraft {
+/**
+ * A blank line, optionally born with the tax rate already in the box.
+ *
+ * `defaultTaxPct` is the CLIENT's province rate (see lib/tax/canada.ts). It is
+ * written onto the line rather than left null on purpose: null already means
+ * "fall back to whatever the screen's default is" and totals correctly, but it
+ * leaves the Tax % field looking empty, and the founder's complaint was about
+ * having to type a number the app already knows.
+ *
+ * Null when there is no client or no province on file — the field stays blank
+ * rather than inventing a rate nobody's address produced.
+ */
+export function emptyItem(defaultTaxPct: number | null = null): EngagementItemDraft {
   return {
     name: "",
     serviceId: null,
@@ -105,7 +117,7 @@ export function emptyItem(): EngagementItemDraft {
     rateCents: null,
     rateType: "item",
     billingFrequency: "once",
-    taxPct: null,
+    taxPct: defaultTaxPct,
   };
 }
 

@@ -53,7 +53,10 @@ import {
 import { MoneyInput } from "@/components/ui/money-input";
 import { saveFirmDefaultTermsAction } from "@/app/actions/firm-terms";
 import { BillingTotalsPanel } from "@/components/engagements/billing-totals-panel";
-import { computeBillingTotals } from "@/lib/engagements/billing-totals";
+import {
+  computeBillingTotals,
+  invoiceAmountFromTotals,
+} from "@/lib/engagements/billing-totals";
 import {
   defaultPriceVisibility,
   emptyBlock,
@@ -67,6 +70,7 @@ import {
   type ScopeWarningContact,
 } from "@/lib/relationships/validate";
 import { addDays } from "date-fns";
+import { taxPctForProvince } from "@/lib/tax/canada";
 import {
   ClientCombobox,
   type ComboboxClient,
@@ -444,6 +448,15 @@ export function EngagementBuilder({
   // Amount source: use the firm's saved service price, or a custom amount.
   const [invoiceUseDefault, setInvoiceUseDefault] = useState(true);
   const [invoiceCustomAmount, setInvoiceCustomAmount] = useState<string>("");
+  /**
+   * Whether the accountant has typed their own figure over the calculated one.
+   *
+   * Until they do, "Amount to bill" FOLLOWS the service items — see
+   * `invoiceAutoAmount` below. Once they type, it stops following, because a
+   * number that silently rewrites itself after you have set it is worse than
+   * one you had to enter.
+   */
+  const [invoiceAmountTouched, setInvoiceAmountTouched] = useState(false);
   // Optional invoice description + the deliverables lock (migration 0610).
   const [invoiceDescription, setInvoiceDescription] = useState<string>("");
   const [invoiceLock, setInvoiceLock] = useState(false);
@@ -914,7 +927,7 @@ export function EngagementBuilder({
       mode: invoiceMode === "off" ? "off" : "on_completion",
       useDefault: invoiceUseDefault,
       defaultCents: invoiceDefaultCents,
-      customAmount: invoiceCustomAmount,
+      customAmount: invoiceAmountValue,
     });
   }
 
@@ -957,6 +970,34 @@ export function EngagementBuilder({
   const billingTotals = computeBillingTotals(serviceItems, {
     depositCents: proposalDepositCents,
   });
+
+  // ── AMOUNT TO BILL, CALCULATED ────────────────────────────────────────
+  //
+  // Founder: "why do you have to enter an amount to bill twice? ... It should
+  // just be automatically calculated based on the service items. And it's just
+  // optionally changeable. and then have it sync with the preview."
+  //
+  // Right — you had priced every line on step 2 and then typed the sum again on
+  // step 4, from memory, with nothing checking that the two agreed. They are
+  // the same number now, from the same computeBillingTotals the proposal
+  // preview totals itself with, so the invoice and the document a client signed
+  // cannot say different things.
+  //
+  // ⚠️ oneTimeTotalCents, NOT totalCents. `totalCents` adds every frequency
+  // together and is explicitly documented in billing-totals.ts as "not a price
+  // anyone pays" — a $4,000 setup plus $500/month is not a $4,500 invoice. The
+  // one-time lines are what is payable up front, which is what an invoice
+  // raised from this engagement charges.
+  //
+  // The rule itself lives in billing-totals.ts beside the numbers it reads, so
+  // it is testable and so the next person to touch the money finds it there
+  // rather than buried in three thousand lines of form.
+  const invoiceAutoAmount = invoiceAmountFromTotals(billingTotals);
+  // DERIVED, not an effect. An effect writing state on every keystroke of a
+  // rate field would fight the input it is trying to help.
+  const invoiceAmountValue = invoiceAmountTouched
+    ? invoiceCustomAmount
+    : invoiceAutoAmount;
 
   const proposalData = {
     clientName: selectedClient?.display_name ?? t("preview_no_client"),
@@ -1829,10 +1870,21 @@ export function EngagementBuilder({
               onServicePicked={pullServiceWork}
               locale={locale}
               services={services}
-              // No firm-wide default tax on this screen — the builder is given
-              // service PRICES, not a rate. Lines take their tax from the
-              // catalogue service or from what you type.
-              fallbackTaxPct={null}
+              // ── THE TAX FILLS ITSELF IN ────────────────────────────────
+              // Founder: "make the tax percentage on a service item fill
+              // automatically based on the province you're in."
+              //
+              // From the CLIENT's province, not the firm's — Canadian
+              // place-of-supply for services puts the rate on the recipient,
+              // which is why a Montreal firm bills an Ontario client 13% and
+              // not 14.975%. It was `null` here, and the only other source
+              // (`firm.default_tax_pct`) is a column that exists in no
+              // migration, so this box has been blank for everybody since it
+              // was built.
+              //
+              // Still a SUGGESTION: a line that carries its own rate wins, the
+              // same rule the service catalogue already follows.
+              fallbackTaxPct={taxPctForProvince(selectedProvince)}
             />
           </CardContent>
         </Card>
@@ -2580,9 +2632,14 @@ export function EngagementBuilder({
                           </label>
                         </div>
                       ) : (
-                        <p className="text-xs leading-snug text-muted-foreground">
-                          {t("invoice_no_default_hint")}
-                        </p>
+                        // ...and only when there is nothing to calculate from.
+                        // "Enter the amount below" under a box that has already
+                        // filled itself in is an instruction to redo work.
+                        invoiceAutoAmount === "" && (
+                          <p className="text-xs leading-snug text-muted-foreground">
+                            {t("invoice_no_default_hint")}
+                          </p>
+                        )
                       )}
                       {(!invoiceUseDefault || !hasSavedPrice) && (
                         <div className="flex items-center gap-1.5">
@@ -2591,14 +2648,41 @@ export function EngagementBuilder({
                             type="number"
                             min={0.5}
                             step={0.01}
-                            value={invoiceCustomAmount}
-                            onChange={(e) => setInvoiceCustomAmount(e.target.value)}
+                            value={invoiceAmountValue}
+                            onChange={(e) => {
+                              setInvoiceAmountTouched(true);
+                              setInvoiceCustomAmount(e.target.value);
+                            }}
                             placeholder="0.00"
                             className="w-32"
                             aria-label={t("invoice_amount_label")}
                           />
                         </div>
                       )}
+
+                      {/* Where the number came from, and the way back to it.
+                          A field that fills itself has to say so, or it reads
+                          as something you left behind on a previous visit. */}
+                      {(!invoiceUseDefault || !hasSavedPrice) &&
+                        invoiceAutoAmount !== "" &&
+                        (invoiceAmountTouched ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInvoiceAmountTouched(false);
+                              setInvoiceCustomAmount("");
+                            }}
+                            className="text-xs text-accent underline-offset-2 hover:underline"
+                          >
+                            {t("invoice_amount_reset", {
+                              amount: invoiceAutoAmount,
+                            })}
+                          </button>
+                        ) : (
+                          <p className="text-xs leading-snug text-muted-foreground">
+                            {t("invoice_amount_from_services")}
+                          </p>
+                        ))}
                     </div>
                   )}
 

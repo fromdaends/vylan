@@ -72,7 +72,12 @@ export function EngagementItemsEditor({
    * the price, it does not lock it.
    */
   services = [],
-  /** The firm's default tax rate, used where a line does not set its own. */
+  /**
+   * The tax rate for THIS engagement's client, from their province
+   * (lib/tax/canada.ts). Used two ways: any line that does not set its own
+   * still totals with it, and a NEW line is born carrying it so the Tax % box
+   * arrives filled in rather than empty.
+   */
   fallbackTaxPct = null,
   /**
    * Called when a picked service carries WORK (1620), so the caller can pull
@@ -152,7 +157,7 @@ export function EngagementItemsEditor({
             variant="outline"
             size="sm"
             className="mt-3"
-            onClick={() => onChange([emptyItem()])}
+            onClick={() => onChange([emptyItem(fallbackTaxPct)])}
           >
             <Plus className="size-4" aria-hidden />
             {t("items_add")}
@@ -364,7 +369,7 @@ export function EngagementItemsEditor({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => onChange([...items, emptyItem()])}
+            onClick={() => onChange([...items, emptyItem(fallbackTaxPct)])}
           >
             <Plus className="size-4" aria-hidden />
             {t("items_add")}
