@@ -924,7 +924,10 @@
       "invalid": "That doesn't look like a valid email.",
       "same_email": "That's already your current email.",
       "email_taken": "That email is already used by another account."
-    }
+    },
+    "firm_province": "Your province",
+    "firm_province_hint": "Used for sales tax on a service item when the client has no province on their profile. A client's own province always wins.",
+    "firm_province_none": "Not set — leave the tax blank"
   },
   "Settings": {
     "statuses_link_hint": "Name the states your work moves through.",
