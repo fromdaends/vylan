@@ -499,15 +499,16 @@ export function AppShell({
                 // page across the entirety of vylan sync. Not full paged."
                 // Full-bleed still means "the page owns its own gutters" — it
                 // no longer means "grow without limit". Laptops never reach
-                // the cap, so nothing changes below 1600px.
-                "max-w-[1600px] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
+                // the cap, so nothing changes below 1800px.
+                "max-w-[1800px] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
               : cn(
                   "px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8",
                   // ONE cap for every page — the founder reversed the old
                   // "dense pages widen to 2100px on big monitors" call from
-                  // their own 27": every page syncs at 1600px, and smaller
+                  // their own 27": every page syncs at 1800px ("slightly wider"
+                  // than the first 1600px cut, same founder), and smaller
                   // screens never notice either way.
-                  "max-w-[1600px]",
+                  "max-w-[1800px]",
                 ),
           )}
         >
