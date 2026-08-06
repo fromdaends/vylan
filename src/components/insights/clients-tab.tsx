@@ -129,11 +129,19 @@ export function ClientsTab({ data }: { data: InsightsPayload }) {
                 data={points}
                 fill={seriesColor(0)}
                 cursor="pointer"
-                onClick={(p) =>
-                  router.push(
-                    `/clients/${(p as unknown as { clientId: string }).clientId}`,
-                  )
-                }
+                onClick={(p) => {
+                  // Recharts hands the clicked NODE's props; the datum sits in
+                  // .payload on some versions and is spread onto the props on
+                  // others. Read both rather than trusting one shape, and go
+                  // nowhere on a miss — a wrong-guess navigation to
+                  // /clients/undefined would 404 the owner mid-analysis.
+                  const node = p as unknown as {
+                    clientId?: string;
+                    payload?: { clientId?: string };
+                  };
+                  const clientId = node.payload?.clientId ?? node.clientId;
+                  if (clientId) router.push(`/clients/${clientId}`);
+                }}
               />
             </ScatterChart>
           </ResponsiveContainer>

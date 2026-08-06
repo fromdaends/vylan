@@ -6,7 +6,7 @@
 // dashboard's Capacity tab renders), hours by service, and average hours per
 // completed engagement by service.
 
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   Bar,
   BarChart,
@@ -21,12 +21,9 @@ import { Panel } from "@/components/ui/panel";
 import { formatMinutes } from "@/lib/time/duration";
 import { HoursByMemberChart } from "@/components/insights/hours-by-member-chart";
 import type { InsightsPayload } from "@/lib/insights/load";
-import type { AppLocale } from "@/lib/format";
 
 export function TeamTab({ data }: { data: InsightsPayload }) {
   const t = useTranslations("Insights");
-  // Locale kept for parity with the sibling tabs; nothing here formats money.
-  useLocale() as AppLocale;
 
   const services = data.team.byService.map((s) => ({
     name: s.service ?? t("service_general"),
