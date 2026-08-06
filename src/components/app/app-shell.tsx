@@ -493,20 +493,22 @@ export function AppShell({
             fullBleed
               ? // Mobile still needs clearance for the bottom tab bar; the page
                 // supplies its own bottom padding from `sm` up.
-                "max-w-none pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
+                //
+                // ⚠️ CAPPED NOW, not max-w-none. Founder, on a 27" display:
+                // "Can you not have files take up the whole page... Have every
+                // page across the entirety of vylan sync. Not full paged."
+                // Full-bleed still means "the page owns its own gutters" — it
+                // no longer means "grow without limit". Laptops never reach
+                // the cap, so nothing changes below 1800px.
+                "max-w-[1800px] pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-0"
               : cn(
                   "px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8",
-                  // The data-dense pages (Overview, Clients, Engagements list +
-                  // detail) get a wider cap on large monitors (>=1800px) so they
-                  // fill a 27" screen instead of letterboxing. Forms (New
-                  // engagement) and every smaller screen (MacBooks, laptops,
-                  // phones) stay at 1600px, byte-identical to before.
-                  pathname === "/dashboard" ||
-                    pathname === "/clients" ||
-                    (pathname.startsWith("/engagements") &&
-                      pathname !== "/engagements/new")
-                    ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
-                    : "max-w-[1600px]",
+                  // ONE cap for every page — the founder reversed the old
+                  // "dense pages widen to 2100px on big monitors" call from
+                  // their own 27": every page syncs at 1800px ("slightly wider"
+                  // than the first 1600px cut, same founder), and smaller
+                  // screens never notice either way.
+                  "max-w-[1800px]",
                 ),
           )}
         >
