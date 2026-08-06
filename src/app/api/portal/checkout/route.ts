@@ -4,7 +4,7 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
 import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
-  getLatestPaymentRequestForEngagementSR,
+  getOldestOpenPaymentRequestForEngagementSR,
   attachCheckoutSessionSR,
 } from "@/lib/db/payment-requests";
 import {
@@ -183,12 +183,18 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const pr = await getLatestPaymentRequestForEngagementSR(engagement.id);
-  if (!pr || pr.status !== "requested") {
-    return blocked("no_open_request", 409, {
-      engagementId: engagement.id,
-      latestStatus: pr?.status ?? null,
-    });
+  // The OLDEST OPEN invoice, not the newest of any status.
+  //
+  // An engagement can hold several live invoices since 1680 (deposit) and 1710
+  // (a recurring period). Charging the newest would take the engagement invoice
+  // when the client is standing on the deposit screen, and asking for the newest
+  // of ANY status refused payment outright whenever the most recent one happened
+  // to be paid or cancelled. Oldest-open is what a person would pay first, and
+  // it lands on the deposit by construction — the deposit is raised at
+  // acceptance, before any other invoice on that engagement exists.
+  const pr = await getOldestOpenPaymentRequestForEngagementSR(engagement.id);
+  if (!pr) {
+    return blocked("no_open_request", 409, { engagementId: engagement.id });
   }
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";

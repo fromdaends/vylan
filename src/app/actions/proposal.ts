@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { findEngagementForToken, logActivity } from "@/lib/db/portal";
 import { applyAcceptedBilling } from "@/lib/engagements/on-accepted";
+import { acceptanceStartsWorkNow } from "@/lib/engagements/deposit-state";
 
 export type ProposalResult = { ok: boolean };
 
@@ -29,12 +30,24 @@ export type ProposalResult = { ok: boolean };
  * "when the client accepts the proposal the engagement is marked active, the
  * work starts and the client can view their client portal etc etc."
  *
- * So this does all of it in ONE write: accepted, activated, in_progress. That
- * is deliberately different from the firm's two-step (accept, then Activate) —
- * and it is right, because those two steps exist to separate the CLIENT's act
- * from the FIRM's. When the client signs it themselves, both have happened.
- * Making them wait for a firm to press Activate would leave a client who just
- * agreed staring at a portal that says nothing is happening.
+ * ...and then, once a deposit could be asked for: "they read the whole proposal
+ * and stuff then agree then pay and once they PAY the client portal activates."
+ *
+ * So acceptance and activation are no longer one write. Agreeing records the
+ * agreement; the DEPOSIT opens the portal. When there is no deposit — most
+ * engagements — nothing changes: accepting still starts the work in the same
+ * breath, which is what the first quote asked for.
+ *
+ * That remains deliberately different from the firm's two-step (accept, then
+ * Activate). Those two steps exist to separate the CLIENT's act from the FIRM's,
+ * and when the client signs it themselves both have happened.
+ *
+ * ── THE AGREEMENT IS WRITTEN EVEN WHEN THE MONEY IS NOT ────────────────────
+ *
+ * accepted_at is set the instant they click, before any payment. The
+ * alternative loses it: a client who agrees and then has a card declined would
+ * leave the firm with no record that anybody ever said yes. "Accepted, awaiting
+ * deposit" is a real state with a way out — the payment screen is the portal.
  *
  * accepted_by is 'client', never 'firm'. That distinction is the difference
  * between "they signed it" and "we recorded that they agreed", and it must
@@ -50,13 +63,20 @@ export async function acceptProposalAction(
 
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
+
+  // Does agreeing start the work, or does the deposit? Asked BEFORE the write,
+  // so one update settles it and there is no window where the engagement is
+  // briefly live and then retracted.
+  const activatesNow = await acceptanceStartsWorkNow(found.id);
+
   const { error } = await sb
     .from("engagements")
     .update({
       accepted_at: now,
       accepted_by: "client",
-      activated_at: now,
-      status: "in_progress",
+      // Held back when a deposit is due. recordInvoicePaid sets both the moment
+      // it clears (lib/payments/paid-event.ts).
+      ...(activatesNow ? { activated_at: now, status: "in_progress" } : {}),
       // Accepting withdraws an earlier refusal. A client who declined and then
       // agreed has agreed; leaving the decline on the row would show the firm
       // a contradiction.

@@ -4092,7 +4092,10 @@
     "gate_error_wrong": "That code isn't right.",
     "gate_attempts_remaining": "{count, plural, one {# attempt left} other {# attempts left}}",
     "gate_locked": "Too many attempts — try again later.",
-    "gate_unavailable": "Something went wrong. Try again."
+    "gate_unavailable": "Something went wrong. Try again.",
+    "deposit_accepted_title": "Thanks — {firm} has your agreement",
+    "deposit_accepted_body": "One last step. Pay the deposit below and your portal opens right away, with everything you need in it.",
+    "deposit_credited_note": "This deposit comes off your final invoice."
   },
   "Integrations": {
     "index_title": "Integrations",

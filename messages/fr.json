@@ -4092,7 +4092,10 @@
     "gate_error_wrong": "Ce code n'est pas le bon.",
     "gate_attempts_remaining": "{count, plural, one {# tentative restante} other {# tentatives restantes}}",
     "gate_locked": "Trop de tentatives — réessayez plus tard.",
-    "gate_unavailable": "Une erreur est survenue. Réessayez."
+    "gate_unavailable": "Une erreur est survenue. Réessayez.",
+    "deposit_accepted_title": "Merci — {firm} a votre accord",
+    "deposit_accepted_body": "Une dernière étape. Payez l'acompte ci-dessous et votre portail s'ouvre aussitôt, avec tout ce qu'il vous faut.",
+    "deposit_credited_note": "Cet acompte sera déduit de votre facture finale."
   },
   "Integrations": {
     "index_title": "Intégrations",

@@ -21,54 +21,75 @@ const engagement = {
   deposit_cents: 10_000 as number | null,
 };
 
+// Rows the deposit-credit read (paidDepositCentsSR) should find. Empty by
+// default, so every existing assertion below still describes an invoice with no
+// deposit credited — which is what those tests set up. The deposit-credit test
+// fills it.
+let paidDepositRows: Array<{ amount_cents: number | null }> = [];
+
 const serviceRole = {
   from(table: string) {
     return {
       select(columns: string) {
-        return {
-          eq() {
-            return {
-              async maybeSingle() {
-                if (table === "engagements") {
-                  // Mirror the mock row so tests can flip its status (the
-                  // at-spawn cases exercise 'sent' occurrences).
-                  if (columns === "status") return { data: { status: engagement.status } };
-                  if (columns === "deposit_cents") {
-                    return { data: { deposit_cents: engagement.deposit_cents } };
-                  }
-                  if (columns.includes("invoice_locks_deliverables")) {
-                    return {
-                      data: {
-                        invoice_locks_deliverables: false,
-                        invoice_description: "Tax services",
-                      },
-                    };
-                  }
-                  return { data: engagement };
-                }
-                if (table === "firms") {
-                  return {
-                    data: {
-                      name: "Acme",
-                      logo_url: null,
-                      connect_charges_enabled: true,
-                    },
-                  };
-                }
-                if (table === "clients") {
-                  return {
-                    data: {
-                      display_name: "Jordan",
-                      email: "jordan@example.com",
-                      locale: "en",
-                    },
-                  };
-                }
-                return { data: null };
-              },
-            };
+        // A CHAINABLE builder. The deposit-credit read filters on three columns
+        // (engagement_id, kind, status) and awaits the builder directly for a
+        // LIST; every other read here filters once and calls maybeSingle. One
+        // object serves both: eq() returns itself, and `then` makes it
+        // awaitable.
+        const builder = {
+          eq: () => builder,
+          then(
+            resolve: (v: {
+              data: Array<{ amount_cents: number | null }>;
+              error: null;
+            }) => unknown,
+          ) {
+            return Promise.resolve({
+              data: table === "payment_requests" ? paidDepositRows : [],
+              error: null,
+            }).then(resolve);
+          },
+          async maybeSingle() {
+            if (table === "engagements") {
+              // Mirror the mock row so tests can flip its status (the
+              // at-spawn cases exercise 'sent' occurrences).
+              if (columns === "status")
+                return { data: { status: engagement.status } };
+              if (columns === "deposit_cents") {
+                return { data: { deposit_cents: engagement.deposit_cents } };
+              }
+              if (columns.includes("invoice_locks_deliverables")) {
+                return {
+                  data: {
+                    invoice_locks_deliverables: false,
+                    invoice_description: "Tax services",
+                  },
+                };
+              }
+              return { data: engagement };
+            }
+            if (table === "firms") {
+              return {
+                data: {
+                  name: "Acme",
+                  logo_url: null,
+                  connect_charges_enabled: true,
+                },
+              };
+            }
+            if (table === "clients") {
+              return {
+                data: {
+                  display_name: "Jordan",
+                  email: "jordan@example.com",
+                  locale: "en",
+                },
+              };
+            }
+            return { data: null };
           },
         };
+        return builder;
       },
       insert(input: unknown) {
         insertActivity(input);
@@ -94,11 +115,16 @@ vi.mock("@/lib/db/payment-requests", () => ({
 const getFirmInvoiceSettingsSR = vi.fn();
 const allocateInvoiceSeqSR = vi.fn();
 vi.mock("@/lib/db/invoice-settings", () => ({
-  getFirmInvoiceSettingsSR: (firmId: string) => getFirmInvoiceSettingsSR(firmId),
+  getFirmInvoiceSettingsSR: (firmId: string) =>
+    getFirmInvoiceSettingsSR(firmId),
   allocateInvoiceSeqSR: (firmId: string) => allocateInvoiceSeqSR(firmId),
 }));
 vi.mock("@/lib/email", () => ({
-  buildPaymentRequestEmail: () => ({ subject: "Invoice", html: "h", text: "t" }),
+  buildPaymentRequestEmail: () => ({
+    subject: "Invoice",
+    html: "h",
+    text: "t",
+  }),
   sendEmail: (input: unknown) => sendEmail(input),
 }));
 vi.mock("@/lib/storage", () => ({
@@ -106,8 +132,7 @@ vi.mock("@/lib/storage", () => ({
   getBrandingImageUrlForEmail: async () => null,
 }));
 vi.mock("@/lib/db/final-documents", () => ({
-  getInvoiceAttachmentForEngagementSR: (id: string) =>
-    getInvoiceAttachment(id),
+  getInvoiceAttachmentForEngagementSR: (id: string) => getInvoiceAttachment(id),
 }));
 
 import { sendEngagementInvoice } from "./send";
@@ -359,6 +384,63 @@ describe("sendEngagementInvoice — the deposit (migration 1680)", () => {
     await sendEngagementInvoice("e1");
     expect(createPaymentRequest).toHaveBeenCalledWith(
       expect.objectContaining({ amount_cents: 25_000, kind: "engagement" }),
+    );
+  });
+});
+
+describe("the deposit comes off the final invoice", () => {
+  beforeEach(() => {
+    paidDepositRows = [];
+  });
+
+  it("bills the BALANCE once a deposit has been paid", async () => {
+    // The founder, asked directly whether a $1,000 deposit on a $5,000
+    // engagement leaves a $4,000 or a $5,000 final invoice: "The balance
+    // obviously." Without this the client is billed $6,000 for a $5,000 job.
+    paidDepositRows = [{ amount_cents: 10_000 }];
+    const result = await sendEngagementInvoice("e1");
+    expect(result.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 15_000, kind: "engagement" }),
+    );
+  });
+
+  it("bills the full fee when the deposit was never paid", async () => {
+    // An UNPAID deposit has taken no money; deducting it would bill the client
+    // less than they owe. The engagement carries deposit_cents either way.
+    paidDepositRows = [];
+    const result = await sendEngagementInvoice("e1");
+    expect(result.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 25_000 }),
+    );
+  });
+
+  it("sums several settled deposits rather than crediting only one", async () => {
+    paidDepositRows = [{ amount_cents: 6_000 }, { amount_cents: 4_000 }];
+    await sendEngagementInvoice("e1");
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 15_000 }),
+    );
+  });
+
+  it("raises NOTHING when the deposit already covered the whole engagement", async () => {
+    // A correct outcome, not a failure: the money is collected, and a $0
+    // invoice would ask the client to pay nothing.
+    paidDepositRows = [{ amount_cents: 25_000 }];
+    const result = await sendEngagementInvoice("e1");
+    expect(result).toEqual({ ok: false, reason: "no_amount" });
+    expect(createPaymentRequest).not.toHaveBeenCalled();
+  });
+
+  it("does NOT credit the deposit against the deposit invoice itself", async () => {
+    // Netting a charge against itself would raise a $0 deposit, or nothing.
+    engagement.status = "in_progress";
+    paidDepositRows = [{ amount_cents: 10_000 }];
+    const result = await sendEngagementInvoice("e1", { kind: "deposit" });
+    expect(result.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 10_000, kind: "deposit" }),
     );
   });
 });

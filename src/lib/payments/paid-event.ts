@@ -133,8 +133,87 @@ export async function recordInvoicePaid(
     await syncEngagementStageSR(result.engagementId);
   }
 
+  // ── THE DEPOSIT OPENS THE PORTAL ─────────────────────────────────────────
+  //
+  // The founder's flow: "they read the whole proposal and stuff then agree then
+  // pay and once they pay the client portal activates for the client."
+  //
+  // acceptProposalAction records the agreement and deliberately withholds
+  // activation when a deposit is due; THIS is the other half. Every rail funnels
+  // through recordInvoicePaid, so a card, a PayPal capture, the self-heal
+  // reconcile and a cheque the firm records by hand all open the portal the same
+  // way — which is the whole reason this function exists.
+  //
+  // Best-effort and last: the money is already recorded, and a failure here
+  // leaves an engagement that is paid-but-not-activated. Recoverable (the firm's
+  // Activate button, and the next paid event) and loudly logged, where a throw
+  // would instead unwind a settled payment.
+  if (result.engagementId) {
+    try {
+      await activateOnDepositPaid(
+        result.firmId,
+        result.engagementId,
+        paymentRequestId,
+      );
+    } catch (e) {
+      console.error(
+        "[paid-event] deposit activation failed — engagement paid but not activated:",
+        result.engagementId,
+        e,
+      );
+    }
+  }
+
   await emitPaymentNotification(result, "received", paymentRequestId);
   return { outcome: "newly_paid" };
+}
+
+/**
+ * A paid DEPOSIT starts the work.
+ *
+ * Only a deposit: the engagement's own invoice and a recurring period's invoice
+ * are money for work already agreed and already running, and neither should
+ * ever move an engagement's lifecycle.
+ *
+ * Idempotent by its WHERE clause — `activated_at is null` means a replayed
+ * webhook, a reconcile racing the webhook, or a second rail landing late cannot
+ * move the activation time. The first payment is the one that started the work.
+ */
+async function activateOnDepositPaid(
+  firmId: string,
+  engagementId: string,
+  paymentRequestId: string,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("kind")
+    .eq("id", paymentRequestId)
+    .maybeSingle();
+  // Pre-1680 there is no `kind`, so no invoice can be a deposit and nothing
+  // gated on one — the old behaviour (accept activates immediately) still holds
+  // and there is nothing here to do.
+  if (error || (data as { kind?: string } | null)?.kind !== "deposit") return;
+
+  const now = new Date().toISOString();
+  const { error: updErr } = await sb
+    .from("engagements")
+    .update({ activated_at: now, status: "in_progress" })
+    .eq("id", engagementId)
+    // Never resurrect a cancelled engagement, and never re-open a completed one,
+    // because a deposit can settle late. Only work that is genuinely waiting.
+    .in("status", ["sent", "draft"])
+    .is("activated_at", null);
+  if (updErr) {
+    console.error("[paid-event] activation update failed:", updErr);
+    return;
+  }
+
+  await logServiceRoleActivity(firmId, engagementId, "engagement_activated", {
+    reason: "deposit_paid",
+    payment_request_id: paymentRequestId,
+  });
 }
 
 // A payment attempt failed (async card failure today; PayPal capture denied in
