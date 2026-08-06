@@ -23,7 +23,8 @@ describe("computeBoardStats", () => {
   it("counts an unbudgeted card as work without inventing a budget", () => {
     const s = computeBoardStats([card(null, 90)]);
     expect(s.workItems).toBe(1);
-    expect(s.budgetMinutes).toBe(0);
+    // NULL, not 0 — see "the stats bar must not invent an overrun" below.
+    expect(s.budgetMinutes).toBeNull();
     expect(s.actualMinutes).toBe(90);
   });
 
@@ -49,9 +50,16 @@ describe("computeBoardStats", () => {
     expect(s.remainingCents).toBe(82_500);
   });
 
-  it("is zero-everything on an empty board rather than throwing", () => {
+  it("is empty rather than throwing on a board with no cards", () => {
     const s = computeBoardStats([]);
-    expect(s).toMatchObject({ workItems: 0, budgetMinutes: 0, actualMinutes: 0 });
+    expect(s).toMatchObject({
+      workItems: 0,
+      actualMinutes: 0,
+      // No cards means no budget to state, which is the same "—" a board of
+      // untimed services shows.
+      budgetMinutes: null,
+      remainingMinutes: null,
+    });
   });
 });
 
@@ -120,5 +128,40 @@ describe("resolveBudgetMinutes — the catalogue proposes, the engagement may di
     expect(
       resolveBudgetMinutes({ overrideMinutes: null, serviceMinutes: [120, null] }),
     ).toBe(120);
+  });
+});
+
+describe("⚠️ the stats bar must not invent an overrun", () => {
+  it("says NOTHING for budget and remaining when no card is budgeted", () => {
+    // Found by running the real board against production: with no service
+    // durations filled in, the bar read "Budget 0m · Remaining −17h 55m" in
+    // red — "you are eighteen hours over budget" when the truth was "nobody
+    // has set a budget". Hours worked are still real and still shown.
+    const s = computeBoardStats([card(null, 300), card(null, 780)]);
+    expect(s.budgetMinutes).toBeNull();
+    expect(s.remainingMinutes).toBeNull();
+    expect(s.actualMinutes).toBe(1080);
+    expect(s.workItems).toBe(2);
+  });
+
+  it("totals only the budgeted cards, and still subtracts ALL the work", () => {
+    // Mixed board: one job planned, one not. The plan is 6h; the work done
+    // across both is 8h. Remaining is genuinely negative and must stay so.
+    const s = computeBoardStats([card(360, 300), card(null, 180)]);
+    expect(s.budgetMinutes).toBe(360);
+    expect(s.remainingMinutes).toBe(-120);
+  });
+
+  it("keeps a real overrun visible", () => {
+    const s = computeBoardStats([card(60, 200)]);
+    expect(s.remainingMinutes).toBe(-140);
+  });
+
+  it("shows no money for a budget that does not exist", () => {
+    const s = computeBoardStats([card(null, 60)], 16_500);
+    expect(s.budgetCents).toBeNull();
+    expect(s.remainingCents).toBeNull();
+    // Work actually done still has a value.
+    expect(s.actualCents).toBe(16_500);
   });
 });

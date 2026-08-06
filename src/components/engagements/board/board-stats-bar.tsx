@@ -71,7 +71,9 @@ export function BoardStatsBar({
         currency={labels.currency}
         animate={animate}
         // An overrun is red here too, for the same reason it is on the card.
-        danger={stats.remainingMinutes < 0}
+        danger={
+          stats.remainingMinutes != null && stats.remainingMinutes < 0
+        }
       />
     </div>
   );
@@ -130,12 +132,19 @@ function MoneyCell({
 }: {
   label: string;
   cents: number | null;
-  minutes: number;
+  /** Null = there is nothing to state. Renders "—" rather than 0h, because a
+   *  board with no budgets set and a board that is exactly on plan are not the
+   *  same board. */
+  minutes: number | null;
   locale: AppLocale;
   currency: string;
   animate: boolean;
   danger?: boolean;
 }) {
+  // Nothing to say at all — no budget has been set anywhere on this board.
+  if (minutes == null) {
+    return <Cell label={label} value="—" />;
+  }
   // No rates capability: hours ARE the number, not a footnote to one.
   if (cents == null) {
     return (

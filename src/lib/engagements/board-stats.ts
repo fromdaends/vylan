@@ -29,11 +29,26 @@ export type BoardStatsInput = {
 export type BoardStats = {
   /** Count of visible cards. */
   workItems: number;
-  budgetMinutes: number;
+  /**
+   * ⚠️ NULL when NOT ONE visible card has a budget.
+   *
+   * Summing "unknown" as zero is the same mistake `resolveBudgetMinutes`
+   * exists to prevent, one level up. Caught by running the real board against
+   * production: with no service durations filled in, the bar read
+   * "Budget 0m · Remaining −17h 55m" in red — which says "you are eighteen
+   * hours over budget" when the truth is "nobody has set a budget".
+   */
+  budgetMinutes: number | null;
   actualMinutes: number;
-  /** Budget − actual. NEGATIVE IS MEANINGFUL and is kept: a firm that has
-   *  overrun its planned hours needs to see that, not a floor at zero. */
-  remainingMinutes: number;
+  /**
+   * Budget − actual, or null when there is no budget to subtract from.
+   *
+   * A NEGATIVE number is meaningful and is kept — a firm that has genuinely
+   * overrun needs to see it, not a floor at zero. That is exactly why the
+   * no-budget case has to be null instead: a real overrun and an empty
+   * catalogue must not look identical.
+   */
+  remainingMinutes: number | null;
   /** Null unless the viewer may see rates — see the note above. */
   budgetCents: number | null;
   actualCents: number | null;
@@ -50,18 +65,28 @@ export function computeBoardStats(
   cards: BoardStatsInput[],
   rateCents: number | null = null,
 ): BoardStats {
-  let budgetMinutes = 0;
+  let budgetSum = 0;
+  let budgeted = 0;
   let actualMinutes = 0;
   for (const c of cards) {
-    // An unbudgeted card contributes 0 to the budget total but still counts as
-    // a work item. It cannot contribute a guess — see budget_minutes in 1790.
-    budgetMinutes += c.budgetMinutes ?? 0;
+    // An unbudgeted card still counts as a work item and still contributes its
+    // hours WORKED. It just cannot contribute a plan nobody made.
+    if (c.budgetMinutes != null) {
+      budgetSum += c.budgetMinutes;
+      budgeted += 1;
+    }
     actualMinutes += c.actualMinutes;
   }
-  const remainingMinutes = budgetMinutes - actualMinutes;
+  // Nothing budgeted at all → the bar says so, rather than inventing 0h and a
+  // red overrun out of an empty catalogue.
+  const budgetMinutes = budgeted === 0 ? null : budgetSum;
+  const remainingMinutes =
+    budgetMinutes == null ? null : budgetMinutes - actualMinutes;
 
-  const money = (minutes: number) =>
-    rateCents == null ? null : Math.round((minutes / 60) * rateCents);
+  const money = (minutes: number | null) =>
+    rateCents == null || minutes == null
+      ? null
+      : Math.round((minutes / 60) * rateCents);
 
   return {
     workItems: cards.length,
