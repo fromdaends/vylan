@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ClampedNumberInput } from "@/components/ui/clamped-number-input";
@@ -39,9 +39,10 @@ import { ProposalPreview } from "@/components/engagements/proposal-preview";
 // two lines while the template builder said it quietly in one — the exact
 // drift the shared chrome exists to prevent.
 import {
-  BuilderChrome,
+  TemplateBuilderShell,
   RadioCard,
   ToggleRow,
+  type BuilderTab,
 } from "@/components/templates/template-builder-shell";
 import { AssetUpload } from "@/components/templates/asset-upload";
 import { TermsSectionsEditor } from "@/components/engagements/terms-sections-editor";
@@ -236,6 +237,15 @@ type WizardStepKey =
   | "wizard_step_billing"
   | "wizard_step_reminders"
   | "wizard_step_proposal";
+
+// The one line under each step's name in the wizard's steps box.
+type WizardStepDescKey =
+  | "wizard_step_desc_details"
+  | "wizard_step_desc_services"
+  | "wizard_step_desc_tasks"
+  | "wizard_step_desc_billing"
+  | "wizard_step_desc_reminders"
+  | "wizard_step_desc_proposal";
 
 export function EngagementBuilder({
   clients,
@@ -868,6 +878,9 @@ export function EngagementBuilder({
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
   const [pending, startTransition] = useTransition();
+  // The wizard's ✕ and Esc both close by NAVIGATING — this screen is a route,
+  // not a mounted dialog, which is the decision three lag bugs were fixed by.
+  const router = useRouter();
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
   const selectedClient = clients.find((client) => client.id === clientId);
@@ -1363,25 +1376,7 @@ export function EngagementBuilder({
   }
 
   return (
-    <EngagementModalShell
-      title={t("new_title")}
-      closeHref="/engagements"
-      busy={pending}
-      // BuilderChrome scrolls its own middle and pins its own footer, so the
-      // modal body must not scroll or pad on top of it.
-      flushBody
-      onSaveDraft={() => submit(false)}
-      onSaveAndSend={() => submit(true)}
-      onSaveAsTemplate={() => setSavingTemplate(true)}
-      labels={{
-        close: tc("cancel"),
-        save: t("wizard_save"),
-        saveDraft: t("save_draft"),
-        saveAndSend: t("create_and_send"),
-        saveAsTemplate: t("save_as_template"),
-        saving: tc("saving"),
-      }}
-    >
+    <>
     <SaveAsTemplateDialog
       open={savingTemplate}
       onOpenChange={setSavingTemplate}
@@ -1394,19 +1389,27 @@ export function EngagementBuilder({
         that Vylan UI look not the canopy Ui look that you can see on the
         template builders. I want the same feel on engagement creation."
 
-        So the left rail and the hand-rolled Back/Next are gone, replaced by
-        BuilderChrome — the identical tabs, preview toggle, form/preview split
-        and footer the three template builders wear. Not a copy of them: the
-        same component, so the next change to how a builder looks reaches this
-        screen without anyone remembering to come here.
+        So this is TemplateBuilderShell — the identical steps box, green
+        checkmarks, progress bar, preview card and Back/Continue footer the four
+        template builders wear. Not a copy of them: the same component, so the
+        next change to how a builder looks reaches this screen without anyone
+        remembering to come here. That is the handoff's line too: "identical
+        panels to the engagement template — that is the point: same rooms, same
+        furniture."
 
-        The MODAL stays. The founder asked for the same FEEL, not for
-        engagement creation to stop being an overlay — and the overlay was its
-        own decision, made over three rounds of bug reports. */}
-    <BuilderChrome
-      tabs={WIZARD_STEPS.map((k): { key: string; label: string; incomplete: boolean } => ({
+        EngagementModalShell is gone from this path. It drew its own overlay,
+        title bar and save dropdown, and the wizard draws all three — keeping it
+        would have meant two backdrops and two save controls. The opening
+        "start from a template?" question still uses it, because that screen is
+        a question and not a wizard. */}
+    <TemplateBuilderShell
+      kicker={t("kicker_engagement")}
+      title={t("new_title")}
+      explainer={t("wizard_explainer")}
+      tabs={WIZARD_STEPS.map((k): BuilderTab => ({
         key: k,
         label: t(`wizard_step_${k}` as WizardStepKey),
+        description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
         // The red mark means "required and not answered yet" — the same thing
         // the rail's asterisk-plus-empty-circle used to say, in the template
         // builders' vocabulary. Only the two that actually stop you sending.
@@ -1414,15 +1417,37 @@ export function EngagementBuilder({
       }))}
       activeTab={step}
       onTabChange={(k) => setStep(k as WizardStep)}
-      previewOpen={previewOpen}
-      onPreviewToggle={() => setPreviewOpen((v) => !v)}
-      // On the Proposal step — the last one — Next becomes the send. It is the
-      // only thing left to do there, and a greyed-out Next said nothing.
+      onClose={() => router.push("/engagements")}
+      // Save draft keeps a half-finished engagement; Save as template keeps its
+      // SHAPE. Both were in the old split button, and both survive — they are
+      // the two ways of leaving this screen without sending, and the handoff's
+      // header (one outline button + ✕) has room for them.
+      headerActions={[
+        {
+          label: pending ? tc("saving") : t("save_draft"),
+          variant: "outline" as const,
+          disabled: pending,
+          onClick: () => submit(false),
+        },
+        {
+          label: t("save_as_template"),
+          variant: "ghost" as const,
+          disabled: pending,
+          onClick: () => setSavingTemplate(true),
+        },
+      ]}
+      // On the Proposal step — the last one — Continue becomes the send. It is
+      // the only thing left to do there, and a greyed-out Next said nothing.
       finalAction={{
         label: t("create_and_send"),
         disabled: pending,
         onClick: () => submit(true),
       }}
+      previewLabel={
+        selectedClient
+          ? t("preview_for_client", { name: selectedClient.display_name })
+          : tTpl("preview_sample_label")
+      }
       // ── THE PROPOSAL, ON EVERY STEP ─────────────────────────────────
       // Founder: "Put the preview that you see on proposal appear throughout
       // the entire engagement creation process."
@@ -3098,7 +3123,7 @@ export function EngagementBuilder({
         </>
       )}
 
-    </BuilderChrome>
-    </EngagementModalShell>
+    </TemplateBuilderShell>
+    </>
   );
 }

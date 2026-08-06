@@ -1363,3 +1363,165 @@
     transform: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE GUIDED WIZARD — two floating cards over the dimmed app.
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Every "create something" surface in the product (four template builders,
+   engagement creation, task creation, and the single-card client / invoice /
+   import flows) is drawn by ONE shell: `template-builder-shell.tsx`. Its
+   geometry and motion live here rather than in the component because
+   CLAUDE.md's cohesion rule applies to style too — "change how builders look"
+   has to be one edit, not eight.
+
+   The numbers are the handoff's, verbatim. Colour is never a literal: every
+   surface below reaches for a token so dark mode keeps working, which is the
+   one thing the light-only prototype could not show. */
+
+@keyframes wizard-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wizard-card-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.977); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Forward and backward are DIFFERENT animations, not one with a sign flipped:
+   the incoming panel has to arrive from the side you are travelling towards,
+   or Back feels like Continue. */
+@keyframes wizard-step-forward {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wizard-step-back {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Overshoots to 1.18 and settles. A checkmark that simply appears reads as a
+   render; one that pops reads as something you just did. */
+@keyframes wizard-check-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  62% { transform: scale(1.18); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes wizard-popover-in {
+  from { opacity: 0; transform: translateX(-8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wizard-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* The one-time mark on a row you just saved. It fades to TRANSPARENT rather
+   than to a colour, so it works on the striped hover state underneath it. */
+@keyframes wizard-row-fresh {
+  from { background-color: var(--accent-subtle); }
+  to { background-color: transparent; }
+}
+
+.wizard-overlay {
+  background: rgb(9 10 16 / 0.46);
+  backdrop-filter: blur(2.5px);
+  animation: wizard-overlay-in 180ms both;
+}
+
+.wizard-card {
+  box-shadow:
+    0 24px 64px rgb(9 10 16 / 0.28),
+    0 2px 8px rgb(9 10 16 / 0.12);
+  animation: wizard-card-in 340ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* The preview lands a beat after the setup card. Same motion, later start —
+   the eye reads it as one object arriving, not two racing. */
+.wizard-card-preview {
+  animation-duration: 420ms;
+}
+
+/* min() against the viewport so the preview card always has its 400px + gap.
+   Below `xl` the preview is hidden entirely (see .wizard-preview) and the
+   setup card takes the room back. */
+.wizard-card-setup {
+  width: min(980px, 100vw - 48px);
+  min-width: 0;
+  height: min(760px, 100vh - 48px);
+}
+
+@media (min-width: 80rem) {
+  .wizard-card-setup {
+    width: min(980px, 100vw - 540px);
+    min-width: 660px;
+  }
+}
+
+/* Client / invoice / import have one step and no preview: no rail, and the
+   card shrinks to something the size of what it actually asks for. */
+.wizard-card-single {
+  width: min(560px, 100vw - 48px);
+  min-width: 0;
+  height: auto;
+  max-height: min(760px, 100vh - 48px);
+}
+
+.wizard-preview {
+  display: none;
+}
+
+@media (min-width: 80rem) {
+  .wizard-preview {
+    display: flex;
+  }
+}
+
+.wizard-step-forward {
+  animation: wizard-step-forward 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wizard-step-back {
+  animation: wizard-step-back 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wizard-check {
+  animation: wizard-check-in 350ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wizard-popover {
+  box-shadow:
+    0 16px 44px rgb(9 10 16 / 0.18),
+    0 2px 8px rgb(9 10 16 / 0.08);
+  animation: wizard-popover-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wizard-toast {
+  animation: wizard-toast-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.wizard-row-fresh {
+  animation: wizard-row-fresh 1800ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Entrances, the step slide and the check pop all drop to nothing. The
+     COLOUR changes stay — a circle going green without travelling is not a
+     vestibular trigger, and it is the only thing telling you the step is
+     behind you. */
+  .wizard-overlay,
+  .wizard-card,
+  .wizard-card-preview,
+  .wizard-step-forward,
+  .wizard-step-back,
+  .wizard-check,
+  .wizard-popover,
+  .wizard-toast,
+  .wizard-row-fresh {
+    animation: none;
+  }
+}
