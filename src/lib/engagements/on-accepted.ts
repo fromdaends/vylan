@@ -22,6 +22,10 @@
 
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import { startRecurringSchedules } from "@/lib/billing/start-schedules";
+import {
+  acceptanceDueCents,
+  acceptanceDueLines,
+} from "@/lib/billing/acceptance-lines";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export type AcceptedBillingResult = {
@@ -78,7 +82,35 @@ export async function applyAcceptedBilling(
       .select("invoice_auto_mode")
       .eq("id", engagementId)
       .maybeSingle();
-    if (data?.invoice_auto_mode === "on_acceptance") {
+    // ── THE PROPOSAL'S OWN LINES OUTRANK A TYPED NUMBER (1740) ───────────
+    //
+    // A block saying "$4,000, one time, ON ACCEPTANCE" now bills. Until the
+    // timing was persisted, the engagement invoice could only ever charge
+    // `invoice_amount_cents` — a figure typed on the Billing tab, unconnected to
+    // the priced lines the client actually read and agreed to.
+    //
+    // So when the engagement has priced one-time lines marked on-acceptance,
+    // THEY set the amount. A signed document beats a number typed two tabs away.
+    // No such lines (every engagement created before this) and nothing here
+    // fires: invoice_auto_mode decides exactly as it does today.
+    //
+    // Cannot double-bill: both paths raise kind='engagement', and 1680's unique
+    // index permits one live invoice per engagement per kind — so the second is
+    // rejected at the database and reads as "already sent".
+    const dueLines = await acceptanceDueLines(engagementId);
+    const dueCents = acceptanceDueCents(dueLines);
+    if (dueCents > 0) {
+      // Stamp the agreed figure onto the engagement so the ONE sender bills it,
+      // keeping the rails gate, the tax computation, the numbering and the
+      // pay-link email in a single place rather than growing a second invoice
+      // path that would drift from the first.
+      await sb
+        .from("engagements")
+        .update({ invoice_amount_cents: dueCents })
+        .eq("id", engagementId);
+      const invoice = await sendEngagementInvoice(engagementId);
+      out.invoiceRaised = invoice.ok;
+    } else if (data?.invoice_auto_mode === "on_acceptance") {
       const invoice = await sendEngagementInvoice(engagementId);
       out.invoiceRaised = invoice.ok;
     }

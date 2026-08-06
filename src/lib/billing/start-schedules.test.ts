@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { schedulableFrequencies } from "./start-schedules";
+import { customStartFor, schedulableFrequencies } from "./start-schedules";
 
 const line = (over: Record<string, unknown> = {}) => ({
   name: "Bookkeeping",
@@ -118,5 +118,81 @@ describe("an hourly line is never put on a schedule", () => {
         line({ billing_frequency: "quarterly", rate_type: "hour" }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("customStartFor — a block that names its own start date (1740)", () => {
+  it("returns the date a custom_date block asked for", () => {
+    expect(
+      customStartFor(
+        [
+          line({
+            billing_timing: "custom_date",
+            billing_start_date: "2027-01-01",
+          }),
+        ],
+        "monthly",
+      ),
+    ).toBe("2027-01-01");
+  });
+
+  it("ignores a date on a block that did NOT choose custom_date", () => {
+    // "from the engagement start" means exactly that, whatever stale value the
+    // date field happens to be carrying.
+    expect(
+      customStartFor(
+        [
+          line({
+            billing_timing: "engagement_start",
+            billing_start_date: "2027-01-01",
+          }),
+        ],
+        "monthly",
+      ),
+    ).toBeNull();
+  });
+
+  it("ignores lines of a DIFFERENT frequency", () => {
+    expect(
+      customStartFor(
+        [
+          line({
+            billing_frequency: "quarterly",
+            billing_timing: "custom_date",
+            billing_start_date: "2027-01-01",
+          }),
+        ],
+        "monthly",
+      ),
+    ).toBeNull();
+  });
+
+  it("takes the EARLIEST when two lines disagree", () => {
+    // Billing should begin no later than any line promised — the safe direction
+    // for the client.
+    expect(
+      customStartFor(
+        [
+          line({ billing_timing: "custom_date", billing_start_date: "2027-03-01" }),
+          line({ billing_timing: "custom_date", billing_start_date: "2027-01-01" }),
+        ],
+        "monthly",
+      ),
+    ).toBe("2027-01-01");
+  });
+
+  it("is null on a pre-1740 row, which reads as the engagement start", () => {
+    expect(customStartFor([line()], "monthly")).toBeNull();
+  });
+
+  it("refuses a value that is not an ISO date", () => {
+    for (const bad of ["soon", "", null, 20270101, "01/01/2027"]) {
+      expect(
+        customStartFor(
+          [line({ billing_timing: "custom_date", billing_start_date: bad })],
+          "monthly",
+        ),
+      ).toBeNull();
+    }
   });
 });

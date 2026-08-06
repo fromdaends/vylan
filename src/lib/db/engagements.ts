@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { isMissingSchema } from "@/lib/db/quickbooks";
-import type { EngagementItemDraft } from "@/lib/engagements/items";
+import { isBillingTiming, type EngagementItemDraft } from "@/lib/engagements/items";
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -153,7 +153,7 @@ export async function listEngagementItems(
   const { data, error } = await supabase
     .from("engagement_items")
     .select(
-      "id, name, description, service_id, rate_cents, rate_type, billing_frequency, tax_pct, order_index",
+      "id, name, description, service_id, rate_cents, rate_type, billing_frequency, tax_pct, billing_timing, billing_start_date, order_index",
     )
     .eq("engagement_id", engagementId)
     .order("order_index", { ascending: true });
@@ -179,6 +179,13 @@ export async function listEngagementItems(
         (row.billing_frequency as EngagementItemDraft["billingFrequency"]) ??
         "once",
       taxPct: (row.tax_pct as number | null) ?? null,
+      // NULL stays NULL rather than being defaulted here: "no timing recorded"
+      // and "bills on acceptance" are different facts, and every reader has its
+      // own right answer for the absent case.
+      billingTiming: isBillingTiming(row.billing_timing)
+        ? row.billing_timing
+        : null,
+      billingStartDate: (row.billing_start_date as string | null) ?? null,
     };
   });
 }
@@ -420,6 +427,14 @@ export type CreateEngagementInput = {
     rate_type: "item" | "hour";
     billing_frequency: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
     tax_pct: number | null;
+    /** WHEN it bills, inherited from its billing block (1740). */
+    billing_timing?:
+      | "on_acceptance"
+      | "on_completion"
+      | "engagement_start"
+      | "custom_date"
+      | null;
+    billing_start_date?: string | null;
   }[];
   reminder_settings: ReminderSettings;
   // Who the work belongs to from the moment it exists. Absent (or null) keeps
@@ -708,8 +723,46 @@ export async function createEngagementWithItems(
         billing_frequency: it.billing_frequency,
         tax_pct: it.tax_pct,
         order_index: idx,
+        // WHEN it bills (1740). Dropped by the retry below on a pre-1740
+        // database, exactly like every other newest-column-first field here —
+        // the prices still save, they simply lose their timing until the
+        // migration lands.
+        ...(it.billing_timing != null
+          ? { billing_timing: it.billing_timing }
+          : {}),
+        ...(it.billing_start_date != null
+          ? { billing_start_date: it.billing_start_date }
+          : {}),
       })),
     );
+    // Pre-1740: retry WITHOUT the timing columns. Losing the timing is bad;
+    // losing the whole priced scope because a migration has not landed is worse,
+    // and this is the same ladder createEngagementWithItems already uses above.
+    if (scopeErr && isUnknownColumnError(scopeErr)) {
+      const { error: retryErr } = await supabase
+        .from("engagement_items")
+        .insert(
+          scope.map((it, idx) => ({
+            engagement_id: (engagement as Engagement).id,
+            firm_id: u.firm_id,
+            name: it.name,
+            service_id: it.service_id ?? null,
+            description: it.description,
+            rate_cents: it.rate_cents,
+            rate_type: it.rate_type,
+            billing_frequency: it.billing_frequency,
+            tax_pct: it.tax_pct,
+            order_index: idx,
+          })),
+        );
+      if (retryErr && !isMissingSchema(retryErr)) throw retryErr;
+      if (retryErr) {
+        console.warn(
+          "[engagements] priced scope not saved — migration 1450 unapplied",
+        );
+      }
+      return engagement as Engagement;
+    }
     if (scopeErr && !isMissingSchema(scopeErr)) throw scopeErr;
     if (scopeErr) {
       console.warn(

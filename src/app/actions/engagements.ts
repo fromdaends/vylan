@@ -196,6 +196,20 @@ const CreateSchema = z
             "yearly",
           ]),
           tax_pct: z.number().min(0).max(100).nullable(),
+          // WHEN the line bills, inherited from its billing block (1740).
+          // OPTIONAL, and that is deliberate: a tab loaded from the previous
+          // deployment does not send it, and creation must not start returning
+          // "invalid" to everyone with a stale tab open — the same deploy-skew
+          // rule the rest of this object follows.
+          billing_timing: z
+            .enum([
+              "on_acceptance",
+              "on_completion",
+              "engagement_start",
+              "custom_date",
+            ])
+            .nullish(),
+          billing_start_date: z.string().trim().min(1).max(20).nullish(),
         }),
       )
       .max(50)
@@ -330,6 +344,13 @@ export async function createEngagementAction(
       rate_type: "item" | "hour";
       billing_frequency: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
       tax_pct: number | null;
+      billing_timing?:
+        | "on_acceptance"
+        | "on_completion"
+        | "engagement_start"
+        | "custom_date"
+        | null;
+      billing_start_date?: string | null;
     }[];
     /** What the work consists of. Optional — a stale tab does not send it. */
     tasks?: {

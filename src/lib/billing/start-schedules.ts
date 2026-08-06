@@ -45,6 +45,9 @@ export type ScannableLine = {
   rate_cents?: unknown;
   rate_type?: unknown;
   name?: unknown;
+  /** WHEN the block said to start (1740). */
+  billing_timing?: unknown;
+  billing_start_date?: unknown;
 };
 
 /**
@@ -79,21 +82,68 @@ export function schedulableFrequencies(
   return [...found];
 }
 
-export async function recurringFrequenciesFor(
+/**
+ * The date a frequency's block said to START billing, if it named one (1740).
+ *
+ * The picker offered "from a date you pick" with nowhere to pick one, so it
+ * silently meant "from the engagement start". Now a block can carry a real date
+ * and this is where it takes effect.
+ *
+ * Only honoured when the line says timing='custom_date'. The EARLIEST such date
+ * wins if two lines in one frequency disagree — billing should begin no later
+ * than any line promised, which is the safe direction for the client.
+ */
+export function customStartFor(
+  lines: readonly ScannableLine[],
+  frequency: ChargeFrequency,
+): string | null {
+  let earliest: string | null = null;
+  for (const line of lines) {
+    if (line.billing_frequency !== frequency) continue;
+    if (line.billing_timing !== "custom_date") continue;
+    const d = line.billing_start_date;
+    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(d)) continue;
+    if (earliest == null || d < earliest) earliest = d.slice(0, 10);
+  }
+  return earliest;
+}
+
+export async function recurringLinesForScan(
   engagementId: string,
-): Promise<ChargeFrequency[]> {
+): Promise<ScannableLine[]> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
+  const full =
+    "billing_frequency, rate_cents, rate_type, name, billing_timing, billing_start_date";
+  const first = await sb
     .from("engagement_items")
-    .select("billing_frequency, rate_cents, rate_type, name")
+    .select(full)
     .eq("engagement_id", engagementId);
-  if (error) {
-    if (!isMissingSchema(error)) {
-      console.error("[billing] frequency scan failed:", error.message);
+  let rows: unknown = first.data;
+  let failure = first.error;
+  // Pre-1740: retry without the timing columns. The schedules still start, they
+  // simply start at the engagement start rather than a custom date — which is
+  // exactly what they did before the columns existed.
+  if (failure && failure.code === "42703") {
+    const legacy = await sb
+      .from("engagement_items")
+      .select("billing_frequency, rate_cents, rate_type, name")
+      .eq("engagement_id", engagementId);
+    rows = legacy.data;
+    failure = legacy.error;
+  }
+  if (failure) {
+    if (!isMissingSchema(failure)) {
+      console.error("[billing] frequency scan failed:", failure.message);
     }
     return [];
   }
-  return schedulableFrequencies((data ?? []) as ScannableLine[]);
+  return (rows ?? []) as ScannableLine[];
+}
+
+export async function recurringFrequenciesFor(
+  engagementId: string,
+): Promise<ChargeFrequency[]> {
+  return schedulableFrequencies(await recurringLinesForScan(engagementId));
 }
 
 export type StartedSchedules = {
@@ -115,7 +165,8 @@ export async function startRecurringSchedules(
 ): Promise<StartedSchedules> {
   const out: StartedSchedules = { started: [], existing: [] };
 
-  const frequencies = await recurringFrequenciesFor(engagementId);
+  const lines = await recurringLinesForScan(engagementId);
+  const frequencies = schedulableFrequencies(lines);
   if (frequencies.length === 0) return out;
 
   const sb = getServiceRoleSupabase();
@@ -142,11 +193,18 @@ export async function startRecurringSchedules(
   startDate = (startRow?.start_date as string | null) ?? null;
 
   // Never bill for a period that has already passed before the client agreed.
-  const firstCharge =
-    startDate && startDate > today ? startDate : today;
-  const anchorDay = Number(firstCharge.slice(8, 10)) || 1;
+  const engagementStart = startDate && startDate > today ? startDate : today;
 
   for (const frequency of frequencies) {
+    // A block that named its own start date wins over the engagement's — that
+    // is the whole point of "from a date you pick" (1740). Still floored at
+    // today, so a date already in the past cannot bill for periods that elapsed
+    // before anyone agreed.
+    const custom = customStartFor(lines, frequency);
+    const firstCharge =
+      custom && custom > today ? custom : engagementStart;
+    const anchorDay = Number(firstCharge.slice(8, 10)) || 1;
+
     const created: BillingSchedule | "duplicate" | null =
       await createBillingScheduleSR({
         firm_id: engagement.firm_id,
