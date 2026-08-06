@@ -34,10 +34,13 @@ function Harness({
   tabs = TABS,
   onFinal = vi.fn(),
   onClose = vi.fn(),
+  withFinal = true,
 }: {
   tabs?: BuilderTab[];
   onFinal?: () => void;
   onClose?: () => void;
+  /** false = the card has nothing it can do, and must not pretend otherwise. */
+  withFinal?: boolean;
 }) {
   // The builder owns the step, exactly as the real ones do — the shell derives
   // done / maxVisited / direction from watching it, and that derivation is
@@ -52,7 +55,9 @@ function Harness({
         tabs={tabs}
         activeTab={step}
         onTabChange={setStep}
-        finalAction={{ label: "Save template", onClick: onFinal }}
+        finalAction={
+          withFinal ? { label: "Save template", onClick: onFinal } : undefined
+        }
         onClose={onClose}
       >
         <p>step body</p>
@@ -158,6 +163,20 @@ describe("the guided wizard", () => {
     render(<Harness onClose={onClose} />);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("draws NO primary button when the card has nothing it can do", () => {
+    // Founder: "there should be no buttons that don't work." The invoice card
+    // hits this when every engagement already has a live invoice — it has an
+    // explanation to give and nothing to offer, and a permanently-greyed
+    // "Draft invoice" under that explanation is furniture shaped like a way
+    // forward. A control disabled by a required field is a different thing:
+    // typing turns it on.
+    render(<Harness tabs={[{ key: "only", label: "New invoice" }]} withFinal={false} />);
+    expect(screen.queryByRole("button", { name: /save template/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /continue/i })).toBeNull();
+    // The way OUT still has to exist, or the card is a trap.
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeTruthy();
   });
 
   describe("a single-step flow (client, invoice, import)", () => {
