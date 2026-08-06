@@ -3151,7 +3151,17 @@
     "services_billing_end_confirm": "Oui — arrêter définitivement",
     "invoice_amount_from_services": "Calculé à partir de vos éléments de service — modifiable au besoin.",
     "invoice_amount_reset": "Utiliser le montant calculé ({amount} $)",
-    "bulk_mark_done": "Marquer terminé"
+    "bulk_mark_done": "Marquer terminé",
+    "board_stat_work_items": "Éléments de travail",
+    "board_stat_budget": "Budget",
+    "board_stat_actual": "Réel",
+    "board_stat_remaining": "Restant",
+    "board_drag_here": "Glissez du travail ici",
+    "board_move_failed": "Impossible de déplacer cette carte. Remise à sa place.",
+    "board_no_due_date": "Aucune échéance",
+    "board_overdue": "en retard",
+    "board_docs": "documents",
+    "board_tasks": "tâches"
   },
   "Attention": {
     "metric_active": "Actifs",

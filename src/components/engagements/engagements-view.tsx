@@ -31,7 +31,15 @@ import {
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { EngagementsBoard } from "@/components/engagements/engagements-board";
+import { CapacityBoard } from "@/components/engagements/board/capacity-board";
+import { BoardStatsBar } from "@/components/engagements/board/board-stats-bar";
+import { computeBoardStats } from "@/lib/engagements/board-stats";
+// From the NEUTRAL module, never from lib/db — that path reaches next/headers
+// and Turbopack refuses to put it in a client bundle.
+import {
+  EMPTY_BOARD_NUMBERS,
+  type BoardNumbers,
+} from "@/lib/engagements/board-numbers";
 import { Columns3, List } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { localDay } from "@/lib/time/dates";
@@ -56,6 +64,8 @@ export function EngagementsView({
   badges,
   teamEnabled,
   assignMembers,
+  boardNumbers = {},
+  boardRateCents = null,
   firmId,
   savedViews = [],
   viewLinks = [],
@@ -70,6 +80,11 @@ export function EngagementsView({
   // Active teammates, so a row can be handed to somebody from its menu. Doubles
   // as the presence roster — the only source of names for a live face on a row.
   assignMembers?: { id: string; name: string }[];
+  /** Budget / actual / rank per engagement id, loaded on the server. */
+  boardNumbers?: Record<string, BoardNumbers>;
+  /** Hourly billable rate in cents, or NULL when this person may not see
+   *  money. Null is the safe default — see computeBoardStats. */
+  boardRateCents?: number | null;
   // Enables live presence on the rows. Absent → no subscription, no faces.
   firmId?: string | null;
   /** This person's saved filter sets for this list (1630). */
@@ -279,17 +294,18 @@ export function EngagementsView({
           after the column menus have filtered and only the table knows that. */}
 
       {viewMode === "board" ? (
-        // The BOARD (timer v2 Part B): same rows, same filters, same search —
-        // a different projection, never a different dataset. Columns per
-        // member; drag = the row menu's reassign. Overdue is judged against
-        // the BROWSER's day here (the accountant's own desk), a deliberate
-        // hair's difference from the table's server-fed day.
-        <EngagementsBoard
+        // The CAPACITY BOARD: same rows, same filters, same search — a
+        // different projection, never a different dataset. Columns per member;
+        // drag reassigns AND reorders. Overdue is judged against the BROWSER's
+        // day here (the accountant's own desk), a deliberate hair's difference
+        // from the table's server-fed day.
+        <BoardSurface
           rows={visible}
           members={assignMembers ?? []}
           locale={locale}
           canReassign={teamEnabled}
-          today={localDay()}
+          boardNumbers={boardNumbers}
+          boardRateCents={boardRateCents}
         />
       ) : (
       <WorklistTable
@@ -335,6 +351,99 @@ export function EngagementsView({
         }
       />
       )}
+    </div>
+  );
+}
+
+
+/**
+ * The board and the numbers above it.
+ *
+ * One component so the stats bar and the columns can never be looking at
+ * different card sets — the handoff is explicit that the bar "aggregates the
+ * currently visible (filtered) cards", and a bar fed from a different array is
+ * a bar quietly answering a different question.
+ */
+function BoardSurface({
+  rows,
+  members,
+  locale,
+  canReassign,
+  boardNumbers,
+  boardRateCents,
+}: {
+  rows: WorklistRow[];
+  members: { id: string; name: string }[];
+  locale: AppLocale;
+  canReassign: boolean;
+  boardNumbers: Record<string, BoardNumbers>;
+  boardRateCents: number | null;
+}) {
+  const t = useTranslations("Engagements");
+  const tStatus = useTranslations("Status");
+
+  const cards = rows.map((row) => ({
+    row,
+    ...(boardNumbers[row.id] ?? EMPTY_BOARD_NUMBERS),
+  }));
+  const stats = computeBoardStats(cards, boardRateCents);
+
+  // First paint only. A board that replayed its entrance on every drop would
+  // be exhausting, so the flag is TRUE for the first 1.4s and false forever
+  // after.
+  //
+  // No matchMedia here: reduced motion is handled in globals.css, where the
+  // .board-card-in / .board-chrome-in rules drop to `animation: none`. Asking
+  // JavaScript as well would mean starting `false` on the server and `true`
+  // after hydration — a className mismatch on every card.
+  const [animate, setAnimate] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAnimate(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="space-y-[18px]">
+      <div className={animate ? "board-chrome-in" : undefined}>
+        <BoardStatsBar
+          stats={stats}
+          locale={locale}
+          animate={animate}
+          labels={{
+            workItems: t("board_stat_work_items"),
+            budget: t("board_stat_budget"),
+            actual: t("board_stat_actual"),
+            remaining: t("board_stat_remaining"),
+            currency: "CAD",
+          }}
+        />
+      </div>
+
+      <CapacityBoard
+        cards={cards}
+        members={members}
+        locale={locale}
+        today={localDay()}
+        canReassign={canReassign}
+        showBudget
+        showEmptyColumns
+        animate={animate}
+        statusLabel={(s) => tStatus(s as "active")}
+        labels={{
+          unassigned: t("board_unassigned"),
+          dragHere: t("board_drag_here"),
+          moveFailed: t("board_move_failed"),
+          card: {
+            budget: t("board_stat_budget"),
+            actual: t("board_stat_actual"),
+            remaining: t("board_stat_remaining"),
+            noDueDate: t("board_no_due_date"),
+            overdue: t("board_overdue"),
+            docs: t("board_docs"),
+            tasks: t("board_tasks"),
+          },
+        }}
+      />
     </div>
   );
 }

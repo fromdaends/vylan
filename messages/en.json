@@ -3151,7 +3151,17 @@
     "services_billing_end_confirm": "Yes — stop billing permanently",
     "invoice_amount_from_services": "Calculated from your service items — change it if you need to.",
     "invoice_amount_reset": "Use the calculated amount (${amount})",
-    "bulk_mark_done": "Mark done"
+    "bulk_mark_done": "Mark done",
+    "board_stat_work_items": "Work items",
+    "board_stat_budget": "Budget",
+    "board_stat_actual": "Actual",
+    "board_stat_remaining": "Remaining",
+    "board_drag_here": "Drag work here",
+    "board_move_failed": "Couldn't move that card. Put back where it was.",
+    "board_no_due_date": "No due date",
+    "board_overdue": "overdue",
+    "board_docs": "docs",
+    "board_tasks": "tasks"
   },
   "Attention": {
     "metric_active": "Active",

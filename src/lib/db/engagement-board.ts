@@ -1,4 +1,11 @@
 import { getServerSupabase } from "@/lib/supabase/server";
+import { resolveBudgetMinutes } from "@/lib/engagements/board-stats";
+// Shared across the server/client boundary, so they live in a module that
+// imports neither side — see the note at the top of board-numbers.ts.
+import type { BoardNumbers } from "@/lib/engagements/board-numbers";
+
+export type { BoardNumbers };
+export { EMPTY_BOARD_NUMBERS } from "@/lib/engagements/board-numbers";
 
 // The capacity board's own numbers: planned hours, worked hours, manual order.
 //
@@ -19,18 +26,6 @@ import { getServerSupabase } from "@/lib/supabase/server";
 // would be the N+1 this repo has already paid for elsewhere, so both halves are
 // batched by engagement id and returned as maps the caller indexes into.
 
-export type BoardNumbers = {
-  /** Planned minutes, or null when nobody has budgeted this job. NULL IS NOT
-   *  ZERO: an unbudgeted job renders "—", because "0h planned" is a claim
-   *  nobody made. */
-  budgetMinutes: number | null;
-  /** Minutes actually worked, summed from time_entries. Zero is honest here —
-   *  nobody has started. */
-  actualMinutes: number;
-  /** Manual position within its column. Null = never dragged; sorts last and
-   *  leaves the list's own ordering alone. */
-  boardRank: number | null;
-};
 
 /**
  * Budget, actual and rank for a set of engagements, keyed by engagement id.
@@ -49,7 +44,8 @@ export async function loadBoardNumbers(
 
   const sb = await getServerSupabase();
 
-  const [{ data: engagements }, { data: entries }] = await Promise.all([
+  const [{ data: engagements }, { data: entries }, { data: items }] =
+    await Promise.all([
     // `select("*")` deliberately: naming budget_minutes / board_rank would make
     // this query FAIL on a database where 1790 has not run yet, taking the whole
     // board down rather than degrading. A star select simply does not carry the
@@ -59,7 +55,15 @@ export async function loadBoardNumbers(
       .from("time_entries")
       .select("engagement_id, duration_minutes")
       .in("engagement_id", engagementIds),
-  ]);
+    // The priced lines, so a budget can be ASSEMBLED from the services the job
+    // actually sells — the founder's ruling over a number typed per job. The
+    // nested select reaches the catalogue's duration in one round trip rather
+    // than one per engagement.
+    sb
+      .from("engagement_items")
+      .select("engagement_id, service_id, firm_services(budget_minutes)")
+      .in("engagement_id", engagementIds),
+    ]);
 
   const worked = new Map<string, number>();
   for (const e of (entries ?? []) as {
@@ -73,10 +77,38 @@ export async function loadBoardNumbers(
     );
   }
 
+  // Per engagement, the duration of each service line — nulls KEPT, because
+  // "three services, none timed" and "no services" are different answers and
+  // only one of them may total to a number. See resolveBudgetMinutes.
+  const serviceMinutes = new Map<string, (number | null)[]>();
+  for (const raw of (items ?? []) as unknown[]) {
+    const it = raw as {
+      engagement_id?: string | null;
+      // PostgREST returns an OBJECT for a many-to-one embed, but the generated
+      // types say array. Both are handled rather than cast away, because the
+      // wrong guess here silently gives every engagement a null budget.
+      firm_services?:
+        | { budget_minutes?: number | null }
+        | { budget_minutes?: number | null }[]
+        | null;
+    };
+    if (!it.engagement_id) continue;
+    const svc = Array.isArray(it.firm_services)
+      ? it.firm_services[0]
+      : it.firm_services;
+    const list = serviceMinutes.get(it.engagement_id) ?? [];
+    list.push(numberOrNull(svc?.budget_minutes));
+    serviceMinutes.set(it.engagement_id, list);
+  }
+
   for (const row of (engagements ?? []) as Record<string, unknown>[]) {
     const id = String(row.id);
     out.set(id, {
-      budgetMinutes: numberOrNull(row.budget_minutes),
+      budgetMinutes: resolveBudgetMinutes({
+        // A number here means somebody disagreed with the sum for this job.
+        overrideMinutes: numberOrNull(row.budget_minutes),
+        serviceMinutes: serviceMinutes.get(id) ?? [],
+      }),
       actualMinutes: worked.get(id) ?? 0,
       boardRank: numberOrNull(row.board_rank),
     });
@@ -84,11 +116,6 @@ export async function loadBoardNumbers(
   return out;
 }
 
-export const EMPTY_BOARD_NUMBERS: BoardNumbers = {
-  budgetMinutes: null,
-  actualMinutes: 0,
-  boardRank: null,
-};
 
 /** Guards against the column being absent (pre-1790) AND against a string
  *  arriving from a numeric type, which PostgREST does for some of them. */
