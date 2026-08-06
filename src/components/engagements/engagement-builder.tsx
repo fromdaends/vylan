@@ -142,7 +142,14 @@ type KnownErrorKey =
   | "invoice_amount_required"
   | "invoice_attachment_too_large"
   | "invoice_attachment_type"
-  | "invoice_attachment_upload_error";
+  | "invoice_attachment_upload_error"
+  // Two DIFFERENT walls, and they need different actions from the accountant:
+  // the plan's active-engagement cap is full (finish or archive something), or
+  // the free trial lapsed (book a call). Both were previously absent from this
+  // union AND the set below, so the server's code rendered on screen as the raw
+  // string `plan_limit_reached` — at the exact moment somebody is blocked.
+  | "plan_limit_reached"
+  | "trial_expired";
 // Next year down to 6 back — the practical range for a new engagement (late
 // prior-year filings included) without a free-text year field.
 const TAX_YEAR_OPTIONS = (() => {
@@ -162,6 +169,8 @@ const KNOWN_ERRORS = new Set<string>([
   "invoice_attachment_too_large",
   "invoice_attachment_type",
   "invoice_attachment_upload_error",
+  "plan_limit_reached",
+  "trial_expired",
 ]);
 
 // Imported and re-exported, NOT re-declared: this file used to carry its own
