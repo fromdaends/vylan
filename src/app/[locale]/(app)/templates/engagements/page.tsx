@@ -110,8 +110,6 @@ export default async function EngagementTemplatesPage({
                   name={tmpl.name}
                   type={tmpl.payload.type ?? "custom"}
                   meta={metaFor(tmpl)}
-                  isDraft={tmpl.payload.isDraft}
-                  isPrivate={tmpl.access === "private"}
                 />
               ),
             })),

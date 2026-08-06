@@ -81,7 +81,6 @@ export function TaskTemplateCatalogue({
                 key={tpl.id}
                 id={tpl.id}
                 name={tpl.name}
-                isPrivate={tpl.access === "private"}
                 meta={[
                   tpl.payload.subtasks.map((x) => x.title).join(" · "),
                   tpl.payload.checklist.length > 0

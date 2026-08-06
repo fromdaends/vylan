@@ -785,9 +785,6 @@ export function EngagementBuilder({
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  // Open by default, like every template builder. The eye in the tab bar hides
-  // it for anyone who wants the full width for the form.
-  const [previewOpen, setPreviewOpen] = useState(true);
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   // Load a saved engagement template into the form. Everything it carries is
