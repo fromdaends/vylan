@@ -135,6 +135,58 @@ export async function listEntriesForClient(
   return ((data ?? []) as unknown as JoinedRow[]).map(withNames);
 }
 
+/** Every FINISHED entry in the firm since `startIso` (null = all time) — the
+ *  Insights aggregation read. Slim columns on purpose: no note (nothing in
+ *  Insights renders one) and, as everywhere in this module, no dollar field.
+ *  Paginated because "all time" on a busy firm outgrows one page; capped far
+ *  above any real firm so a runaway can't loop forever. */
+export async function listEntriesForInsights(
+  startIso: string | null,
+): Promise<
+  {
+    id: string;
+    user_id: string;
+    client_id: string;
+    engagement_id: string | null;
+    started_at: string;
+    duration_minutes: number;
+  }[]
+> {
+  const supabase = await getServerSupabase();
+  const PAGE = 1000;
+  const MAX_ROWS = 50_000;
+  const out: {
+    id: string;
+    user_id: string;
+    client_id: string;
+    engagement_id: string | null;
+    started_at: string;
+    duration_minutes: number;
+  }[] = [];
+  for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
+    let q = supabase
+      .from("time_entries")
+      .select("id, user_id, client_id, engagement_id, started_at, duration_minutes")
+      .is("deleted_at", null)
+      .not("ended_at", "is", null)
+      .order("started_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (startIso) q = q.gte("started_at", startIso);
+    const { data, error } = await q;
+    if (error) {
+      if (!isMissingSchema(error)) {
+        console.error("[time-entries] insights list failed:", error);
+      }
+      return out;
+    }
+    const rows = (data ?? []) as typeof out;
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 /** Start a timer for the caller. The action layer stops any running timer
  *  first; the DB's partial unique index is the backstop the action cannot
  *  race. 23505 from that index surfaces as `conflict` so the action can stop
