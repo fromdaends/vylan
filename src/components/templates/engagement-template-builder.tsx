@@ -32,6 +32,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { useRouter } from "@/i18n/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -390,7 +391,21 @@ export function EngagementTemplateBuilder({
         );
         return;
       }
-      router.push("/templates/engagements");
+      // Hand the listing three things: which tab this landed in, and which row
+      // to flash. A save that drops you on an unfiltered list of thirty makes
+      // you hunt for the thing you just made — and on the wrong tab it reads as
+      // a save that did not happen.
+      const landedIn = asDraft ? "draft" : access;
+      const params = new URLSearchParams({ tab: landedIn });
+      if (res.id) params.set("saved", res.id);
+      toast.success(
+        asDraft
+          ? t("draft_saved_toast")
+          : t("template_saved_toast", {
+              access: access === "team" ? t("access_team") : t("access_private"),
+            }),
+      );
+      router.push(`/templates/engagements?${params}`);
     });
   }
 

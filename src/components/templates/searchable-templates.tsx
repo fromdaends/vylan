@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { TemplatesPageHeader } from "./templates-chrome";
 import { TemplateRowList } from "./template-row";
@@ -104,7 +105,19 @@ export function SearchableTemplates({
   const [query, setQuery] = useState("");
   const shownTabs = tabs ?? [];
   const hasTabs = shownTabs.length > 0;
-  const [tab, setTab] = useState<TabName>(shownTabs[0] ?? "team");
+
+  // ── ARRIVING FROM A SAVE ───────────────────────────────────────────────
+  //
+  // The builder pushes ?tab=<where it landed>, so a template saved as Private
+  // opens the list ON Private rather than on Team with the row apparently
+  // missing. Read once as the INITIAL state rather than watched: after that
+  // first render the tab is yours, and a URL that kept re-asserting itself
+  // would fight every click.
+  const params = useSearchParams();
+  const landedIn = params.get("tab");
+  const [tab, setTab] = useState<TabName>(
+    shownTabs.find((x) => x === landedIn) ?? shownTabs[0] ?? "team",
+  );
 
   const q = query.trim().toLowerCase();
 
@@ -192,7 +205,7 @@ export function SearchableTemplates({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("search_placeholder")}
             aria-label={t("search_placeholder")}
-            className="h-8 w-full rounded-lg border border-border bg-card pr-3 pl-8 text-[13px] text-foreground transition-shadow placeholder:text-muted-foreground/75 focus-visible:border-accent focus-visible:shadow-[0_0_0_3px_var(--accent-subtle)] focus-visible:outline-none"
+            className="h-8 w-full rounded-[8px] border border-border bg-card pr-3 pl-8 text-[13px] text-foreground transition-shadow placeholder:text-muted-foreground/75 focus-visible:border-accent focus-visible:shadow-[0_0_0_3px_var(--accent-subtle)] focus-visible:outline-none"
           />
         </div>
       </div>

@@ -54,6 +54,7 @@ export function TemplateRow({
   onSelect,
   actions = [],
   dimmed = false,
+  fresh = false,
 }: {
   icon: LucideIcon;
   name: string;
@@ -80,6 +81,15 @@ export function TemplateRow({
   actions?: TemplateRowAction[];
   /** Archived or otherwise inactive — same row, quieter. */
   dimmed?: boolean;
+  /**
+   * You just made this one. Flashes accent-subtle → transparent over 1.8s and
+   * then is an ordinary row forever.
+   *
+   * A one-shot animation rather than a state: the point is to catch your eye
+   * on arrival, and a row that stayed marked would still be marked tomorrow,
+   * when "new" has stopped being true.
+   */
+  fresh?: boolean;
 }) {
   const t = useTranslations("Templates");
 
@@ -115,6 +125,7 @@ export function TemplateRow({
         // bordered cards with a gap; one card with dividers is quieter and
         // scans as a list rather than as a pile.
         "group flex items-center gap-3.5 border-t border-border px-4 py-[13px] transition-colors first:border-t-0 hover:bg-muted/55",
+        fresh && "wizard-row-fresh",
         // Only when the row actually goes somewhere — a pointer on a row that
         // does nothing is a promise it cannot keep.
         (href || onSelect) && "cursor-pointer",

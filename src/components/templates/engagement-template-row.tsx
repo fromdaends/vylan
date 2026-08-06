@@ -20,11 +20,14 @@ export function EngagementTemplateRow({
   name,
   type,
   meta,
+  fresh = false,
 }: {
   id: string;
   name: string;
   type: string;
   meta: string;
+  /** Just saved from the wizard — flashes once. */
+  fresh?: boolean;
 }) {
   const t = useTranslations("Templates");
   const router = useRouter();
@@ -38,6 +41,7 @@ export function EngagementTemplateRow({
       name={name}
       meta={meta}
       href={href}
+      fresh={fresh}
       // NO access badge. The pills above the list already separate Team,
       // Private and Drafts, so a "PRIVATE" chip on every row of the Private tab
       // said the same word as many times as there were rows. Colour and chips

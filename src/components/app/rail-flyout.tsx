@@ -339,17 +339,20 @@ export function RailPopover({
   onClose: (opts?: { restoreFocus?: boolean }) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [top, setTop] = useState(anchorTop);
+  // Both in STATE, not read off the ref at render time. The clamp and the
+  // caret need a height the box does not have until it has been laid out once,
+  // and reading a ref during render is how you get a value from the previous
+  // open — or, on the first one, nothing at all.
+  const [box, setBox] = useState({ top: anchorTop, height: 0 });
 
-  // Measured AFTER layout, because the clamp needs a height the box does not
-  // have until it has been laid out once. useLayoutEffect rather than
-  // useEffect so the correction lands before the browser paints — with the
-  // async version an over-hanging popover visibly jumps up.
+  // useLayoutEffect rather than useEffect so the correction lands before the
+  // browser paints — with the async version an over-hanging popover visibly
+  // jumps up after you have already seen it in the wrong place.
   useLayoutEffect(() => {
     if (!open) return;
-    const h = ref.current?.offsetHeight ?? 0;
-    const max = Math.max(8, window.innerHeight - h - 8);
-    setTop(Math.min(Math.max(8, anchorTop), max));
+    const height = ref.current?.offsetHeight ?? 0;
+    const max = Math.max(8, window.innerHeight - height - 8);
+    setBox({ top: Math.min(Math.max(8, anchorTop), max), height });
   }, [open, anchorTop, items.length, actions?.length]);
 
   useEffect(() => {
@@ -385,9 +388,12 @@ export function RailPopover({
   // Where the caret sits on the popover's own left edge — chased back to the
   // trigger after any clamping, so it keeps pointing at the tab that opened it
   // rather than at whatever happens to be beside it.
+  // 200 is the pre-measurement fallback: the first frame is drawn before the
+  // layout effect has run, and a caret pinned to 14 would visibly slide down
+  // on the second. A rough middle is invisible; a jump is not.
   const caretTop = Math.min(
-    Math.max(14, anchorTop - top + 18),
-    (ref.current?.offsetHeight ?? 200) - 24,
+    Math.max(14, anchorTop - box.top + 18),
+    (box.height || 200) - 24,
   );
 
   return (
@@ -396,7 +402,7 @@ export function RailPopover({
       role="menu"
       aria-label={title}
       style={{
-        top,
+        top: box.top,
         // The box grows OUT of the tab: the origin is the caret, not the
         // corner, which is the difference between expanding and sliding.
         transformOrigin: `0 ${caretTop}px`,
