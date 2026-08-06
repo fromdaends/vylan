@@ -3286,8 +3286,6 @@
     "template_empty_error": "Give the template a name and an engagement name before saving.",
     "preview_sample_client": "Sample Client Inc.",
     "preview_untitled": "Untitled engagement",
-    "preview_begins_acceptance": "{period}, beginning when the client accepts",
-    "preview_begins_custom": "{period}, beginning on a date you pick",
     "preview_no_intro": "No introductory items",
     "preview_no_intro_hint": "Your welcome message will appear here",
     "preview_no_services": "No services",

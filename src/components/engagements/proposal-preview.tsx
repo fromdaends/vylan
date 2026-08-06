@@ -384,10 +384,13 @@ export function ProposalPreview({
             <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
               {t("doc_period_label")}
             </p>
+            {/* JUST the period. It read "Ongoing, beginning when the client
+                accepts" — which on the CLIENT's own copy addressed them in the
+                third person, and restated what the Acceptance section says
+                properly a few inches below. The founder: "get rid of
+                'beginning when the client accepts', keep just 'Ongoing'." */}
             <p className={cn("font-medium", isDocument ? "mt-1 text-[15px]" : "text-[11px]")}>
-              {data.periodStartsOn === "acceptance"
-                ? t("preview_begins_acceptance", { period: periodLabel })
-                : t("preview_begins_custom", { period: periodLabel })}
+              {periodLabel}
             </p>
           </div>
         </div>

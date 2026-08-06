@@ -125,77 +125,79 @@ export function ProposalAcceptance({
       </div>
 
       {/* ── THE DECISION ─────────────────────────────────────────────────
-          Same measure as the sheet above it, so the page has ONE column. It
-          used to be wider than the contract it was accepting, which is the
-          detail that made the contract look like a preview of itself. */}
-      <div className="mx-auto mt-6 w-full max-w-[47rem] rounded-2xl border border-border bg-card p-5 sm:p-6">
+          The founder: the accept buttons "look super skinny and weird".
+
+          They were `size="lg"` in a row that let the primary shrink to
+          `flex-1` beside a ghost button, so the most consequential control on
+          the page ended up the same weight as a toolbar action. This is the one
+          thing the client is here to do: it gets a full-width, tall, obviously
+          pressable button, with the decline as a quiet text link UNDER it
+          rather than a sibling competing for the same row. */}
+      <div className="mx-auto mt-6 w-full max-w-[47rem] rounded-2xl border border-border bg-card p-6 sm:p-8">
         {!confirming && !declining && (
           <>
-            <p className="text-sm leading-relaxed">{t("proposal_agree_note")}</p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
-              <Button
+            <p className="text-[15px] leading-relaxed">
+              {t("proposal_agree_note")}
+            </p>
+            <Button
+              type="button"
+              className="mt-5 h-14 w-full rounded-xl text-base font-semibold shadow-sm transition-transform active:scale-[0.99]"
+              disabled={pending}
+              onClick={() => setConfirming(true)}
+            >
+              {t("proposal_accept")}
+            </Button>
+            {!declinedAt && (
+              <button
                 type="button"
-                size="lg"
-                className="flex-1"
                 disabled={pending}
-                onClick={() => setConfirming(true)}
+                onClick={() => setDeclining(true)}
+                className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
               >
-                {t("proposal_accept")}
-              </Button>
-              {!declinedAt && (
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="ghost"
-                  className="sm:flex-none"
-                  disabled={pending}
-                  onClick={() => setDeclining(true)}
-                >
-                  {t("proposal_decline")}
-                </Button>
-              )}
-            </div>
+                {t("proposal_decline")}
+              </button>
+            )}
           </>
         )}
 
         {confirming && (
           <>
-            <p className="text-sm font-medium">{t("proposal_confirm_title")}</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            <p className="text-base font-semibold">
+              {t("proposal_confirm_title")}
+            </p>
+            <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
               {t("proposal_confirm_body", { firm: firmName })}
             </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
-              <Button
-                type="button"
-                size="lg"
-                className="flex-1"
-                disabled={pending}
-                onClick={accept}
-              >
-                {pending ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <CheckCircle2 className="size-4" aria-hidden />
-                )}
-                {t("proposal_confirm_accept")}
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="ghost"
-                disabled={pending}
-                onClick={() => setConfirming(false)}
-              >
-                {t("proposal_back")}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              className="mt-5 h-14 w-full rounded-xl text-base font-semibold shadow-sm transition-transform active:scale-[0.99]"
+              disabled={pending}
+              onClick={accept}
+            >
+              {pending ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden />
+              ) : (
+                <CheckCircle2 className="size-5" aria-hidden />
+              )}
+              {t("proposal_confirm_accept")}
+            </Button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setConfirming(false)}
+              className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {t("proposal_back")}
+            </button>
           </>
         )}
 
         {declining && (
           <>
-            <p className="text-sm font-medium">{t("proposal_decline_title")}</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            <p className="text-base font-semibold">
+              {t("proposal_decline_title")}
+            </p>
+            <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
               {t("proposal_decline_body")}
             </p>
             <Textarea
@@ -206,28 +208,27 @@ export function ProposalAcceptance({
               rows={3}
               className="mt-3"
             />
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row-reverse">
-              {/* Never disabled on an empty reason: a client who will not
-                  explain must still be able to say no. */}
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                disabled={pending}
-                onClick={decline}
-              >
-                {t("proposal_decline_send")}
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                variant="ghost"
-                disabled={pending}
-                onClick={() => setDeclining(false)}
-              >
-                {t("proposal_back")}
-              </Button>
-            </div>
+            {/* Never disabled on an empty reason: a client who will not
+                explain must still be able to say no. Outline rather than the
+                filled primary — saying no should be easy to do and not the
+                thing the page is pushing you toward. */}
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5 h-14 w-full rounded-xl text-base font-semibold transition-transform active:scale-[0.99]"
+              disabled={pending}
+              onClick={decline}
+            >
+              {t("proposal_decline_send")}
+            </Button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setDeclining(false)}
+              className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {t("proposal_back")}
+            </button>
           </>
         )}
 
