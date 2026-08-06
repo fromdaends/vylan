@@ -159,3 +159,60 @@ describe("computeBillingTotals — due on acceptance", () => {
     expect(t.dueOnAcceptanceCents).toBe(50_000);
   });
 });
+
+describe("the headline total is the ONE-TIME money only", () => {
+  it("does not add a monthly rate into the engagement total", () => {
+    // A $4,000 setup plus $500/month printed "Engagement total $4,500" on the
+    // client's proposal. That is not a total of anything — one number is once
+    // and the other is per month forever.
+    const totals = computeBillingTotals([
+      item({ name: "Setup", rateCents: 400_000, billingFrequency: "once", taxPct: 0 }),
+      item({ name: "Bookkeeping", rateCents: 50_000, billingFrequency: "monthly", taxPct: 0 }),
+    ]);
+    expect(totals.oneTimeTotalCents).toBe(400_000);
+    expect(totals.oneTimeDetermined).toBe(true);
+    // The old cross-frequency sum still exists for internal use, and is still
+    // the misleading number — which is exactly why nothing client-facing shows
+    // it any more.
+    expect(totals.totalCents).toBe(450_000);
+  });
+
+  it("reads $0 up front for a purely recurring arrangement", () => {
+    // "Nothing due up front" is a real, stateable answer — not unknown.
+    const totals = computeBillingTotals([
+      item({ name: "Bookkeeping", rateCents: 50_000, billingFrequency: "monthly", taxPct: 0 }),
+    ]);
+    expect(totals.oneTimeTotalCents).toBe(0);
+    expect(totals.oneTimeDetermined).toBe(true);
+  });
+
+  it("carries tax on the one-time lines into the headline", () => {
+    const totals = computeBillingTotals([
+      item({ name: "Setup", rateCents: 100_000, billingFrequency: "once", taxPct: 10 }),
+      item({ name: "Monthly", rateCents: 50_000, billingFrequency: "monthly", taxPct: 10 }),
+    ]);
+    expect(totals.oneTimeSubtotalCents).toBe(100_000);
+    expect(totals.oneTimeTaxCents).toBe(10_000);
+    expect(totals.oneTimeTotalCents).toBe(110_000);
+  });
+
+  it("is UNDETERMINED when a one-time line has no rate", () => {
+    const totals = computeBillingTotals([
+      item({ name: "Setup", rateCents: 400_000, billingFrequency: "once", taxPct: 0 }),
+      item({ name: "Advisory", rateCents: null, billingFrequency: "once", taxPct: 0 }),
+    ]);
+    expect(totals.oneTimeDetermined).toBe(false);
+  });
+
+  it("stays determined when only a RECURRING line is unpriced", () => {
+    // An unknown monthly rate does not make the up-front figure unknown.
+    const totals = computeBillingTotals([
+      item({ name: "Setup", rateCents: 400_000, billingFrequency: "once", taxPct: 0 }),
+      item({ name: "Advisory", rateCents: null, billingFrequency: "monthly", taxPct: 0 }),
+    ]);
+    expect(totals.oneTimeDetermined).toBe(true);
+    expect(totals.oneTimeTotalCents).toBe(400_000);
+    // The cross-frequency `determined` is still false, correctly.
+    expect(totals.determined).toBe(false);
+  });
+});

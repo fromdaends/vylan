@@ -60,7 +60,32 @@ export type BillingTotals = {
   determined: boolean;
   subtotalCents: number;
   taxCents: number;
+  /**
+   * ⚠️ EVERY FREQUENCY ADDED TOGETHER, WHICH IS NOT A PRICE ANYONE PAYS.
+   *
+   * A $4,000 setup plus $500/month came out as "Engagement total $4,500" — on
+   * the client's proposal, with prices visible by default. That is not a total
+   * of anything: the two numbers are in different units, one is once and the
+   * other is per month forever.
+   *
+   * Kept because the sum is occasionally useful internally (a rough order-of-
+   * magnitude, a sanity check), and REMOVED from every client-facing surface.
+   * Show `oneTimeTotalCents` as the headline and let each recurring cycle state
+   * itself. Do not put this number in front of a client.
+   */
   totalCents: number;
+  /**
+   * What is actually payable up front — the one-time lines only.
+   *
+   * This is the "Engagement total" a client can be held to. Recurring cycles
+   * are stated separately, in their own units, because "$500/month" is a rate
+   * and not an amount.
+   */
+  oneTimeSubtotalCents: number;
+  oneTimeTaxCents: number;
+  oneTimeTotalCents: number;
+  /** False when a one-time line has no rate, so the headline cannot be stated. */
+  oneTimeDetermined: boolean;
   /** What the client pays to make it live. Null when no deposit is required. */
   dueOnAcceptanceCents: number | null;
 };
@@ -116,9 +141,19 @@ export function computeBillingTotals(
   const subtotalCents = groups.reduce((n, g) => n + g.subtotalCents, 0);
   const taxCents = groups.reduce((n, g) => n + g.taxCents, 0);
 
+  // The one-time group on its own. This is the number a client can be held to;
+  // adding "$500/month" to it produces a figure in no unit at all.
+  const once = groups.find((g) => g.frequency === "once");
+
   const deposit = opts.depositCents;
   return {
     groups,
+    oneTimeSubtotalCents: once?.subtotalCents ?? 0,
+    oneTimeTaxCents: once?.taxCents ?? 0,
+    oneTimeTotalCents: once?.totalCents ?? 0,
+    // No one-time lines at all is "determined": the answer is zero up front,
+    // which is a real and stateable answer for a purely recurring arrangement.
+    oneTimeDetermined: once ? once.determined : true,
     // One unknown anywhere makes the engagement total unknown. Saying "$4,000"
     // when a fourth line is "hourly, TBD" is the misleading answer.
     determined: groups.every((g) => g.determined),

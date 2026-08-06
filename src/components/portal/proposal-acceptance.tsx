@@ -106,9 +106,22 @@ export function ProposalAcceptance({
           rendered inside the builder's preview card, which is wider than this
           and had 448px of proposal floating in the middle of it — so the
           container decides, and this container is a client reading a document
-          on a phone or a laptop. */}
-      <div className="mx-auto w-full max-w-md">
-        <ProposalPreview data={data} locale={locale} activeStep="sign" />
+          on a phone or a laptop.
+
+          FULL WIDTH, not max-w-md. 448px was a SIDE-PANE measurement that
+          followed the component here: the contract rendered as a narrow strip of
+          small type, NARROWER than the Accept/Decline box directly beneath it,
+          which is the giveaway that the number came from somewhere else. This is
+          the widest thing on the page because it is the thing they are here to
+          read. */}
+      <div className="w-full">
+        <ProposalPreview
+          data={data}
+          locale={locale}
+          activeStep="sign"
+          // The client's copy: nothing clamped, no inert "Get started" chip.
+          variant="document"
+        />
       </div>
 
       {/* ── THE DECISION ───────────────────────────────────────────────── */}

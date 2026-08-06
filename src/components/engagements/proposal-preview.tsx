@@ -114,11 +114,32 @@ export function ProposalPreview({
   locale,
   /** Which step the reader is looking at, so the builder can follow its tabs. */
   activeStep = "introduction",
+  variant = "preview",
 }: {
   data: ProposalPreviewData;
   locale: "en" | "fr";
   activeStep?: (typeof STEPS)[number];
+  /**
+   * WHO IS READING THIS.
+   *
+   * "preview" — the firm, in a narrow side pane beside the builder. A thumbnail
+   *   of the document: terms clamped so one long clause cannot push the rest of
+   *   the proposal off screen, and Canopy's own "Get started" chip drawn inert
+   *   because the pane is a picture, not a flow.
+   *
+   * "document" — the CLIENT, on the page where they accept or decline. This is
+   *   the contract itself and it has to be readable: nothing clamped, and no
+   *   disabled button, because a greyed-out control sitting directly above the
+   *   real Accept button is furniture shaped like a way forward.
+   *
+   * A PROP, not a second component. The whole reason this was pulled out of the
+   * builder is that the firm's preview and the client's copy must be the same
+   * markup — the moment they are two files, a preview stops meaning anything.
+   * CLAUDE.md's rule, and client-team-editor's precedent.
+   */
+  variant?: "preview" | "document";
 }) {
+  const isDocument = variant === "document";
   const t = useTranslations("Templates");
 
   const money = (cents: number) =>
@@ -380,7 +401,16 @@ export function ProposalPreview({
                   {section.heading.trim() && (
                     <p className="text-xs font-medium">{section.heading}</p>
                   )}
-                  <p className="line-clamp-6 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                  {/* NEVER clamped for the client. A real scope or liability
+                      clause runs well past six lines, and the clamp had no
+                      expand control anywhere — so the person being asked to
+                      agree could not read what they were agreeing to. */}
+                  <p
+                    className={cn(
+                      "whitespace-pre-wrap leading-relaxed text-muted-foreground",
+                      isDocument ? "text-sm" : "line-clamp-6 text-xs",
+                    )}
+                  >
                     {section.body}
                   </p>
                 </div>
@@ -424,15 +454,23 @@ export function ProposalPreview({
           </div>
         </Section>
 
-        {/* Canopy's own call to action at the foot of the document. */}
-        <button
-          type="button"
-          disabled
-          className="ml-auto flex items-center gap-1 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
-        >
-          {t("preview_get_started")}
-          <ChevronRight className="size-3.5" aria-hidden />
-        </button>
+        {/* Canopy's own call to action at the foot of the document — a PICTURE
+            of one, which is why it is disabled.
+
+            Never rendered on the client's copy. There it sat greyed out
+            directly above the real Accept button: a control that looks like the
+            way forward and does nothing, immediately above the one that is. The
+            client's page has its own Accept and Decline. */}
+        {!isDocument && (
+          <button
+            type="button"
+            disabled
+            className="ml-auto flex items-center gap-1 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground"
+          >
+            {t("preview_get_started")}
+            <ChevronRight className="size-3.5" aria-hidden />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -95,14 +95,25 @@ export function BillingTotalsPanel({
           </div>
         ))}
 
+      {/* ⚠️ THE HEADLINE IS THE ONE-TIME MONEY, NOT EVERY FREQUENCY SUMMED.
+
+          This used to print totals.totalCents, so a $4,000 setup plus $500/month
+          read "Engagement total $4,500" — on the client's proposal, with prices
+          visible by default. That is not a total of anything: one number is once
+          and the other is per month forever, and a client held to it would be
+          right to dispute it.
+
+          Each recurring cycle already states itself above, in its own units.
+          Shown even at zero when there ARE recurring lines, because "$0.00 due
+          up front" is the honest headline for a purely monthly arrangement. */}
       {showTotal && (
         <div className="border-t border-border pt-2">
           <Row
             strong
             label={t("totals_engagement_total")}
             value={
-              totals.determined ? (
-                money(totals.totalCents)
+              totals.oneTimeDetermined ? (
+                money(totals.oneTimeTotalCents)
               ) : (
                 <span>{t("totals_tbd")}</span>
               )
