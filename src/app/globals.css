@@ -1701,3 +1701,49 @@
     transition: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE TIME PAGE — /time
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Motion for the week / day / month views, per
+   `design_handoff_time_page/README.md`. Here rather than in the components so
+   "change how the Time page feels" stays one edit — the same reason the wizard
+   and the capacity board keep theirs here.
+
+   Colour never appears below: the handoff's oklch literals were sampled from
+   the light theme, and the components reach for tokens instead. */
+
+@keyframes time-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The running timer's clock and dot. A slow breath, not a blink — it has to
+   read as "still going" from across a desk without pulling the eye off the
+   thing being worked on. */
+@keyframes time-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.time-card-in {
+  animation: time-card-in 450ms cubic-bezier(0.22, 0.8, 0.26, 1) both;
+}
+
+.time-pulse {
+  animation: time-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The entrance goes. The PULSE STAYS but stops moving — it is the only
+     thing on the page saying a timer is still running, and removing it would
+     take information away rather than motion. It holds at full opacity. */
+  .time-card-in {
+    animation: none;
+  }
+  .time-pulse {
+    animation: none;
+    opacity: 1;
+  }
+}
