@@ -482,6 +482,29 @@ export async function loadPortalContext(
     getThreadForClient(sb, engagement.client_id),
     readDepositState(engagement.id),
   ]);
+
+  // Sign the proposal's uploaded intro files, if it has any. Only reached for an
+  // engagement carrying a proposal, and skipped entirely when nothing was
+  // uploaded — which is most of them.
+  const introHrefByPath = new Map<string, string>();
+  {
+    const snap = (engagement as Record<string, unknown>).proposal as
+      | Record<string, unknown>
+      | null;
+    const introPaths = [snap?.videoPath, snap?.documentPath].filter(
+      (x): x is string => typeof x === "string" && x.trim().length > 0,
+    );
+    if (introPaths.length > 0) {
+      const { data: signed } = await sb.storage
+        .from(BUCKET)
+        .createSignedUrls(introPaths, 60 * 60 * 4);
+      for (const row of signed ?? []) {
+        if (row.signedUrl && !row.error && row.path) {
+          introHrefByPath.set(row.path, row.signedUrl);
+        }
+      }
+    }
+  }
   if (
     msgRows !== CLIENT_MESSAGING_SCHEMA_MISSING &&
     msgThread !== CLIENT_MESSAGING_SCHEMA_MISSING
@@ -575,7 +598,21 @@ export async function loadPortalContext(
       const data = readProposalSnapshot(e.proposal, (client as Client).display_name);
       if (!proposalIsPresentable(data)) return null;
       return {
-        data,
+        // The uploaded intro video / document, made openable.
+        //
+        // The firm could attach a real file and the client was shown literally
+        // nothing of it — and if the video was the only thing in the
+        // introduction, they got the "no introduction" empty state instead.
+        //
+        // Signed HERE, with the same batch signer that already hands the client
+        // their own files, rather than through a new /r/[token]/file route:
+        // there is then no second way to hand out a storage object and no new
+        // surface to get the authorisation wrong on.
+        data: {
+          ...data,
+          videoHref: introHrefByPath.get(data.videoPath ?? "") ?? null,
+          documentHref: introHrefByPath.get(data.documentPath ?? "") ?? null,
+        },
         declinedAt: typeof e.declined_at === "string" ? e.declined_at : null,
       };
     })(),
