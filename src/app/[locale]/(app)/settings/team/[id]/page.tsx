@@ -45,6 +45,10 @@ import { formatDate } from "@/lib/format";
 import { listFirmRoles, listRoleIdsForUser } from "@/lib/db/firm-roles";
 import { MemberRoles } from "@/components/settings/team/member-roles";
 import { RoleBadges } from "@/components/settings/team/role-badge";
+import { MemberRates } from "@/components/settings/team/member-rates";
+import { can } from "@/lib/auth/capabilities";
+import { isTimeInsightsEnabled } from "@/lib/time/flags";
+import { listUserRates } from "@/lib/db/user-rates";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +112,17 @@ export default async function TeamMemberProfilePage({
   const members = await listFirmUsers();
   const member = members.find((m) => m.id === id);
   if (!member) notFound();
+
+  // Hourly rates (1750). Gated on the CAPABILITY, never the owner rank — the
+  // founder: "billing rates could be transferred over to, like, a senior
+  // manager... roles only." listUserRates runs as the viewer, so a non-holder
+  // reaching this line anyway gets [] from RLS and the panel simply shows
+  // empty fields it cannot save.
+  const canSeeRates =
+    isTimeInsightsEnabled(firm) && can(user, "rates.manage");
+  const memberRate = canSeeRates
+    ? (await listUserRates()).find((r) => r.user_id === id) ?? null
+    : null;
 
   // Two engagement scopes at most, and usually one: loadEngagementWorklist is
   // React.cache'd per scope, so active/ready/completed all resolve to the same
@@ -378,6 +393,31 @@ export default async function TeamMemberProfilePage({
             )}
           </dl>
         </Panel>
+
+        {/* HOURLY RATES (1750) — quiet, in the rail, on the object it acts on,
+            like every other member control. Rendered for rates.manage HOLDERS
+            (a role permission, not the owner rank); everyone else never sees
+            the panel and could not read the table behind it anyway. Not on a
+            deactivated member: their history keeps its snapshots, and a rate
+            for someone who logs no more hours would only be a number to
+            mis-read. */}
+        {canSeeRates && !member.deactivated_at && (
+          <Panel title={t("rates_title")}>
+            <MemberRates
+              userId={id}
+              initialCostCents={
+                memberRate?.cost_rate_hourly == null
+                  ? null
+                  : Math.round(Number(memberRate.cost_rate_hourly) * 100)
+              }
+              initialBillableCents={
+                memberRate?.billable_rate_hourly == null
+                  ? null
+                  : Math.round(Number(memberRate.billable_rate_hourly) * 100)
+              }
+            />
+          </Panel>
+        )}
 
         {/* Owner actions on this person, together, at the bottom of the rail —
             the two heaviest things you can do to a teammate, kept away from the

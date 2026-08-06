@@ -118,6 +118,14 @@ export const AUDIT_ACTIONS = [
   "firm_role_created",
   "firm_role_deleted",
   "firm_role_permissions_changed",
+  // Time tracking (1750). Registered in the SAME change that starts logging
+  // them — the notes above record what happens otherwise (raw codes printed at
+  // the operator). ⚠️ member_rate_changed metadata NEVER carries amounts:
+  // activity_log is firm-readable, rates are not.
+  "time_entry_created",
+  "time_entry_updated",
+  "time_entry_deleted",
+  "member_rate_changed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

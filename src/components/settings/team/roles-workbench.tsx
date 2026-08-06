@@ -52,6 +52,8 @@ import {
   type RoleColor,
 } from "@/lib/roles/palette";
 import { GRANTABLE_CAPABILITIES } from "@/lib/auth/grantable";
+import { capabilityLabelKey } from "@/lib/auth/capability-labels";
+import type { Capability } from "@/lib/auth/capabilities";
 import {
   createRoleAction,
   updateRoleAction,
@@ -574,10 +576,9 @@ function PermissionsTab({
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const label = (cap: string) =>
-    cap === "billing.manage"
-      ? t("permissions_cap_billing")
-      : t("permissions_cap_integrations");
+  // Shared key mapper — see capability-labels.ts; this was the second copy of
+  // a ternary that mislabeled everything past the first two capabilities.
+  const label = (cap: Capability) => t(capabilityLabelKey(cap));
 
   const shown = useMemo(
     () =>

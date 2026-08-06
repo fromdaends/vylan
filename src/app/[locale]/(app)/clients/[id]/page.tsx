@@ -76,6 +76,10 @@ import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { can } from "@/lib/auth/capabilities";
+import { isTimeInsightsEnabled } from "@/lib/time/flags";
+import { listEntriesForClient } from "@/lib/db/time-entries";
+import { dateInTimeZone } from "@/lib/tasks/dates";
+import { TimePanel } from "@/components/time/time-panel";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -226,6 +230,7 @@ export default async function ClientDetailPage({
     clientTasks,
     recentFiles,
     bookkeeping,
+    clientTimeEntries,
   ] = await Promise.all([
     // Relationships card data: this client's live links, plus the firm roster
     // of clients — archived included so a link's NAME still resolves even when
@@ -452,12 +457,22 @@ export default async function ClientDetailPage({
         openRequests: close.openRequests,
       };
     })(),
+    // Time tracking (1750) — OVERVIEW only, and only when the firm's flag is
+    // on. getCurrentFirm is React.cache'd, so asking again here shares the
+    // batch's own query. HOURS only; no dollar reaches this page.
+    (async () => {
+      if (tab !== "overview") return [];
+      const currentFirm = await getCurrentFirm();
+      if (!isTimeInsightsEnabled(currentFirm)) return [];
+      return listEntriesForClient(id, 30);
+    })(),
   ]);
 
   const [relationships, allClients] = relationshipData;
   const { engagements, signals } = engagementData;
   const { clientPayments, paymentByEng } = moneyData;
   const me = viewer;
+  const timeEnabled = isTimeInsightsEnabled(firm);
   const clientNameById = new Map(
     allClients.map((c) => [c.id, c.display_name]),
   );
@@ -1118,6 +1133,49 @@ export default async function ClientDetailPage({
               currentUserId={me?.id}
             />
           )}
+        </Panel>
+      )}
+
+      {/* TIME (1750) — this client's logged hours and the two ways to add
+          more. Flag-gated, HOURS ONLY (no permission gate: shared capacity is
+          the founder's ruling, and no dollar figure exists on this surface to
+          need one). Renders when empty like its neighbours — the empty state
+          is how someone finds out where time tracking lives. */}
+      {tab === "overview" && timeEnabled && (
+        <Panel
+          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
+          title={t("time_title")}
+        >
+          <TimePanel
+            entries={clientTimeEntries.map((e) => ({
+              id: e.id,
+              userId: e.user_id,
+              day:
+                dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ??
+                e.started_at.slice(0, 10),
+              durationMinutes: e.duration_minutes,
+              note: e.note,
+              engagementId: e.engagement_id,
+              clientId: e.client_id,
+              engagementTitle: e.engagement_title,
+            }))}
+            members={firmUsers.map((u) => ({
+              id: u.id,
+              name: userDisplayLabel(u),
+            }))}
+            currentUserId={me?.id ?? ""}
+            canManage={can(me, "time.manage")}
+            locale={locale}
+            context={{
+              clientId: client.id,
+              clientName: client.display_name,
+              engagementChoices: engagements.map((e) => ({
+                id: e.id,
+                title: e.title,
+              })),
+            }}
+            showEngagement
+          />
         </Panel>
       )}
 

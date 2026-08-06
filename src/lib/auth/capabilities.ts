@@ -105,7 +105,32 @@ export const CAPABILITIES = [
   // ── Named grants ──────────────────────────────────────────────────────────
   // Approve a teammate's submitted time (Phase 8). No preset carries it: it is
   // granted per person. Listed now so the type exists before the feature does.
+  // NOTE: this is NOT part of the time-tracking build — that build explicitly
+  // has no submission/approval workflow. It stays listed and stays inert.
   "time.approve",
+
+  // ── Time tracking + Insights (migration 1750) ─────────────────────────────
+  // The founder's ruling that shapes all three: "it should all be role
+  // permission that are set though... roles only." None of these is gated on
+  // the owner rank anywhere — not in the UI, not in the actions, and not in
+  // RLS (which reads them through current_user_has_capability(), the SQL
+  // mirror of this module).
+  //
+  // See and set what each team member costs per hour (user_rates). The
+  // founder's own example of why this is a capability and not a rank: "billing
+  // rates could be transferred over to, like, a senior manager who wants to
+  // see how each person is being paid."
+  "rates.manage",
+  // The money picture: revenue, labour cost, estimated margin — the Insights
+  // section. ⚠️ Anyone holding this can DERIVE a colleague's hourly rate
+  // (margin is rate × hours, and division exists), so granting it is granting
+  // rates-adjacent knowledge. The switch's description says so out loud.
+  "insights.view",
+  // Fix or remove a TEAMMATE'S time entry. Everyone edits their own without
+  // any capability; this is the practice-manager grant for tidying the firm's
+  // time. Deliberately separate from time.approve (inert, above): correcting a
+  // typo is not an approval workflow.
+  "time.manage",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

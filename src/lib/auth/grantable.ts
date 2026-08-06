@@ -37,6 +37,16 @@ import type { Capability } from "./capabilities";
 export const GRANTABLE_CAPABILITIES: readonly Capability[] = [
   "billing.manage",
   "integrations.manage",
+  // Time tracking + Insights (1750). All three are RLS-backed through
+  // current_user_has_capability(), so a grant here changes what the DATABASE
+  // returns, not merely what the UI draws — the standard clients.private
+  // failed and these pass. The founder's ruling: "roles only. It's simple."
+  //
+  // ⚠️ insights.view is rates-adjacent by arithmetic: margin ÷ hours is a
+  // rate. The switch description in messages/*.json states it; keep it stated.
+  "rates.manage",
+  "insights.view",
+  "time.manage",
 ];
 
 export function isGrantable(value: unknown): value is Capability {
