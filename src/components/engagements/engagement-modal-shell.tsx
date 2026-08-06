@@ -45,7 +45,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
-import { EngagementsListSkeleton } from "@/components/engagements/engagements-list-skeleton";
 
 export function EngagementModalShell({
   title,
@@ -96,19 +95,7 @@ export function EngagementModalShell({
   // you move from a two-card question to a fourteen-card template grid. Capped
   // against the viewport so it never overflows a laptop screen.
   const sheet = cn(
-    // `relative` is load-bearing, not decoration.
-    //
-    // CSS paints POSITIONED elements (even at z-index:auto) in a later layer
-    // than non-positioned ones. The dim beside it is `absolute`; this sheet was
-    // static. So the dim painted ON TOP of the dialog no matter what order they
-    // appeared in the DOM — the whole thing washed out grey, which is what the
-    // founder saw four times and I misread three times as a blur problem.
-    //
-    // Positioning the sheet puts both in the same painting step, where DOM
-    // order decides — and the sheet comes last.
-    // `relative z-10` is load-bearing, not decoration: it is the ONLY thing
-    // keeping the dim behind the dialog rather than over it.
-    "relative z-10 flex w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
+    "flex w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated",
     "pointer-events-auto h-[min(86vh,54rem)]",
     // LIGHTER than the page, not merely bordered. The app background is pure
     // black and bg-card is oklch 0.14 — near enough identical that the sheet
@@ -135,60 +122,12 @@ export function EngagementModalShell({
           
           It is a plain page again. It LOOKS overlaid and nothing behind it is
           real, so nothing behind it can move, repaint, or steal a click. */}
-      {/* ── THE GLASS, AND AN EXPLICIT ORDER ───────────────────────────
-          The founder, five times: the frosted glass is not working.
+      <div
+        aria-hidden
+        className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm sm:left-[var(--rail-width)]"
+      />
 
-          Every previous attempt left the paint order IMPLIED — by z-index
-          across separate fixed layers, then by DOM order, then by making the
-          sheet positioned. Each was correct in theory and none of them held,
-          and the symptom was always the same: the DIALOG came out grey, which
-          only ever happens when the dim is painting on top of it.
-
-          So nothing is implied any more. The scenery and its dim are ONE
-          element at `z-0`; the sheet is at `z-10`. Two positioned siblings with
-          explicit, different z-indexes in the same parent have exactly one
-          possible order, and no ancestor can change it.
-
-          ── WHAT IS BEHIND THE GLASS ────────────────────────────────────
-
-          The SHAPE of the engagements list and nothing else: no data, no client
-          components, no hydration, no scrolling, no animation. Scenery — closer
-          to a photograph of the page than to the page, which is what the
-          founder asked for and what keeps it free.
-
-          The blur is a plain `filter` on the scenery, not a `backdrop-filter`
-          pane: backdrop-filter samples a "backdrop root" whose membership
-          depends on the same stacking rules that kept breaking this. */}
-      {/* NO `animate-in-fade` on this container, and that is the whole fix.
-          Proven in the live page: stripping that one class makes the dialog
-          snap crisp and the frosted glass appear behind it. With it, the sheet
-          rendered grey and washed out no matter how the layers underneath were
-          ordered — which is why five attempts at the layering changed nothing.
-
-          `main` already fades the page in, so this was a second fade over the
-          first; once the scenery and its dim moved INSIDE this container, that
-          compositing is what flattened the dialog into them. */}
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-        <div
-          aria-hidden
-          // `inert` as well as pointer-events-none: nothing in here may take
-          // focus from the dialog, including via the keyboard.
-          inert
-          className="absolute inset-0 z-0 select-none overflow-hidden sm:left-[var(--rail-width)]"
-        >
-          {/* blur-md is filter: blur(12px) on this element's own content.
-              scale-105 hides the soft transparent edge a blur leaves behind. */}
-          <div className="scale-105 px-6 pt-7 blur-md lg:px-11">
-            <EngagementsListSkeleton animated={false} tone="contrast" />
-          </div>
-          {/* The dim, inside the same element as the scenery it dims — so the
-              two can never be separated by a stacking rule again. */}
-          {/* Light dim. The BLUR is what separates the dialog from the page;
-              the dim only takes the edge off. Heavier values washed the scenery
-              back out to nothing, which is the bug this kept shipping. */}
-          <div className="absolute inset-0 bg-background/20 dark:bg-background/30" />
-        </div>
-
+      <div className="animate-in-fade pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
         <div className={sheet}>
           {/* ── The bar ───────────────────────────────────────────────────
               Title left, actions right, exactly Canopy's arrangement. It never
