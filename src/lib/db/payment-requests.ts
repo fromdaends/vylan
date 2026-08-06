@@ -105,7 +105,20 @@ export type CreatePaymentRequestInput = {
    * the client owed on accepting. Optional so callers that predate it insert
    * exactly as before, and dropped on a pre-1680 database.
    */
-  kind?: "engagement" | "deposit";
+  kind?: "engagement" | "deposit" | "recurring";
+  /**
+   * WHICH PERIOD this invoice bills (migration 1710) — "2026-08", "2026-Q3",
+   * "2026-W32", "2026".
+   *
+   * Only meaningful for kind='recurring'. It is what makes an ongoing
+   * arrangement's twelve monthly invoices twelve separate charges on ONE
+   * engagement rather than twelve attempts at one charge: the live-invoice
+   * unique index keys on (engagement_id, kind, coalesce(billing_period, '')).
+   *
+   * NULL for the one-off kinds, which have no period — so the deposit and the
+   * final bill keep enforcing exactly what 1680 gave them.
+   */
+  billing_period?: string | null;
   // Native-invoice payload (migration 0750) — present only on generated
   // invoices; simple/attached invoices omit every field and insert exactly as
   // before. The caller (lib/invoices/create) computes all of it server-side.
@@ -606,21 +619,39 @@ export async function createPaymentRequestSR(
   input: CreatePaymentRequestInput,
 ): Promise<PaymentRequest | "duplicate" | "seq_duplicate" | null> {
   const sb = getServiceRoleSupabase();
-  const { locks_deliverables, kind, ...base } = input;
+  const { locks_deliverables, kind, billing_period, ...base } = input;
   // Newest columns first, dropped one tier at a time — the ladder this repo
   // uses so a deploy that lands before its migration degrades instead of
-  // failing. A pre-1680 database has no `kind`; a pre-0610 one has no lock.
+  // failing. A pre-1710 database has no `billing_period`; a pre-1680 one has no
+  // `kind`; a pre-0610 one has no lock.
   const full = {
     ...base,
     auto: true,
     ...(locks_deliverables != null ? { locks_deliverables } : {}),
     ...(kind != null ? { kind } : {}),
+    ...(billing_period != null ? { billing_period } : {}),
   };
   let { data, error } = await sb
     .from("payment_requests")
     .insert(full)
     .select("*")
     .single();
+  // Pre-1710: retry without `billing_period`. Only a recurring charge sets one,
+  // and the charge runner refuses to bill at all until its own ledger table
+  // exists — so in practice this tier is reached by nothing. It is here so the
+  // ladder stays complete rather than because anything relies on it.
+  if (error && isUnknownColumnError(error) && billing_period != null) {
+    ({ data, error } = await sb
+      .from("payment_requests")
+      .insert({
+        ...base,
+        auto: true,
+        ...(locks_deliverables != null ? { locks_deliverables } : {}),
+        ...(kind != null ? { kind } : {}),
+      })
+      .select("*")
+      .single());
+  }
   // Pre-1680: retry without `kind`. The invoice still goes out; it simply has
   // no kind, which is what every row meant before the column existed.
   if (error && isUnknownColumnError(error) && kind != null) {

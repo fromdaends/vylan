@@ -21,6 +21,7 @@
 // invoice by hand); an acceptance that appeared to fail is not.
 
 import { sendEngagementInvoice } from "@/lib/invoices/send";
+import { startRecurringSchedules } from "@/lib/billing/start-schedules";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export type AcceptedBillingResult = {
@@ -28,6 +29,9 @@ export type AcceptedBillingResult = {
   depositRaised: boolean;
   /** The engagement's own invoice, when the firm chose to bill on acceptance. */
   invoiceRaised: boolean;
+  /** Frequencies now on a schedule — "monthly" means the client will be
+   *  invoiced every month from here on, not just this once. */
+  schedulesStarted: string[];
 };
 
 /**
@@ -54,6 +58,7 @@ export async function applyAcceptedBilling(
   const out: AcceptedBillingResult = {
     depositRaised: false,
     invoiceRaised: false,
+    schedulesStarted: [],
   };
 
   try {
@@ -79,6 +84,23 @@ export async function applyAcceptedBilling(
     }
   } catch (e) {
     console.error("[on-accepted] acceptance invoice failed:", e);
+  }
+
+  // 3. THE ONGOING ARRANGEMENT (1710). A proposal that says "$400/month" was
+  //    invoiced exactly once — the same shape of broken promise the deposit was
+  //    before 1680. Accepting now starts a schedule, and the hourly recurrences
+  //    cron raises one invoice per period from here on.
+  //
+  //    Idempotent at the database (UNIQUE(engagement_id, frequency)), so an
+  //    acceptance recorded twice cannot bill the client twice.
+  try {
+    const started = await startRecurringSchedules(
+      engagementId,
+      new Date().toISOString().slice(0, 10),
+    );
+    out.schedulesStarted = started.started;
+  } catch (e) {
+    console.error("[on-accepted] recurring schedules failed:", e);
   }
 
   return out;

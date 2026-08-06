@@ -11,6 +11,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { spawnDueRecurrences } from "@/lib/recurring/spawn";
+import { drainDueRecurringCharges } from "@/lib/billing/drain-recurring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,9 +33,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const summary = await spawnDueRecurrences();
+
+    // The OTHER kind of scheduled recurring thing (1710): a "$400/month" line
+    // on an accepted proposal raises one real invoice per period. It rides this
+    // cron rather than its own because "the scheduled things that should have
+    // happened by now, happen" is already what this route means — and because
+    // two crons would be two answers to where scheduled charges live.
+    //
+    // Its own try//catch: a billing hiccup must never stop engagements from
+    // spawning, and a spawn failure must never stop the billing.
+    let billing: Awaited<ReturnType<typeof drainDueRecurringCharges>> | null =
+      null;
+    try {
+      billing = await drainDueRecurringCharges();
+    } catch (e) {
+      console.error("[cron] recurring charges drain failed:", e);
+    }
+
     return NextResponse.json({
       ranAt: new Date().toISOString(),
       ...summary,
+      billing: billing
+        ? { checked: billing.checked, charged: billing.charged }
+        : { error: "drain_failed" },
     });
   } catch (e) {
     // A migration-not-applied environment (or a transient DB error) must
