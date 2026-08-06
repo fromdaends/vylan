@@ -51,17 +51,26 @@ export function EngagementsListSkeleton({
   // page in both themes and comparing, not by picking a number that looked
   // reasonable in the one theme I happened to be in — which is how this shipped
   // invisible twice.
+  // ── STRONG ENOUGH TO ACTUALLY SEE ──────────────────────────────────────
+  //
+  // Tasteful values kept shipping invisible. Under a 12px blur a pale grey bar
+  // is indistinguishable from noise, and the founder reported "can't see
+  // anything behind it" through several rounds of small increases.
+  //
+  // So these are deliberately assertive. If it now reads as too heavy that is a
+  // one-line dial-back — the failure mode of too subtle has already cost days,
+  // and the failure mode of too strong is visible in one glance.
   const strong =
     tone === "contrast"
-      ? "bg-foreground/[0.30] dark:bg-foreground/[0.12]"
+      ? "bg-foreground/[0.55] dark:bg-foreground/[0.24]"
       : "bg-muted";
   const mid =
     tone === "contrast"
-      ? "bg-foreground/[0.22] dark:bg-foreground/[0.09]"
+      ? "bg-foreground/[0.42] dark:bg-foreground/[0.18]"
       : "bg-muted/50";
   const soft =
     tone === "contrast"
-      ? "bg-foreground/[0.16] dark:bg-foreground/[0.07]"
+      ? "bg-foreground/[0.32] dark:bg-foreground/[0.14]"
       : "bg-muted/40";
   // The modal covers the middle, so what a viewer actually sees of this is the
   // MARGINS — thin strips top and bottom, wider ones either side. Enough rows to
