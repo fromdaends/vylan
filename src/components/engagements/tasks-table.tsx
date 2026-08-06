@@ -557,11 +557,22 @@ export function TasksTable({
    * server renumbers from the array, which is the only version that is right
    * regardless of the gaps createEngagementTask leaves in order_index.
    */
-  function dropOn(index: number) {
-    if (!dragId) return;
-    const from = visible.findIndex((r) => r.id === dragId);
+  function dropOn(index: number, draggedId: string) {
+    // ⚠️ THE ID COMES FROM THE DROP EVENT, NOT FROM REACT STATE.
+    //
+    // This read `dragId` (state set on dragstart) and silently returned when it
+    // was stale — which it was, often enough that a second drag in the same
+    // page session simply did nothing and wrote nothing. The founder saw a card
+    // that would not move; the handler was returning one line in.
+    //
+    // The dataTransfer payload is what HTML5 drag has for exactly this: the
+    // browser hands the drop the identity of what was picked up, with no
+    // dependence on a state update having committed between two events. The
+    // state that remains (dragId/overId) is now only used for the visuals.
     setDragId(null);
     setOverId(null);
+    if (!draggedId) return;
+    const from = visible.findIndex((r) => r.id === draggedId);
     if (from === -1 || from === index) return;
 
     const next = [...visible];
@@ -859,7 +870,6 @@ export function TasksTable({
                 // is not a target anybody can hit.
                 dropProps: {
                   onDragOver: (e) => {
-                    if (!dragId) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                     if (overId !== task.id) setOverId(task.id);
@@ -869,7 +879,7 @@ export function TasksTable({
                   },
                   onDrop: (e) => {
                     e.preventDefault();
-                    dropOn(i);
+                    dropOn(i, e.dataTransfer.getData("text/plain"));
                   },
                 },
               }}

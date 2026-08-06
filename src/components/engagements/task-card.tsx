@@ -116,33 +116,29 @@ export function TaskCard({
       // them when the status changes.
       style={{ ["--task-hue" as string]: status.color }}
       className={cn(
-        "group/card relative isolate cursor-pointer overflow-hidden rounded-xl border border-border bg-card p-3.5 pl-4 text-left",
-        "transition-[transform,border-color,box-shadow,opacity] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
-        "hover:-translate-y-0.5 hover:border-[color-mix(in_oklab,var(--task-hue)_45%,var(--border))]",
-        "hover:shadow-[0_14px_28px_-18px_color-mix(in_oklab,var(--task-hue)_70%,transparent)]",
+        "group/card relative cursor-pointer rounded-lg border border-border bg-card px-4 py-3.5 text-left",
+        "transition-[border-color,box-shadow,opacity] duration-150",
+        // A quiet border and a plain shadow on hover. The coloured glow this
+        // replaces is what made a list of tasks look like a synth panel.
+        "hover:border-foreground/20 hover:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "motion-reduce:hover:translate-y-0",
         dragging && "opacity-40",
-        dragOver &&
-          "border-[var(--task-hue)] ring-2 ring-[color-mix(in_oklab,var(--task-hue)_50%,transparent)]",
+        dragOver && "border-foreground/40 ring-1 ring-foreground/20",
       )}
     >
-      {/* The stripe. Always the status colour, always the full height, so a
-          column of cards reads as a column of statuses before you read a word. */}
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-[3px] bg-[var(--task-hue)] transition-[width,background-color] duration-300 group-hover/card:w-[5px]"
-      />
-      {/* The bloom. Faint on purpose — enough that a wall of cards is not grey,
-          not so much that the card competes with its own text. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(120%_90%_at_0%_0%,color-mix(in_oklab,var(--task-hue)_14%,transparent)_0%,transparent_58%)] transition-opacity duration-300 group-hover/card:opacity-100"
-      />
+      {/* ── KARBON'S LINE ──────────────────────────────────────────────────
+          Founder: "remove the gradient add the line like in the screenshot i
+          sent from karbon". Their cards carry a thin horizontal rule under the
+          title, and that rule is where the colour lives — no glow, no bloom, no
+          neon edge. It reads as stationery rather than as a dashboard widget,
+          which is the whole difference between "techy" and "professional".
 
+          The radial gradient that used to sit here was the techy part. Gone
+          rather than toned down: a faint version of a wrong idea is still the
+          wrong idea. */}
       <div className="flex items-center gap-1.5">
-        <TaskKindIcon kind={kind} className="size-3.5 shrink-0 text-[var(--task-hue)]" />
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--task-hue)]">
+        <TaskKindIcon kind={kind} className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {kindLabel}
         </span>
         <span className="flex-1" />
@@ -162,20 +158,30 @@ export function TaskCard({
         )}
       </div>
 
-      <p className="mt-1.5 line-clamp-2 text-sm font-medium leading-snug">{title}</p>
+      <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug">{title}</p>
 
+      {/* THE LINE. Always present, because a card whose rule appears only
+          sometimes reads as two different cards. It carries the status colour,
+          which is the founder's rule: "the color of the task align with the
+          status of the task... so the colors can change depending on the
+          status of it."
+
+          With steps, it is a real progress bar and says so underneath. Without
+          them it is a full rule in the status colour — an accent, and NOT a
+          claim that the task is 100% done. That distinction is why the caption
+          only appears when there is something to count. */}
+      <div className="mt-2.5 h-[3px] overflow-hidden rounded-full bg-border">
+        <span
+          className="block h-full rounded-full bg-[var(--task-hue)] transition-[width,background-color] duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+          style={{
+            width: steps > 0 ? `${Math.round((stepsDone / steps) * 100)}%` : "100%",
+          }}
+        />
+      </div>
       {steps > 0 && (
-        <div className="mt-2.5">
-          <div className="h-1 overflow-hidden rounded-full bg-muted">
-            <span
-              className="block h-full rounded-full bg-[var(--task-hue)] transition-[width,background-color] duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-              style={{ width: `${Math.round((stepsDone / steps) * 100)}%` }}
-            />
-          </div>
-          <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
-            {t("task_steps_done", { done: stepsDone, total: steps })}
-          </p>
-        </div>
+        <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
+          {t("task_steps_done", { done: stepsDone, total: steps })}
+        </p>
       )}
 
       <div

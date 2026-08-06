@@ -680,9 +680,21 @@ describe("TasksTable — cards, on an engagement", () => {
     // A stand-in for the real DataTransfer. setData is not decoration: Safari
     // refuses to begin a drag without a payload, which is why the first
     // version did nothing at all there.
-    const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+    // A stand-in for the real DataTransfer that actually STORES the payload —
+    // the drop reads the dragged id back out of it, so a mock that only
+    // records the call would pass while the feature could not work.
+    const store: Record<string, string> = {};
+    const dataTransfer = {
+      setData: vi.fn((k: string, v: string) => { store[k] = v; }),
+      getData: (k: string) => store[k] ?? "",
+      effectAllowed: "",
+      dropEffect: "",
+    };
     fireEvent.dragStart(handles[0], { dataTransfer });
-    expect(dataTransfer.setData).toHaveBeenCalled();
+    // ⚠️ The id must be ON the event. Reading it from React state instead was
+    // why a second drag in one session silently did nothing: the state had not
+    // committed, dropOn returned one line in, and no write ever went out.
+    expect(store["text/plain"]).toBe(TASKS[0].id);
 
     // ⚠️ DROP ON THE CARD, not the handle. A handle is ~14px and only appears
     // on hover, so requiring the release to land on one is why the founder
