@@ -1713,6 +1713,21 @@ export default async function EngagementDetailPage({
         // component the firm-wide Tasks page uses. The three built-in kinds are
         // REAL rows (1370), so an engagement nobody has planned shows nothing.
         tasks={internalTasks.map((x) => ({
+          // ⚠️ THE STEPS. This page LOADED subtasksByParent and then never
+          // handed them over, so on an engagement every task looked childless:
+          // no step bar on the card, and an empty Steps section in the panel.
+          // /work has always passed them, which is why the same task showed
+          // its steps there and not here. Founder: "the steps dont show when
+          // youre fully zoomed in on an engagement viewing its specific
+          // tasks."
+          subtasks: (subtasksByParent.get(x.id) ?? []).map((sub) => ({
+            id: sub.id,
+            title: sub.title,
+            status: sub.status,
+            statusId: sub.statusId,
+            assigneeIds: sub.assigneeIds,
+            dueDate: sub.dueDate,
+          })),
           id: x.id,
           title: x.title,
           kind: x.kind,
