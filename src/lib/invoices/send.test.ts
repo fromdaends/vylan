@@ -148,6 +148,13 @@ import { sendEngagementInvoice } from "./send";
 beforeEach(() => {
   vi.clearAllMocks();
   engagement.status = "complete";
+  // Reset the module-level stub rows HERE, not per-describe. They are `let`s
+  // shared by every test in the file, so a block that sets them silently
+  // changed the answer for every block after it — which is exactly what
+  // happened: an acceptance test read a $4,000 service line left behind by the
+  // itemisation tests and asserted against the wrong number.
+  paidDepositRows = [];
+  serviceLineRows = [];
   getLatestPaymentRequest.mockResolvedValue(null);
   createPaymentRequest.mockResolvedValue({ id: "pay-1" });
   getInvoiceAttachment.mockResolvedValue({
@@ -535,5 +542,37 @@ describe("the invoice is built FROM the agreed service lines", () => {
     expect(input.kind).toBe("deposit");
     expect(input.line_items).toHaveLength(1);
     expect(input.line_items[0].amount_cents).toBe(10_000);
+  });
+});
+
+describe("the ON-ACCEPTANCE invoice can actually be raised", () => {
+  it("bills a LIVE engagement when atAcceptance is set", async () => {
+    // The bug this exists for. kind='engagement' demands a COMPLETE engagement,
+    // and an engagement being accepted is 'sent' — so applyAcceptedBilling
+    // called this, got `not_complete`, and raised nothing. Every single time.
+    // The founder accepted a $459.90 on-acceptance engagement and its row had
+    // ZERO payment_requests against it.
+    engagement.status = "sent";
+    const result = await sendEngagementInvoice("e1", { atAcceptance: true });
+    expect(result.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 25_000, kind: "engagement" }),
+    );
+  });
+
+  it("still refuses a live engagement WITHOUT the flag", async () => {
+    // The completion rule is right for a normal end-of-job invoice and must not
+    // be loosened for everyone just because acceptance needs an exception.
+    engagement.status = "sent";
+    const result = await sendEngagementInvoice("e1");
+    expect(result).toEqual({ ok: false, reason: "not_complete" });
+    expect(createPaymentRequest).not.toHaveBeenCalled();
+  });
+
+  it("refuses a CANCELLED engagement even with the flag", async () => {
+    // atAcceptance means "live, not finished" — never "any status at all".
+    engagement.status = "cancelled";
+    const result = await sendEngagementInvoice("e1", { atAcceptance: true });
+    expect(result).toEqual({ ok: false, reason: "not_complete" });
   });
 });
