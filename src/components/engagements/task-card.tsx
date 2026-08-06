@@ -59,6 +59,8 @@ export function TaskCard({
   dragging,
   dragOver,
   canDrag,
+  selected,
+  onSelectToggle,
   onOpen,
   statusMenu,
   children,
@@ -78,6 +80,11 @@ export function TaskCard({
   dragging?: boolean;
   dragOver?: boolean;
   canDrag?: boolean;
+  /** Bulk selection. The cards inherited the table's bulk bar and then had no
+   *  way to feed it — founder: "theres no way to like select them like before
+   *  on the left side with the dot to select." */
+  selected?: boolean;
+  onSelectToggle?: () => void;
   onOpen: () => void;
   /** The row's own status control, handed in so the two surfaces cannot drift
    *  into different menus. */
@@ -124,6 +131,7 @@ export function TaskCard({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         dragging && "opacity-40",
         dragOver && "border-foreground/40 ring-1 ring-foreground/20",
+        selected && "border-accent bg-accent-subtle/40",
       )}
     >
       {/* ── KARBON'S LINE ──────────────────────────────────────────────────
@@ -137,6 +145,24 @@ export function TaskCard({
           rather than toned down: a faint version of a wrong idea is still the
           wrong idea. */}
       <div className="flex items-center gap-1.5">
+        {onSelectToggle && (
+          // Hidden until hover, ALWAYS visible once ticked — a selection you
+          // cannot see at rest is a selection you act on by accident. Same
+          // rule as the drag handle beside it.
+          <input
+            type="checkbox"
+            checked={Boolean(selected)}
+            onChange={onSelectToggle}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={t("bulk_select_task", { title })}
+            className={cn(
+              "size-[15px] shrink-0 cursor-pointer accent-[var(--accent)] transition-opacity",
+              selected
+                ? "opacity-100"
+                : "opacity-0 focus-visible:opacity-100 group-hover/card:opacity-100",
+            )}
+          />
+        )}
         <TaskKindIcon kind={kind} className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           {kindLabel}

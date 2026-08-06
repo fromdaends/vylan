@@ -1541,6 +1541,8 @@ function Row({
               taskStatus={task.status}
               assignees={assignees}
               subtasks={task.subtasks}
+              selected={isSelected}
+              onSelectToggle={canEdit ? onSelectToggle : undefined}
               canDrag={canEdit && Boolean(drag)}
               dragging={drag?.isDragging}
               dragOver={drag?.isOver}
