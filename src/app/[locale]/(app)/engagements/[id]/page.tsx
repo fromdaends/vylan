@@ -1268,17 +1268,11 @@ export default async function EngagementDetailPage({
                   reasonKey="block_send_engagement_reason"
                   size="sm"
                 />
-              ) : items.length === 0 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled
-                  title={t("send_no_items_hint")}
-                >
-                  <Send className="size-4" />
-                  {t("send")}
-                </Button>
               ) : (
+                /* NO documents gate. This button used to be permanently
+                   disabled on an engagement that requested no files, which made
+                   a proposal-only engagement impossible to send — see
+                   sendEngagementAction for the full reasoning. */
                 <form action={sendEngagementAction}>
                   <input type="hidden" name="id" value={engagement.id} />
                   <Button type="submit" size="sm">
@@ -1628,16 +1622,14 @@ export default async function EngagementDetailPage({
           />
         )}
 
-      {isDraft &&
-        (items.length === 0 ? (
-          <Alert variant="destructive">
-            <AlertDescription>{t("send_no_items_blocked")}</AlertDescription>
-          </Alert>
-        ) : (
-          <Alert>
-            <AlertDescription>{t("draft_notice")}</AlertDescription>
-          </Alert>
-        ))}
+      {/* The red "add a document before you can send" banner is gone with the
+          rule it described. A draft is a draft whether or not it asks for
+          files. */}
+      {isDraft && (
+        <Alert>
+          <AlertDescription>{t("draft_notice")}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Checklist + Signatures share one tab switch (Checklist is the default)
           so the page shows one section at a time instead of stacking both. Each

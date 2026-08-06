@@ -198,6 +198,106 @@ No password required.`;
   return { subject, html, text };
 }
 
+/**
+ * The client-facing "here is your engagement letter" email.
+ *
+ * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ *
+ * Every send used buildEngagementInviteEmail — "{Firm} needs a few documents
+ * for {Title}", CTA "Open my portal". That was right when every engagement WAS
+ * a document request. It stopped being right when the builder started attaching
+ * a proposal to essentially everything: the client now gets a chore email, and
+ * lands on a contract to read and agree to.
+ *
+ * A proposal has different stakes, so it gets its own words. The CTA says what
+ * the click actually does — review and accept — because "Open my portal" beside
+ * a document nobody has agreed to reads like a task, not a decision.
+ *
+ * ── THE DEPOSIT IS NAMED IN THE EMAIL ──────────────────────────────────────
+ *
+ * The founder's flow is read → agree → pay, with the portal opening once the
+ * deposit clears. A client who learns about the payment only after agreeing has
+ * been surprised by a bill, so when there is a deposit the email says the amount
+ * up front. `depositAmount` is already-formatted currency, like every other
+ * money field in this file, so the caller owns locale and currency.
+ */
+export function buildProposalInviteEmail(opts: {
+  clientName: string;
+  firmName: string;
+  firmLogoUrl?: string | null;
+  engagementTitle: string;
+  url: string;
+  /** Formatted, e.g. "$1,000.00". Null when the proposal asks for nothing up
+   *  front — the common case, and it must not print an empty sentence. */
+  depositAmount: string | null;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
+  const title = escapeHtml(opts.engagementTitle);
+  const firm = escapeHtml(opts.firmName);
+  const name = escapeHtml(opts.clientName);
+
+  if (opts.locale === "fr") {
+    const subject = `${opts.firmName} vous envoie une lettre de mission : « ${opts.engagementTitle} »`;
+    const depositLine = opts.depositAmount
+      ? `<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Un acompte de <strong>${escapeHtml(opts.depositAmount)}</strong> est payable au moment de l'acceptation. Il sera déduit de votre facture finale.</p>`
+      : "";
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Bonjour ${name},</p>
+<p>${firm} vous a préparé une proposition pour <strong>${title}</strong> : les services, les honoraires et les conditions.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Prenez le temps de la lire. Vous pourrez l'accepter ou la refuser à la fin.</p>
+${depositLine}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Lire et accepter</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur : <br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Aucun mot de passe à créer. Ce lien est valide pendant 90 jours.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.clientName},
+
+${opts.firmName} vous a préparé une proposition pour ${opts.engagementTitle} : les services, les honoraires et les conditions.
+Prenez le temps de la lire. Vous pourrez l'accepter ou la refuser à la fin.${
+      opts.depositAmount
+        ? `\n\nUn acompte de ${opts.depositAmount} est payable au moment de l'acceptation. Il sera déduit de votre facture finale.`
+        : ""
+    }
+
+Lire et accepter : ${opts.url}
+
+Aucun mot de passe à créer. Lien valide pendant 90 jours.`;
+    return { subject, html, text };
+  }
+
+  const subject = `${opts.firmName} has sent you an engagement letter: "${opts.engagementTitle}"`;
+  const depositLine = opts.depositAmount
+    ? `<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">A deposit of <strong>${escapeHtml(opts.depositAmount)}</strong> is due when you accept. It comes off your final invoice.</p>`
+    : "";
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Hi ${name},</p>
+<p>${firm} has put together a proposal for <strong>${title}</strong> — the services, the fees and the terms.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Take your time reading it. You can accept or decline at the end.</p>
+${depositLine}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Review and accept</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">No password required. This link is valid for 90 days.</p>
+</body></html>`;
+  const text = `Hi ${opts.clientName},
+
+${opts.firmName} has put together a proposal for ${opts.engagementTitle} — the services, the fees and the terms.
+Take your time reading it. You can accept or decline at the end.${
+    opts.depositAmount
+      ? `\n\nA deposit of ${opts.depositAmount} is due when you accept. It comes off your final invoice.`
+      : ""
+  }
+
+Review and accept: ${opts.url}
+
+No password required. Link valid for 90 days.`;
+  return { subject, html, text };
+}
+
 // The client-facing "please pay" email. The CTA opens the SAME firm-branded
 // portal (where the Pay now card lives), keeping all Stripe logic server-side.
 export function buildPaymentRequestEmail(opts: {
