@@ -295,6 +295,28 @@
   .animate-in-stagger > *:nth-child(7) { animation-delay: 360ms; }
   .animate-in-stagger > *:nth-child(8) { animation-delay: 420ms; }
 
+  /* Engagement page (design 2a) motion vocabulary. Delays are set inline per
+     section (header 0 · tasks 60 · rail 100/160/220 · comments 140) because
+     the stagger order is the DESIGN's, not DOM order. */
+  .animate-card-in {
+    animation: card-in 450ms cubic-bezier(0.22, 0.8, 0.26, 1) both;
+  }
+  .animate-modal-in {
+    animation: modal-in 220ms cubic-bezier(0.3, 1.2, 0.4, 1) both;
+  }
+  /* The done-checkbox overshoot. On the STATE, not the click, exactly like the
+     approved reference: a row that mounts already-done pops once too. */
+  .animate-task-pop {
+    animation: task-pop 300ms cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-card-in,
+    .animate-modal-in,
+    .animate-task-pop {
+      animation: none;
+    }
+  }
+
   .hover-lift {
     transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
       box-shadow 180ms ease, border-color 180ms ease;
@@ -388,6 +410,15 @@
   }
   .dark .shadow-card {
     box-shadow: none;
+  }
+  /* The floating task panel's deep two-layer shadow (engagement design 2a). */
+  .shadow-panel {
+    box-shadow:
+      0 32px 80px oklch(0.15 0.02 262 / 0.35),
+      0 8px 24px oklch(0.15 0.02 262 / 0.18);
+  }
+  .dark .shadow-panel {
+    box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
   }
 
   /* --- Bolder utilities --- */
@@ -1246,6 +1277,21 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* Engagement page (design 2a): sections arriving, the floating task panel,
+   and the done-checkbox pop. */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes task-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
 
 /* One row of the rail's second sidebar arriving. An ANIMATION rather than a
    delayed transition on purpose: a transition-delay on the row would delay its
@@ -1570,5 +1616,88 @@
   .wizard-toast,
   .wizard-row-fresh {
     animation: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE CAPACITY BOARD — /engagements
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Geometry and motion for the Karbon-style board, from
+   `design_handoff_engagements_board/README.md`. Here rather than in the
+   components for the same reason the wizard's are: "change how the board
+   feels" has to be one edit.
+
+   Colour is never a literal. The handoff's inline oklch() values map 1:1 onto
+   tokens already in this file, and writing them back in would give us a board
+   that is white-on-white in dark mode. */
+
+/* Cards arrive in a diagonal sweep: down each column, and across the columns.
+   First load ONLY — a board that replayed this on every re-render would
+   re-animate every time somebody dropped a card. */
+@keyframes board-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes board-chrome-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The count badge acknowledges a drop. Overshoots and settles — a number that
+   simply changes reads as a re-render; one that pops reads as a consequence. */
+@keyframes board-badge-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.board-card-in {
+  animation: board-card-in 500ms cubic-bezier(0.22, 0.8, 0.26, 1) both;
+}
+
+.board-chrome-in {
+  animation: board-chrome-in 500ms cubic-bezier(0.22, 0.8, 0.26, 1) both;
+}
+
+.board-badge-pop {
+  animation: board-badge-pop 400ms cubic-bezier(0.3, 1.25, 0.5, 1);
+}
+
+/* The card under the cursor. `position: fixed` and following the pointer at
+   the grab offset, so it does not fight the scroll container it came out of. */
+.board-ghost {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  transform: rotate(2.5deg) scale(1.04);
+  box-shadow:
+    0 24px 48px rgb(0 0 0 / 0.22),
+    0 4px 12px rgb(0 0 0 / 0.12);
+}
+
+/* The drop. The ghost travels to where the placeholder is and un-tilts on the
+   way — the overshoot in the bezier is what makes it feel like it lands rather
+   than stops. */
+.board-ghost-landing {
+  transition:
+    transform 240ms cubic-bezier(0.3, 1.25, 0.5, 1),
+    left 240ms cubic-bezier(0.3, 1.25, 0.5, 1),
+    top 240ms cubic-bezier(0.3, 1.25, 0.5, 1);
+  transform: rotate(0deg) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Entrances and the pop go. Drag-and-drop KEEPS WORKING — it just becomes
+     instant. Reduced motion asks for no gratuitous movement, not for a board
+     you cannot rearrange. */
+  .board-card-in,
+  .board-chrome-in,
+  .board-badge-pop {
+    animation: none;
+  }
+  .board-ghost-landing {
+    transition: none;
   }
 }

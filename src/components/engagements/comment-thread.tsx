@@ -48,7 +48,10 @@ export type CommentTarget =
 // (vylan:open-help / vylan:assistant:open).
 // ---------------------------------------------------------------------------
 
-const OPEN_EVENT = "vylan:comments:add";
+// Exported for the engagement page's always-visible Comments card (design 2a):
+// it listens for the SAME event the "..." menu and ?comment=1 dispatch, so the
+// existing doors keep working with the bubble replaced by a card.
+export const OPEN_EVENT = "vylan:comments:add";
 
 // The key builders live in comment-keys.ts (a PLAIN module): the engagement
 // page is a Server Component and must be able to CALL them — defined here in

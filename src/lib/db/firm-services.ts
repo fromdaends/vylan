@@ -32,6 +32,14 @@ export type FirmService = {
    * when the service is used, so editing it never rewrites a job under way.
    */
   taskTemplateId: string | null;
+  /**
+   * How long this service usually takes, in minutes (migration 1790).
+   *
+   * Feeds the capacity board: an engagement's budget is the sum across the
+   * services it picked. NULL = nobody has said, and it contributes NOTHING to
+   * a budget rather than zero — see resolveBudgetMinutes.
+   */
+  budgetMinutes: number | null;
   archivedAt: string | null;
 };
 
@@ -41,6 +49,7 @@ type Row = {
   description: string | null;
   rate_cents: number | null;
   task_template_id?: string | null;
+  budget_minutes?: number | null;
   rate_type: RateType;
   billing_frequency: BillingFrequency;
   tax_pct: number | string | null;
@@ -61,6 +70,7 @@ function toService(r: Row): FirmService {
     // Absent before 1620 is applied, which reads as "carries no work" — the
     // catalogue keeps working, it simply pulls no tasks.
     taskTemplateId: r.task_template_id ?? null,
+    budgetMinutes: r.budget_minutes ?? null,
     archivedAt: r.archived_at,
   };
 }
@@ -78,9 +88,11 @@ export async function listFirmServices(
   const supabase = await getServerSupabase();
   let q = supabase
     .from("firm_services")
-    .select(
-      "id, name, description, rate_cents, rate_type, billing_frequency, tax_pct, task_template_id, archived_at",
-    )
+    // `*`, NOT a column list. A named list makes every future column addition
+    // a silent outage window: the select errors until the migration runs,
+    // isMissingSchema swallows it, and the catalogue reads as EMPTY rather
+    // than as slightly out of date. Star simply omits what does not exist yet.
+    .select("*")
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
   if (!opts.includeArchived) q = q.is("archived_at", null);
@@ -105,9 +117,11 @@ export async function getFirmService(id: string): Promise<FirmService | null> {
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("firm_services")
-    .select(
-      "id, name, description, rate_cents, rate_type, billing_frequency, tax_pct, task_template_id, archived_at",
-    )
+    // `*`, NOT a column list. A named list makes every future column addition
+    // a silent outage window: the select errors until the migration runs,
+    // isMissingSchema swallows it, and the catalogue reads as EMPTY rather
+    // than as slightly out of date. Star simply omits what does not exist yet.
+    .select("*")
     .eq("id", id)
     .maybeSingle();
 
@@ -129,6 +143,8 @@ export type FirmServiceInput = {
   taxPct: number | null;
   /** Null clears the link — a service that carries no work is normal. */
   taskTemplateId?: string | null;
+  /** Minutes this service usually takes. Null = unknown, and stays unknown. */
+  budgetMinutes?: number | null;
 };
 
 export async function createFirmService(
@@ -152,6 +168,12 @@ export async function createFirmService(
       // carry no work rather than failing outright.
       ...(input.taskTemplateId !== undefined
         ? { task_template_id: input.taskTemplateId }
+        : {}),
+      // Same conditional shape, same reason: a database without 1790 keeps
+      // saving services rather than rejecting the whole write over a column
+      // the form did not have to fill in.
+      ...(input.budgetMinutes !== undefined
+        ? { budget_minutes: input.budgetMinutes }
         : {}),
       created_by_user_id: user.id,
     })
@@ -184,6 +206,12 @@ export async function updateFirmService(
       // carry no work rather than failing outright.
       ...(input.taskTemplateId !== undefined
         ? { task_template_id: input.taskTemplateId }
+        : {}),
+      // Same conditional shape, same reason: a database without 1790 keeps
+      // saving services rather than rejecting the whole write over a column
+      // the form did not have to fill in.
+      ...(input.budgetMinutes !== undefined
+        ? { budget_minutes: input.budgetMinutes }
         : {}),
     })
     .eq("id", id);

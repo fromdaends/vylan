@@ -26,6 +26,10 @@ const ServiceSchema = z.object({
   rateType: z.enum(["item", "hour"]),
   /** An existing task template this service implies (1620). */
   taskTemplateId: z.string().uuid().nullable().optional(),
+  // Minutes, already converted from the hours the form asks for. Nullable
+  // because "nobody has timed this service" is a real answer and must survive
+  // the round trip as null rather than becoming 0 — see resolveBudgetMinutes.
+  budgetMinutes: z.number().int().min(0).max(60 * 1000).nullable().optional(),
   /**
    * Steps typed on the service form instead of picking a template.
    *

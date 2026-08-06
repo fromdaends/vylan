@@ -51,6 +51,7 @@ export default async function EditServicePage({
         billingFrequency: service.billingFrequency,
         taxPct: service.taxPct,
         taskTemplateId: service.taskTemplateId,
+        budgetMinutes: service.budgetMinutes,
       }}
     />
   );
