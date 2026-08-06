@@ -727,6 +727,51 @@ export async function getPaymentRequestForEngagementKindSR(
   return (data as PaymentRequest) ?? null;
 }
 
+/**
+ * The invoice a client should pay NEXT for this engagement — the OLDEST one
+ * still open.
+ *
+ * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ *
+ * "The engagement's invoice" used to be unambiguous: there was one. 1680 added
+ * the deposit and 1710 added a recurring period's bill, so an engagement can now
+ * hold several live invoices at once — and every caller still asking for the
+ * LATEST is asking a question with the wrong answer:
+ *
+ *   * the portal's Pay-now would charge whichever was raised most recently,
+ *     which after acceptance is the engagement invoice, not the deposit the
+ *     client is being asked for;
+ *   * an engagement whose newest invoice is paid or cancelled would report "no
+ *     open request" and refuse payment on an older one that is genuinely owed.
+ *
+ * OLDEST-OPEN is the right rule on both counts. It is what a person would pay
+ * first, and it is correct by construction for the deposit: the deposit is
+ * raised at acceptance, before any other invoice on that engagement exists.
+ *
+ * Identical to the old behaviour whenever an engagement has one invoice, which
+ * is still almost all of them.
+ */
+export async function getOldestOpenPaymentRequestForEngagementSR(
+  engagementId: string,
+): Promise<PaymentRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("*")
+    .eq("engagement_id", engagementId)
+    .eq("status", "requested")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] getOldestOpen(SR) failed:", error);
+    }
+    return null;
+  }
+  return (data as PaymentRequest) ?? null;
+}
+
 export async function getLatestPaymentRequestForEngagementSR(
   engagementId: string,
 ): Promise<PaymentRequest | null> {

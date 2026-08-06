@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ProposalAcceptance } from "@/components/portal/proposal-acceptance";
+import { DepositDue } from "@/components/portal/deposit-due";
 import {
   CheckCircle2,
   ShieldCheck,
@@ -279,6 +280,34 @@ export function PortalShell({
           declinedAt={ctx.awaiting_proposal.declinedAt}
           locale={locale}
           firmName={ctx.firm.name}
+        />
+      </div>
+    );
+  }
+
+  // ── AGREED, AND THE DEPOSIT IS THE NEXT STEP ─────────────────────────────
+  //
+  // The founder's flow: agree, then pay, and paying is what opens the portal.
+  // Same reasoning as the proposal branch above and the same position in the
+  // order — showing a document checklist beside this would ask the client to
+  // start work on an engagement that has not begun.
+  //
+  // Requires the invoice to exist. If the deposit could not be raised (a rails
+  // outage at the moment of acceptance), falling through to the normal portal is
+  // the right failure: the client is not held at a payment screen with no way to
+  // pay, and the firm can invoice by hand.
+  if (ctx.awaiting_deposit && ctx.payment_request) {
+    return (
+      <div className="relative flex flex-1 flex-col">
+        <DepositDue
+          token={ctx.engagement.magic_token ?? ""}
+          paymentRequest={ctx.payment_request}
+          firmName={ctx.firm.name}
+          locale={locale}
+          justReturnedPaid={justReturnedPaid}
+          justReturnedProcessing={justReturnedProcessing}
+          stripeReady={ctx.payment_config.stripeReady}
+          paypal={ctx.payment_config.paypal}
         />
       </div>
     );

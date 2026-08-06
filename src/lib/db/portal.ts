@@ -21,6 +21,8 @@ import {
 } from "@/lib/engagements/proposal-snapshot";
 import type { ProposalPreviewData } from "@/components/engagements/proposal-preview";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import { readDepositState } from "@/lib/engagements/deposit-state";
+import { isAwaitingDeposit } from "@/lib/engagements/activation";
 import type { EngagementStage } from "@/lib/engagements/stage";
 import { BUCKET } from "@/lib/storage";
 import {
@@ -89,6 +91,21 @@ export type PortalContext = {
   awaiting_proposal: {
     data: ProposalPreviewData;
     declinedAt: string | null;
+  } | null;
+  /**
+   * Agreed to, and waiting on the deposit before anything opens (1680 + the
+   * founder's flow: "they read the whole proposal and stuff then agree then pay
+   * and once they pay the client portal activates").
+   *
+   * The portal's THIRD state, between the proposal and the working portal. Null
+   * for every engagement with no deposit — most of them — and null the moment
+   * the deposit settles, so it is never a state anyone is stuck in.
+   */
+  awaiting_deposit: {
+    amountCents: number;
+    /** Present once the deposit invoice exists; the pay button needs nothing
+     *  else, since checkout resolves the invoice from the token. */
+    paymentRequestId: string | null;
   } | null;
   client: Client;
   firm: Firm;
@@ -456,9 +473,14 @@ export async function loadPortalContext(
   let portalMessages: PortalMessage[] = [];
   let messagesUnread = 0;
   let messagingReady = false;
-  const [msgRows, msgThread] = await Promise.all([
+  // Joins this batch rather than being awaited on its own — it is on the render
+  // path of every portal load, and a bare await here would add a round trip to
+  // the remote database for every client opening their documents. It short-
+  // circuits after ONE read when there is no deposit, which is most engagements.
+  const [msgRows, msgThread, depositState] = await Promise.all([
     listClientMessages(sb, engagement.client_id),
     getThreadForClient(sb, engagement.client_id),
+    readDepositState(engagement.id),
   ]);
   if (
     msgRows !== CLIENT_MESSAGING_SCHEMA_MISSING &&
@@ -557,6 +579,20 @@ export async function loadPortalContext(
         declinedAt: typeof e.declined_at === "string" ? e.declined_at : null,
       };
     })(),
+    // Accepted, deposit still owed. Resolved by the SAME rule the accept path
+    // used to decide whether to activate (lib/engagements/activation.ts), so the
+    // portal can never disagree with the engagement's own state — a client
+    // looking at a payment screen for work that already started, or a working
+    // portal for work that was never paid for.
+    awaiting_deposit: isAwaitingDeposit({
+      ...depositState,
+      acceptedAt: depositState.acceptedAt,
+    })
+      ? {
+          amountCents: depositState.depositCents ?? 0,
+          paymentRequestId: depositState.paymentRequestId,
+        }
+      : null,
     client: clientSafe as Client,
     firm: firm as Firm,
     items: items as RequestItem[],

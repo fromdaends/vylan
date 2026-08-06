@@ -34,6 +34,31 @@ import { firmPaymentRails } from "@/lib/payments/rails";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { formatCurrency } from "@/lib/format";
 import { dueDateFrom, todayIsoDay } from "@/lib/invoices/terms";
+import { invoiceAfterDeposit } from "@/lib/engagements/activation";
+
+/**
+ * How much of this engagement's deposit has actually been collected.
+ *
+ * Only a PAID deposit counts. Best-effort and tolerant: pre-1680 there is no
+ * `kind` column, so no deposit can exist and the answer is zero — which leaves
+ * the invoice at its full amount, exactly as it behaved before deposits.
+ */
+async function paidDepositCentsSR(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  engagementId: string,
+): Promise<number> {
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("amount_cents, status")
+    .eq("engagement_id", engagementId)
+    .eq("kind", "deposit")
+    .eq("status", "paid");
+  if (error || !data) return 0;
+  return (data as Array<{ amount_cents: number | null }>).reduce(
+    (sum, r) => sum + (typeof r.amount_cents === "number" ? r.amount_cents : 0),
+    0,
+  );
+}
 
 export type InvoiceSendReason =
   | "no_engagement"
@@ -138,11 +163,33 @@ export async function sendEngagementInvoice(
     return { ok: false, reason: "not_complete" };
   }
 
-  const amountCents =
-    kind === "deposit"
-      ? depositCents
-      : (engagement.invoice_amount_cents as number | null);
+  // ── THE DEPOSIT COMES OFF THE FINAL BILL ────────────────────────────────
+  //
+  // Asked directly whether a $1,000 deposit on a $5,000 engagement leaves a
+  // $4,000 or a $5,000 final invoice, the founder: "The balance obviously."
+  //
+  // Without this the client is billed $6,000 for a $5,000 job — two invoices
+  // raised by two code paths, neither of which knew about the other. The
+  // engagement invoice bills what is LEFT.
+  //
+  // Only a SETTLED deposit is credited. An unpaid one has taken no money, and
+  // deducting it would bill the client less than they owe.
+  let amountCents: number | null;
+  let depositCreditCents = 0;
+  if (kind === "deposit") {
+    amountCents = depositCents;
+  } else {
+    const gross = engagement.invoice_amount_cents as number | null;
+    depositCreditCents = await paidDepositCentsSR(sb, engagementId);
+    amountCents =
+      gross != null && depositCreditCents > 0
+        ? invoiceAfterDeposit(gross, depositCreditCents)
+        : gross;
+  }
   if (!amountCents || amountCents <= 0) {
+    // A deposit that covered the whole engagement leaves nothing to bill. That
+    // is a correct outcome, not a failure — the money is already collected, and
+    // raising a $0 invoice would ask the client to pay nothing.
     return { ok: false, reason: "no_amount" };
   }
 
