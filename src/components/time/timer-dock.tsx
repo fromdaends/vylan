@@ -116,9 +116,13 @@ export function TimerDock({ entry }: { entry: DockEntry | null }) {
     <>
       <div
         className={cn(
-          // Left of the chat launcher, same baseline: the launcher sits at
-          // right-4/right-6, so the dock parks one bubble further in.
-          "fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 right-[4.25rem] sm:right-[5.5rem] z-50",
+          // Left of the chat launcher, same baseline. ⚠️ THE LAUNCHER IS NOT A
+          // ROUND BUBBLE — it is a ~95px labeled "Chats" pill, and the first
+          // offset (4.25rem) parked the dock UNDERNEATH it: the idle button
+          // was invisible and the running pill's stop square landed on Chats.
+          // Found only by LOOKING at the deployed page. 7.5rem/8.5rem clears
+          // the pill at both breakpoints with a visible gap.
+          "fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 right-[7.5rem] sm:right-[8.5rem] z-50",
         )}
       >
         {entry ? (
