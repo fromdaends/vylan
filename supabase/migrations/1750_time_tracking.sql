@@ -16,15 +16,37 @@
 --
 --   HOURS  — shared. Everybody in the firm can read how much time went where,
 --            because that is a workload board and a firm needs one.
---   MONEY  — gated on a CAPABILITY, not on the owner rank. Cost rates, billable
---            rates, what an hour cost, what a client's margin is.
+--   MONEY  — gated on a CAPABILITY. Cost rates, billable rates, what an hour
+--            cost, what a client's margin is.
 --
--- ── WHY THE GATE IS A CAPABILITY AND NOT current_user_is_owner() ───────────
+-- ── ROLES ONLY. THERE IS NO OWNER-RANK CHECK IN THIS FILE ─────────────────
 --
--- The founder's second sentence is the whole design here. An owner-rank check
--- would mean the only way to let a senior manager see the firm's numbers is to
--- make them an owner, which hands over every other key in the building at the
--- same time.
+-- Founder, when the draft still had one owner-only arm left in it: "billing
+-- rates could be transferred over to, like, a senior manager who wants to see
+-- how each person is being paid. So, again, that doesn't even make sense.
+-- Again — roles only. It's simple."
+--
+-- They are right, and it is simple, so it is now the rule with no exceptions:
+-- EVERY permission this feature introduces is a capability, and not one of them
+-- reads users.role. An owner-rank check would mean the only way to let a senior
+-- manager see what a person costs is to make them an owner — which hands over
+-- every other key in the building to solve a payroll question.
+--
+-- Owners are unaffected: current_user_has_capability() returns true for an
+-- owner on every capability, so they keep everything automatically and nobody
+-- has to grant them anything.
+--
+-- Three capabilities, all grantable through a role or a per-person switch:
+--   rates.manage     — see and set what each person costs per hour.
+--   insights.view    — the money picture: revenue, labour cost, margin.
+--   time.manage      — fix or remove somebody else's time entry.
+--
+-- The private-client arm below reads clients.private for the same reason. That
+-- one is NOT currently handed out (grantable.ts excludes it, because until this
+-- function existed a granted holder would have seen no extra rows), so today it
+-- behaves EXACTLY like the owner check every other client-scoped table uses —
+-- and the day it is added to the grantable list it starts working here with no
+-- second migration.
 --
 -- The capability model (1120 per-person grants, 1260 roles) already stores
 -- exactly this, IN THE DATABASE — so RLS can ask the same question the UI asks
@@ -277,7 +299,7 @@ begin
       for select using (
         firm_id = public.current_firm_id()
         and (
-          public.current_user_is_owner()
+          public.current_user_has_capability('clients.private')
           or not public.client_is_private(client_id)
         )
       );
@@ -296,14 +318,20 @@ begin
         firm_id = public.current_firm_id()
         and user_id = auth.uid()
         and (
-          public.current_user_is_owner()
+          public.current_user_has_capability('clients.private')
           or not public.client_is_private(client_id)
         )
       );
   end if;
 
-  -- Edit and delete: your own, or anybody's if you are the owner. Separate
+  -- Edit and delete: your own always, anybody's with time.manage. Separate
   -- policies per command so widening one never silently widens another.
+  --
+  -- NOT an owner-rank check, for the founder's reason: "billing rates could be
+  -- transferred over to a senior manager". The same is true of fixing a
+  -- mistyped hour — a practice manager tidying the firm's time is an ordinary
+  -- job, and needing to be handed the whole firm to do it is the absurdity the
+  -- roles system exists to remove. Every owner holds this automatically.
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'time_entries'
@@ -312,10 +340,16 @@ begin
     create policy time_entries_update on public.time_entries
       for update using (
         firm_id = public.current_firm_id()
-        and (user_id = auth.uid() or public.current_user_is_owner())
+        and (
+          user_id = auth.uid()
+          or public.current_user_has_capability('time.manage')
+        )
       ) with check (
         firm_id = public.current_firm_id()
-        and (user_id = auth.uid() or public.current_user_is_owner())
+        and (
+          user_id = auth.uid()
+          or public.current_user_has_capability('time.manage')
+        )
       );
   end if;
 
@@ -327,7 +361,10 @@ begin
     create policy time_entries_delete on public.time_entries
       for delete using (
         firm_id = public.current_firm_id()
-        and (user_id = auth.uid() or public.current_user_is_owner())
+        and (
+          user_id = auth.uid()
+          or public.current_user_has_capability('time.manage')
+        )
       );
   end if;
 end $$;
