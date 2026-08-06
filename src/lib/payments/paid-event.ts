@@ -169,16 +169,14 @@ export async function recordInvoicePaid(
 }
 
 /**
- * A SETTLED BALANCE starts the work.
+ * A SETTLED DEPOSIT starts the work.
  *
- * Not "a deposit was paid" — "nothing is outstanding any more". An engagement
- * can owe a deposit AND an on-acceptance invoice, and opening the portal on the
- * first of two would let a client in while money was still due.
+ * Phrased as "no unpaid deposit remains" rather than "this payment was a
+ * deposit", so a firm that raised two of them (or re-raised one after
+ * cancelling) opens the portal on the last, not the first.
  *
- * A recurring period's invoice is money for work already agreed and already
- * running, so it never gates anything — but it also never leaves an engagement
- * un-activated, because activation only applies to work still waiting to start
- * (the status guard below).
+ * The engagement invoice and a recurring period's invoice never gate anything:
+ * they are money the client may settle whenever they like.
  *
  * Idempotent by its WHERE clause — `activated_at is null` means a replayed
  * webhook, a reconcile racing the webhook, or a second rail landing late cannot
@@ -191,20 +189,22 @@ async function activateOnBalanceSettled(
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
 
-  // ── ANY REMAINING BALANCE STILL HOLDS THE DOOR ───────────────────────────
+  // ── ONLY AN UNPAID DEPOSIT HOLDS THE DOOR ────────────────────────────────
   //
-  // This used to fire only for kind='deposit'. Too narrow, the same way the gate
-  // itself was: an engagement billed 'on_acceptance' with no deposit was never
-  // gated, and one carrying BOTH a deposit and an acceptance invoice would have
-  // opened on the deposit alone while money was still owed.
+  // The founder's rule: "if theres a deposit its paid right away. If it isnt,
+  // the actual contract amount can be payed through the client portal at any
+  // time. Its simply for the deposit that you must pay right away."
   //
-  // So the question is not "was this a deposit" but "is anything still owed".
-  // Paying the last outstanding invoice opens the portal; paying the first of
-  // two does not.
+  // So paying the DEPOSIT opens the portal. The engagement invoice and a
+  // recurring period's invoice are money the client may settle whenever they
+  // like, and neither should ever move an engagement's lifecycle — which is
+  // also why this must stay narrow: widening it to "any balance" would leave a
+  // client locked out over a contract amount they are entitled to defer.
   const { data, error } = await sb
     .from("payment_requests")
     .select("id")
     .eq("engagement_id", engagementId)
+    .eq("kind", "deposit")
     .eq("status", "requested");
   if (error) return;
   if ((data ?? []).length > 0) return;

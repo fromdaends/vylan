@@ -58,13 +58,12 @@ export async function readDepositState(
 
     const acceptedAt = eng.accepted_at ?? null;
 
-    // ── WHAT IS ACTUALLY OUTSTANDING ──────────────────────────────────────
+    // ── WHAT MUST BE PAID BEFORE THE PORTAL OPENS ─────────────────────────
     //
-    // Not "is there a deposit column" — what does the client still OWE right
-    // now. That is the sum of every live, unpaid invoice on the engagement:
-    // the deposit AND an on-acceptance engagement invoice both qualify, and
-    // reading only the deposit column let a $459.90 on-acceptance engagement
-    // through the gate untouched.
+    // The unpaid DEPOSIT, and nothing else. Read from the invoice rather than
+    // from engagements.deposit_cents, because the invoice is what the client
+    // can actually pay and what settling it will clear — the column only says
+    // what was promised.
     //
     // Nothing accepted yet means nothing has been raised yet, so skip the
     // remaining reads — this runs on every portal render.
@@ -146,6 +145,18 @@ async function readOutstanding(
     .select("id, amount_cents, status")
     .eq("engagement_id", engagementId)
     .eq("status", "requested")
+    // ⚠️ THE DEPOSIT ONLY. This is the founder's rule, verbatim:
+    //
+    //   "if theres a deposit its paid right away. If it isnt, the actual
+    //    contract amount can be payed through the client portal at any time.
+    //    Its simply for the deposit that you must pay right away."
+    //
+    // So the gate is narrow ON PURPOSE. I widened it to every outstanding
+    // invoice, which was wrong in the expensive direction: it locked a client
+    // out of their own portal over a contract balance they are entitled to
+    // settle whenever they like. The engagement invoice still goes out, still
+    // shows in the portal, still chases — it just does not hold the door.
+    .eq("kind", "deposit")
     .order("created_at", { ascending: true });
   if (error || !data) return { cents: 0, firstId: null };
   const rows = data as Array<{ id: string; amount_cents: number | null }>;
