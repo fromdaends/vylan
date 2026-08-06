@@ -33,19 +33,29 @@
 // never answer it differently.
 
 export type ActivationFacts = {
-  /** What the proposal says is due on acceptance. Cents; null/0 = none. */
-  depositCents: number | null;
+  /**
+   * Money the client owes AT ACCEPTANCE and has not paid — in cents.
+   *
+   * ⚠️ THIS USED TO BE THE DEPOSIT ONLY, and that was too narrow. The founder
+   * accepted a $459.90 engagement billed 'on_acceptance' with no deposit set,
+   * and walked straight into the portal without paying: "you just click accept
+   * and it brings you to the portal. Even though the engagement was supposed to
+   * be five hundred dollars."
+   *
+   * A deposit and an on-acceptance invoice are the same promise from the
+   * client's side — money due before the work starts — so the gate counts BOTH.
+   * Null/0 means nothing is owed yet.
+   */
+  dueNowCents: number | null;
   /**
    * Can the firm actually take the money right now?
    *
-   * A deposit nobody can pay must NOT hold the portal shut. A firm that has not
+   * Money nobody can pay must NOT hold the portal shut. A firm that has not
    * finished connecting Stripe would otherwise trap every client who accepts in
    * a state with no way out and no way to pay — the engagement would look
    * agreed-to and dead at the same time.
    */
   canCollectPayment: boolean;
-  /** Already settled — the client came back and paid, or the firm recorded it. */
-  depositPaid: boolean;
 };
 
 /**
@@ -56,9 +66,9 @@ export type ActivationFacts = {
  * genuinely being asked for up front.
  */
 export function acceptanceActivatesImmediately(f: ActivationFacts): boolean {
-  if (f.depositPaid) return true;
-  if (f.depositCents == null || f.depositCents <= 0) return true;
-  // A deposit that cannot be collected cannot be a gate.
+  // Nothing outstanding — either none was owed, or it is already settled.
+  if (f.dueNowCents == null || f.dueNowCents <= 0) return true;
+  // Money that cannot be collected cannot be a gate.
   return !f.canCollectPayment;
 }
 
@@ -70,7 +80,7 @@ export function acceptanceActivatesImmediately(f: ActivationFacts): boolean {
  * asking someone to pay for something they have not agreed to is the wrong
  * order and the founder corrected exactly that ordering once already.
  */
-export function isAwaitingDeposit(
+export function isAwaitingPayment(
   f: ActivationFacts & { acceptedAt: string | null | undefined },
 ): boolean {
   if (f.acceptedAt == null) return false;

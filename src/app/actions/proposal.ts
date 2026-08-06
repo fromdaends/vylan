@@ -64,19 +64,20 @@ export async function acceptProposalAction(
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
 
-  // Does agreeing start the work, or does the deposit? Asked BEFORE the write,
-  // so one update settles it and there is no window where the engagement is
-  // briefly live and then retracted.
-  const activatesNow = await acceptanceStartsWorkNow(found.id);
-
   const { error } = await sb
     .from("engagements")
     .update({
       accepted_at: now,
       accepted_by: "client",
-      // Held back when a deposit is due. recordInvoicePaid sets both the moment
-      // it clears (lib/payments/paid-event.ts).
-      ...(activatesNow ? { activated_at: now, status: "in_progress" } : {}),
+      // ACTIVATION IS NOT DECIDED HERE ANY MORE.
+      //
+      // It used to be, and the answer was always "yes, activate" - because the
+      // question was asked BEFORE applyAcceptedBilling had raised anything, so
+      // nothing was outstanding yet and the gate saw an empty balance. The
+      // founder walked straight into the portal on a $459.90 engagement.
+      //
+      // The invoices have to exist before "is anything owed?" can mean
+      // anything, so the decision moved below, after the billing runs.
       // Accepting withdraws an earlier refusal. A client who declined and then
       // agreed has agreed; leaving the decline on the row would show the firm
       // a contradiction.
@@ -102,6 +103,30 @@ export async function acceptProposalAction(
   // best-effort inside: a billing hiccup must never turn a recorded agreement
   // into an error on the client's screen.
   await applyAcceptedBilling(found.id);
+
+  // NOW decide whether work starts.
+  //
+  // The deposit and any on-acceptance invoice exist by this point, so the
+  // question has a real answer. Nothing owed (or no way to collect it) and the
+  // engagement goes live exactly as it always did; anything outstanding and the
+  // portal shows the payment screen until recordInvoicePaid settles the last of
+  // it.
+  //
+  // Best-effort: the agreement is already recorded, and an engagement that is
+  // accepted-but-not-activated is a visible, recoverable state. Failing the
+  // client's Accept click over it would not be.
+  try {
+    if (await acceptanceStartsWorkNow(found.id)) {
+      await sb
+        .from("engagements")
+        .update({ activated_at: now, status: "in_progress" })
+        .eq("id", found.id)
+        .is("activated_at", null);
+    }
+  } catch (e) {
+    console.error("[proposal] activation decision failed:", e);
+  }
+
   // Both sides: the client's portal now shows their documents, and the firm's
   // engagement is live.
   revalidatePath(`/r/${token}`);
