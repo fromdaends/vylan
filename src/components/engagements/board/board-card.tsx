@@ -137,8 +137,10 @@ export function BoardCard({
 
       <div className="mt-[9px] flex items-center justify-between gap-2">
         {/* The SAME capsule the table and the portal render, wearing the ONE
-            shared tone mapping rather than a ternary of its own. */}
-        <StatusCapsule tone={statusTone(row.derivedStatus)}>
+            shared tone mapping rather than a ternary of its own — in the
+            board's FILLED variant, which is the tinted pill the approved
+            design shows ("In progress" reads blue, not a blue dot on white). */}
+        <StatusCapsule variant="filled" tone={statusTone(row.derivedStatus)}>
           {statusLabel}
         </StatusCapsule>
         <span

@@ -17,31 +17,31 @@ import type { StatusTone } from "@/components/ui/status-capsule";
 
 export type DerivedStatus = string;
 
+// The REAL vocabulary: EngagementStatus is draft | sent | in_progress |
+// complete | cancelled, and `derivedStatus` adds "ready_to_review" on top. An
+// earlier draft of this file had branches for statuses that do not exist in
+// this codebase (awaiting_documents, on_hold, not_started) — dead code that
+// read like a spec.
 export function statusTone(derivedStatus: DerivedStatus): StatusTone {
   switch (derivedStatus) {
-    // Done, and paid-and-filed downstream of it.
+    // Done.
     case "complete":
       return "success";
     // The engine is holding a gate open for the accountant — the one status
     // that means "you specifically are the blocker".
     case "ready_to_review":
       return "success";
-    // The chase engine is already acting: documents outstanding with the
-    // client. Amber because it is waiting, not late.
-    case "awaiting_documents":
-    case "collecting":
-      return "warning";
-    // Sent, not yet accepted.
-    case "draft":
+    // Sent and not yet accepted, or never sent. Waiting on the client, and
+    // the chase engine is already acting on it.
     case "sent":
-    case "not_started":
-      return "muted";
-    // Deliberately parked. The one genuinely manual state.
-    case "on_hold":
+      return "warning";
+    case "draft":
       return "muted";
     case "cancelled":
       return "destructive";
-    // Work is open. The ordinary, active case.
+    // Work is open. The ordinary, active case — and the blue the founder was
+    // looking for: "In progress" is accent.
+    case "in_progress":
     default:
       return "accent";
   }
