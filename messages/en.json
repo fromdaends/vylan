@@ -1524,7 +1524,8 @@
     "action_time_entry_deleted": "Deleted a time entry",
     "action_member_rate_changed": "Changed a team member's hourly rate",
     "action_engagement_handoff_note": "Handoff note added",
-    "action_team_permissions_changed": "Teammate permissions changed"
+    "action_team_permissions_changed": "Teammate permissions changed",
+    "action_repeat_dropped": "Repeat dropped (items already bill on a schedule)"
   },
   "Notifications": {
     "title": "What's new",
@@ -3245,7 +3246,18 @@
     "board_tasks": "tasks",
     "filter_chip_search": "Search",
     "filter_chip_clear": "Clear the search",
-    "reminder_preset_flow": "From the flow"
+    "reminder_preset_flow": "From the flow",
+    "recur_mode_label": "How this repeats",
+    "recur_mode_none": "Doesn't repeat",
+    "recur_mode_bills": "Bills repeatedly",
+    "recur_mode_recreates": "Recreates the whole job",
+    "recur_none_hint": "One-time work. To bill the client on a schedule, make a service item recurring; to redo the whole job each cycle, pick \"Recreates the whole job\".",
+    "recur_bills_summary": "{count, plural, one {# service item bills} other {# service items bill}} on a schedule inside this one engagement — the charges start when the client accepts.",
+    "recur_bills_jump": "Edit the items",
+    "recur_recreates_every": "Every",
+    "recur_conflict_items": "Your service items already bill repeatedly — recreating the whole job too would charge the client twice. Make the items one-time first.",
+    "recur_conflict_repeat": "This job recreates itself each cycle — bill inside each occurrence instead of repeating a charge here.",
+    "repeat_error_recurring_items": "This engagement's service items already bill on a schedule — repeating the whole job too would charge the client twice. Make the items one-time first."
   },
   "Attention": {
     "metric_active": "Active",

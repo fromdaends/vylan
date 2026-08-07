@@ -1073,6 +1073,30 @@ export function EngagementBuilder({
   // count-all-missing warning could both cry wolf (a letterless second
   // service whose letter would never send) and stay silent about the one
   // that mattered.
+  // ── ONE RECURRENCE, NEVER BOTH (founder ruling) ─────────────────────────
+  // "Bills repeatedly" is DERIVED from the priced items; "recreates the
+  // whole job" is the Repeat series. The mode picker on the Automation step
+  // reflects whichever is live and refuses the combination; the server
+  // coerces any stale payload the same way (recurring items win).
+  const recurringItemBlocks = blocks.filter(
+    (b) =>
+      b.billingType === "recurring" &&
+      b.items.some((i) => i.name.trim().length > 0),
+  );
+  const hasRecurringItems = recurringItemBlocks.length > 0;
+  const recurringItemCount = recurringItemBlocks.reduce(
+    (n, b) => n + b.items.filter((i) => i.name.trim().length > 0).length,
+    0,
+  );
+  // ITEMS WIN, same as the server's coercion — a seeded template carrying
+  // both must read the same way it will be saved. The bills branch shows
+  // the conflict sentence whenever a live repeat is about to be dropped.
+  const recurMode: "none" | "bills" | "recreates" = hasRecurringItems
+    ? "bills"
+    : repeatFrequency !== "off"
+      ? "recreates"
+      : "none";
+
   // Same filter the submit payload applies (empty-named lines are dropped
   // before they reach the server), so the service named here can never
   // differ from the one resolveServiceId picks at send time.
@@ -2183,6 +2207,13 @@ export function EngagementBuilder({
               // Still a SUGGESTION: a line that carries its own rate wins, the
               // same rule the service catalogue already follows.
               fallbackTaxPct={engagementTaxPct}
+              // One recurrence, never both: while the job recreates itself
+              // each cycle, blocks can't switch to recurring billing.
+              recurringDisabledReason={
+                workflowsOn && repeatFrequency !== "off"
+                  ? t("recur_conflict_repeat")
+                  : null
+              }
             />
           </CardContent>
         </Card>
@@ -2897,10 +2928,14 @@ export function EngagementBuilder({
         </Card>
       )}
 
-      {/* Repeat (recurring series, migration 0770) — "what runs by itself",
-          so with the switch on it lives on the AUTOMATION step (founder:
-          "repeat should be in automation"); unflagged firms keep it on
-          Billing exactly as before. ONE block, two homes — never a copy.
+      {/* ── HOW THIS REPEATS — one concept, one card (founder ruling) ─────
+          "Bills repeatedly" (recurring service items: ONE engagement, a
+          charge each period) and "recreates the whole job" (a series
+          spawning fresh engagements) were two knobs on two steps that read
+          as the same thing twice — "that's just recurrence twice? no sense."
+          With the switch on, this card is the single home: a mode picker,
+          never both (the server refuses the combination too). Unflagged
+          firms keep the old Repeat card on Billing byte-identically.
           Invoice recurrence stays IN here with Repeat: it's a property of
           the series. */}
       {(workflowsOn ? step === "automation" : step === "billing") && (
@@ -2908,46 +2943,149 @@ export function EngagementBuilder({
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
                 <Repeat className="size-4 text-muted-foreground" aria-hidden />
-                {t("repeat_section_label")}
+                {workflowsOn
+                  ? t("recur_mode_label")
+                  : t("repeat_section_label")}
               </CardTitle>
-              <Select
-                value={repeatFrequency}
-                onValueChange={(value) => {
-                  const next = value as
-                    | "off"
-                    | "monthly"
-                    | "quarterly"
-                    | "yearly"
-                    | "custom";
-                  setRepeatFrequency(next);
-                  // Default the day to today when Custom is first chosen (the fixed
-                  // frequencies anchor on the setup day implicitly). Set on a real
-                  // interaction so first paint stays deterministic.
-                  if (next === "custom" && repeatAnchorDay === "") {
-                    setRepeatAnchorDay(String(new Date().getDate()));
-                  }
-                }}
-              >
-                <SelectTrigger
-                  id="repeat-frequency"
-                  className="w-40"
-                  aria-label={t("repeat_section_label")}
+              {workflowsOn ? (
+                <Select
+                  value={recurMode}
+                  onValueChange={(value) => {
+                    if (value === "recreates") {
+                      if (repeatFrequency === "off") {
+                        setRepeatFrequency("yearly");
+                      }
+                    } else {
+                      setRepeatFrequency("off");
+                    }
+                  }}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">{t("repeat_off")}</SelectItem>
-                  <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
-                  <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
-                  <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
-                  <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    className="w-56"
+                    aria-label={t("recur_mode_label")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("recur_mode_none")}</SelectItem>
+                    {/* "bills" is DERIVED from the items — offered only when
+                        recurring items exist (it isn't a thing this card can
+                        create; the Services step is where items live). */}
+                    {hasRecurringItems && (
+                      <SelectItem value="bills">
+                        {t("recur_mode_bills")}
+                      </SelectItem>
+                    )}
+                    <SelectItem value="recreates" disabled={hasRecurringItems}>
+                      {t("recur_mode_recreates")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select
+                  value={repeatFrequency}
+                  onValueChange={(value) => {
+                    const next = value as
+                      | "off"
+                      | "monthly"
+                      | "quarterly"
+                      | "yearly"
+                      | "custom";
+                    setRepeatFrequency(next);
+                    if (next === "custom" && repeatAnchorDay === "") {
+                      setRepeatAnchorDay(String(new Date().getDate()));
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    id="repeat-frequency"
+                    className="w-40"
+                    aria-label={t("repeat_section_label")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">{t("repeat_off")}</SelectItem>
+                    <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
+                    <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
+                    <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+                    <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {t("repeat_section_hint")}
-              </p>
+              {workflowsOn && recurMode === "none" && (
+                <p className="text-xs text-muted-foreground">
+                  {t("recur_none_hint")}
+                </p>
+              )}
+              {workflowsOn && recurMode === "bills" && (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {t("recur_bills_summary", { count: recurringItemCount })}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStep("services")}
+                    >
+                      {t("recur_bills_jump")}
+                    </Button>
+                  </div>
+                  {/* WHY "Recreates the whole job" is greyed out — and, when
+                      a seeded template carried both, why its repeat will be
+                      dropped at save (the server enforces the same rule). */}
+                  <p className="text-xs text-muted-foreground">
+                    {t("recur_conflict_items")}
+                  </p>
+                </>
+              )}
+              {workflowsOn && recurMode === "recreates" && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={repeatFrequency}
+                    onValueChange={(value) => {
+                      const next = value as
+                        | "monthly"
+                        | "quarterly"
+                        | "yearly"
+                        | "custom";
+                      setRepeatFrequency(next);
+                      if (next === "custom" && repeatAnchorDay === "") {
+                        setRepeatAnchorDay(String(new Date().getDate()));
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      id="repeat-frequency"
+                      className="w-40"
+                      // Named after the MODE, not "Repeat" — screen readers
+                      // must hear what sighted users are choosing under.
+                      aria-label={t("recur_mode_recreates")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">
+                        {t("repeat_monthly")}
+                      </SelectItem>
+                      <SelectItem value="quarterly">
+                        {t("repeat_quarterly")}
+                      </SelectItem>
+                      <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+                      <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {(!workflowsOn || recurMode === "recreates") && (
+                <p className="text-xs text-muted-foreground">
+                  {t("repeat_section_hint")}
+                </p>
+              )}
 
               {/* Custom schedule: every N months, on a chosen day. */}
               {repeatFrequency === "custom" && (

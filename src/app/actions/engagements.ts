@@ -815,6 +815,30 @@ export async function createEngagementAction(
   // create must never fail creation; the state stays visible (the engagement
   // page's Repeat dialog shows "does not repeat") and re-enabling there is the
   // recovery path.
+  // ── ONE RECURRENCE, NEVER BOTH (founder ruling, 2026-08-07) ─────────────
+  // "Bills repeatedly" (recurring service items → schedules on ONE
+  // engagement) and "recreates the whole job" (a series spawning fresh
+  // engagements) are mutually exclusive: both at once double-charges the
+  // client. The builder disables the combination; this is the server
+  // refusing a stale or hand-built payload. Recurring items win — they are
+  // part of the priced proposal the client actually reads.
+  const hasRecurringItems = (parsed.data.service_items ?? []).some(
+    (i) => i.billing_frequency && i.billing_frequency !== "once",
+  );
+  if (hasRecurringItems && parsed.data.repeat_frequency !== "off") {
+    parsed.data.repeat_frequency = "off";
+    try {
+      const actor = await getCurrentUser();
+      if (actor?.firm_id) {
+        await logUserActivity(actor.firm_id, engagementId, "repeat_dropped", {
+          reason: "recurring_items_present",
+        });
+      }
+    } catch {
+      // The coercion itself is the point; the audit line is best-effort.
+    }
+  }
+
   if (parsed.data.repeat_frequency !== "off") {
     try {
       const [firmForRepeat, userForRepeat, created] = await Promise.all([

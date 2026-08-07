@@ -52,7 +52,15 @@ const RepeatSchema = z
 
 export type RepeatEditResult =
   | { ok: true }
-  | { ok: false; error: "invalid" | "not_found" | "no_documents" | "save_failed" };
+  | {
+      ok: false;
+      error:
+        | "invalid"
+        | "not_found"
+        | "no_documents"
+        | "recurring_items"
+        | "save_failed";
+    };
 
 export async function setEngagementRepeatAction(input: {
   engagementId: string;
@@ -86,6 +94,30 @@ export async function setEngagementRepeatAction(input: {
       }
       revalidatePath(`/engagements/${engagement.id}`);
       return { ok: true };
+    }
+
+    // ── ONE RECURRENCE, NEVER BOTH (founder ruling, 2026-08-07) ───────────
+    // The create action coerces this combination away; this dialog was the
+    // one-click path that recreated it (review's catch): an engagement whose
+    // items bill on a schedule must not ALSO spawn occurrences — each
+    // spawned copy carries the recurring items and stacks another schedule
+    // on the same client. Tolerant read: pre-1740 rows have no
+    // billing_frequency and read as one-time.
+    try {
+      const { listEngagementItems } = await import("@/lib/db/engagements");
+      const lines = await listEngagementItems(engagement.id);
+      const billsRepeatedly = lines.some(
+        (l) =>
+          (l as { billing_frequency?: string | null }).billing_frequency &&
+          (l as { billing_frequency?: string | null }).billing_frequency !==
+            "once",
+      );
+      if (billsRepeatedly) {
+        return { ok: false, error: "recurring_items" };
+      }
+    } catch {
+      // A failed read must not block a legitimate repeat — the create-time
+      // coercion still backstops the invariant for new engagements.
     }
 
     // A series spawns engagements that must be sendable — an empty checklist
