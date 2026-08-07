@@ -1104,7 +1104,22 @@ export default async function EngagementDetailPage({
     "inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[13.5px] font-medium transition-colors duration-150 hover:bg-secondary";
 
   return (
-    <div className="w-full">
+    // ── IT ARRIVES, RATHER THAN APPEARING ────────────────────────────────
+    //
+    // The founder: "have to have an animation appear when you open an
+    // engagement, it just opens instantly."
+    //
+    // Right, and the vocabulary for it was already here — `animate-card-in` is
+    // documented in globals.css as the "Engagement page (design 2a) motion
+    // vocabulary" and this page never wore it. The class was written, the page
+    // shipped without it, and nobody noticed because nothing was broken; it
+    // just landed with a snap.
+    //
+    // It matters more here than on a quiet screen: this page does real server
+    // work before it can render, so the moment it finally arrives is the moment
+    // you find out the click worked. A 450ms rise turns that from a jolt into
+    // an arrival. `prefers-reduced-motion` drops it in globals.css.
+    <div className="animate-card-in w-full">
       {/* ?panel=messages (the notifications Reply chip) opens the chat popup
           straight in Client-messages mode. */}
       {sp.panel === "messages" && <OpenPanelOnLoad tab="messages" />}
