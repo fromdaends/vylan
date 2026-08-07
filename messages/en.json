@@ -5168,7 +5168,10 @@
     "plan_accept_title": "The client accepts",
     "plan_accept_note": "Then the flow begins",
     "plan_accept_note_letter": "Signing the engagement letter records their acceptance — then the flow begins",
-    "plan_completed_note": "Automatic — reminders stop and the documents are filed to your storage"
+    "plan_completed_note": "Automatic — reminders stop and the documents are filed to your storage",
+    "flow_send_card_title": "When it's sent to the client",
+    "flow_letter_toggle": "Send the engagement letter for signature",
+    "flow_letter_toggle_note": "The letter goes out with the proposal the moment you send it — and signing it records the client's acceptance. It is not tied to any stage."
   },
   "Files": {
     "page_title": "Files",

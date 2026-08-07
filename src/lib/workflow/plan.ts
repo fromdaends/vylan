@@ -66,3 +66,34 @@ export function flowSendsLetter(def: WorkflowDefinition): boolean {
     s.on_entry.includes("send_engagement_letter"),
   );
 }
+
+/**
+ * Turn the flow's engagement letter on or off — the ONLY way an editor may
+ * write it. The letter fires at SEND time (runWorkflowSendEffects), never at
+ * stage entry, so it is one flow-level fact, not a per-stage action; but it
+ * is still STORED as a collecting on_entry entry so every saved flow,
+ * snapshot and older build keeps reading it without a data migration.
+ * Off strips it from every stage, wherever an earlier editor left it.
+ */
+export function withFlowLetter(
+  def: WorkflowDefinition,
+  on: boolean,
+): WorkflowDefinition {
+  const stages = { ...def.stages };
+  for (const key of Object.keys(stages) as EngagementStage[]) {
+    const s = stages[key];
+    if (s.on_entry.includes("send_engagement_letter")) {
+      stages[key] = {
+        ...s,
+        on_entry: s.on_entry.filter((a) => a !== "send_engagement_letter"),
+      };
+    }
+  }
+  if (on) {
+    stages.collecting = {
+      ...stages.collecting,
+      on_entry: ["send_engagement_letter", ...stages.collecting.on_entry],
+    };
+  }
+  return { ...def, stages };
+}
