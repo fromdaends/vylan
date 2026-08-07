@@ -773,3 +773,20 @@ the rule has to reach the person *before* they start editing, and it has to be
 about searching for the other copies, because neither comments nor tests can do
 that job.
 
+
+## Reminder tone-step editor — four copies (declared exception, 2026-08-07)
+
+The per-tone reminder step editor (checkbox + days + repeat) now exists in
+four places:
+
+- `src/components/engagements/reminder-automation-dialog.tsx` (per-engagement, full: SMS + custom copy)
+- `src/components/settings/reminder-automation-defaults.tsx` (firm default, full)
+- `src/components/engagements/engagement-builder.tsx` (builder card, no SMS)
+- `src/components/workflow/automation-editor.tsx` (flow Reminders card, cadence only — no SMS, no custom copy)
+
+They share the i18n vocabulary (`Engagements.reminder_tone_*` /
+`reminder_days_*` / `reminder_repeat_*`) so the words cannot drift, but the
+markup is duplicated. The flow card is deliberately the slimmest: a flow
+carries cadence; SMS and custom wording stay per-engagement / firm-default
+concerns until they are consolidated. Next "expand reminders" request should
+extract ONE `ReminderStepsEditor` and convert all four.

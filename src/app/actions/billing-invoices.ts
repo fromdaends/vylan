@@ -33,6 +33,8 @@ import {
 } from "@/lib/db/invoice-settings";
 import { logUserActivity } from "@/lib/db/activity";
 import { outstandingCents } from "@/lib/invoices/outstanding";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { chaseSettingsWithFlowOverride } from "@/lib/invoices/chase-flow";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -107,8 +109,18 @@ export async function remindInvoiceNowAction(
 
   // "Resets the cadence clock" — the queued reminders are replaced by a fresh
   // run starting today, so the client does not get an automatic one tomorrow
-  // on top of the manual nudge they just received.
-  const settings = await getChaseSettings();
+  // on top of the manual nudge they just received. The rebuild keeps the
+  // FLOW's cadence when the engagement's flow carries one — without this, a
+  // single "Remind now" silently reverted the invoice to firm defaults for
+  // the rest of its life.
+  const settings = await chaseSettingsWithFlowOverride(
+    await getServerSupabase(),
+    {
+      base: await getChaseSettings(),
+      engagementId: invoice.engagement_id ?? null,
+      firmId: gate.firmId,
+    },
+  );
   await rescheduleInvoiceChase({ invoiceId, settings });
   revalidatePath("/billing");
   return { ok: true };
@@ -128,8 +140,17 @@ export async function setAutoChaseAction(
 
   if (on) {
     // Switching chasing back on restarts the cadence from today rather than
-    // replaying a schedule anchored to a due date that may be long past.
-    const settings = await getChaseSettings();
+    // replaying a schedule anchored to a due date that may be long past —
+    // per the FLOW's cadence when the engagement's flow carries one, same
+    // resolution as send-time and "Remind now".
+    const settings = await chaseSettingsWithFlowOverride(
+      await getServerSupabase(),
+      {
+        base: await getChaseSettings(),
+        engagementId: invoice.engagement_id ?? null,
+        firmId: gate.firmId,
+      },
+    );
     await rescheduleInvoiceChase({ invoiceId, settings });
   } else {
     // The worker would skip these anyway (it re-reads auto_chase), but leaving

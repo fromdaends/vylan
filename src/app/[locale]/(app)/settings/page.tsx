@@ -18,7 +18,10 @@ import {
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
-import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
+import {
+  getFirmInvoiceSettings,
+  chaseSettingsFrom,
+} from "@/lib/db/invoice-settings";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
@@ -336,6 +339,8 @@ export default async function SettingsPage({
         invoiceDefaultMode={firm.default_invoice_auto_mode ?? "off"}
         invoiceDefaultDelayDays={firm.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}
+        // The invoice-chase defaults, MOVED here from Billing → Settings.
+        chaseDefaults={chaseSettingsFrom(invoiceSettings)}
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
