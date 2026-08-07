@@ -324,7 +324,15 @@ export async function listTimePickerDataAction(input: {
   clientId?: string | null;
 }): Promise<
   Result<{
-    clients: { id: string; name: string }[];
+    // ComboboxClient's shape, so the sheet can render the SAME searchable
+    // client picker the rest of the app uses (Add task, the engagement
+    // builder) instead of a second, dumber list.
+    clients: {
+      id: string;
+      display_name: string;
+      type: "individual" | "business";
+      email: string | null;
+    }[];
     engagements: { id: string; title: string }[];
   }>
 > {
@@ -340,7 +348,12 @@ export async function listTimePickerDataAction(input: {
     return {
       ok: true,
       value: {
-        clients: clients.map((c) => ({ id: c.id, name: c.display_name })),
+        clients: clients.map((c) => ({
+          id: c.id,
+          display_name: c.display_name,
+          type: c.type,
+          email: c.email,
+        })),
         engagements: engagements.map((e) => ({ id: e.id, title: e.title })),
       },
     };
