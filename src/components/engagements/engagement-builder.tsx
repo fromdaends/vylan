@@ -77,6 +77,19 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import {
+  familyDefaultWorkflow,
+  parseWorkflowDefinition,
+  type StageAssigneeRule,
+  type WorkflowDefinition,
+} from "@/lib/workflow/definition";
+import {
+  flowSendsInvoice,
+  flowSendsLetter,
+  workflowPlan,
+} from "@/lib/workflow/plan";
+import { AutomationEditor } from "@/components/workflow/automation-editor";
+import { BUILTIN_NAME_KEYS } from "@/components/vylan/automations-panel";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -212,6 +225,9 @@ const PREVIEW_STEP_FOR: Record<
   // land in the client's Services section.
   services: "services",
   tasks: "services",
+  // The flow is invisible to the client (it is how the FIRM runs the job),
+  // so, like reminders, it highlights the neutral introduction.
+  automation: "introduction",
   billing: "services",
   // Chasing is invisible to the client, so it highlights nothing new — the
   // introduction is the honest neutral, not a section reminders belong to.
@@ -223,6 +239,12 @@ const WIZARD_STEPS = [
   "details",
   "services",
   "tasks",
+  // How this engagement RUNS — the flow it inherits from its template, made
+  // visible and overridable (founder's Automation step). Between the work
+  // and the money on purpose: the flow decides when the work appears and
+  // when the invoice goes, so you meet it after defining one and before
+  // pricing the other. Hidden entirely for firms without the switch.
+  "automation",
   "billing",
   "reminders",
   // LAST, and last on purpose: it is what the CLIENT sees, and you can only
@@ -246,6 +268,7 @@ type WizardStepKey =
   | "wizard_step_details"
   | "wizard_step_services"
   | "wizard_step_tasks"
+  | "wizard_step_automation"
   | "wizard_step_billing"
   | "wizard_step_reminders"
   | "wizard_step_proposal";
@@ -255,6 +278,7 @@ type WizardStepDescKey =
   | "wizard_step_desc_details"
   | "wizard_step_desc_services"
   | "wizard_step_desc_tasks"
+  | "wizard_step_desc_automation"
   | "wizard_step_desc_billing"
   | "wizard_step_desc_reminders"
   | "wizard_step_desc_proposal";
@@ -273,6 +297,9 @@ export function EngagementBuilder({
   engagementTemplates = [],
   taskTemplates = [],
   members = [],
+  workflowsOn = false,
+  automations = [],
+  serviceIdsWithLetters = [],
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -321,6 +348,19 @@ export function EngagementBuilder({
   /** Active firm members, for the assignee picker. Empty in a solo firm, which
    *  hides the control entirely — there is nobody else to hand it to. */
   members?: { id: string; name: string }[];
+  /** The Part A switch. Off hides the Automation step entirely — the wizard
+   *  is byte-identical to before for unflagged firms. */
+  workflowsOn?: boolean;
+  /** The flows library, for the Automation step's picker. */
+  automations?: {
+    id: string;
+    firmId: string | null;
+    name: string;
+    definition: WorkflowDefinition | null;
+  }[];
+  /** Which services have an engagement letter uploaded (1700) — the
+   *  Automation step's letter status line. */
+  serviceIdsWithLetters?: string[];
   /** Saved sets of tasks (migration 1570). Empty before it is applied, which
    *  hides the picker entirely — there is nothing to pick. */
   taskTemplates?: {
@@ -375,6 +415,10 @@ export function EngagementBuilder({
   // are read from there rather than copied here: one label per concept, so the
   // engagement and the template that produced it can never word it differently.
   const tTpl = useTranslations("Templates");
+  // The Automation step speaks the flow vocabulary three other surfaces
+  // already use — one dictionary, no re-wording.
+  const tAuto = useTranslations("Automations");
+  const tStage = useTranslations("Stage");
 
   // The blank "Empty" template leads the list and is the default when the user
   // didn't arrive via a specific template ("Use" on a card). Everything else
@@ -916,6 +960,10 @@ export function EngagementBuilder({
     // every engagement in Vylan was until now, and refusing to send one would
     // break the existing flow for a field nobody has filled in yet.
     services: true,
+    // The flow always HAS an answer (template's copy or the family preset),
+    // so this step can never block a send — visiting it is optional, the
+    // default is honest.
+    automation: true,
     // Titled work, or a checklist with something in it. Either alone is a real
     // answer: "meet the client, then file" needs no documents, and a plain
     // document request needs no other task.
@@ -941,6 +989,46 @@ export function EngagementBuilder({
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
   const selectedClient = clients.find((client) => client.id === clientId);
+
+  // ── THE FLOW THIS ENGAGEMENT WILL RUN (the Automation step) ──────────────
+  // Default: the picked template's own copy, else the family preset — the
+  // same resolution the server performs, shown BEFORE creation instead of
+  // silently after. `flowPick` is the per-engagement override: a different
+  // flow from the library, or this one customized in place. It is sent to
+  // the server verbatim and outranks the template there; the library and the
+  // template are never modified from here.
+  const [flowPick, setFlowPick] = useState<{
+    def: WorkflowDefinition;
+    automationId: string | null;
+    customized: boolean;
+  } | null>(null);
+  const templateFlow = parseWorkflowDefinition(selectedTemplate?.workflow);
+  const activeFlow: WorkflowDefinition =
+    flowPick?.def ??
+    templateFlow ??
+    familyDefaultWorkflow(selectedTemplate?.type ?? "custom");
+  // Which picked services still lack an engagement letter — the Automation
+  // step's honesty line, only when this flow actually sends one.
+  const pickedServiceIds = [
+    ...new Set(
+      serviceItems
+        .map((x) => x.serviceId)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  const lettersMissingCount = pickedServiceIds.filter(
+    (id) => !serviceIdsWithLetters.includes(id),
+  ).length;
+  // The plan line's "handed to" wording. A helper because TypeScript loses
+  // the null-narrowing inside a .find callback in JSX.
+  function flowAssigneeName(rule: StageAssigneeRule): string {
+    if (rule === "owner") return tAuto("assignee_owner");
+    if (rule === "staff") return tAuto("assignee_staff");
+    return (
+      members.find((m) => m.id === rule.member_id)?.name ??
+      tAuto("assignee_staff")
+    );
+  }
   // Non-blocking recipient-scope warning for the picked client + engagement
   // type. Pure email match against the passed contacts — null for individuals,
   // for types with no scope domain (t1/custom), and when scopes cover it.
@@ -1303,6 +1391,14 @@ export function EngagementBuilder({
             // engagement's workflow snapshot copies THAT template's flow —
             // the customized one, not the family default.
             template_id: selectedTemplate.id,
+            // The Automation step's answer, when the user gave one. Absent =
+            // the server derives from template_id exactly as before.
+            ...(workflowsOn && flowPick
+              ? {
+                  workflow_definition: flowPick.def,
+                  automation_id: flowPick.automationId,
+                }
+              : {}),
             tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
@@ -1504,7 +1600,11 @@ export function EngagementBuilder({
       kicker={t("kicker_engagement")}
       title={t("new_title")}
       explainer={t("wizard_explainer")}
-      tabs={WIZARD_STEPS.map((k): BuilderTab => ({
+      tabs={WIZARD_STEPS.filter(
+        // No switch, no step — the wizard reads exactly as before for
+        // unflagged firms, and a stale deep link to the step falls to details.
+        (k) => k !== "automation" || workflowsOn,
+      ).map((k): BuilderTab => ({
         key: k,
         label: t(`wizard_step_${k}` as WizardStepKey),
         description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
@@ -2332,6 +2432,134 @@ export function EngagementBuilder({
           the drift CLAUDE.md's cohesion rule exists to stop, and it would be
           worse than usual here because these numbers are what a client agrees
           to pay. It is read-only in both places — the EDITOR is step 2. */}
+      {/* ── THE AUTOMATION STEP ──────────────────────────────────────────
+          What this engagement will DO, before it exists: the flow inherited
+          from the template, each stage as a plan line, the letter's status,
+          and a per-engagement override that never touches the library. */}
+      {step === "automation" && workflowsOn && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {tAuto("flow_runs_label")}
+            </span>
+            <Select
+              value={flowPick?.automationId ?? "template"}
+              onValueChange={(v) => {
+                if (v === "template") {
+                  setFlowPick(null);
+                  return;
+                }
+                const a = automations.find((x) => x.id === v);
+                if (a?.definition) {
+                  setFlowPick({
+                    def: a.definition,
+                    automationId: a.id,
+                    customized: false,
+                  });
+                }
+              }}
+            >
+              <SelectTrigger className="h-9 w-72 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="template">
+                  {tAuto("flow_from_template")}
+                </SelectItem>
+                {automations.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.firmId === null && BUILTIN_NAME_KEYS[a.id]
+                      ? tAuto(BUILTIN_NAME_KEYS[a.id])
+                      : a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {flowPick?.customized && (
+              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
+                {tAuto("flow_customized_chip")}
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border">
+            {workflowPlan(activeFlow).map((line) => (
+              <div
+                key={line.stage}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-2.5 text-sm last:border-b-0"
+              >
+                <span className="font-medium">
+                  {tStage(`stage_${line.stage}`)}
+                </span>
+                {line.assignee != null && (
+                  <span className="text-xs text-muted-foreground">
+                    → {flowAssigneeName(line.assignee)}
+                  </span>
+                )}
+                {line.actions.map((a) => (
+                  <span
+                    key={a}
+                    className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent"
+                  >
+                    {tAuto(`action_${a}`)}
+                  </span>
+                ))}
+                {line.taskCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {tAuto("summary_tasks", { count: line.taskCount })}
+                  </span>
+                )}
+                {line.advance && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {tAuto(`condition_${line.advance.condition}`)} ·{" "}
+                    {tAuto(
+                      line.advance.mode === "confirm"
+                        ? "mode_confirm"
+                        : "mode_automatic",
+                    )}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {flowSendsLetter(activeFlow) &&
+            (pickedServiceIds.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {tAuto("flow_letter_needs_service")}
+              </p>
+            ) : lettersMissingCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {tAuto("flow_letters_missing", { count: lettersMissingCount })}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {tAuto("flow_letters_ok")}
+              </p>
+            ))}
+
+          <details className="rounded-xl border border-border p-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              {tAuto("flow_customize")}
+            </summary>
+            <p className="mb-3 mt-1 text-xs text-muted-foreground">
+              {tAuto("flow_override_note")}
+            </p>
+            <AutomationEditor
+              value={activeFlow}
+              onChange={(def) =>
+                setFlowPick({
+                  def,
+                  automationId: flowPick?.automationId ?? null,
+                  customized: true,
+                })
+              }
+              members={members}
+            />
+          </details>
+        </section>
+      )}
+
       {step === "billing" && serviceItems.length > 0 && (
         <Card>
           <CardHeader>
@@ -2585,6 +2813,20 @@ export function EngagementBuilder({
               <CardContent className="space-y-3">
                 {connectReady ? (
                   <>
+                  {/* ONE OWNER FOR INVOICE TIMING (founder's merge ruling):
+                      when this engagement's flow raises the invoice itself,
+                      asking the question again here would be a second owner
+                      of the same decision — the server coerces it anyway, so
+                      offering the picker would be offering a lie. The
+                      Automation step is where the timing now reads and where
+                      it can be changed. Amount fields below stay: the flow
+                      bills whatever is entered here. */}
+                  {workflowsOn && flowSendsInvoice(activeFlow) ? (
+                    <p className="text-xs text-muted-foreground">
+                      {tAuto("flow_owns_invoice_note")}
+                    </p>
+                  ) : (
+                  <>
                   <p className="text-xs text-muted-foreground">
                     {t("invoice_section_hint")}
                   </p>
@@ -2609,8 +2851,11 @@ export function EngagementBuilder({
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  </>
+                  )}
 
-                  {invoiceMode === "delayed" && (
+                  {!(workflowsOn && flowSendsInvoice(activeFlow)) &&
+                    invoiceMode === "delayed" && (
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">
                         {t("invoice_delay_prefix")}
