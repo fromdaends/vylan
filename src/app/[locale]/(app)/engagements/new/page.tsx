@@ -16,6 +16,8 @@ import { can } from "@/lib/auth/capabilities";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
 import { listTaskTemplates } from "@/lib/db/task-templates";
+import { listAutomations } from "@/lib/db/automations";
+import { getServiceIdsWithLetters } from "@/app/actions/engagement-letters";
 
 /**
  * The new-engagement screen, rendered by BOTH entry points:
@@ -58,6 +60,8 @@ export default async function NewEngagementPage({
     engagementTemplates,
     taskTemplates,
     members,
+    automations,
+    serviceIdsWithLetters,
   ] =
     await Promise.all([
       listClients({ includeArchived: false }),
@@ -78,6 +82,12 @@ export default async function NewEngagementPage({
       // assigned_user_id since 0001 — the form simply never offered it, which
       // is why assigning was always a SECOND step after creating.
       listFirmUsers(),
+      // The flows library (1560), for the Automation step's picker. Empty
+      // pre-migration; the step itself only renders when the switch is on.
+      listAutomations(),
+      // Which services carry an engagement letter (1700) — the step's honesty
+      // line about sends that would be skipped.
+      getServiceIdsWithLetters(),
     ]);
 
   // Recipient safety (relationships spec §3): each business client's linked
@@ -193,6 +203,17 @@ export default async function NewEngagementPage({
         members={members
           .filter((m) => !m.deactivated_at)
           .map((m) => ({ id: m.id, name: userDisplayLabel(m) }))}
+        workflowsOn={
+          (firm as { workflows_enabled?: boolean } | null)
+            ?.workflows_enabled === true
+        }
+        automations={automations.map((a) => ({
+          id: a.id,
+          firmId: a.firmId,
+          name: a.name,
+          definition: a.definition,
+        }))}
+        serviceIdsWithLetters={serviceIdsWithLetters}
       />
   );
 }

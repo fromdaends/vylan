@@ -3202,6 +3202,8 @@
     "wizard_step_desc_services": "What you sell, priced",
     "wizard_step_desc_tasks": "The work inside it",
     "wizard_step_desc_billing": "How it gets paid",
+    "wizard_step_automation": "Automation",
+    "wizard_step_desc_automation": "What runs by itself",
     "wizard_step_desc_reminders": "Who gets chased, and when",
     "wizard_step_desc_proposal": "What your client will read",
     "preview_for_client": "Preview · {name}",
@@ -5134,7 +5136,16 @@
     "summary_ends_signature_request_sent": "completes when sent to sign",
     "summary_ends_all_docs_verified": "completes when documents verified",
     "skipped_chip": "Skipped",
-    "saved_back_toast": "Saved — \"{name}\" updated too"
+    "saved_back_toast": "Saved — \"{name}\" updated too",
+    "flow_runs_label": "This engagement runs",
+    "flow_from_template": "The template's flow",
+    "flow_customized_chip": "Customized for this engagement",
+    "flow_customize": "Change it for this engagement",
+    "flow_override_note": "Changes here apply to this engagement only — the flow in your library and on the template stay as they are.",
+    "flow_letter_needs_service": "This flow sends an engagement letter, but letters belong to services — add a priced service and its letter will be used.",
+    "flow_letters_missing": "{count, plural, one {# picked service has no engagement letter yet — that send will be skipped until one is uploaded.} other {# picked services have no engagement letter yet — those sends will be skipped until one is uploaded.}}",
+    "flow_letters_ok": "Every picked service has its engagement letter — it will go out for signature automatically.",
+    "flow_owns_invoice_note": "This engagement's flow sends the invoice itself — see the Automation step for when, and to change it."
   },
   "Files": {
     "page_title": "Files",

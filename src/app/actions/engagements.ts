@@ -59,6 +59,7 @@ import {
   parseWorkflowDefinition,
   type WorkflowSnapshot,
 } from "@/lib/workflow/definition";
+import { flowSendsInvoice } from "@/lib/workflow/plan";
 import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -371,6 +372,15 @@ export async function createEngagementAction(
     // Which document template the builder started from (1560) — the source of
     // the engagement's workflow copy. Absent/null = family default by type.
     template_id?: string | null;
+    // The Automation step's per-engagement override (workflows-sync): the
+    // definition as the user left it, when they picked a different flow or
+    // customized this one. Parsed totally server-side; outranks the
+    // template's copy because it is the user's explicit answer for THIS
+    // engagement. A malformed value degrades to the template/family flow —
+    // never to a failed create.
+    workflow_definition?: unknown;
+    // Provenance of the override's pick, display-only. Never read through.
+    automation_id?: string | null;
     items: TemplateItem[];
     send: boolean;
     /**
@@ -469,6 +479,19 @@ export async function createEngagementAction(
             automationId = tpl?.automation_id ?? null;
           }
         }
+        // The Automation step's override outranks both: it is the user's
+        // explicit answer for THIS engagement, made looking at the plan.
+        const override = parseWorkflowDefinition(payload.workflow_definition);
+        if (override) {
+          def = override;
+          automationId =
+            typeof payload.automation_id === "string" &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              payload.automation_id,
+            )
+              ? payload.automation_id
+              : automationId;
+        }
         const members = await listActiveFirmUsers();
         workflowSnapshot = buildWorkflowSnapshot(
           def,
@@ -537,13 +560,10 @@ export async function createEngagementAction(
     //   * an explicit "create the invoice now" is immediate billing, a
     //     different decision the flow does not make, and passes through
     //     untouched (invoice_create_now, handled after creation).
-    const flowSendsInvoice =
-      workflowSnapshot != null &&
-      Object.values(workflowSnapshot.stages).some((s) =>
-        s.on_entry.includes("send_invoice"),
-      );
+    const flowOwnsInvoice =
+      workflowSnapshot != null && flowSendsInvoice(workflowSnapshot);
     const effectiveAutoMode =
-      flowSendsInvoice && parsed.data.invoice_auto_mode !== "off"
+      flowOwnsInvoice && parsed.data.invoice_auto_mode !== "off"
         ? "off"
         : parsed.data.invoice_auto_mode;
 
@@ -571,7 +591,7 @@ export async function createEngagementAction(
       // took ownership above, its send_invoice action still bills THIS
       // amount — nulling it would turn the flow's invoice into no_amount.
       invoice_amount_cents:
-        parsed.data.invoice_auto_mode === "off" && !flowSendsInvoice
+        parsed.data.invoice_auto_mode === "off" && !flowOwnsInvoice
           ? null
           : (parsed.data.invoice_amount_cents ?? null),
       // Lock preference + description are carried onto a LATER (automated)
