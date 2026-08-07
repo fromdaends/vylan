@@ -18,6 +18,7 @@ import { TimerDock } from "@/components/time/timer-dock";
 import { getRunningEntry } from "@/lib/db/time-entries";
 import { isTimeInsightsEnabled } from "@/lib/time/flags";
 import { can } from "@/lib/auth/capabilities";
+import { isFounderEmail } from "@/lib/founders/access";
 import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
@@ -131,6 +132,10 @@ export default async function AppLayout({
       // The CAPABILITY, not the rank (founder: "roles only") — a senior
       // manager granted insights.view through a role gets the tab.
       showInsights={timeEnabled && can(dbUser, "insights.view")}
+      // The Vylan founders' own cross-firm console. A pure env-allowlist check
+      // — no database read, no capability, nothing a firm can grant itself —
+      // and the /founders route re-checks it rather than trusting this.
+      showFounders={isFounderEmail(dbUser.email)}
       topBar={
         // Back to banner-only (timer v2): the timer moved OUT of the top bar
         // and into the dock beside the Chats launcher — one control, bottom
@@ -167,6 +172,7 @@ export default async function AppLayout({
         workTimeHint: t("nav_work_time_hint"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
+        founders: t("nav_founders"),
         engagementViews: {
           active: tEng("view_active_label"),
           all: tEng("view_all_label"),
