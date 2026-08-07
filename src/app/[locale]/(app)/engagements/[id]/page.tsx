@@ -969,6 +969,9 @@ export default async function EngagementDetailPage({
     // "The client has done something since we sent it" is the honest stand-in
     // for live until acceptance draws that line properly.
     clientHasEngaged: attention.daysSinceClientActivity != null,
+    // Whether a client was ever ASKED. When they were, nothing below
+    // acceptance may infer it — see resolveAgreementStatus.
+    requiresAcceptance: engagement.requires_acceptance === true,
   });
   // Which nodes the stepper draws: the skip logic. An engagement with no
   // signature items never shows Awaiting signature; one with no live invoice
@@ -1414,7 +1417,16 @@ export default async function EngagementDetailPage({
 
         {/* Labeled stage pills — passed stages collapsed (replaces the dot
             stepper; same resolver + words as the engagements list). */}
-        <EngagementStagePills status={agreementStatus} />
+        <EngagementStagePills
+          status={agreementStatus}
+          // Only draw an Accepted pill where acceptance is part of this
+          // engagement's life — asked for, or already given. Otherwise the
+          // rail ticks a stage nobody was ever asked to pass.
+          showAccepted={
+            engagement.requires_acceptance === true ||
+            engagement.accepted_at != null
+          }
+        />
 
         {/* The exceptions, kept: rare states the founder must still see. */}
         {(engagement.reminders_paused ||

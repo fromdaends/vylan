@@ -239,3 +239,128 @@ describe("resolveAgreementStatus — explicit activation (1630)", () => {
     ).toBe("draft");
   });
 });
+
+describe("⚠️ an engagement that asks for acceptance never claims one", () => {
+  // The founder, looking at a sent proposal: "it says draft ✓ sent ✓ accepted ✓
+  // ... It should not say accepted because it has not been accepted."
+  //
+  // The rail ticks every step BEFORE the current one, so returning "active"
+  // here put a checkmark on "Accepted" — on a contract nobody signed.
+  const sentNotAccepted = {
+    status: "sent" as const,
+    sentAt: "2026-08-07T23:36:52Z",
+    acceptedAt: null,
+    completedAt: null,
+    requiresAcceptance: true,
+  };
+
+  it("stays SENT even when the client has opened it", () => {
+    // `clientHasEngaged` was the stand-in "until acceptance exists". It exists.
+    expect(
+      resolveAgreementStatus({ ...sentNotAccepted, clientHasEngaged: true }),
+    ).toBe("sent");
+  });
+
+  it("stays SENT even when the lifecycle column says in_progress", () => {
+    // 31 of 80 production engagements were in exactly this shape.
+    expect(
+      resolveAgreementStatus({
+        ...sentNotAccepted,
+        status: "in_progress",
+        clientHasEngaged: false,
+      }),
+    ).toBe("sent");
+  });
+
+  it("stays SENT even if something stamped activated_at", () => {
+    // Activating what nobody agreed to must not skip the agreement.
+    expect(
+      resolveAgreementStatus({
+        ...sentNotAccepted,
+        clientHasEngaged: true,
+        activatedAt: "2026-08-07T23:40:00Z",
+      }),
+    ).toBe("sent");
+  });
+
+  it("moves on the moment the client actually accepts", () => {
+    expect(
+      resolveAgreementStatus({
+        ...sentNotAccepted,
+        acceptedAt: "2026-08-08T10:00:00Z",
+        clientHasEngaged: false,
+      }),
+    ).toBe("accepted");
+  });
+
+  it("still lets a completed engagement be complete", () => {
+    // The most-final-first ordering must survive the new rule.
+    expect(
+      resolveAgreementStatus({
+        ...sentNotAccepted,
+        clientHasEngaged: true,
+        completedAt: "2026-08-09T10:00:00Z",
+      }),
+    ).toBe("complete");
+  });
+
+  it("leaves engagements that never ask for acceptance alone", () => {
+    // Historical rows, and firms that do not use the accept step. The old
+    // stand-in is still the best reading there, with no real answer to overrule.
+    expect(
+      resolveAgreementStatus({
+        ...sentNotAccepted,
+        requiresAcceptance: false,
+        clientHasEngaged: true,
+      }),
+    ).toBe("active");
+  });
+});
+
+describe("the list and the detail page give the SAME answer", () => {
+  // They used to disagree: the row derivation passed neither acceptedAt nor
+  // requiresAcceptance, so a sent-unaccepted engagement read "active" in the
+  // list while its own page read "sent". One job, two answers, and the wrong
+  // one claimed a signed contract.
+  it("a sent, unaccepted row is SENT in the list too", () => {
+    expect(
+      agreementStatusForRow({
+        status: "sent",
+        startedAt: "2026-08-07T23:36:52Z",
+        daysSinceClientActivity: 0, // the client opened it
+        acceptedAt: null,
+        requiresAcceptance: true,
+      }),
+    ).toBe("sent");
+  });
+
+  it("agrees with resolveAgreementStatus on the same facts", () => {
+    const facts = {
+      status: "in_progress" as const,
+      startedAt: "2026-08-07T23:36:52Z",
+      daysSinceClientActivity: 2,
+      acceptedAt: null,
+      requiresAcceptance: true,
+    };
+    expect(agreementStatusForRow(facts)).toBe(
+      resolveAgreementStatus({
+        status: facts.status,
+        sentAt: facts.startedAt,
+        completedAt: null,
+        clientHasEngaged: true,
+        acceptedAt: null,
+        requiresAcceptance: true,
+      }),
+    );
+  });
+
+  it("leaves rows that never ask for acceptance exactly as they were", () => {
+    expect(
+      agreementStatusForRow({
+        status: "in_progress",
+        startedAt: "2026-01-01T00:00:00Z",
+        daysSinceClientActivity: 1,
+      }),
+    ).toBe("active");
+  });
+});
