@@ -2483,6 +2483,36 @@ export function EngagementBuilder({
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border">
+            {/* The journey BEFORE the flow — the founder: "it goes from
+                draft to sent to the client accepts, and then it can move
+                into collecting... but it doesn't display over here." Now it
+                does. The letter belongs to the SEND line (signing it is how
+                the client accepts), and the accept line only renders when
+                this engagement will actually hold for one — a plain
+                document request starts the moment it is sent. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
+              <span className="font-medium">{tAuto("plan_sent_title")}</span>
+              {flowSendsLetter(activeFlow) && (
+                <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
+                  {tAuto("action_send_engagement_letter")}
+                </span>
+              )}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {tAuto("plan_sent_note")}
+              </span>
+            </div>
+            {pickedServiceIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
+                <span className="font-medium">
+                  {tAuto("plan_accept_title")}
+                </span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {flowSendsLetter(activeFlow)
+                    ? tAuto("plan_accept_note_letter")
+                    : tAuto("plan_accept_note")}
+                </span>
+              </div>
+            )}
             {workflowPlan(activeFlow).map((line) => (
               <div
                 key={line.stage}
@@ -2496,14 +2526,18 @@ export function EngagementBuilder({
                     → {flowAssigneeName(line.assignee)}
                   </span>
                 )}
-                {line.actions.map((a) => (
-                  <span
-                    key={a}
-                    className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent"
-                  >
-                    {tAuto(`action_${a}`)}
-                  </span>
-                ))}
+                {line.actions
+                  // The letter renders on the "Sent to the client" line
+                  // above — showing it here too would claim two sends.
+                  .filter((a) => a !== "send_engagement_letter")
+                  .map((a) => (
+                    <span
+                      key={a}
+                      className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent"
+                    >
+                      {tAuto(`action_${a}`)}
+                    </span>
+                  ))}
                 {line.taskCount > 0 && (
                   <span className="text-xs text-muted-foreground">
                     {tAuto("summary_tasks", { count: line.taskCount })}
@@ -2517,6 +2551,13 @@ export function EngagementBuilder({
                         ? "mode_confirm"
                         : "mode_automatic",
                     )}
+                  </span>
+                )}
+                {/* "Completed" said nothing about what completing DOES —
+                    the founder had to ask whether paid means done. */}
+                {line.stage === "completed" && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {tAuto("plan_completed_note")}
                   </span>
                 )}
               </div>

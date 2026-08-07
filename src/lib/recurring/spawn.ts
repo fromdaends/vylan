@@ -46,6 +46,7 @@ import {
   parseWorkflowSnapshot,
   type WorkflowDefinition,
 } from "@/lib/workflow/definition";
+import { runWorkflowSendEffects } from "@/lib/workflow/effects";
 import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 
 // How many due series one cron run will process. Hourly cadence means a
@@ -546,6 +547,16 @@ async function spawnOccurrence(
     await syncEngagementStageSR(engagementId);
   } catch (e) {
     console.error("[recurring] stage sync failed:", e);
+  }
+
+  // A spawn IS a send, so the send-time effects fire here too — the letter,
+  // when the flow carries one and the letter-key guard hasn't already been
+  // satisfied by an earlier occurrence this year (that guard is the whole
+  // reason twelve bookkeeping spawns ask for one signature, not twelve).
+  try {
+    await runWorkflowSendEffects({ engagementId, firmId: series.firm_id });
+  } catch (e) {
+    console.error("[recurring] send effects failed:", e);
   }
 
   // Activity trail.

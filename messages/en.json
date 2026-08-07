@@ -5162,7 +5162,13 @@
     "flow_letter_needs_service": "This flow sends an engagement letter, but letters belong to services — add a priced service and its letter will be used.",
     "flow_letters_missing": "{count, plural, one {# picked service has no engagement letter yet — that send will be skipped until one is uploaded.} other {# picked services have no engagement letter yet — those sends will be skipped until one is uploaded.}}",
     "flow_letters_ok": "Every picked service has its engagement letter — it will go out for signature automatically.",
-    "flow_owns_invoice_note": "This engagement's flow sends the invoice itself — see the Automation step for when, and to change it."
+    "flow_owns_invoice_note": "This engagement's flow sends the invoice itself — see the Automation step for when, and to change it.",
+    "plan_sent_title": "Sent to the client",
+    "plan_sent_note": "The proposal lands in their portal",
+    "plan_accept_title": "The client accepts",
+    "plan_accept_note": "Then the flow begins",
+    "plan_accept_note_letter": "Signing the engagement letter records their acceptance — then the flow begins",
+    "plan_completed_note": "Automatic — reminders stop and the documents are filed to your storage"
   },
   "Files": {
     "page_title": "Files",

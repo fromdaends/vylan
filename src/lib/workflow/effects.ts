@@ -31,19 +31,28 @@ import {
   type EngagementStage,
 } from "@/lib/engagements/stage";
 import {
+  parseWorkflowSnapshot,
   workflowStageOrder,
   type WorkflowSnapshot,
   type WorkflowTaskDef,
 } from "./definition";
+import { flowSendsLetter } from "./plan";
+import { isWorkflowsEnabledForFirm } from "./flags";
 
 type ClaimResult = "claimed" | "duplicate" | "error";
+
+// The ledger's stage key is text: real stages, plus 'sent' — the pseudo-phase
+// for effects that belong to SENDING the engagement rather than to any stage
+// (the engagement letter, per the founder: signing it IS the acceptance, so
+// it cannot wait for the acceptance it produces).
+type LedgerPhase = EngagementStage | "sent";
 
 async function claimEvent(
   sb: SupabaseClient,
   row: {
     firm_id: string;
     engagement_id: string;
-    stage: EngagementStage;
+    stage: LedgerPhase;
     action: string;
     status?: "done" | "failed" | "skipped";
     detail?: Record<string, unknown>;
@@ -67,7 +76,7 @@ async function claimEvent(
 
 async function markEvent(
   sb: SupabaseClient,
-  where: { engagement_id: string; stage: EngagementStage; action: string },
+  where: { engagement_id: string; stage: LedgerPhase; action: string },
   patch: { status: "done" | "failed" | "skipped"; detail?: Record<string, unknown> },
 ): Promise<void> {
   const { error } = await sb
@@ -168,6 +177,14 @@ export async function runWorkflowStageEffects(
 
       // ── Entry actions, in the template's order ───────────────────────────
       for (const action of stageDef.on_entry) {
+        // The letter is NOT a stage action (founder's correction): it goes
+        // out when the engagement is SENT — signing it is how the client
+        // accepts, so it cannot wait for the acceptance it produces.
+        // runWorkflowSendEffects owns it under the 'sent' ledger key; flows
+        // that still list it on a stage (the seeds, older copies) are read
+        // as "this flow sends the letter" and skipped here without a claim —
+        // a ledger row saying a stage sent it would be a lie.
+        if (action === "send_engagement_letter") continue;
         const claim = await claimEvent(sb, {
           firm_id: input.firmId,
           engagement_id: input.engagementId,
@@ -187,57 +204,6 @@ export async function runWorkflowStageEffects(
             { status: "done", detail: { via: "engagement_send" } },
           );
           actionsRun.push(action);
-        } else if (action === "send_engagement_letter") {
-          // Dynamic import for the same reason send_invoice uses one: the
-          // letter sender reaches back into the signature + item layers,
-          // which re-enter the stage engine.
-          const { sendEngagementLetter } = await import("./letter");
-          try {
-            const res = await sendEngagementLetter({
-              engagementId: input.engagementId,
-              firmId: input.firmId,
-            });
-            if (res.ok) {
-              // A new signature ITEM exists, which the resolver counts.
-              outcome.factsChanged = true;
-              actionsRun.push(action);
-            } else {
-              await markEvent(
-                sb,
-                { engagement_id: input.engagementId, stage, action },
-                {
-                  // already_signed / already_sent are the guard working, not
-                  // a failure: the client has the letter, which is the point.
-                  status:
-                    res.reason === "already_signed" ||
-                    res.reason === "already_sent" ||
-                    res.reason === "not_configured" ||
-                    // No priced service line means there is no letter to
-                    // send — a setup fact, not a failure.
-                    res.reason === "no_service"
-                      ? "skipped"
-                      : "failed",
-                  detail: {
-                    reason: res.reason,
-                    ...(res.detail ? { detail: res.detail } : {}),
-                  },
-                },
-              );
-              if (
-                res.reason === "already_signed" ||
-                res.reason === "already_sent"
-              ) {
-                actionsRun.push(action);
-              }
-            }
-          } catch (e) {
-            console.error("[workflow] send_engagement_letter failed:", e);
-            await markEvent(
-              sb,
-              { engagement_id: input.engagementId, stage, action },
-              { status: "failed", detail: { reason: "exception" } },
-            );
-          }
         } else if (action === "send_invoice") {
           // Dynamic import breaks a real cycle: invoices/send re-syncs the
           // stage after raising its invoice (send → stage-sync → effects).
@@ -335,6 +301,76 @@ export async function runWorkflowStageEffects(
     console.error("[workflow] effects failed:", e);
   }
   return outcome;
+}
+
+/**
+ * Effects that belong to SENDING, not to any stage — today exactly one: the
+ * engagement letter. Founder's correction after seeing the first plan: "the
+ * engagement letter is supposed to be sent upon create, not when the client
+ * accepts" — signing it IS how the client agrees (signwell/complete.ts
+ * records accepted_at when a letter-keyed request completes), so it must be
+ * in their hands the moment the engagement is.
+ *
+ * Ledger key ('sent', 'send_engagement_letter'): exactly-once across every
+ * send path — create-and-send, the detail page's Send button, and recurring
+ * spawns all call this; only the first claim fires.
+ */
+export async function runWorkflowSendEffects(input: {
+  engagementId: string;
+  firmId: string;
+}): Promise<void> {
+  try {
+    const sb = getServiceRoleSupabase();
+    const { data } = await sb
+      .from("engagements")
+      .select("workflow")
+      .eq("id", input.engagementId)
+      .maybeSingle();
+    const wf = parseWorkflowSnapshot(
+      (data as { workflow?: unknown } | null)?.workflow,
+    );
+    if (!wf || !flowSendsLetter(wf)) return;
+    if (!(await isWorkflowsEnabledForFirm(sb, input.firmId))) return;
+
+    const claim = await claimEvent(sb, {
+      firm_id: input.firmId,
+      engagement_id: input.engagementId,
+      stage: "sent",
+      action: "send_engagement_letter",
+    });
+    if (claim !== "claimed") return;
+
+    const { sendEngagementLetter } = await import("./letter");
+    const res = await sendEngagementLetter(input);
+    if (!res.ok) {
+      await markEvent(
+        sb,
+        {
+          engagement_id: input.engagementId,
+          stage: "sent",
+          action: "send_engagement_letter",
+        },
+        {
+          // The guard doing its job (already signed/sent) and setup facts
+          // (no letter, no service) are skips; everything else needs a human
+          // and reads as failed on the ledger.
+          status:
+            res.reason === "already_signed" ||
+            res.reason === "already_sent" ||
+            res.reason === "not_configured" ||
+            res.reason === "no_service"
+              ? "skipped"
+              : "failed",
+          detail: {
+            reason: res.reason,
+            ...(res.detail ? { detail: res.detail } : {}),
+          },
+        },
+      );
+    }
+  } catch (e) {
+    console.error("[workflow] send effects failed:", e);
+  }
 }
 
 // Reassign the engagement to the stage's person. Returns the user id when the
