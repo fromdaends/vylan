@@ -91,21 +91,50 @@ export async function finalizeSignatureCompletion(
         .eq("id", sr.id)
         .maybeSingle();
       if ((lk as { letter_key?: string | null } | null)?.letter_key) {
-        const { error: acceptErr } = await sbSR
+        // Clears the decline like the plain-accept path does — a client who
+        // declined and then signed has agreed, and leaving declined_at on
+        // the row would show the firm a standing refusal on an accepted
+        // engagement. Pre-1650 (no decline columns) retries without them.
+        const acceptPatch = {
+          accepted_at: new Date().toISOString(),
+          accepted_by: "client",
+        };
+        let acceptRes = await sbSR
           .from("engagements")
-          .update({
-            accepted_at: new Date().toISOString(),
-            accepted_by: "client",
-          })
+          .update({ ...acceptPatch, declined_at: null, decline_reason: null })
           .eq("id", sr.engagement_id)
-          .is("accepted_at", null);
-        if (!acceptErr) {
+          .is("accepted_at", null)
+          .select("id");
+        if (
+          acceptRes.error &&
+          (acceptRes.error.code === "42703" ||
+            acceptRes.error.code === "PGRST204")
+        ) {
+          acceptRes = await sbSR
+            .from("engagements")
+            .update(acceptPatch)
+            .eq("id", sr.engagement_id)
+            .is("accepted_at", null)
+            .select("id");
+        }
+        // First writer only: the guard means a row came back exactly when
+        // THIS signature recorded the acceptance.
+        if (!acceptRes.error && (acceptRes.data?.length ?? 0) > 0) {
           await logServiceRoleActivity(
             sr.firm_id,
             sr.engagement_id,
             "engagement_accepted",
             { accepted_by: "client", via: "engagement_letter" },
           );
+          // THE ACCEPTANCE'S CONSEQUENCES — the deposit, the on-acceptance
+          // invoice, the recurring schedules, then the activation decision.
+          // The same shared pipeline the portal's Accept button runs; without
+          // it, sign-to-accept recorded agreements whose deposits were never
+          // raised and whose portals opened unpaid (the review's blocker).
+          const { runAcceptanceConsequences } = await import(
+            "@/lib/engagements/on-accepted"
+          );
+          await runAcceptanceConsequences(sr.engagement_id);
         }
       }
     } catch (e) {

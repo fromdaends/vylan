@@ -4376,7 +4376,13 @@
     "gate_unavailable": "Something went wrong. Try again.",
     "deposit_accepted_title": "Thanks — {firm} has your agreement",
     "deposit_accepted_body": "One last step. Pay the deposit below and your portal opens right away, with everything you need in it.",
-    "deposit_credited_note": "This deposit comes off your final invoice."
+    "deposit_credited_note": "This deposit comes off your final invoice.",
+    "proposal_letter_note": "To accept, review and sign the engagement letter from {firm}. Your signature records your acceptance of this proposal.",
+    "proposal_letter_sign": "Review & sign the engagement letter",
+    "proposal_letter_preparing": "{firm} is preparing your engagement letter — you'll be able to review and sign it here once it's ready.",
+    "proposal_letter_signed_title": "Signature received",
+    "proposal_letter_signed_body": "We're finalizing your acceptance — this usually takes a few seconds.",
+    "proposal_letter_declined": "You declined the engagement letter. If you've changed your mind, contact {firm} — they can send a fresh copy for signature."
   },
   "Integrations": {
     "index_title": "Integrations",

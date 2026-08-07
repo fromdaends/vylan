@@ -91,6 +91,15 @@ export type PortalContext = {
   awaiting_proposal: {
     data: ProposalPreviewData;
     declinedAt: string | null;
+    /** A live engagement letter on this proposal. Signing it IS accepting;
+     *  while present the plain Accept is replaced (sent/viewed = signable,
+     *  pending = the firm is still placing fields, declined = the client
+     *  refused it in SignWell and the firm must re-send). Null = no letter
+     *  rides this engagement and Accept behaves exactly as before. */
+    letter: {
+      itemId: string;
+      status: "pending" | "sent" | "viewed" | "declined";
+    } | null;
   } | null;
   /**
    * Agreed to, and waiting on the deposit before anything opens (1680 + the
@@ -453,16 +462,59 @@ export async function loadPortalContext(
         .invoice_locks_deliverables === true,
   });
 
-  // SignWell status per signature item, for the portal signature card. Tolerant
-  // of the table being absent before migration 0400 (data stays empty on error).
+  // SignWell status per signature item, for the portal signature card. Also
+  // reads letter_key (1580): while the proposal gate is up, a live
+  // letter-keyed request IS the acceptance control — signing it writes
+  // accepted_at (signwell/complete.ts) — so the proposal screen must be able
+  // to open it. Wide select first; pre-1580 (no letter_key column) retries
+  // narrow, reading as "no letter", which keeps the plain Accept button.
+  // Tolerant of the whole table being absent before 0400 (data stays empty).
   const signatureStatusByItem: Record<string, SignatureStatus> = {};
-  const { data: sigReqs } = await sb
+  let proposalLetter: {
+    itemId: string;
+    status: "pending" | "sent" | "viewed" | "declined";
+  } | null = null;
+  const wideSig = await sb
     .from("signature_requests")
-    .select("request_item_id, status")
+    .select("request_item_id, status, letter_key")
     .eq("engagement_id", engagement.id);
-  for (const r of sigReqs ?? []) {
-    signatureStatusByItem[r.request_item_id as string] =
-      r.status as SignatureStatus;
+  const sigRows: unknown[] =
+    wideSig.error &&
+    (wideSig.error.code === "42703" || wideSig.error.code === "PGRST204")
+      ? ((
+          await sb
+            .from("signature_requests")
+            .select("request_item_id, status")
+            .eq("engagement_id", engagement.id)
+        ).data ?? [])
+      : (wideSig.data ?? []);
+  for (const r of sigRows) {
+    const row = r as {
+      request_item_id: string | null;
+      status: string;
+      letter_key?: string | null;
+    };
+    if (row.request_item_id) {
+      signatureStatusByItem[row.request_item_id] =
+        row.status as SignatureStatus;
+    }
+    if (
+      row.letter_key &&
+      row.request_item_id &&
+      (row.status === "pending" ||
+        row.status === "sent" ||
+        row.status === "viewed" ||
+        row.status === "declined")
+    ) {
+      // A firm can re-send after a decline, leaving both rows: the live one
+      // always outranks the declined one.
+      if (!(proposalLetter && row.status === "declined")) {
+        proposalLetter = {
+          itemId: row.request_item_id,
+          status: row.status,
+        };
+      }
+    }
   }
 
   // Client messaging: the client's ONE forever thread with the firm + their
@@ -641,6 +693,10 @@ export async function loadPortalContext(
           sentDate: engagement.sent_at ?? null,
         },
         declinedAt: typeof e.declined_at === "string" ? e.declined_at : null,
+        // The engagement letter riding this proposal, when one is live.
+        // Signing it IS the acceptance; the screen swaps its Accept button
+        // for the signing flow and the accept action refuses to bypass it.
+        letter: proposalLetter,
       };
     })(),
     // Accepted, deposit still owed. Resolved by the SAME rule the accept path
