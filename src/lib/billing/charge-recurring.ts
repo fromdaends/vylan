@@ -337,6 +337,51 @@ export async function chargeSchedulePeriod(
     console.error("[billing] activity log failed:", e);
   }
 
+  // ── Start chasing what we just billed ────────────────────────────────────
+  //
+  // Both one-time senders schedule a chase (create.ts since 1310, send.ts
+  // since reminders-into-flows); THIS path never did — every period invoice
+  // showed "auto-chase on" in Billing while no reminder was ever queued.
+  // Same rules as send.ts: the engagement's flow may carry its own invoice
+  // cadence, and a period invoice is that engagement's money, so the flow's
+  // opinion outranks the firm default (the deposit is the only charge that
+  // ignores it — acceptance money, not flow money). Best-effort and swallowed:
+  // an unchased invoice is a smaller problem than a charge that reads as
+  // failed.
+  try {
+    const { getChaseSettingsSR } = await import("@/lib/db/invoice-settings");
+    const { scheduleInvoiceChase } = await import("@/lib/invoices/chase");
+    const { chaseSettingsWithFlowOverride } = await import(
+      "@/lib/invoices/chase-flow"
+    );
+    const chase = await chaseSettingsWithFlowOverride(sb, {
+      base: await getChaseSettingsSR(schedule.firm_id),
+      engagementId: schedule.engagement_id,
+      firmId: schedule.firm_id,
+    });
+    if (chase.enabledDefault) {
+      await scheduleInvoiceChase({
+        invoiceId: created.id,
+        issuedOn:
+          (invoiceFields.issue_date as string | undefined) ?? todayIsoDay(),
+        dueDate: (invoiceFields.due_date as string | null | undefined) ?? null,
+        settings: chase,
+      });
+    } else {
+      // Off (by flow or by firm): the row must not read as armed in the UI
+      // when nothing is queued — the exact lie this block exists to end.
+      // Direct service-role write, this runs from the hourly cron with no
+      // cookies. Pre-1310 the column is missing; the swallow above treats
+      // that as "nothing to do".
+      await sb
+        .from("payment_requests")
+        .update({ auto_chase: false })
+        .eq("id", created.id);
+    }
+  } catch (e) {
+    console.error("[billing] scheduling recurring invoice chase failed:", e);
+  }
+
   return {
     ok: true,
     paymentRequestId: created.id,
