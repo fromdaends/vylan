@@ -504,13 +504,33 @@ export function EngagementBuilder({
   const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
   // Scroll target for the Repeat section's "Set up the invoice" shortcut.
   const invoiceSectionRef = useRef<HTMLDivElement>(null);
+  // Seeded at INIT, never by a mount effect (same doctrine as the template
+  // seeding above): a deep-linked template whose flow carries a cadence must
+  // show that cadence on first paint, not flash the firm default first.
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
-    () =>
-      structuredClone(reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS),
+    () => {
+      const seed = workflowsOn
+        ? parseWorkflowDefinition(
+            templates.find((tt) => tt.id === templateId)?.workflow,
+          )?.reminders?.documents
+        : null;
+      return structuredClone(
+        seed ?? reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS,
+      );
+    },
   );
+  // "flow" = the cadence the picked flow carries — the founder's named
+  // preset ("select a preset automation you created or use the default").
   const [reminderPreset, setReminderPreset] = useState<
-    "firm" | "vylan" | "custom"
-  >(() => (reminderDefaultSettings ? "firm" : "vylan"));
+    "firm" | "vylan" | "custom" | "flow"
+  >(() => {
+    const seeded =
+      workflowsOn &&
+      parseWorkflowDefinition(
+        templates.find((tt) => tt.id === templateId)?.workflow,
+      )?.reminders?.documents;
+    return seeded ? "flow" : reminderDefaultSettings ? "firm" : "vylan";
+  });
   const [reminderPreviewBase] = useState(() => new Date());
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
@@ -898,6 +918,16 @@ export function EngagementBuilder({
       templates.some((tt) => tt.id === p.documentTemplateId)
     ) {
       setTemplateId(p.documentTemplateId);
+      // The deep-link arrival seeds the flow's reminder cadence at state
+      // init; the chooser path must land identically (this function's own
+      // rule) — so it applies the same cadence here.
+      if (workflowsOn) {
+        applyFlowReminders(
+          parseWorkflowDefinition(
+            templates.find((tt) => tt.id === p.documentTemplateId)?.workflow,
+          ),
+        );
+      }
     }
     if (p.title.trim() !== "") {
       setTitle(p.title);
@@ -1226,6 +1256,19 @@ export function EngagementBuilder({
     // province — an Ontario client never gets the Quebec RL slips.
     setItems(forProvince(tmpl?.items ?? [], selectedProvince));
     setTitleTouched(false);
+    // The template's flow becomes the active flow (unless overridden), so
+    // its reminder cadence applies in the same gesture — flow = the preset.
+    // NOT on a re-click of the already-selected card, and NEVER over a
+    // hand-tuned cadence: "custom" means the founder edited the steps, and
+    // a template click on another tab must not silently discard that.
+    if (
+      workflowsOn &&
+      !flowPick &&
+      id !== templateId &&
+      reminderPreset !== "custom"
+    ) {
+      applyFlowReminders(parseWorkflowDefinition(tmpl?.workflow));
+    }
   }
 
   function updateItem(idx: number, patch: Partial<TemplateItem>) {
@@ -1263,8 +1306,17 @@ export function EngagementBuilder({
     }));
   }
 
-  function applyReminderPreset(value: "firm" | "vylan" | "custom") {
+  function applyReminderPreset(value: "firm" | "vylan" | "custom" | "flow") {
     if (value === "custom") return;
+    if (value === "flow") {
+      // Re-apply what the active flow says; the option only renders when it
+      // says something (activeFlow.reminders?.documents non-null).
+      const fromFlow = activeFlow?.reminders?.documents;
+      if (!fromFlow) return;
+      setReminderPreset("flow");
+      setReminderSettings(structuredClone(fromFlow));
+      return;
+    }
     setReminderPreset(value);
     setReminderSettings((current) => ({
       ...structuredClone(
@@ -1274,6 +1326,22 @@ export function EngagementBuilder({
       ),
       enabled: current.enabled,
     }));
+  }
+
+  // Picking a flow applies its cadence in the same gesture — the flow IS the
+  // reminder preset. A flow with no opinion leaves a hand-tuned cadence
+  // alone, but must not keep wearing the "From the flow" label for a cadence
+  // the PREVIOUS flow supplied — that falls back to the firm/Vylan preset.
+  function applyFlowReminders(def: WorkflowDefinition | null) {
+    const docs = def?.reminders?.documents;
+    if (!docs) {
+      if (reminderPreset === "flow") {
+        applyReminderPreset(reminderDefaultSettings ? "firm" : "vylan");
+      }
+      return;
+    }
+    setReminderSettings(structuredClone(docs));
+    setReminderPreset("flow");
   }
 
   function reminderSchedulePreview(step: ReminderStep): string | null {
@@ -1603,7 +1671,11 @@ export function EngagementBuilder({
       tabs={WIZARD_STEPS.filter(
         // No switch, no step — the wizard reads exactly as before for
         // unflagged firms, and a stale deep link to the step falls to details.
-        (k) => k !== "automation" || workflowsOn,
+        // With the switch, the standalone Reminders step disappears instead:
+        // the founder's ruling is that reminders live INSIDE the automations,
+        // so the same card renders on the Automation step and nowhere else.
+        (k) =>
+          workflowsOn ? k !== "reminders" : k !== "automation",
       ).map((k): BuilderTab => ({
         key: k,
         label: t(`wizard_step_${k}` as WizardStepKey),
@@ -2447,6 +2519,9 @@ export function EngagementBuilder({
               onValueChange={(v) => {
                 if (v === "template") {
                   setFlowPick(null);
+                  // Reverting to the template re-applies ITS cadence (when
+                  // it has one) in the same gesture, like picking any flow.
+                  applyFlowReminders(templateFlow);
                   return;
                 }
                 const a = automations.find((x) => x.id === v);
@@ -2456,6 +2531,7 @@ export function EngagementBuilder({
                     automationId: a.id,
                     customized: false,
                   });
+                  applyFlowReminders(a.definition);
                 }
               }}
             >
@@ -2596,6 +2672,12 @@ export function EngagementBuilder({
                 })
               }
               members={members}
+              // Per-engagement document chasing is the Reminders card on
+              // THIS step (engagements.reminder_settings — what the
+              // scheduler reads). A second documents editor here would take
+              // edits that are dead for this engagement. Invoice stays: the
+              // snapshot's invoice cadence IS read at billing time.
+              hideDocumentReminders
             />
           </details>
         </section>
@@ -2687,13 +2769,13 @@ export function EngagementBuilder({
         </Card>
       )}
 
-      {/* STEP 3 — money. Repeat and Invoice belong together: whether the job recurs and what it costs are one decision, and they were separated by the whole reminders section. */}
-      {step === "billing" && (
-        <>
-          {/* Repeat (recurring series, migration 0770) — its own top-level card
-              (founder feedback: Repeat / Reminders / Invoice should read as
-              separate sections, not one packed Details card). Invoice recurrence
-              stays IN here with Repeat: it's a property of the series. */}
+      {/* Repeat (recurring series, migration 0770) — "what runs by itself",
+          so with the switch on it lives on the AUTOMATION step (founder:
+          "repeat should be in automation"); unflagged firms keep it on
+          Billing exactly as before. ONE block, two homes — never a copy.
+          Invoice recurrence stays IN here with Repeat: it's a property of
+          the series. */}
+      {(workflowsOn ? step === "automation" : step === "billing") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
@@ -2824,12 +2906,19 @@ export function EngagementBuilder({
                       variant="outline"
                       size="sm"
                       className="shrink-0"
-                      onClick={() =>
+                      onClick={() => {
+                        // With flows on, this card sits on the Automation
+                        // step while the Invoice card stays on Billing —
+                        // jump steps instead of scrolling at nothing.
+                        if (workflowsOn) {
+                          setStep("billing");
+                          return;
+                        }
                         invoiceSectionRef.current?.scrollIntoView({
                           behavior: "smooth",
                           block: "center",
-                        })
-                      }
+                        });
+                      }}
                     >
                       {t("repeat_invoice_set_button")}
                     </Button>
@@ -2838,7 +2927,11 @@ export function EngagementBuilder({
               )}
             </CardContent>
           </Card>
+      )}
 
+      {/* STEP — money. */}
+      {step === "billing" && (
+        <>
           {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
               wrapper div is the scroll target of the Repeat card's "Set up the
               invoice" shortcut. Without Stripe Connect the card still shows, with
@@ -3083,7 +3176,10 @@ export function EngagementBuilder({
       )}
 
       {/* STEP 4 — chasing. Canopy has no equivalent step; Vylan does, because Vylan chases the documents from step 2 on your behalf. */}
-      {step === "reminders" && (
+      {/* ONE card, two homes — never a copy: its own step for unflagged
+          firms, folded into the Automation step when flows are on (the
+          founder: "the reminder thing will also be there"). */}
+      {(step === "reminders" || (workflowsOn && step === "automation")) && (
         <>
           {/* Automatic reminders — its own top-level card. */}
           <Card>
@@ -3113,7 +3209,8 @@ export function EngagementBuilder({
 
                 {reminderSettings.enabled && (
                   <>
-                    {reminderDefaultSettings ? (
+                    {reminderDefaultSettings ||
+                    (workflowsOn && activeFlow?.reminders?.documents) ? (
                       <div className="grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-[10rem_1fr] sm:items-center">
                         <Label htmlFor="reminder-preset" className="text-xs text-muted-foreground">
                           {t("reminder_preset_label")}
@@ -3122,7 +3219,7 @@ export function EngagementBuilder({
                           value={reminderPreset}
                           onValueChange={(value) =>
                             applyReminderPreset(
-                              value as "firm" | "vylan" | "custom",
+                              value as "firm" | "vylan" | "custom" | "flow",
                             )
                           }
                         >
@@ -3130,9 +3227,22 @@ export function EngagementBuilder({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="firm">
-                              {t("reminder_preset_firm")}
-                            </SelectItem>
+                            {/* The flow's own cadence — the founder's named
+                                preset. Offered whenever the active flow
+                                carries one (and kept while selected, so the
+                                control never shows an empty value). */}
+                            {((workflowsOn &&
+                              activeFlow?.reminders?.documents) ||
+                              reminderPreset === "flow") && (
+                              <SelectItem value="flow">
+                                {t("reminder_preset_flow")}
+                              </SelectItem>
+                            )}
+                            {reminderDefaultSettings && (
+                              <SelectItem value="firm">
+                                {t("reminder_preset_firm")}
+                              </SelectItem>
+                            )}
                             <SelectItem value="vylan">
                               {t("reminder_preset_vylan")}
                             </SelectItem>

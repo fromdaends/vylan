@@ -9,28 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { ArrowUpRight } from "lucide-react";
-import {
-  CHASE_INTERVAL_MIN,
-  CHASE_INTERVAL_MAX,
-  CHASE_MAX_MIN,
-  CHASE_MAX_MAX,
-  type ChaseSettings,
-} from "@/lib/invoices/chase-settings";
+import type { ChaseSettings } from "@/lib/invoices/chase-settings";
 import { DUE_DAYS_MIN, DUE_DAYS_MAX } from "@/lib/invoices/terms";
-import {
-  saveChaseSettingsAction,
-  saveDefaultDueDaysAction,
-} from "@/app/actions/billing-invoices";
+import { saveDefaultDueDaysAction } from "@/app/actions/billing-invoices";
 
 // The Settings tab.
 //
-// Only ONE thing here is editable: the reminder cadence, which is genuinely new
-// and has nowhere else to live. Everything else is a READ-ONLY window onto
-// configuration that already exists elsewhere, with a link to it. That is the
-// whole point of the section per the spec — a second place to set the GST rate
-// is a second place for it to be wrong.
+// Only ONE thing here is editable: the payment terms. The invoice-reminder
+// cadence moved to Settings → Automation (founder: reminders live in
+// automations, nowhere else) and is a read-only window below, like every
+// other card — a second place to edit a setting is a second place for it to
+// be wrong, which is the whole point of the section per the spec.
 export function BillingSettings({
   chase,
   defaultDueDays,
@@ -51,34 +41,6 @@ export function BillingSettings({
   books: { quickbooks: boolean; xero: boolean };
 }) {
   const t = useTranslations("FirmBilling");
-  const [pending, startTransition] = useTransition();
-  const [enabled, setEnabled] = useState(chase.enabledDefault);
-  const [interval, setInterval] = useState(String(chase.intervalDays));
-  const [max, setMax] = useState(String(chase.maxReminders));
-
-  const intervalNum = Number(interval);
-  const maxNum = Number(max);
-  const valid =
-    Number.isInteger(intervalNum) &&
-    intervalNum >= CHASE_INTERVAL_MIN &&
-    intervalNum <= CHASE_INTERVAL_MAX &&
-    Number.isInteger(maxNum) &&
-    maxNum >= CHASE_MAX_MIN &&
-    maxNum <= CHASE_MAX_MAX;
-
-  const save = () => {
-    if (!valid) return;
-    startTransition(async () => {
-      const res = await saveChaseSettingsAction({
-        enabledDefault: enabled,
-        intervalDays: intervalNum,
-        maxReminders: maxNum,
-      });
-      toast[res.ok ? "success" : "error"](
-        res.ok ? t("settings_saved") : t("settings_save_err"),
-      );
-    });
-  };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -88,72 +50,28 @@ export function BillingSettings({
           warning rows and the chase cadence all sit inert. */}
       <PaymentTermsCard initialDays={defaultDueDays} />
 
-      {/* ── The other editable thing ─────────────────────────────────── */}
+      {/* ── Invoice reminders MOVED to Settings → Automation (founder:
+          reminders live in automations, nowhere else). This is now a
+          read-only window with a link — the same shape as every other card
+          on this tab, which was always the section's doctrine anyway. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
             {t("settings_reminders_title")}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            {t("settings_reminders_body")}
+        <CardContent className="space-y-3">
+          <p className="text-sm">
+            {chase.enabledDefault
+              ? t("settings_reminders_summary", {
+                  days: chase.intervalDays,
+                  max: chase.maxReminders,
+                })
+              : t("settings_reminders_off_window")}
           </p>
-
-          <div className="flex items-center justify-between gap-4">
-            <Label htmlFor="chase-on" className="font-normal">
-              {t("settings_reminders_enabled")}
-            </Label>
-            <Switch
-              id="chase-on"
-              checked={enabled}
-              onCheckedChange={setEnabled}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="chase-interval">
-                {t("settings_reminders_interval")}
-              </Label>
-              <Input
-                id="chase-interval"
-                type="number"
-                min={CHASE_INTERVAL_MIN}
-                max={CHASE_INTERVAL_MAX}
-                value={interval}
-                onChange={(e) => setInterval(e.target.value)}
-                disabled={!enabled}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="chase-max">{t("settings_reminders_max")}</Label>
-              <Input
-                id="chase-max"
-                type="number"
-                min={CHASE_MAX_MIN}
-                max={CHASE_MAX_MAX}
-                value={max}
-                onChange={(e) => setMax(e.target.value)}
-                disabled={!enabled}
-              />
-            </div>
-          </div>
-
-          {/* Says the cadence back in a sentence, because "7" and "4" in two
-              boxes do not read as "then every week, four times". */}
-          {valid && enabled && (
-            <p className="text-xs text-muted-foreground">
-              {t("settings_reminders_summary", {
-                days: intervalNum,
-                max: maxNum,
-              })}
-            </p>
-          )}
-
-          <Button onClick={save} disabled={pending || !valid} size="sm">
-            {t("settings_save")}
-          </Button>
+          <SettingsLink href="/settings?tab=automation">
+            {t("settings_reminders_moved_link")}
+          </SettingsLink>
         </CardContent>
       </Card>
 

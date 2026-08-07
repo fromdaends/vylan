@@ -17,6 +17,11 @@ import {
   type EngagementStage,
 } from "@/lib/engagements/stage";
 import type { EngagementType } from "@/lib/db/templates";
+import {
+  normalizeReminderSettings,
+  type ReminderSettings,
+} from "@/lib/reminder-settings";
+import { normalizeChaseSettings } from "@/lib/invoices/chase-settings";
 
 export type StageAssigneeRule = "owner" | "staff" | { member_id: string };
 
@@ -59,9 +64,31 @@ export type WorkflowStageDef = {
   advance: { condition: AdvanceCondition; mode: AdvanceMode } | null;
 };
 
+// The flow's reminder cadences — flow-level facts like the letter, never
+// per-stage (a nag schedule doesn't belong to a stage; it belongs to the
+// job). Null on either side means "the firm's default at creation time" —
+// the flow states an opinion only when the founder gave it one, so editing
+// the firm default keeps steering every flow that never overrode it.
+export type WorkflowInvoiceChase = {
+  enabled: boolean;
+  intervalDays: number;
+  maxReminders: number;
+};
+
+export type WorkflowReminders = {
+  /** Document chase — the 4-tone schedule, or null = firm default. */
+  documents: ReminderSettings | null;
+  /** Invoice chase for invoices THIS FLOW raises. enabled:false = don't
+   *  chase; null = firm chase defaults. */
+  invoice: WorkflowInvoiceChase | null;
+};
+
 export type WorkflowDefinition = {
   version: 1;
   stages: Record<EngagementStage, WorkflowStageDef>;
+  /** Absent on flows saved before reminders moved in — read as "no
+   *  opinion", which is the pre-move behaviour exactly. */
+  reminders?: WorkflowReminders;
 };
 
 // The engagement's copy: the definition plus assignees resolved to real user
@@ -159,6 +186,46 @@ function parseStage(
   };
 }
 
+// Total, like everything here: junk on either side degrades to null ("no
+// opinion"), never a throw. `documents` reuses the same normalizer the
+// engagement column uses, so a cadence can never mean two things.
+function parseReminders(v: unknown): WorkflowReminders | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const r = v as Record<string, unknown>;
+  // An OPINION needs evidence of shape: a bare `{}` (or junk) as documents
+  // must read as no-opinion, not silently become a full enabled default
+  // cadence the founder never chose.
+  const docsRaw = r.documents;
+  const documents =
+    docsRaw &&
+    typeof docsRaw === "object" &&
+    ("steps" in docsRaw || "enabled" in docsRaw)
+      ? normalizeReminderSettings(docsRaw)
+      : null;
+  let invoice: WorkflowReminders["invoice"] = null;
+  if (r.invoice && typeof r.invoice === "object") {
+    const raw = r.invoice as Record<string, unknown>;
+    // Missing numbers must reach the normalizer as undefined so its
+    // defaults fire — Number(undefined) is NaN, and clamp() maps NaN to the
+    // MINIMUM (a 1-day daily-nag cadence), not the 7-day default.
+    const asFinite = (x: unknown): number | undefined => {
+      const n = Number(x);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const bounded = normalizeChaseSettings({
+      intervalDays: asFinite(raw.intervalDays),
+      maxReminders: asFinite(raw.maxReminders),
+    });
+    invoice = {
+      enabled: raw.enabled !== false,
+      intervalDays: bounded.intervalDays,
+      maxReminders: bounded.maxReminders,
+    };
+  }
+  if (!documents && !invoice) return undefined;
+  return { documents, invoice };
+}
+
 /**
  * Parse whatever came out of a jsonb column into a typed definition, or null
  * when there is no usable workflow at all (null column, garbage, wrong shape).
@@ -176,7 +243,8 @@ export function parseWorkflowDefinition(
   for (const s of ENGAGEMENT_STAGES) {
     stages[s] = parseStage(s, (stagesRaw as Record<string, unknown>)[s]);
   }
-  return { version: 1, stages };
+  const reminders = parseReminders(r.reminders);
+  return { version: 1, stages, ...(reminders ? { reminders } : {}) };
 }
 
 /** Parse an engagement's snapshot (definition + resolved assignees). */

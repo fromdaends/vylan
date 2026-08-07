@@ -13,6 +13,7 @@
 import { useTranslations } from "next-intl";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ClampedNumberInput } from "@/components/ui/clamped-number-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -41,6 +42,20 @@ import {
   type WorkflowTaskDef,
 } from "@/lib/workflow/definition";
 import { flowSendsLetter, withFlowLetter } from "@/lib/workflow/plan";
+import {
+  DEFAULT_REMINDER_SETTINGS,
+  normalizeReminderSettings,
+  type ReminderTone,
+} from "@/lib/reminder-settings";
+import {
+  CHASE_INTERVAL_DEFAULT,
+  CHASE_INTERVAL_MAX,
+  CHASE_INTERVAL_MIN,
+  CHASE_MAX_DEFAULT,
+  CHASE_MAX_MAX,
+  CHASE_MAX_MIN,
+} from "@/lib/invoices/chase-settings";
+import type { WorkflowReminders } from "@/lib/workflow/definition";
 
 // The letter is NOT a stage action anymore — it rides the send (the founder:
 // "the engagement letter is supposed to be sent upon create... not the right
@@ -72,15 +87,27 @@ export function AutomationEditor({
   members,
   disabled = false,
   aspect = "all",
+  hideDocumentReminders = false,
 }: {
   value: WorkflowDefinition;
   onChange: (next: WorkflowDefinition) => void;
   members: EditorMember[];
   disabled?: boolean;
   aspect?: EditorAspect;
+  /** The engagement builder's embedded instance sets this: per-engagement
+   *  document chasing is owned by the Reminders card on the same step
+   *  (engagements.reminder_settings — the column the scheduler actually
+   *  reads), so offering a second documents editor here would be an editor
+   *  whose edits are dead for this engagement. The invoice side stays: the
+   *  snapshot's reminders.invoice IS what send.ts reads at billing time. */
+  hideDocumentReminders?: boolean;
 }) {
   const t = useTranslations("Automations");
   const tStage = useTranslations("Stage");
+  // Tone labels and cadence words come from the Engagements namespace — the
+  // exact keys the builder and the firm-default editor already use, so the
+  // same tone can never be named two ways.
+  const tEng = useTranslations("Engagements");
 
   const showFlow = aspect === "all" || aspect === "flow";
   const showTasks = aspect === "all" || aspect === "tasks";
@@ -95,6 +122,30 @@ export function AutomationEditor({
       },
     });
   }
+
+  // Reminders are flow-level, like the letter. null on a side = "the firm's
+  // default at creation time" — a flow only carries an opinion the founder
+  // actually set, so tightening the firm default keeps steering every flow
+  // that never overrode it.
+  const reminders: WorkflowReminders = value.reminders ?? {
+    documents: null,
+    invoice: null,
+  };
+  function setReminders(patch: Partial<WorkflowReminders>) {
+    onChange({ ...value, reminders: { ...reminders, ...patch } });
+  }
+  const docMode =
+    reminders.documents === null
+      ? "default"
+      : reminders.documents.enabled
+        ? "custom"
+        : "off";
+  const invMode =
+    reminders.invoice === null
+      ? "default"
+      : reminders.invoice.enabled
+        ? "custom"
+        : "off";
 
   return (
     <div className="flex flex-col gap-3">
@@ -131,6 +182,233 @@ export function AutomationEditor({
           <p className="mt-1.5 text-xs text-muted-foreground">
             {t("flow_letter_toggle_note")}
           </p>
+        </section>
+      )}
+
+      {/* Reminders — the founder's ruling: the chases live INSIDE the
+          automations, nowhere else. Documents while collecting, the invoice
+          once this flow raises one. */}
+      {showFlow && (
+        <section
+          aria-label={t("flow_reminders_card_title")}
+          className="rounded-xl border border-border bg-muted/20 p-4"
+        >
+          <h3 className="text-sm font-medium">
+            {t("flow_reminders_card_title")}
+          </h3>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {t("flow_reminders_note")}
+          </p>
+
+          {!hideDocumentReminders && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Label className="w-24 text-xs text-muted-foreground">
+              {t("flow_reminders_documents")}
+            </Label>
+            <Select
+              value={docMode}
+              onValueChange={(v) =>
+                setReminders({
+                  documents:
+                    v === "default"
+                      ? null
+                      : v === "off"
+                        ? normalizeReminderSettings({
+                            ...DEFAULT_REMINDER_SETTINGS,
+                            enabled: false,
+                          })
+                        : // enabled:true EXPLICITLY — reusing an "off" object
+                          // as-is left docMode reading "off" and the select
+                          // snapping back, so Off→Custom was unreachable.
+                          {
+                            ...(reminders.documents ??
+                              structuredClone(DEFAULT_REMINDER_SETTINGS)),
+                            enabled: true,
+                          },
+                })
+              }
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 w-56 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">
+                  {t("flow_reminders_mode_default")}
+                </SelectItem>
+                <SelectItem value="custom">
+                  {t("flow_reminders_mode_custom")}
+                </SelectItem>
+                <SelectItem value="off">
+                  {t("flow_reminders_mode_off")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          )}
+          {!hideDocumentReminders && docMode === "custom" && reminders.documents && (
+            <div className="mt-2 flex flex-col gap-1.5 pl-[6.5rem]">
+              {reminders.documents.steps.map((s) => (
+                <div
+                  key={s.tone}
+                  className="flex flex-wrap items-center gap-2 text-xs"
+                >
+                  <label className="flex w-40 cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={s.enabled}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        setReminders({
+                          documents: {
+                            ...reminders.documents!,
+                            steps: reminders.documents!.steps.map((x) =>
+                              x.tone === s.tone
+                                ? { ...x, enabled: e.target.checked }
+                                : x,
+                            ),
+                          },
+                        })
+                      }
+                    />
+                    {tEng(`reminder_tone_${s.tone as ReminderTone}`)}
+                  </label>
+                  <ClampedNumberInput
+                    min={1}
+                    max={365}
+                    value={s.days}
+                    disabled={disabled || !s.enabled}
+                    onCommit={(days) =>
+                      setReminders({
+                        documents: {
+                          ...reminders.documents!,
+                          steps: reminders.documents!.steps.map((x) =>
+                            x.tone === s.tone ? { ...x, days } : x,
+                          ),
+                        },
+                      })
+                    }
+                    aria-label={tEng("reminder_days_label")}
+                    className="h-7 w-16 text-xs"
+                  />
+                  <span className="text-muted-foreground">
+                    {tEng(
+                      s.timing === "after_due"
+                        ? "reminder_days_after_due"
+                        : "reminder_days_after_send",
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {tEng("reminder_repeat_prefix")}
+                  </span>
+                  <ClampedNumberInput
+                    min={1}
+                    max={12}
+                    value={s.repeatCount}
+                    disabled={disabled || !s.enabled}
+                    onCommit={(repeatCount) =>
+                      setReminders({
+                        documents: {
+                          ...reminders.documents!,
+                          steps: reminders.documents!.steps.map((x) =>
+                            x.tone === s.tone ? { ...x, repeatCount } : x,
+                          ),
+                        },
+                      })
+                    }
+                    aria-label={tEng("reminder_repeat_label")}
+                    className="h-7 w-14 text-xs"
+                  />
+                  <span className="text-muted-foreground">
+                    {tEng("reminder_repeat_suffix")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Label className="w-24 text-xs text-muted-foreground">
+              {t("flow_reminders_invoice")}
+            </Label>
+            <Select
+              value={invMode}
+              onValueChange={(v) =>
+                setReminders({
+                  invoice:
+                    v === "default"
+                      ? null
+                      : v === "off"
+                        ? {
+                            enabled: false,
+                            intervalDays: CHASE_INTERVAL_DEFAULT,
+                            maxReminders: CHASE_MAX_DEFAULT,
+                          }
+                        : {
+                            enabled: true,
+                            intervalDays:
+                              reminders.invoice?.intervalDays ??
+                              CHASE_INTERVAL_DEFAULT,
+                            maxReminders:
+                              reminders.invoice?.maxReminders ??
+                              CHASE_MAX_DEFAULT,
+                          },
+                })
+              }
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 w-56 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">
+                  {t("flow_reminders_mode_default")}
+                </SelectItem>
+                <SelectItem value="custom">
+                  {t("flow_reminders_mode_custom")}
+                </SelectItem>
+                <SelectItem value="off">
+                  {t("flow_reminders_mode_off")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {invMode === "custom" && reminders.invoice && (
+              <>
+                <Label className="text-xs text-muted-foreground">
+                  {t("flow_chase_interval_label")}
+                </Label>
+                <ClampedNumberInput
+                  min={CHASE_INTERVAL_MIN}
+                  max={CHASE_INTERVAL_MAX}
+                  value={reminders.invoice.intervalDays}
+                  disabled={disabled}
+                  onCommit={(intervalDays) =>
+                    setReminders({
+                      invoice: { ...reminders.invoice!, intervalDays },
+                    })
+                  }
+                  aria-label={t("flow_chase_interval_label")}
+                  className="h-7 w-16 text-xs"
+                />
+                <Label className="text-xs text-muted-foreground">
+                  {t("flow_chase_max_label")}
+                </Label>
+                <ClampedNumberInput
+                  min={CHASE_MAX_MIN}
+                  max={CHASE_MAX_MAX}
+                  value={reminders.invoice.maxReminders}
+                  disabled={disabled}
+                  onCommit={(maxReminders) =>
+                    setReminders({
+                      invoice: { ...reminders.invoice!, maxReminders },
+                    })
+                  }
+                  aria-label={t("flow_chase_max_label")}
+                  className="h-7 w-14 text-xs"
+                />
+              </>
+            )}
+          </div>
         </section>
       )}
       {ENGAGEMENT_STAGES.map((stage, i) => {
