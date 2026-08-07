@@ -60,6 +60,7 @@ import {
   type WorkflowSnapshot,
 } from "@/lib/workflow/definition";
 import { flowSendsInvoice } from "@/lib/workflow/plan";
+import { runWorkflowSendEffects } from "@/lib/workflow/effects";
 import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -723,6 +724,13 @@ export async function createEngagementAction(
       // detail-page Send button synced; this path was missed when stages
       // were wired in. Best-effort (stage-sync self-heals on the next event).
       await syncEngagementStage(await getServerSupabase(), engagementId);
+      // The engagement letter rides the SEND (founder's correction): signing
+      // it is how the client accepts, so it goes out with the engagement,
+      // never after the acceptance it produces. Exactly-once via the ledger.
+      await runWorkflowSendEffects({
+        engagementId,
+        firmId: created.firm_id,
+      });
       await deliverInviteEmail(engagementId);
       if (sent.sent_at) {
         await scheduleEngagementReminders({
@@ -903,6 +911,9 @@ export async function sendEngagementAction(formData: FormData) {
   // must read the flag this may have just set.
   await ensureProposalForSend(id);
   const sent = await sendEngagement(id);
+  // The engagement letter rides the SEND (founder's correction): signing it
+  // is how the client accepts. Ledger-deduped, so a re-send never re-asks.
+  await runWorkflowSendEffects({ engagementId: id, firmId: sent.firm_id });
   await deliverInviteEmail(id);
   if (sent.sent_at) {
     await scheduleEngagementReminders({

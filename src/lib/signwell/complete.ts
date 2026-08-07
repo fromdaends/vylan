@@ -75,8 +75,48 @@ export async function finalizeSignatureCompletion(
   });
   // res is null when another path already completed it — don't double-log.
   if (res) {
+    // THE LETTER IS THE AGREEMENT (founder's ruling): a signed engagement
+    // letter records the client's acceptance — one agree moment, not a
+    // signature AND a separate accept tap. Only letter-keyed requests (the
+    // automated engagement letter, 1580/1700) do this; an ordinary signature
+    // on some other document says nothing about the proposal. Tolerant of
+    // pre-1580 (no column → no letter requests exist) and first-writer-wins
+    // like acceptEngagement itself; the acceptance sync then releases the
+    // flow that was holding for this exact moment.
+    try {
+      const sbSR = getServiceRoleSupabase();
+      const { data: lk } = await sbSR
+        .from("signature_requests")
+        .select("letter_key")
+        .eq("id", sr.id)
+        .maybeSingle();
+      if ((lk as { letter_key?: string | null } | null)?.letter_key) {
+        const { error: acceptErr } = await sbSR
+          .from("engagements")
+          .update({
+            accepted_at: new Date().toISOString(),
+            accepted_by: "client",
+          })
+          .eq("id", sr.engagement_id)
+          .is("accepted_at", null);
+        if (!acceptErr) {
+          await logServiceRoleActivity(
+            sr.firm_id,
+            sr.engagement_id,
+            "engagement_accepted",
+            { accepted_by: "client", via: "engagement_letter" },
+          );
+        }
+      }
+    } catch (e) {
+      console.error("[signwell] letter acceptance failed:", e);
+    }
+
     // Mark the checklist item approved so the engagement can read as ready to
     // review / complete (a required signature item otherwise stays 'pending').
+    // Runs AFTER the acceptance write above: setItemStatus re-syncs the
+    // stage, and that sync must see the engagement as accepted so the flow
+    // leaves its acceptance hold in the same beat as the signature.
     await setItemStatus(res.requestItemId, "approved", res.engagementId);
     await logServiceRoleActivity(
       res.firmId,

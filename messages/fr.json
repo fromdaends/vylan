@@ -5162,7 +5162,13 @@
     "flow_letter_needs_service": "Ce flux envoie une lettre de mission, mais les lettres appartiennent aux services — ajoutez un service tarifé et sa lettre sera utilisée.",
     "flow_letters_missing": "{count, plural, one {# service choisi n'a pas encore de lettre de mission — cet envoi sera sauté tant qu'aucune n'est téléversée.} other {# services choisis n'ont pas encore de lettre de mission — ces envois seront sautés tant qu'aucune n'est téléversée.}}",
     "flow_letters_ok": "Chaque service choisi a sa lettre de mission — elle partira pour signature automatiquement.",
-    "flow_owns_invoice_note": "Le flux de ce mandat envoie la facture lui-même — voyez l'étape Automatisation pour le moment, et pour le modifier."
+    "flow_owns_invoice_note": "Le flux de ce mandat envoie la facture lui-même — voyez l'étape Automatisation pour le moment, et pour le modifier.",
+    "plan_sent_title": "Envoyé au client",
+    "plan_sent_note": "La proposition arrive dans son portail",
+    "plan_accept_title": "Le client accepte",
+    "plan_accept_note": "Puis le flux démarre",
+    "plan_accept_note_letter": "Signer la lettre de mission enregistre son acceptation — puis le flux démarre",
+    "plan_completed_note": "Automatique — les rappels s'arrêtent et les documents sont classés dans votre stockage"
   },
   "Files": {
     "page_title": "Fichiers",
