@@ -227,9 +227,7 @@ export function RepeatDialog({
         setError(
           result.error === "no_documents"
             ? t("repeat_error_no_documents")
-            : result.error === "recurring_items"
-              ? t("repeat_error_recurring_items")
-              : t("repeat_error"),
+            : t("repeat_error"),
         );
         return;
       }

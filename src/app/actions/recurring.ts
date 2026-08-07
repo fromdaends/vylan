@@ -58,7 +58,6 @@ export type RepeatEditResult =
         | "invalid"
         | "not_found"
         | "no_documents"
-        | "recurring_items"
         | "save_failed";
     };
 
@@ -96,29 +95,10 @@ export async function setEngagementRepeatAction(input: {
       return { ok: true };
     }
 
-    // ── ONE RECURRENCE, NEVER BOTH (founder ruling, 2026-08-07) ───────────
-    // The create action coerces this combination away; this dialog was the
-    // one-click path that recreated it (review's catch): an engagement whose
-    // items bill on a schedule must not ALSO spawn occurrences — each
-    // spawned copy carries the recurring items and stacks another schedule
-    // on the same client. Tolerant read: pre-1740 rows have no
-    // billing_frequency and read as one-time.
-    try {
-      const { listEngagementItems } = await import("@/lib/db/engagements");
-      const lines = await listEngagementItems(engagement.id);
-      const billsRepeatedly = lines.some(
-        (l) =>
-          (l as { billing_frequency?: string | null }).billing_frequency &&
-          (l as { billing_frequency?: string | null }).billing_frequency !==
-            "once",
-      );
-      if (billsRepeatedly) {
-        return { ok: false, error: "recurring_items" };
-      }
-    } catch {
-      // A failed read must not block a legitimate repeat — the create-time
-      // coercion still backstops the invariant for new engagements.
-    }
+    // (The refusal that lived here — "these items already bill on a
+    // schedule, so the job may not also repeat" — is gone: the two cadences
+    // are independent now, and start-schedules.ts keeps ONE payment schedule
+    // per series so repeating the work cannot stack a second charge.)
 
     // A series spawns engagements that must be sendable — an empty checklist
     // would create occurrences the client can't act on (the send flow itself
