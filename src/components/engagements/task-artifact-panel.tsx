@@ -46,6 +46,11 @@ import { RejectModal } from "@/components/engagements/reject-modal";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
 import { RetrySignatureSetup } from "@/components/engagements/retry-signature-setup";
 import { FinalDocumentDelete } from "@/components/engagements/final-document-row";
+import {
+  SetSummaryLine,
+  shouldShowSetLine,
+} from "@/components/engagements/set-summary-line";
+import type { SetAssessment } from "@/lib/ai/set-assessment";
 
 export type ArtifactPanelKind = "docs" | "signatures" | "deliverables";
 
@@ -54,6 +59,12 @@ export type DocPanelItem = {
   label: string;
   status: "pending" | "submitted" | "approved" | "rejected" | "na";
   files: { id: string; name: string }[];
+  /** What the AI told the client when it sent a document back — surfaced so
+   *  the accountant sees the reason without leaving the panel. */
+  rejectionReason: string | null;
+  /** The AI's set verdict (missing pages, chain breaks). Null when AI is off
+   *  for the engagement — the panel then shows no AI chrome at all. */
+  setAssessment: SetAssessment | null;
 };
 
 export type SigPanelRow = {
@@ -158,7 +169,8 @@ export function TaskArtifactPanel({
   canEdit,
   locale,
   addDeliverable,
-  reviewDocuments,
+  addItem,
+  addSignature,
 }: {
   kind: ArtifactPanelKind | null;
   onClose: () => void;
@@ -176,7 +188,10 @@ export function TaskArtifactPanel({
   canEdit: boolean;
   locale: AppLocale;
   addDeliverable: React.ReactNode;
-  reviewDocuments: React.ReactNode;
+  /** AddItemDialog, on the doc panel's progress row — add where you review. */
+  addItem: React.ReactNode;
+  /** AddSignatureDialog, at the foot of the signatures panel. */
+  addSignature: React.ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const tStatus = useTranslations("Status");
@@ -280,9 +295,25 @@ export function TaskArtifactPanel({
                     ? t("kind_signatures")
                     : t("kind_deliverables")}
               </span>
+              {/* Nudge client lives up here (founder request) — the panel's
+                  one whole-request action, beside the close control. */}
+              {kind === "docs" && canEdit && (
+                <button
+                  type="button"
+                  onClick={nudge}
+                  disabled={pendingNudge}
+                  className={cn(FOOTER_BTN, "ml-auto")}
+                >
+                  <Bell className="size-3" aria-hidden />
+                  {t("panel_nudge_client")}
+                </button>
+              )}
               <DialogPrimitive.Close
                 aria-label={t("panel_close")}
-                className="ml-auto flex size-[30px] cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={cn(
+                  "flex size-[30px] cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  !(kind === "docs" && canEdit) && "ml-auto",
+                )}
               >
                 <X className="size-[15px]" aria-hidden />
               </DialogPrimitive.Close>
@@ -316,6 +347,15 @@ export function TaskArtifactPanel({
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                {/* Add where you review (moved off the old footer). */}
+                {canEdit && addItem && (
+                  <span
+                    className="flex-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {addItem}
+                  </span>
+                )}
               </div>
               <div className="mt-3 flex flex-col gap-2">
                 {items.map((item) => {
@@ -411,30 +451,33 @@ export function TaskArtifactPanel({
                           ))}
                         </div>
                       )}
+                      {/* The AI's SET verdict (missing pages, chain breaks) —
+                          the same line the old checklist carried. Null
+                          assessment = AI off for the engagement, no chrome. */}
+                      {item.setAssessment &&
+                        shouldShowSetLine(
+                          item.setAssessment,
+                          item.files.length,
+                        ) && (
+                          <SetSummaryLine
+                            assessment={item.setAssessment}
+                            locale={locale}
+                            className="mt-2 pl-[38px]"
+                          />
+                        )}
+                      {/* When a document was sent back, the exact reason the
+                          client received — the AI writes this on auto-reject. */}
+                      {item.status === "rejected" && item.rejectionReason && (
+                        <p className="mt-2 pl-[38px] text-[11.5px] leading-snug text-destructive/90">
+                          <span className="font-medium">
+                            {t("client_was_told")}:
+                          </span>{" "}
+                          {item.rejectionReason}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
-              </div>
-              <div className="mt-3.5 flex flex-wrap items-center gap-2.5 border-t border-border/60 pt-3.5">
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={nudge}
-                    disabled={pendingNudge}
-                    className={FOOTER_BTN}
-                  >
-                    <Bell className="size-3" aria-hidden />
-                    {t("panel_nudge_client")}
-                  </button>
-                )}
-                <span onClick={(e) => e.stopPropagation()}>
-                  {reviewDocuments}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {reminderEveryDays != null
-                    ? t("panel_reminder_days", { days: reminderEveryDays })
-                    : t("panel_reminder_off")}
-                </span>
               </div>
             </div>
           )}
@@ -442,6 +485,14 @@ export function TaskArtifactPanel({
           {/* ── Signatures ───────────────────────────────────────────────── */}
           {kind === "signatures" && (
             <div className="flex flex-col gap-2.5 px-[22px] pb-5 pt-3.5">
+              {canEdit && addSignature && (
+                <div
+                  className="self-end"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {addSignature}
+                </div>
+              )}
               {signatures.map((s) => {
                 const audit = [
                   s.sentAt
