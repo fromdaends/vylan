@@ -178,6 +178,8 @@ export function TemplateBuilderShell({
         <BuilderChrome
           kicker={kicker}
           title={title}
+          // Still passed: single-step sheets render it as their only
+          // description. Multi-step wizards ignore it (see BuilderChrome).
           explainer={explainer}
           tabs={tabs}
           activeTab={activeTab}
@@ -281,7 +283,6 @@ export function BuilderChrome({
         <StepsBox
           kicker={kicker}
           title={title}
-          explainer={explainer}
           tabs={tabs}
           index={index}
           done={progress.done}
@@ -301,9 +302,14 @@ export function BuilderChrome({
             <p className="truncate text-[15.5px] font-[620] tracking-[-0.01em]">
               {showSteps ? current?.label : title}
             </p>
-            {(showSteps ? current?.description : explainer) && (
+            {/* A WIZARD step gets its title and nothing else (founder:
+                remove the little descriptions). The explainer survives for
+                SINGLE-step flows — the quick-create cards and the invoice
+                picker — where it is the only sentence saying what the sheet
+                is for, and there is no rail to say it instead. */}
+            {!showSteps && explainer && (
               <p className="mt-px truncate text-xs text-muted-foreground">
-                {showSteps ? current?.description : explainer}
+                {explainer}
               </p>
             )}
           </div>
@@ -423,7 +429,6 @@ export function BuilderChrome({
 function StepsBox({
   kicker,
   title,
-  explainer,
   tabs,
   index,
   done,
@@ -432,7 +437,6 @@ function StepsBox({
 }: {
   kicker?: string;
   title: string;
-  explainer?: string;
   tabs: BuilderTab[];
   index: number;
   done: number[];
@@ -450,13 +454,14 @@ function StepsBox({
       <p className="mt-1.5 text-[16.5px] font-[620] leading-tight tracking-[-0.015em]">
         {title}
       </p>
-      {explainer && (
-        <p className="mt-[7px] text-xs leading-relaxed text-muted-foreground">
-          {explainer}
-        </p>
-      )}
+      {/* NO explainer, and NO per-step descriptions below (founder: "remove
+          all of the little descriptions under the check marks ... to really
+          simplify it all"). The step LABELS carry the meaning; a second line
+          under each one turned a six-item list into eighteen lines of text
+          you stop reading by step two. Shared shell, so this simplification
+          reaches every builder at once. */}
 
-      <ol className="mt-[22px] flex flex-col">
+      <ol className="mt-7 flex flex-col">
         {tabs.map((tab, i) => {
           // A check only ahead-of-nothing: behind the cursor AND actually left.
           const isDone = i < index && done.includes(i);
@@ -495,13 +500,13 @@ function StepsBox({
                   {i < tabs.length - 1 && (
                     <span
                       className={cn(
-                        "h-5 w-0.5 rounded-full transition-colors duration-300",
+                        "h-9 w-0.5 rounded-full transition-colors duration-300",
                         connectorDone ? "bg-success" : "bg-border",
                       )}
                     />
                   )}
                 </span>
-                <span className="min-w-0 pb-2 pt-1">
+                <span className="min-w-0 pb-4 pt-[3px]">
                   <span
                     className={cn(
                       "block text-[13px] font-[560] leading-snug transition-colors",
@@ -520,11 +525,6 @@ function StepsBox({
                       />
                     )}
                   </span>
-                  {tab.description && (
-                    <span className="mt-px block text-[11px] leading-snug text-muted-foreground">
-                      {tab.description}
-                    </span>
-                  )}
                 </span>
               </button>
             </li>
