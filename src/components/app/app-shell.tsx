@@ -19,6 +19,7 @@ import {
   FileText,
   CircleCheckBig,
   FolderOpen,
+  Gauge,
   LayoutDashboard,
   LogOut,
   Receipt,
@@ -65,6 +66,9 @@ type Labels = {
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
   vylanHub: string;
+  // The FOUNDERS console (/founders). Only ever rendered for the two people on
+  // the FOUNDER_EMAILS allowlist, so most sessions never see this string.
+  founders: string;
   settings: string;
   firm: string;
   logout: string;
@@ -111,6 +115,7 @@ export function AppShell({
   quickbooksConnected = false,
   xeroConnected = false,
   showInsights = false,
+  showFounders = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -135,6 +140,11 @@ export function AppShell({
   // the owner rank (founder: "roles only"), which is why this is its own prop
   // rather than reusing isOwner. A tab someone cannot open must not render.
   showInsights?: boolean;
+  // Drives the Founders rail item. Decided by the LAYOUT as
+  // isFounderEmail(user.email) — the same env allowlist the /founders route
+  // itself checks, never a second rule. A tab somebody cannot open must not
+  // render, and the route notFounds them anyway if they type the URL.
+  showFounders?: boolean;
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
@@ -337,6 +347,14 @@ export function AppShell({
       : []),
     // No Integrations tab: it lives in Settings > Integrations now (founder:
     // "no point in it being in the sidebar"). /integrations redirects there.
+    //
+    // THE FOUNDERS CONSOLE — last, and present for nobody but Zach and Tyler.
+    // It is not a firm feature: it looks ACROSS every firm on the platform, so
+    // it sits at the bottom of the rail rather than among the things an
+    // accountant uses. Gated on the same env allowlist the route checks.
+    ...(showFounders
+      ? [{ href: "/founders", label: labels.founders, icon: Gauge }]
+      : []),
   ];
 
   // Settings lives in the account dropdown; Firm is pinned at the foot of the
