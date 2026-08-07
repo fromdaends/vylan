@@ -1,21 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Check, PenLine, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
-import { logPortalActivity } from "@/lib/portal/activity-log";
 import { pickItemText } from "@/lib/engagements/request-item-row";
-import {
-  loadSignWellEmbed,
-  getSignWellEmbedCtor,
-} from "@/components/signwell/embed-loader";
-
-type LocalState = "idle" | "opening" | "open" | "submitted" | "error";
+import { usePortalSigning } from "@/components/portal/use-portal-signing";
 
 // A signature item on the client portal (Phase 3): the client signs the document
 // EMBEDDED inside Vylan via SignWell. No download, no re-upload, no redirect.
@@ -35,10 +27,13 @@ export function SignatureItemCard({
   signatureStatus: SignatureStatus | null;
 }) {
   const t = useTranslations("Portal");
-  const router = useRouter();
-  const [local, setLocal] = useState<LocalState>("idle");
-
   const label = pickItemText(locale, item.label_fr, item.label);
+  // Shared with the proposal screen's letter signing — one opener, never two.
+  const { local, busy, openSigning } = usePortalSigning({
+    token,
+    itemId: item.id,
+    activityLabel: label,
+  });
 
   const isSigned = local === "submitted" || signatureStatus === "completed";
   const canSign =
@@ -51,61 +46,6 @@ export function SignatureItemCard({
     : canSign
       ? "to_sign"
       : "pending";
-
-  const busy = local === "opening" || local === "open";
-
-  async function openSigning() {
-    setLocal("opening");
-    // Log the intent to sign (a deliberate client click) — the authoritative
-    // "signed" event is logged separately by the SignWell webhook.
-    logPortalActivity(token, "client_opened_signature", {
-      name: label,
-      ref: item.id,
-    });
-    try {
-      const res = await fetch(
-        `/api/portal/signwell/embed?token=${encodeURIComponent(
-          token,
-        )}&item_id=${encodeURIComponent(item.id)}`,
-      );
-      if (!res.ok) throw new Error("fetch_failed");
-      const body = (await res.json()) as {
-        embedded_signing_url?: string;
-        status?: string;
-      };
-      // Already signed elsewhere, or not ready.
-      if (body.status === "completed") {
-        setLocal("submitted");
-        router.refresh();
-        return;
-      }
-      if (!body.embedded_signing_url) throw new Error("no_url");
-
-      await loadSignWellEmbed();
-      const Ctor = getSignWellEmbedCtor();
-      if (!Ctor) throw new Error("no_ctor");
-
-      const embed = new Ctor({
-        url: body.embedded_signing_url,
-        events: {
-          completed: () => {
-            setLocal("submitted");
-            // Let the webhook flip the authoritative status + pull the PDF;
-            // refresh so the server-rendered status catches up.
-            router.refresh();
-          },
-          declined: () => setLocal("idle"),
-          closed: () =>
-            setLocal((s) => (s === "submitted" ? s : "idle")),
-          error: () => setLocal("error"),
-        },
-      });
-      setLocal("open");
-      embed.open();
-    } catch {
-      setLocal("error");
-    }
-  }
 
   return (
     <div
