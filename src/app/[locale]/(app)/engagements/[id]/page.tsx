@@ -713,7 +713,9 @@ export default async function EngagementDetailPage({
         }
       : null,
   );
-  const repeatInvoiceAvailable = currentInvoiceSnap != null;
+  // (An "is there invoice material to copy?" flag used to gate the
+  // recreate-invoice switch. The switch is gone — an occurrence inherits this
+  // engagement's billing either way — so only the SUMMARY sentence remains.)
   const storedInvoiceSnap = repeatSeriesRow
     ? parseInvoiceSnapshot(repeatSeriesRow.invoice_snapshot)
     : null;
@@ -1380,7 +1382,6 @@ export default async function EngagementDetailPage({
                     : undefined
                 }
                 repeatSeries={repeatSeries}
-                repeatInvoiceAvailable={repeatInvoiceAvailable}
                 repeatInvoiceSummary={repeatInvoiceSummary}
                 repeatSeriesOutOfSync={repeatSeriesOutOfSync}
                 status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
