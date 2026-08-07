@@ -57,10 +57,13 @@ import {
   invoiceAmountFromTotals,
 } from "@/lib/engagements/billing-totals";
 import {
+  BLOCK_FREQUENCIES,
   defaultPriceVisibility,
   emptyBlock,
   flattenBlocks,
+  withBillingType,
   type BillingBlock,
+  type BlockFrequency,
   type PriceVisibility,
 } from "@/lib/engagements/billing-blocks";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
@@ -1073,29 +1076,61 @@ export function EngagementBuilder({
   // count-all-missing warning could both cry wolf (a letterless second
   // service whose letter would never send) and stay silent about the one
   // that mattered.
-  // ── ONE RECURRENCE, NEVER BOTH (founder ruling) ─────────────────────────
-  // "Bills repeatedly" is DERIVED from the priced items; "recreates the
-  // whole job" is the Repeat series. The mode picker on the Automation step
-  // reflects whichever is live and refuses the combination; the server
-  // coerces any stale payload the same way (recurring items win).
-  const recurringItemBlocks = blocks.filter(
-    (b) =>
-      b.billingType === "recurring" &&
-      b.items.some((i) => i.name.trim().length > 0),
-  );
-  const hasRecurringItems = recurringItemBlocks.length > 0;
-  const recurringItemCount = recurringItemBlocks.reduce(
-    (n, b) => n + b.items.filter((i) => i.name.trim().length > 0).length,
-    0,
-  );
-  // ITEMS WIN, same as the server's coercion — a seeded template carrying
-  // both must read the same way it will be saved. The bills branch shows
-  // the conflict sentence whenever a live repeat is about to be dropped.
+  // ── ONE RECURRENCE, AND THE AUTOMATION STEP OWNS IT ─────────────────────
+  // Founder: "you can't select if you want a quarterly, monthly, or yearly
+  // anymore... there's now recurring still on service items, when you should
+  // just be able to do that from automation."
+  //
+  // So the mode card is a CONTROL, not a readout: picking "Bills repeatedly"
+  // converts the priced blocks to recurring at the frequency chosen right
+  // there, and the One-time/Recurring pills leave the Services step entirely
+  // (BillingBlocksEditor's hideBillingType). Still exactly one recurrence:
+  // the two modes write each other's state off.
+  const recurringBlocks = blocks.filter((b) => b.billingType === "recurring");
+  const hasRecurringItems = recurringBlocks.length > 0;
   const recurMode: "none" | "bills" | "recreates" = hasRecurringItems
     ? "bills"
     : repeatFrequency !== "off"
       ? "recreates"
       : "none";
+  // The frequency those blocks bill at. They are set together from this card,
+  // so the first one speaks for all; monthly is the default a firm means when
+  // they say "bill them repeatedly".
+  const billsFrequency: BlockFrequency =
+    recurringBlocks[0]?.frequency ?? "monthly";
+
+  /** The single writer for "how this repeats". Each mode clears the other's
+   *  state, which is what makes both-at-once unreachable from the UI (the
+   *  server refuses it too, for stale payloads). */
+  function applyRecurMode(next: "none" | "bills" | "recreates") {
+    if (next === "bills") {
+      setRepeatFrequency("off");
+      setBlocks((prev) =>
+        prev.map((b) =>
+          b.billingType === "recurring"
+            ? b
+            : { ...withBillingType(b, "recurring"), frequency: billsFrequency },
+        ),
+      );
+      return;
+    }
+    // Both remaining modes bill their items once; only the job's own
+    // repetition differs.
+    setBlocks((prev) => prev.map((b) => withBillingType(b, "one_time")));
+    if (next === "recreates") {
+      if (repeatFrequency === "off") setRepeatFrequency("yearly");
+    } else {
+      setRepeatFrequency("off");
+    }
+  }
+
+  function setBillsFrequency(freq: BlockFrequency) {
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.billingType === "recurring" ? { ...b, frequency: freq } : b,
+      ),
+    );
+  }
 
   // Same filter the submit payload applies (empty-named lines are dropped
   // before they reach the server), so the service named here can never
@@ -2207,13 +2242,10 @@ export function EngagementBuilder({
               // Still a SUGGESTION: a line that carries its own rate wins, the
               // same rule the service catalogue already follows.
               fallbackTaxPct={engagementTaxPct}
-              // One recurrence, never both: while the job recreates itself
-              // each cycle, blocks can't switch to recurring billing.
-              recurringDisabledReason={
-                workflowsOn && repeatFrequency !== "off"
-                  ? t("recur_conflict_repeat")
-                  : null
-              }
+              // Recurrence lives on the Automation step now — one screen
+              // decides whether and how this repeats, so these pills would
+              // be a second place to answer the same question.
+              hideBillingType={workflowsOn}
             />
           </CardContent>
         </Card>
@@ -2950,15 +2982,9 @@ export function EngagementBuilder({
               {workflowsOn ? (
                 <Select
                   value={recurMode}
-                  onValueChange={(value) => {
-                    if (value === "recreates") {
-                      if (repeatFrequency === "off") {
-                        setRepeatFrequency("yearly");
-                      }
-                    } else {
-                      setRepeatFrequency("off");
-                    }
-                  }}
+                  onValueChange={(value) =>
+                    applyRecurMode(value as "none" | "bills" | "recreates")
+                  }
                 >
                   <SelectTrigger
                     className="w-56"
@@ -2968,15 +2994,14 @@ export function EngagementBuilder({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">{t("recur_mode_none")}</SelectItem>
-                    {/* "bills" is DERIVED from the items — offered only when
-                        recurring items exist (it isn't a thing this card can
-                        create; the Services step is where items live). */}
-                    {hasRecurringItems && (
-                      <SelectItem value="bills">
-                        {t("recur_mode_bills")}
-                      </SelectItem>
-                    )}
-                    <SelectItem value="recreates" disabled={hasRecurringItems}>
+                    {/* Both are real choices HERE now — picking one writes
+                        the state it describes (and clears the other's), so
+                        the founder never has to go hunting on another step
+                        for the switch that makes this option available. */}
+                    <SelectItem value="bills">
+                      {t("recur_mode_bills")}
+                    </SelectItem>
+                    <SelectItem value="recreates">
                       {t("recur_mode_recreates")}
                     </SelectItem>
                   </SelectContent>
@@ -3022,24 +3047,35 @@ export function EngagementBuilder({
               )}
               {workflowsOn && recurMode === "bills" && (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {t("recur_bills_summary", { count: recurringItemCount })}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStep("services")}
+                  {/* The frequency the founder came here for — weekly through
+                      yearly, set once for every priced line. */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("recur_bills_every")}
+                    </span>
+                    <Select
+                      value={billsFrequency}
+                      onValueChange={(v) =>
+                        setBillsFrequency(v as BlockFrequency)
+                      }
                     >
-                      {t("recur_bills_jump")}
-                    </Button>
+                      <SelectTrigger
+                        className="w-40"
+                        aria-label={t("recur_mode_bills")}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BLOCK_FREQUENCIES.map((f) => (
+                          <SelectItem key={f} value={f}>
+                            {tTpl(`freq_${f}` as "freq_monthly")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  {/* WHY "Recreates the whole job" is greyed out — and, when
-                      a seeded template carried both, why its repeat will be
-                      dropped at save (the server enforces the same rule). */}
                   <p className="text-xs text-muted-foreground">
-                    {t("recur_conflict_items")}
+                    {t("recur_bills_hint")}
                   </p>
                 </>
               )}
