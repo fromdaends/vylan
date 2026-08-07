@@ -245,7 +245,6 @@ export default async function EngagementDetailPage({
   // Paired with the schedules (1710) rather than awaited after them: both are
   // small indexed reads on the same engagement, and the Services panel needs
   // them together — "billed monthly" and "next invoice Sept 1" are one fact.
-  const engagementItems = await listEngagementItems(engagement.id);
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
   // The flow surfaces (gate banner + timeline rail) share ONE gate lookup.
@@ -276,30 +275,8 @@ export default async function EngagementDetailPage({
   // member's partial read is NOT summed — a number missing colleagues' hours
   // posing as the engagement's value would be worse than no number.
   const timeEnabled = isTimeInsightsEnabled(firm);
-  const timeEntries = timeEnabled
-    ? await listEntriesForEngagement(engagement.id)
-    : [];
   const canSeeTimeValue =
     can(user, "insights.view") || can(user, "rates.manage");
-  const timeRates = canSeeTimeValue
-    ? await listBillableRates(timeEntries.map((e) => e.id))
-    : new Map<string, number>();
-  // "No rates recorded at all" is NULL, never $0 — 1780's own contract. A
-  // sum that starts at 0 and finds nothing prints "$0 value" on a job that
-  // may be deeply underwater, which is the exact lie the flat-fee line
-  // exists to prevent.
-  let timeValueCents: number | null = null;
-  for (const e of timeEntries) {
-    const rate = timeRates.get(e.id);
-    if (rate != null) {
-      timeValueCents = (timeValueCents ?? 0) + valueCents(e.duration_minutes, rate);
-    }
-  }
-  const timeTotalMinutes = timeEntries.reduce(
-    (sum, e) => sum + e.duration_minutes,
-    0,
-  );
-
   // SECOND batch: everything keyed off engagement/firm fields, fanned out in
   // parallel. Each thunk chains its own dependents internally (statuses →
   // cached lists, payment row → reconcile → cancel chip), so the page's total
@@ -316,6 +293,19 @@ export default async function EngagementDetailPage({
     signatureRequestsByItem,
     finalDocData,
     handoffRaw,
+    // ── THESE THREE USED TO WAIT THEIR TURN ────────────────────────────
+    // Each needs only `engagement.id` or the route param, both of which have
+    // been in hand since the first batch — so each was a ~100ms round trip
+    // spent queueing behind work it did not depend on. Measured against
+    // production: eight of this page's reads cost 899ms strictly in series,
+    // and these were three of them.
+    //
+    // Their DEPENDENTS still follow (billable rates need the entry ids,
+    // subtasks need the task ids) — but they now start a third of a second
+    // earlier, and share one round trip between them instead of two.
+    engagementItems,
+    timeEntries,
+    internalTasks,
   ] = await Promise.all([
     getClient(engagement.client_id),
     // Relationships (spec §3, read-only): the compact header line linking to
@@ -543,6 +533,18 @@ export default async function EngagementDetailPage({
     teamEnabled && engagement.assigned_user_id
       ? getLatestHandoffNote(engagement.id)
       : Promise.resolve(null),
+    // The priced lines. Not read until the Services panel renders (~line
+    // 1550); it was fetched a thousand lines earlier, alone, for no reason
+    // beyond where it happened to be written.
+    listEngagementItems(engagement.id),
+    // Hours logged. `timeEnabled` comes from `firm`, which the first batch
+    // already resolved.
+    timeEnabled
+      ? listEntriesForEngagement(engagement.id)
+      : Promise.resolve([]),
+    // The job's own tasks. Takes the ROUTE PARAM — available before the page
+    // had asked the database anything at all.
+    listEngagementTasks(id),
   ]);
 
   // ── Per-job access (1320) ────────────────────────────────────────────────
@@ -573,11 +575,34 @@ export default async function EngagementDetailPage({
   // Both reads together: the job's tasks, and the firm's statuses that give
   // them their labels and colours. listTaskStatuses is request-cached, so this
   // costs nothing on a page that already asked for them.
-  const internalTasks = await listEngagementTasks(id);
-  // The steps inside each of them, batched by parent.
-  const subtasksByParent = await listSubtasksByParent(
-    internalTasks.map((x) => x.id),
+  // ── THE ONE FOLLOW-UP LAYER ───────────────────────────────────────────
+  // Both of these genuinely need something the batch above produced — the
+  // entry ids and the task ids — so they cannot join it. They CAN share a
+  // round trip with each other, which is the difference between two 100ms
+  // hops and one.
+  const [timeRates, subtasksByParent] = await Promise.all([
+    canSeeTimeValue
+      ? listBillableRates(timeEntries.map((e) => e.id))
+      : Promise.resolve(new Map<string, number>()),
+    listSubtasksByParent(internalTasks.map((x) => x.id)),
+  ]);
+
+  // "No rates recorded at all" is NULL, never $0 — 1780's own contract. A
+  // sum that starts at 0 and finds nothing prints "$0 value" on a job that
+  // may be deeply underwater, which is the exact lie the flat-fee line
+  // exists to prevent.
+  let timeValueCents: number | null = null;
+  for (const e of timeEntries) {
+    const rate = timeRates.get(e.id);
+    if (rate != null) {
+      timeValueCents = (timeValueCents ?? 0) + valueCents(e.duration_minutes, rate);
+    }
+  }
+  const timeTotalMinutes = timeEntries.reduce(
+    (sum, e) => sum + e.duration_minutes,
+    0,
   );
+
   const jobGuestIds = new Set(jobGuestRows.map((m) => m.userId));
   // Anyone who can ALREADY see this through the client is not a candidate:
   // adding them would grant nothing, and removing them later would take
