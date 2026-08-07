@@ -156,7 +156,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Eye,
-  Plus,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -964,6 +963,7 @@ export default async function EngagementDetailPage({
     };
   });
 
+  const aiEnabled = engagement.ai_enabled !== false;
   const docItems = collectionItems.map((item) => ({
     id: item.id,
     label: locale === "fr" && item.label_fr ? item.label_fr : item.label,
@@ -977,6 +977,8 @@ export default async function EngagementDetailPage({
       id: f.id,
       name: f.display_name ?? f.original_filename,
     })),
+    rejectionReason: item.rejection_reason ?? null,
+    setAssessment: aiEnabled ? (item.ai_set_assessment ?? null) : null,
   }));
 
   // Signature rows for the panel — the same state derivation the old
@@ -1416,24 +1418,18 @@ export default async function EngagementDetailPage({
               locale={locale}
               addTask={
                 isLive ? (
+                  // ⚠️ NO custom trigger element here on purpose. A trigger
+                  // node built in this Server Component and threaded through
+                  // the client hub into PopoverTrigger rendered NOTHING —
+                  // silently, on SSR and client alike (build of 2026-08-07;
+                  // the panel dialogs with their own triggers were fine). The
+                  // dialog's own accent button is also the SAME control /work
+                  // shows, which the cohesion rule prefers anyway.
                   <AddTaskDialog
                     clientId={engagement.client_id}
                     engagementId={engagement.id}
                     existingKinds={internalTasks.map((x) => x.kind)}
                     members={activeMembers}
-                    trigger={
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-accent transition-colors hover:text-accent-hover"
-                      >
-                        <Plus
-                          className="size-[13px]"
-                          strokeWidth={2.2}
-                          aria-hidden
-                        />
-                        {t("add_task")}
-                      </button>
-                    }
                   />
                 ) : null
               }
@@ -1452,28 +1448,28 @@ export default async function EngagementDetailPage({
                   />
                 ) : null
               }
-              reviewDocuments={
-                <>
-                  {/* The full visual review of everything uploaded — AI
-                      verdicts included — kept one click away in the panel. */}
-                  <EngagementPreview
-                    uploads={uploads}
-                    items={items}
+              preview={
+                <EngagementPreview
+                  uploads={uploads}
+                  items={items}
+                  engagementId={engagement.id}
+                  engagementTitle={engagement.title}
+                  clientName={client?.display_name ?? null}
+                  locale={locale}
+                />
+              }
+              addItem={
+                isLive ? (
+                  <AddItemDialog
                     engagementId={engagement.id}
-                    engagementTitle={engagement.title}
-                    clientName={client?.display_name ?? null}
-                    locale={locale}
+                    province={client?.province ?? null}
                   />
-                  {isLive && (
-                    <AddItemDialog
-                      engagementId={engagement.id}
-                      province={client?.province ?? null}
-                    />
-                  )}
-                  {isLive && (
-                    <AddSignatureDialog engagementId={engagement.id} />
-                  )}
-                </>
+                ) : null
+              }
+              addSignature={
+                isLive ? (
+                  <AddSignatureDialog engagementId={engagement.id} />
+                ) : null
               }
             />
           </div>

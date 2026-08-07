@@ -163,8 +163,17 @@ export function CapacityBoard({
 
   // ── THE DRAG ────────────────────────────────────────────────────────────
 
+  // Click vs drag: the browser fires a CLICK on the same element after every
+  // pointerup, including the one that ends a drag — so a card would navigate
+  // away the moment you dropped it somewhere. Armed drags flip this ref, the
+  // click handler checks it, and a fresh pointerdown clears it. For people
+  // who cannot reassign, startDrag returns before any of the drag machinery,
+  // the ref stays false, and every click is a clean open.
+  const suppressClickRef = useRef(false);
+
   const startDrag = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, cardId: string) => {
+      suppressClickRef.current = false;
       if (!canReassign || e.button !== 0) return;
       const el = cardRefs.current.get(cardId);
       if (!el) return;
@@ -183,6 +192,7 @@ export function CapacityBoard({
         }
         if (!armed) {
           armed = true;
+          suppressClickRef.current = true;
           document.body.style.cursor = "grabbing";
           document.body.style.userSelect = "none";
         }
@@ -341,6 +351,13 @@ export function CapacityBoard({
                     statusLabel={statusLabel(c.row.derivedStatus)}
                     dragging={drag?.cardId === c.row.id}
                     onPointerDown={(e) => startDrag(e, c.row.id)}
+                    // The founder's missing click: a card opens its
+                    // engagement. Never fires off the pointerup that ends a
+                    // drag (the suppress ref above).
+                    onOpen={() => {
+                      if (suppressClickRef.current) return;
+                      router.push(`/engagements/${c.row.id}`);
+                    }}
                     entranceDelayMs={
                       animate ? 150 + colIndex * 70 + rowIndex * 65 : undefined
                     }

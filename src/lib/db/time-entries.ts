@@ -196,18 +196,31 @@ export async function listEntriesForInsights(
 /** One week of FINISHED entries, firm-wide (shared hours — the standing
  *  ruling), for the Work → Time timesheet. The week is [startIso, endIso);
  *  bounds come from the page, computed in the FIRM's timezone. */
+/**
+ * Finished entries inside a range.
+ *
+ * Named "week" for the caller that came first; the bounds are arbitrary, so the
+ * Time page's day and month views use it too rather than growing two more
+ * readers that would drift from this one's RLS and ordering.
+ *
+ * `userId` scopes to one member for that page's person chip. Omitted keeps the
+ * old behaviour exactly — everything RLS lets the caller see.
+ */
 export async function listEntriesForWeek(
   startIso: string,
   endIso: string,
+  userId?: string,
 ): Promise<TimeEntryWithNames[]> {
   const supabase = await getServerSupabase();
-  const { data, error } = await supabase
+  let q = supabase
     .from("time_entries")
     .select(`${SELECT}, clients(display_name), engagements(title)`)
     .is("deleted_at", null)
     .not("ended_at", "is", null)
     .gte("started_at", startIso)
-    .lt("started_at", endIso)
+    .lt("started_at", endIso);
+  if (userId) q = q.eq("user_id", userId);
+  const { data, error } = await q
     .order("started_at", { ascending: true })
     .limit(2000);
   if (error) {

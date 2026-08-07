@@ -40,6 +40,15 @@ import {
   type WorkflowStageDef,
   type WorkflowTaskDef,
 } from "@/lib/workflow/definition";
+import { flowSendsLetter, withFlowLetter } from "@/lib/workflow/plan";
+
+// The letter is NOT a stage action anymore — it rides the send (the founder:
+// "the engagement letter is supposed to be sent upon create... not the right
+// flow"). It gets its own flow-level card below; offering it per stage would
+// promise a fire-on-entry that the engine deliberately refuses.
+const STAGE_ENTRY_ACTIONS = ENTRY_ACTIONS.filter(
+  (a) => a !== "send_engagement_letter",
+);
 
 export type EditorMember = { id: string; name: string };
 export type EditorAspect = "all" | "flow" | "tasks" | "assignees";
@@ -89,6 +98,41 @@ export function AutomationEditor({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* The journey starts BEFORE stage one: sending the proposal is when
+          the letter goes out, and signing it is how the client accepts. One
+          flow-level switch — the same fact flowSendsLetter() reads — never a
+          per-stage toggle. */}
+      {showFlow && (
+        <section
+          aria-label={t("flow_send_card_title")}
+          className="rounded-xl border border-border bg-muted/20 p-4"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-sm font-medium">
+              {t("flow_send_card_title")}
+            </h3>
+            <label
+              className={cn(
+                "ml-auto flex cursor-pointer items-center gap-1.5 text-xs",
+                disabled && "cursor-default",
+              )}
+            >
+              <Switch
+                className="scale-75"
+                checked={flowSendsLetter(value)}
+                onCheckedChange={(on) =>
+                  onChange(withFlowLetter(value, on === true))
+                }
+                disabled={disabled}
+              />
+              {t("flow_letter_toggle")}
+            </label>
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {t("flow_letter_toggle_note")}
+          </p>
+        </section>
+      )}
       {ENGAGEMENT_STAGES.map((stage, i) => {
         const def = value.stages[stage];
         const lockedStage = stage === "collecting" || stage === "completed";
@@ -176,7 +220,7 @@ export function AutomationEditor({
                     <span className="text-xs text-muted-foreground">
                       {t("on_entry_label")}
                     </span>
-                    {ENTRY_ACTIONS.map((action) => {
+                    {STAGE_ENTRY_ACTIONS.map((action) => {
                       const on = def.on_entry.includes(action);
                       return (
                         <label
