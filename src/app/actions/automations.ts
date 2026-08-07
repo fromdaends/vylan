@@ -37,13 +37,15 @@ function cleanName(v: unknown): string | null {
 }
 
 /**
- * New automation. Starts from a base flow's definition when one is named
- * (any visible automation, built-ins included), else the return-type default —
- * the same rule the spec gives new custom templates.
+ * New automation. A reviewed AI draft's definition wins when supplied (run
+ * through the total parser like every other write); else a base flow's copy
+ * when one is named (any visible automation, built-ins included); else the
+ * return-type default — the same rule the spec gives new custom templates.
  */
 export async function createAutomationAction(input: {
   name: string;
   baseId?: string | null;
+  definition?: unknown;
 }): Promise<AutomationActionState> {
   const user = await getCurrentUser();
   if (!user?.firm_id) return { ok: false, error: "no_session" };
@@ -52,7 +54,13 @@ export async function createAutomationAction(input: {
 
   try {
     let definition = returnTypeWorkflow();
-    if (typeof input.baseId === "string" && UUID_RE.test(input.baseId)) {
+    let fromDraft = false;
+    if (input.definition !== undefined) {
+      const parsed = parseWorkflowDefinition(input.definition);
+      if (!parsed) return { ok: false, error: "invalid" };
+      definition = parsed;
+      fromDraft = true;
+    } else if (typeof input.baseId === "string" && UUID_RE.test(input.baseId)) {
       const base = await getAutomation(input.baseId);
       if (base?.definition) definition = base.definition;
     }
@@ -61,6 +69,7 @@ export async function createAutomationAction(input: {
       automation_id: created.id,
       name,
       base_id: input.baseId ?? null,
+      ...(fromDraft ? { from_ai_draft: true } : {}),
     });
     revalidateAllLocales("/vylan");
     return { ok: true, id: created.id };
@@ -68,6 +77,103 @@ export async function createAutomationAction(input: {
     console.error("[automations] create failed:", e);
     return { ok: false, error: "save_failed" };
   }
+}
+
+/**
+ * Draft a flow from a plain-language description — or refine an existing
+ * draft with a change request. PERSISTS NOTHING: the caller renders the
+ * result in the editor and the human decides whether it becomes a row
+ * (createAutomationAction with the reviewed definition). Rate-limited by
+ * being human-clicked and single-shot; the total parser inside draft.ts is
+ * the safety gate.
+ */
+export async function draftAutomationAction(input: {
+  description: string;
+  locale: "en" | "fr";
+  current?: unknown;
+  instruction?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      name: string;
+      summaryEn: string;
+      summaryFr: string;
+      definition: unknown;
+    }
+  | {
+      ok: false;
+      error:
+        | "no_session"
+        | "invalid"
+        | "not_configured"
+        | "rate_limited"
+        | "draft_failed";
+    }
+> {
+  const user = await getCurrentUser();
+  if (!user?.firm_id) return { ok: false, error: "no_session" };
+  const description =
+    typeof input.description === "string" ? input.description.trim() : "";
+  if (description.length < 10 || description.length > 2000) {
+    return { ok: false, error: "invalid" };
+  }
+
+  // Same money guards as the assistant route (its exact rule: a trial firm
+  // must not burn unbounded paid calls outside its cap, and the count is
+  // reserved BEFORE the call so a crash costs us, not the founder). Plus a
+  // modest per-user limiter — this is a human-clicked button, not an API.
+  const [{ checkRateLimit }, { getFirmAiUsage, incrementFirmAiUsage }] =
+    await Promise.all([import("@/lib/rate-limit"), import("@/lib/ai/usage")]);
+  const limit = await checkRateLimit({
+    key: `automation-draft:${user.id}`,
+    limit: 20,
+    window: "1 h",
+  });
+  if (!limit.ok) return { ok: false, error: "rate_limited" };
+  const aiUsage = await getFirmAiUsage(user.firm_id);
+  if (aiUsage.paused) return { ok: false, error: "rate_limited" };
+  if (aiUsage.isTrial) await incrementFirmAiUsage(user.firm_id);
+
+  // The refine payload rides the prompt; a definition is small by nature and
+  // anything huge is either abuse or a mistake — both get "invalid", not a
+  // maximum-cost API call.
+  const current =
+    input.current !== undefined
+      ? parseWorkflowDefinition(input.current)
+      : null;
+  if (current && JSON.stringify(current).length > 20_000) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const { draftWorkflowFromDescription } = await import(
+    "@/lib/workflow/draft"
+  );
+  const res = await draftWorkflowFromDescription({
+    description,
+    locale: input.locale === "fr" ? "fr" : "en",
+    current,
+    instruction:
+      typeof input.instruction === "string" ? input.instruction : null,
+  });
+  if (!res.ok) {
+    await logUserActivity(user.firm_id, null, "automation_draft_failed", {
+      reason: res.reason,
+    });
+    return {
+      ok: false,
+      error: res.reason === "not_configured" ? "not_configured" : "draft_failed",
+    };
+  }
+  await logUserActivity(user.firm_id, null, "automation_drafted", {
+    refined: Boolean(input.instruction),
+  });
+  return {
+    ok: true,
+    name: res.name,
+    summaryEn: res.summaryEn,
+    summaryFr: res.summaryFr,
+    definition: res.definition,
+  };
 }
 
 /** Rename and/or replace the definition of one of the firm's own automations. */

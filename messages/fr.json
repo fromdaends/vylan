@@ -5202,7 +5202,21 @@
     "flow_reminders_mode_custom": "Personnalisé pour ce flux",
     "flow_reminders_mode_off": "Désactivé",
     "flow_chase_interval_label": "Jours d'intervalle",
-    "flow_chase_max_label": "Envois max"
+    "flow_chase_max_label": "Envois max",
+    "ai_draft_label": "Ou décrivez-le et laissez l'IA le rédiger",
+    "ai_draft_placeholder": "p. ex. Tenue de livres mensuelle : collecte des relevés, je révise, l'équipe concilie, facture quand le travail est terminé — sans étape de signature",
+    "ai_draft_hint": "Vous révisez le brouillon avant tout enregistrement.",
+    "ai_draft_button": "Rédiger avec l'IA",
+    "ai_drafting": "Rédaction…",
+    "ai_draft_title": "Brouillon IA",
+    "ai_draft_review_note": "Révisez, ajustez au besoin, puis enregistrez dans votre bibliothèque.",
+    "ai_refine_placeholder": "Demandez un changement — p. ex. sauter l'étape de révision",
+    "ai_refine_button": "Mettre à jour le brouillon",
+    "ai_discard": "Abandonner",
+    "ai_save_to_library": "Enregistrer dans la bibliothèque",
+    "ai_draft_not_configured": "La rédaction par IA n'est pas encore configurée sur ce serveur.",
+    "ai_draft_failed": "L'IA n'a pas pu produire un brouillon utilisable — reformulez votre description.",
+    "ai_draft_rate_limited": "Vous avez beaucoup rédigé dans la dernière heure — patientez quelques minutes et réessayez."
   },
   "Files": {
     "page_title": "Fichiers",
