@@ -138,3 +138,69 @@ describe("How this repeats — one on/off, then the details", () => {
     expect(screen.queryByText("Recreates the whole job")).toBeNull();
   });
 });
+
+// ── HOW THE CLIENT AGREES ──────────────────────────────────────────────────
+// Founder: "you could just choose whether you wanna use the actual proposal
+// ... they just click on accept, they don't have to actually esign anything.
+// Or the option for the firm to upload their own engagement letter." And, on
+// the letter path: "they do not see the sample client, the preview ... there's
+// no point in seeing it." And: "that shouldn't even be a button" — placement
+// is automatic, never asked.
+describe("the agreement choice decides what the rest of the wizard shows", () => {
+  function pickLetterMode() {
+    fireEvent.click(screen.getByText(en.Engagements.agreement_mode_letter));
+  }
+
+  it("asks the question on step 1, defaulting to the proposal", () => {
+    mount();
+    expect(screen.getByText(en.Engagements.agreement_mode_title)).toBeTruthy();
+    expect(
+      screen.getByText(en.Engagements.agreement_mode_proposal_hint),
+    ).toBeTruthy();
+  });
+
+  it("proposal mode keeps the preview and shows NO letter anywhere", () => {
+    mount();
+    // The preview pane renders the proposal document.
+    expect(screen.getAllByText(en.Templates.doc_kicker).length).toBeGreaterThan(
+      0,
+    );
+    goToAutomation();
+    expect(
+      screen.queryByText(en.Automations.action_send_engagement_letter),
+    ).toBeNull();
+    expect(
+      screen.queryByText(en.Automations.flow_letter_place_note),
+    ).toBeNull();
+  });
+
+  it("letter mode drops the proposal preview AND its step", () => {
+    mount();
+    // Proposal mode: the document's own headings are on screen.
+    expect(
+      screen.getAllByText(en.Templates.doc_acceptance_heading).length,
+    ).toBeGreaterThan(0);
+
+    pickLetterMode();
+    expect(
+      screen.getByText(en.Engagements.agreement_mode_letter_hint),
+    ).toBeTruthy();
+    // The preview is gone...
+    expect(screen.queryByText(en.Templates.doc_acceptance_heading)).toBeNull();
+    // ...and so is the step that composed it — nobody will read it.
+    const proposalTab = screen
+      .getAllByRole("button")
+      .find((b) =>
+        b.textContent?.includes(en.Engagements.wizard_step_proposal),
+      );
+    expect(proposalTab).toBeUndefined();
+  });
+
+  it("never asks about placing signature fields — it just says it happens", () => {
+    mount();
+    pickLetterMode();
+    goToAutomation();
+    // The old switch's label is gone from the product entirely.
+    expect(screen.queryByText("Place the signature fields myself")).toBeNull();
+  });
+});
