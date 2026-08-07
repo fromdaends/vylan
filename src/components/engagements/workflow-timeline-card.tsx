@@ -92,6 +92,11 @@ export async function WorkflowTimelineCard({
     if (l.status === "planned") {
       return { text: t("timeline_letter_planned"), failed: false };
     }
+    if (l.status === "preparing") {
+      // Needs the accountant — the placement card beside the gate is the
+      // control; this line just refuses to claim "sent" about a draft.
+      return { text: t("timeline_letter_awaiting_placement"), failed: false };
+    }
     if (l.status === "skipped") {
       if (l.reason === "already_signed") {
         return { text: t("timeline_letter_already_signed"), failed: false };

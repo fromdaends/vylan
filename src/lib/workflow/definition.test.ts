@@ -298,3 +298,18 @@ describe("flow reminders — junk-degrades contracts (review findings)", () => {
     expect(def?.reminders).toBeUndefined();
   });
 });
+
+describe("snapshot letter_placement", () => {
+  it("carries 'editor' and drops junk", () => {
+    const base = { stages: {}, assignees: {} };
+    expect(
+      parseWorkflowSnapshot({ ...base, letter_placement: "editor" })
+        ?.letter_placement,
+    ).toBe("editor");
+    expect(
+      parseWorkflowSnapshot({ ...base, letter_placement: "banana" })
+        ?.letter_placement,
+    ).toBeUndefined();
+    expect(parseWorkflowSnapshot(base)?.letter_placement).toBeUndefined();
+  });
+});

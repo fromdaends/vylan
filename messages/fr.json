@@ -5222,7 +5222,17 @@
     "ai_save_to_library": "Enregistrer dans la bibliothèque",
     "ai_draft_not_configured": "La rédaction par IA n'est pas encore configurée sur ce serveur.",
     "ai_draft_failed": "L'IA n'a pas pu produire un brouillon utilisable — reformulez votre description.",
-    "ai_draft_rate_limited": "Vous avez beaucoup rédigé dans la dernière heure — patientez quelques minutes et réessayez."
+    "ai_draft_rate_limited": "Vous avez beaucoup rédigé dans la dernière heure — patientez quelques minutes et réessayez.",
+    "flow_letter_attach_here": "La lettre de mission pour {service} part avec l'envoi — mais aucune n'est enregistrée. Ajoutez-la ici :",
+    "flow_letter_missing_for": "Aucune lettre de mission n'est enregistrée pour {service}, donc rien ne partira. Un propriétaire du cabinet peut en ajouter une sous Modèles → Services.",
+    "flow_letter_place_myself": "Placer moi-même les champs de signature",
+    "flow_letter_place_note": "L'éditeur SignWell s'ouvre juste après l'envoi ; la lettre part au client une fois les champs placés.",
+    "letter_placement_waiting": "La lettre de mission attend le placement de ses champs de signature.",
+    "letter_placement_note": "Le client ne peut ni la lire, ni la signer, ni accepter tant que ce n'est pas terminé.",
+    "letter_placement_button": "Terminer le placement",
+    "letter_placement_error": "Impossible d'ouvrir l'éditeur — réessayez dans un instant.",
+    "flow_letter_ok_for": "La lettre de mission pour {service} est enregistrée — elle partira pour signature avec l'envoi.",
+    "timeline_letter_awaiting_placement": "Lettre rédigée — les champs de signature restent à placer"
   },
   "Files": {
     "page_title": "Fichiers",
