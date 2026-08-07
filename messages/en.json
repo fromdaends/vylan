@@ -3251,13 +3251,10 @@
     "recur_mode_none": "Doesn't repeat",
     "recur_mode_bills": "Bills repeatedly",
     "recur_mode_recreates": "Recreates the whole job",
-    "recur_none_hint": "One-time work. To bill the client on a schedule, make a service item recurring; to redo the whole job each cycle, pick \"Recreates the whole job\".",
-    "recur_bills_summary": "{count, plural, one {# service item bills} other {# service items bill}} on a schedule inside this one engagement — the charges start when the client accepts.",
-    "recur_bills_jump": "Edit the items",
-    "recur_recreates_every": "Every",
-    "recur_conflict_items": "Your service items already bill repeatedly — recreating the whole job too would charge the client twice. Make the items one-time first.",
-    "recur_conflict_repeat": "This job recreates itself each cycle — bill inside each occurrence instead of repeating a charge here.",
-    "repeat_error_recurring_items": "This engagement's service items already bill on a schedule — repeating the whole job too would charge the client twice. Make the items one-time first."
+    "recur_none_hint": "One-time work: the client is billed once and the job doesn't come back.",
+    "repeat_error_recurring_items": "This engagement's service items already bill on a schedule — repeating the whole job too would charge the client twice. Make the items one-time first.",
+    "recur_bills_every": "Bill the client every",
+    "recur_bills_hint": "One engagement, a charge each period — the schedule starts when the client accepts. Your service items keep their prices; this sets how often they bill."
   },
   "Attention": {
     "metric_active": "Active",

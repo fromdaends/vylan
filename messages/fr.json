@@ -3251,13 +3251,10 @@
     "recur_mode_none": "Ne se répète pas",
     "recur_mode_bills": "Facture de façon récurrente",
     "recur_mode_recreates": "Recrée le mandat au complet",
-    "recur_none_hint": "Travail ponctuel. Pour facturer le client selon un calendrier, rendez un service récurrent ; pour refaire tout le mandat à chaque cycle, choisissez « Recrée le mandat au complet ».",
-    "recur_bills_summary": "{count, plural, one {# service se facture} other {# services se facturent}} selon un calendrier dans ce seul mandat — les frais démarrent à l'acceptation du client.",
-    "recur_bills_jump": "Modifier les services",
-    "recur_recreates_every": "Chaque",
-    "recur_conflict_items": "Vos services se facturent déjà de façon récurrente — recréer le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels.",
-    "recur_conflict_repeat": "Ce mandat se recrée à chaque cycle — facturez dans chaque occurrence plutôt que de répéter des frais ici.",
-    "repeat_error_recurring_items": "Les services de ce mandat se facturent déjà selon un calendrier — répéter le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels."
+    "recur_none_hint": "Travail ponctuel : le client est facturé une fois et le mandat ne revient pas.",
+    "repeat_error_recurring_items": "Les services de ce mandat se facturent déjà selon un calendrier — répéter le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels.",
+    "recur_bills_every": "Facturer le client tous les",
+    "recur_bills_hint": "Un seul mandat, des frais à chaque période — le calendrier démarre à l'acceptation du client. Vos services gardent leurs prix ; ceci définit la fréquence de facturation."
   },
   "Attention": {
     "metric_active": "Actifs",

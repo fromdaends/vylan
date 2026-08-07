@@ -70,7 +70,7 @@ export function BillingBlocksEditor({
   services = [],
   fallbackTaxPct = null,
   onServicePicked,
-  recurringDisabledReason = null,
+  hideBillingType = false,
 }: {
   blocks: BillingBlock[];
   onChange: (next: BillingBlock[]) => void;
@@ -82,13 +82,14 @@ export function BillingBlocksEditor({
   /** Fired when a picked service carries work (1620), so the caller can pull
    *  the tasks in. Passed straight through — a block has no opinion about it. */
   onServicePicked?: (service: CatalogueService) => void;
-  /** One recurrence, never both (founder ruling): when the engagement
-   *  RECREATES itself each cycle, switching a block to recurring billing is
-   *  disabled and this sentence says why. Null = no restriction (the
-   *  template builders, and engagements that don't repeat). Blocks that are
-   *  ALREADY recurring stay visible and editable — hiding live state would
-   *  be worse than explaining it. */
-  recurringDisabledReason?: string | null;
+  /** The engagement builder's Automation step owns "how this repeats" now
+   *  (founder: "there's now recurring still on service items, when you
+   *  should just be able to do that from automation") — so it hides the
+   *  One-time/Recurring pills and the per-block frequency here. The blocks
+   *  still CARRY that state; one screen sets it. The template builders pass
+   *  nothing and keep the full controls, since they have no Automation
+   *  step to move the choice to. */
+  hideBillingType?: boolean;
 }) {
   const t = useTranslations("Templates");
 
@@ -170,27 +171,18 @@ export function BillingBlocksEditor({
             <div className="flex flex-wrap items-center gap-2">
               {/* HOW it bills. Changing this resets a timing the new type has
                   no meaning for — see withBillingType. */}
-              {BILLING_TYPES.map((type) => {
-                const lockedOut =
-                  type === "recurring" &&
-                  recurringDisabledReason != null &&
-                  b.billingType !== "recurring";
-                return (
+              {!hideBillingType &&
+                BILLING_TYPES.map((type) => (
                   <button
                     key={type}
                     type="button"
-                    onClick={() =>
-                      lockedOut ? undefined : patch(idx, withBillingType(b, type))
-                    }
-                    disabled={lockedOut}
-                    title={lockedOut ? recurringDisabledReason : undefined}
+                    onClick={() => patch(idx, withBillingType(b, type))}
                     aria-pressed={b.billingType === type}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                       b.billingType === type
                         ? "border-accent bg-accent/10 text-foreground"
                         : "border-border text-muted-foreground hover:text-foreground",
-                      lockedOut && "cursor-not-allowed opacity-50",
                     )}
                   >
                     {t(
@@ -199,8 +191,7 @@ export function BillingBlocksEditor({
                         : "billing_recurring") as BillingTypeKey,
                     )}
                   </button>
-                );
-              })}
+                ))}
 
               <span className="text-xs text-muted-foreground">
                 {t("billing_when")}
@@ -220,7 +211,7 @@ export function BillingBlocksEditor({
                 ))}
               </select>
 
-              {b.billingType === "recurring" && (
+              {b.billingType === "recurring" && !hideBillingType && (
                 <select
                   value={b.frequency}
                   onChange={(e) =>
@@ -333,16 +324,6 @@ export function BillingBlocksEditor({
           </section>
         );
       })}
-
-      {/* ONE sentence for the lock, rendered once, whenever any block's
-          "Recurring" switch is disabled by it — a title on a disabled button
-          is hover-only on desktop and nothing at all on touch. */}
-      {recurringDisabledReason != null &&
-        blocks.some((b) => b.billingType !== "recurring") && (
-          <p className="text-xs text-muted-foreground">
-            {recurringDisabledReason}
-          </p>
-        )}
 
       <div className="flex gap-2">
         <Button
