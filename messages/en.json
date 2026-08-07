@@ -1524,7 +1524,8 @@
     "action_time_entry_deleted": "Deleted a time entry",
     "action_member_rate_changed": "Changed a team member's hourly rate",
     "action_engagement_handoff_note": "Handoff note added",
-    "action_team_permissions_changed": "Teammate permissions changed"
+    "action_team_permissions_changed": "Teammate permissions changed",
+    "action_repeat_dropped": "Repeat dropped (items already bill on a schedule)"
   },
   "Notifications": {
     "title": "What's new",
@@ -2869,11 +2870,6 @@
     "repeat_sync_dismiss": "Not now",
     "repeat_sync_applied": "Series updated. Future occurrences will match this engagement.",
     "repeat_control_error": "Could not update the series. Please try again.",
-    "repeat_invoice_label": "Recreate the invoice each cycle",
-    "repeat_invoice_hint": "Every new occurrence gets its own fresh invoice with the same amount and settings, including the payment lock. When it goes out follows the invoice timing (now, on completion, or delayed).",
-    "repeat_invoice_none": "This engagement has no invoice to copy. Set one up in the Invoice options first.",
-    "repeat_invoice_off_hint": "No invoice is set for this engagement yet. Set one up below and each occurrence can bill automatically.",
-    "repeat_invoice_set_button": "Set up the invoice",
     "repeat_invoice_timing_at_spawn": "created as soon as the occurrence opens",
     "repeat_invoice_timing_on_completion": "sent when the occurrence is completed",
     "repeat_invoice_timing_delayed": "sent {days} days after completion",
@@ -3245,7 +3241,26 @@
     "board_tasks": "tasks",
     "filter_chip_search": "Search",
     "filter_chip_clear": "Clear the search",
-    "reminder_preset_flow": "From the flow"
+    "reminder_preset_flow": "From the flow",
+    "repeat_invoice_each": "Each occurrence bills {amount}, {when}.",
+    "repeat_invoice_none_yet": "No invoice is set up, so occurrences won't bill anything.",
+    "repeat_invoice_when_now": "as soon as it opens",
+    "repeat_invoice_when_on_acceptance": "when the client accepts it",
+    "repeat_invoice_when_on_completion": "when you mark it complete",
+    "repeat_invoice_when_delayed": "{days} days after you complete it",
+    "repeat_invoice_each_is": "Each occurrence bills:",
+    "cadence_card_title": "How this repeats",
+    "cadence_pay_label": "How often the client pays",
+    "cadence_pay_once": "Once",
+    "cadence_work_label": "How often the work repeats",
+    "cadence_work_once": "Once — it doesn't come back",
+    "cadence_summary_neither": "Choose at least one below — how often they pay, how often the work repeats, or both.",
+    "cadence_summary_pay_only": "One job that keeps going, with a charge each period — the schedule starts when the client accepts.",
+    "cadence_summary_work_only": "A fresh job each cycle — same client, same checklist, a new client link — billed once each time.",
+    "cadence_summary_both": "A fresh job each cycle, and one continuous payment schedule running alongside it — the client is charged on their own cadence, not once per job.",
+    "cadence_none": "Doesn't repeat",
+    "cadence_recurring": "Recurring",
+    "cadence_none_hint": "A one-time job: the client is billed once and the work doesn't come back."
   },
   "Attention": {
     "metric_active": "Active",
@@ -3611,7 +3626,7 @@
     "template_saved_toast": "Template saved — {access}",
     "draft_saved_toast": "Draft saved",
     "remove_block": "Remove this billing group",
-    "doc_kicker": "Engagement letter",
+    "doc_kicker": "Proposal",
     "doc_date_label": "Date",
     "doc_prepared_for": "Prepared for",
     "doc_prepared_by": "Prepared by",
@@ -3622,7 +3637,7 @@
     "doc_accepted_by": "Accepted by",
     "doc_col_service": "Service",
     "doc_col_amount": "Amount",
-    "doc_acceptance_body": "By accepting below, {client} agrees to the services, fees and terms set out in this letter. Your acceptance is recorded with the date and time you accept.",
+    "doc_acceptance_body": "By accepting below, {client} agrees to the services, fees and terms set out in this proposal. Your acceptance is recorded with the date and time you accept.",
     "totals_determined_later": "Determined later",
     "preview_step_acceptance": "Acceptance",
     "service_budget_hours": "Hours it usually takes",
@@ -4376,7 +4391,13 @@
     "gate_unavailable": "Something went wrong. Try again.",
     "deposit_accepted_title": "Thanks — {firm} has your agreement",
     "deposit_accepted_body": "One last step. Pay the deposit below and your portal opens right away, with everything you need in it.",
-    "deposit_credited_note": "This deposit comes off your final invoice."
+    "deposit_credited_note": "This deposit comes off your final invoice.",
+    "proposal_letter_note": "To accept, review and sign the engagement letter from {firm}. Your signature records your acceptance of this proposal.",
+    "proposal_letter_sign": "Review & sign the engagement letter",
+    "proposal_letter_preparing": "{firm} is preparing your engagement letter — you'll be able to review and sign it here once it's ready.",
+    "proposal_letter_signed_title": "Signature received",
+    "proposal_letter_signed_body": "We're finalizing your acceptance — this usually takes a few seconds.",
+    "proposal_letter_declined": "You declined the engagement letter. If you've changed your mind, contact {firm} — they can send a fresh copy for signature."
   },
   "Integrations": {
     "index_title": "Integrations",
@@ -5216,7 +5237,17 @@
     "ai_save_to_library": "Save to library",
     "ai_draft_not_configured": "AI drafting isn't set up on this server yet.",
     "ai_draft_failed": "The AI couldn't produce a usable draft — try rewording your description.",
-    "ai_draft_rate_limited": "You've drafted a lot in the last hour — give it a few minutes and try again."
+    "ai_draft_rate_limited": "You've drafted a lot in the last hour — give it a few minutes and try again.",
+    "flow_letter_attach_here": "The engagement letter for {service} goes out with the send — but none is on file yet. Attach it here:",
+    "flow_letter_missing_for": "No engagement letter is on file for {service}, so nothing will go out. A firm owner can attach one under Templates → Services.",
+    "flow_letter_place_myself": "Place the signature fields myself",
+    "flow_letter_place_note": "SignWell's editor opens right after you send; the letter goes to the client once you've placed the fields.",
+    "letter_placement_waiting": "The engagement letter needs its signature fields placed.",
+    "letter_placement_note": "The client can't review, sign, or accept until you finish.",
+    "letter_placement_button": "Finish placing",
+    "letter_placement_error": "Couldn't open the editor — try again in a moment.",
+    "flow_letter_ok_for": "The engagement letter for {service} is on file — it goes out for signature with the send.",
+    "timeline_letter_awaiting_placement": "Letter drafted — the signature fields still need placing"
   },
   "Files": {
     "page_title": "Files",
@@ -5655,6 +5686,12 @@
     "feedback_empty": "Nobody has used the feedback box yet.",
     "adoption_requested_signature": "Asked for a signature",
     "adoption_used_assistant": "Asked the assistant something",
-    "adoption_reached_clients": "Their clients showed up"
+    "adoption_reached_clients": "Their clients showed up",
+    "panel_tracking": "Tracking ({count})",
+    "firms_only_pinned": "Tracking only ({count})",
+    "pin_add": "Track {name}",
+    "pin_remove": "Stop tracking {name}",
+    "pin_failed": "Could not save that. Try again.",
+    "pin_needs_migration": "Pinning needs database update 1810. The SQL is in the pull request."
   }
 }

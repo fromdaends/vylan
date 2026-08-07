@@ -97,6 +97,10 @@ export type WorkflowSnapshot = WorkflowDefinition & {
   assignees: Partial<Record<EngagementStage, string>>;
   // Provenance only. Never read through for behaviour.
   automation_id?: string | null;
+  /** The creator's per-engagement choice (builder Automation step): place
+   *  the letter's signature fields in SignWell's editor at send time.
+   *  Absent = the appended signature page, exactly as before. */
+  letter_placement?: "editor";
 };
 
 // A latched confirm gate: who approved the move out of this stage, and when.
@@ -261,7 +265,14 @@ export function parseWorkflowSnapshot(raw: unknown): WorkflowSnapshot | null {
   }
   const automationId =
     typeof r.automation_id === "string" ? r.automation_id : null;
-  return { ...def, assignees, automation_id: automationId };
+  return {
+    ...def,
+    assignees,
+    automation_id: automationId,
+    ...(r.letter_placement === "editor"
+      ? { letter_placement: "editor" as const }
+      : {}),
+  };
 }
 
 /** The stages this workflow actually walks, in order (skips removed). */

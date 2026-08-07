@@ -26,13 +26,54 @@ import {
   acceptanceDueCents,
   acceptanceDueLines,
 } from "@/lib/billing/acceptance-lines";
+import { acceptanceStartsWorkNow } from "@/lib/engagements/deposit-state";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
+
+/**
+ * EVERYTHING a client's acceptance sets in motion, after accepted_at is
+ * written: the billing (deposit / on-acceptance invoice / schedules) and
+ * then the activation decision — in that order, because "is anything owed?"
+ * only means something once the invoices exist (the founder walked into the
+ * portal on a $459.90 engagement when the order was wrong).
+ *
+ * THREE places record a client's agreement and all of them must land here:
+ * the portal's Accept button, the firm's accept-on-behalf, and — since
+ * sign-to-accept — a signed engagement letter (signwell/complete.ts). The
+ * letter path shipping without this was a live blocker: accepted engagements
+ * with deposits that were never raised and portals that opened unpaid.
+ *
+ * Best-effort throughout: the agreement is already recorded, and an
+ * accepted-but-not-activated engagement is a visible, recoverable state.
+ */
+export async function runAcceptanceConsequences(
+  engagementId: string,
+): Promise<void> {
+  await applyAcceptedBilling(engagementId);
+  try {
+    if (await acceptanceStartsWorkNow(engagementId)) {
+      const sb = getServiceRoleSupabase();
+      await sb
+        .from("engagements")
+        .update({
+          activated_at: new Date().toISOString(),
+          status: "in_progress",
+        })
+        .eq("id", engagementId)
+        .is("activated_at", null);
+    }
+  } catch (e) {
+    console.error("[on-accepted] activation decision failed:", e);
+  }
+}
 
 export type AcceptedBillingResult = {
   /** The deposit the proposal said was due on acceptance, if one was raised. */
   depositRaised: boolean;
   /** The engagement's own invoice, when the firm chose to bill on acceptance. */
   invoiceRaised: boolean;
+  /** True when that invoice was deliberately NOT raised because a payment
+   *  schedule already bills this arrangement period by period. */
+  invoiceSkippedForSchedule?: boolean;
   /** Frequencies now on a schedule — "monthly" means the client will be
    *  invoiced every month from here on, not just this once. */
   schedulesStarted: string[];
@@ -56,6 +97,51 @@ export type AcceptedBillingResult = {
  * one live invoice per engagement PER KIND. Calling this twice raises nothing
  * twice.
  */
+/**
+ * Is this engagement's client already on a live payment schedule belonging to
+ * the same repeating series? Then the arrangement is billed period by period
+ * and must not ALSO be billed as a lump sum.
+ *
+ * Fails CLOSED-ish in the safe direction for money: an unreadable answer
+ * returns false, i.e. the flat invoice is raised as it always was. A missing
+ * invoice is visible and fixable in one click; a duplicate charge to a client
+ * is neither — but so is an arrangement that silently never bills, and this
+ * branch only fires for engagements whose firm explicitly chose
+ * bill-on-acceptance. Preserving the pre-existing behaviour on an unknown is
+ * the smaller surprise.
+ */
+async function seriesScheduleCovers(engagementId: string): Promise<boolean> {
+  try {
+    const sb = getServiceRoleSupabase();
+    const { data: row, error } = await sb
+      .from("engagements")
+      .select("series_id")
+      .eq("id", engagementId)
+      .maybeSingle();
+    if (error) return false;
+    const seriesId = (row as { series_id?: string | null } | null)?.series_id;
+    if (!seriesId) return false;
+
+    const { data: siblings } = await sb
+      .from("engagements")
+      .select("id")
+      .eq("series_id", seriesId);
+    const ids = (siblings ?? []).map((s) => (s as { id: string }).id);
+    if (ids.length === 0) return false;
+
+    const { data: scheds } = await sb
+      .from("engagement_billing_schedules")
+      .select("id")
+      .in("engagement_id", ids)
+      .neq("status", "ended")
+      .limit(1);
+    return (scheds?.length ?? 0) > 0;
+  } catch (e) {
+    console.error("[on-accepted] schedule coverage check failed:", e);
+    return false;
+  }
+}
+
 export async function applyAcceptedBilling(
   engagementId: string,
 ): Promise<AcceptedBillingResult> {
@@ -116,10 +202,27 @@ export async function applyAcceptedBilling(
       });
       out.invoiceRaised = invoice.ok;
     } else if (data?.invoice_auto_mode === "on_acceptance") {
-      const invoice = await sendEngagementInvoice(engagementId, {
-        atAcceptance: true,
-      });
-      out.invoiceRaised = invoice.ok;
+      // ── NOT ON TOP OF A CONTINUOUS ARRANGEMENT ──────────────────────────
+      //
+      // A spawned occurrence inherits the series' flat invoice settings. If
+      // the client is ALSO on a payment schedule — the founder's annual job
+      // paid monthly — raising that flat amount here charges the whole fee
+      // again beside the monthly charges. The lines the client agreed to are
+      // billed by the schedule, one period at a time; this branch exists for
+      // jobs billed as a single sum, which this is not.
+      //
+      // Only the FLAT branch is suppressed. One-time lines marked
+      // on-acceptance (the branch above) are extra work for this cycle and
+      // are billed exactly as they should be.
+      const covered = await seriesScheduleCovers(engagementId);
+      if (covered) {
+        out.invoiceSkippedForSchedule = true;
+      } else {
+        const invoice = await sendEngagementInvoice(engagementId, {
+          atAcceptance: true,
+        });
+        out.invoiceRaised = invoice.ok;
+      }
     }
   } catch (e) {
     console.error("[on-accepted] acceptance invoice failed:", e);

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { trustedDocTypeCode } from "@/lib/filing/tokens";
 import { DELETED_RETENTION_DAYS } from "./lifecycle";
+import { rehomeSchedulesBeforeDelete } from "@/lib/billing/rehome-schedules";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -187,6 +188,17 @@ export async function purgeOneEngagement(
       files_rehomed: rehomedIds.length,
     },
   });
+
+  // 3b. Move any live PAYMENT SCHEDULE off this engagement first.
+  //
+  //     Since work-repeat and pay-repeat became independent, one schedule can
+  //     span a whole series while being pinned to whichever occurrence
+  //     created it — usually the oldest, i.e. the first one purged. The
+  //     cascade below would take the arrangement's billing and its entire
+  //     charge ledger with it, silently: the client just stops being charged.
+  //     Re-homing to a surviving occurrence keeps the money running; with no
+  //     survivor the schedule is ended, which is honest and keeps the history.
+  await rehomeSchedulesBeforeDelete(eng.id);
 
   // 4. Hard-delete the row; the FK cascade clears everything that references
   //    it. If THIS fails the re-homed rows are removed again before rethrowing

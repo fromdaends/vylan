@@ -37,11 +37,18 @@ export type TimelineFacts = {
   hasProposalItems: boolean;
   /** The confirm gate currently waiting, when one is (stage it holds). */
   pendingGateStage: EngagementStage | null;
+  /** The letter-keyed signature request's LIVE status (null = none). The
+   *  ledger burns its claim when the letter is CREATED; only the live row
+   *  knows an editor-mode draft is still awaiting field placement. */
+  letterLiveStatus?: string | null;
   events: WorkflowEventRow[];
 };
 
 export type LetterOutcome = {
-  status: "planned" | "done" | "skipped" | "failed";
+  /** "preparing" = an editor-mode draft whose signature fields the
+   *  accountant still has to place — created, but not in the client's
+   *  hands. */
+  status: "planned" | "preparing" | "done" | "skipped" | "failed";
   /** already_signed | already_sent | not_configured | no_service | … */
   reason: string | null;
 };
@@ -100,7 +107,15 @@ export function buildFlowTimeline(
     if (row) {
       const d = row.detail && typeof row.detail === "object" ? row.detail : {};
       letter = {
-        status: row.status === "done" ? "done" : row.status,
+        status:
+          row.status === "done"
+            ? // The ledger says the send effect ran; the LIVE row knows
+              // whether the letter actually left (an editor-mode draft sits
+              // at 'pending' until its fields are placed).
+              facts.letterLiveStatus === "pending"
+              ? "preparing"
+              : "done"
+            : row.status,
         reason: typeof d.reason === "string" ? d.reason : null,
       };
     } else if (!sentHappened) {

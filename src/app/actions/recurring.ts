@@ -52,7 +52,14 @@ const RepeatSchema = z
 
 export type RepeatEditResult =
   | { ok: true }
-  | { ok: false; error: "invalid" | "not_found" | "no_documents" | "save_failed" };
+  | {
+      ok: false;
+      error:
+        | "invalid"
+        | "not_found"
+        | "no_documents"
+        | "save_failed";
+    };
 
 export async function setEngagementRepeatAction(input: {
   engagementId: string;
@@ -87,6 +94,11 @@ export async function setEngagementRepeatAction(input: {
       revalidatePath(`/engagements/${engagement.id}`);
       return { ok: true };
     }
+
+    // (The refusal that lived here — "these items already bill on a
+    // schedule, so the job may not also repeat" — is gone: the two cadences
+    // are independent now, and start-schedules.ts keeps ONE payment schedule
+    // per series so repeating the work cannot stack a second charge.)
 
     // A series spawns engagements that must be sendable — an empty checklist
     // would create occurrences the client can't act on (the send flow itself

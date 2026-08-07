@@ -57,10 +57,13 @@ import {
   invoiceAmountFromTotals,
 } from "@/lib/engagements/billing-totals";
 import {
+  BLOCK_FREQUENCIES,
   defaultPriceVisibility,
   emptyBlock,
   flattenBlocks,
+  withBillingType,
   type BillingBlock,
+  type BlockFrequency,
   type PriceVisibility,
 } from "@/lib/engagements/billing-blocks";
 import { BillingBlocksEditor } from "@/components/templates/billing-blocks-editor";
@@ -75,6 +78,8 @@ import {
   type ComboboxClient,
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
+import { openPlacementEditor } from "@/components/engagements/placement-editor";
+import { ServiceLetterSection } from "@/components/templates/service-letter-section";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import {
   familyDefaultWorkflow,
@@ -300,6 +305,8 @@ export function EngagementBuilder({
   workflowsOn = false,
   automations = [],
   serviceIdsWithLetters = [],
+  canUploadLetters = false,
+  signwellEditorOn = false,
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -361,6 +368,11 @@ export function EngagementBuilder({
   /** Which services have an engagement letter uploaded (1700) — the
    *  Automation step's letter status line. */
   serviceIdsWithLetters?: string[];
+  /** can(user, "firm.settings") — whether the inline letter-attach renders.
+   *  The upload action enforces the same capability server-side. */
+  canUploadLetters?: boolean;
+  /** SIGNWELL_API_APPLICATION_ID present — field placement is available. */
+  signwellEditorOn?: boolean;
   /** Saved sets of tasks (migration 1570). Empty before it is applied, which
    *  hides the picker entirely — there is nothing to pick. */
   taskTemplates?: {
@@ -501,7 +513,12 @@ export function EngagementBuilder({
   const [repeatAnchorDay, setRepeatAnchorDay] = useState<string>("");
   // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
   // occurrence. OFF by default — billing repeats only when explicitly chosen.
-  const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
+  // No switch any more (founder: the recreate-invoice toggle asked what the
+  // priced lines already answer). A recreated occurrence always inherits this
+  // engagement's invoice settings; parseInvoiceSnapshot still stores nothing
+  // when there is no invoice to inherit, so a job with no billing stays
+  // unbilled.
+  const repeatInvoiceRecreate = true;
   // Scroll target for the Repeat section's "Set up the invoice" shortcut.
   const invoiceSectionRef = useRef<HTMLDivElement>(null);
   // Seeded at INIT, never by a mount effect (same doctrine as the template
@@ -533,6 +550,19 @@ export function EngagementBuilder({
   });
   const [reminderPreviewBase] = useState(() => new Date());
   const [remindersExpanded, setRemindersExpanded] = useState(false);
+  // Letters attached INLINE on the Automation step this session (founder:
+  // "you can't attach the engagement letter you'd like to be automatically
+  // sent out"). Uploads write to the service's own letter rows — the same
+  // storage the Templates → Services tab manages — this list only keeps the
+  // honesty line truthful without a server round-trip.
+  const [attachedLetterServiceIds, setAttachedLetterServiceIds] = useState<
+    string[]
+  >([]);
+  // "Place the signature fields myself": SignWell's editor opens right
+  // after send, instead of the auto-appended signature page.
+  const [letterPlacement, setLetterPlacement] = useState<"auto" | "editor">(
+    "auto",
+  );
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
   // ── BILLED WHEN THEY ACCEPT, BY DEFAULT ────────────────────────────────
@@ -1046,9 +1076,91 @@ export function EngagementBuilder({
         .filter((x): x is string => Boolean(x)),
     ),
   ];
-  const lettersMissingCount = pickedServiceIds.filter(
-    (id) => !serviceIdsWithLetters.includes(id),
-  ).length;
+  // THE letter rides the FIRST catalogue line, in proposal order — the exact
+  // rule resolveServiceId applies at send time (workflow/letter.ts). The old
+  // count-all-missing warning could both cry wolf (a letterless second
+  // service whose letter would never send) and stay silent about the one
+  // that mattered.
+  // ── ONE RECURRENCE, AND THE AUTOMATION STEP OWNS IT ─────────────────────
+  // Founder: "you can't select if you want a quarterly, monthly, or yearly
+  // anymore... there's now recurring still on service items, when you should
+  // just be able to do that from automation."
+  //
+  // So the mode card is a CONTROL, not a readout: picking "Bills repeatedly"
+  // converts the priced blocks to recurring at the frequency chosen right
+  // there, and the One-time/Recurring pills leave the Services step entirely
+  // (BillingBlocksEditor's hideBillingType).
+  // ── TWO QUESTIONS, NOT ONE (founder ruling, after three attempts) ───────
+  //
+  // "How often does the WORK repeat?" and "How often do they PAY?" are
+  // different facts, and an annual T2 paid $300/month is an ordinary
+  // arrangement this app could not express while they were one either/or
+  // control. They are independent now; what made them dangerous together —
+  // each spawned occurrence opening a SECOND payment schedule on top of the
+  // last — is fixed at the source (start-schedules.ts keeps one schedule per
+  // series), not papered over by forbidding the combination.
+  const recurringBlocks = blocks.filter((b) => b.billingType === "recurring");
+  const hasRecurringItems = recurringBlocks.length > 0;
+  // What the client pays on: "once" or a cadence. All priced lines share it —
+  // a proposal that bills some lines monthly and others quarterly is a thing
+  // the block editor can still express, but this card speaks for the common
+  // case and shows the first cadence when they differ.
+  const payCadence: "once" | BlockFrequency = hasRecurringItems
+    ? (recurringBlocks[0]?.frequency ?? "monthly")
+    : "once";
+
+  // ── ONE ON/OFF, THEN THE DETAILS ────────────────────────────────────────
+  // Founder: "have it in one little button so you could select doesn't repeat
+  // if you don't want anything repeating. Then... you click on recurring, and
+  // it shows billing... it shows the entire work job option."
+  //
+  // So: does anything about this job repeat — yes or no. Yes reveals BOTH
+  // knobs (bill the client / redo the job); no clears them. Three sibling
+  // modes were the mistake: "doesn't repeat" was never the same KIND of
+  // answer as the other two, so listing them together read as nonsense.
+  //
+  // Held as state rather than derived, so answering "yes" can show the two
+  // rows before either has been set — otherwise the control would snap back
+  // to "no" the moment it was opened.
+  const [recurringOpen, setRecurringOpen] = useState(
+    () => hasRecurringItems || repeatFrequency !== "off",
+  );
+
+  function setRecurring(open: boolean) {
+    setRecurringOpen(open);
+    if (!open) {
+      // "Doesn't repeat" means exactly that — neither the money nor the work.
+      setPayCadence("once");
+      setRepeatFrequency("off");
+    }
+  }
+
+  /** Sets how often the CLIENT PAYS. Never touches the work schedule. */
+  function setPayCadence(next: "once" | BlockFrequency) {
+    if (next === "once") {
+      setBlocks((prev) => prev.map((b) => withBillingType(b, "one_time")));
+      return;
+    }
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.billingType === "recurring"
+          ? { ...b, frequency: next }
+          : { ...withBillingType(b, "recurring"), frequency: next },
+      ),
+    );
+  }
+
+  // Same filter the submit payload applies (empty-named lines are dropped
+  // before they reach the server), so the service named here can never
+  // differ from the one resolveServiceId picks at send time.
+  const sendingService =
+    serviceItems.find((x) => x.serviceId && x.name.trim().length > 0) ?? null;
+  const sendingServiceId = sendingService?.serviceId ?? null;
+  const sendingServiceName = sendingService?.name.trim() || null;
+  const sendingLetterMissing =
+    sendingServiceId != null &&
+    !serviceIdsWithLetters.includes(sendingServiceId) &&
+    !attachedLetterServiceIds.includes(sendingServiceId);
   // The plan line's "handed to" wording. A helper because TypeScript loses
   // the null-narrowing inside a .find callback in JSX.
   function flowAssigneeName(rule: StageAssigneeRule): string {
@@ -1098,6 +1210,26 @@ export function EngagementBuilder({
   // The amount to bill from the current invoice choices (shared pure helper).
   // The helper only distinguishes "off" from any billing mode, so "now" maps to
   // a non-off mode for the amount calculation.
+  const money = (cents: number) =>
+    new Intl.NumberFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+      style: "currency",
+      currency: "CAD",
+    }).format(cents / 100);
+
+  /** When the occurrence's invoice goes out, as a sentence FRAGMENT. The
+   *  Billing step's dropdown labels are written as options ("Now, so they can
+   *  pay right away") and read as gibberish mid-sentence. */
+  function invoiceWhenPhrase(): string {
+    if (invoiceMode === "delayed") {
+      return t("repeat_invoice_when_delayed", {
+        days: Math.max(1, Math.floor(Number(invoiceDelayDays) || 0)),
+      });
+    }
+    return t(
+      `repeat_invoice_when_${invoiceMode}` as "repeat_invoice_when_now",
+    );
+  }
+
   function currentInvoiceAmountCents(): number | null {
     return resolveInvoiceAmountCents({
       mode: invoiceMode === "off" ? "off" : "on_completion",
@@ -1467,6 +1599,14 @@ export function EngagementBuilder({
                   automation_id: flowPick.automationId,
                 }
               : {}),
+            // Field placement rides only when the flow sends a letter — a
+            // toggle left on from an earlier flow pick must not mark an
+            // engagement that sends nothing.
+            ...(workflowsOn &&
+            letterPlacement === "editor" &&
+            flowSendsLetter(activeFlow)
+              ? { workflow_letter_placement: "editor" as const }
+              : {}),
             tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
@@ -1574,6 +1714,29 @@ export function EngagementBuilder({
         } else if (result?.fieldErrors) {
           const first = Object.entries(result.fieldErrors)[0];
           setError(first ? `${first[0]}: ${first[1]}` : "create_failed");
+        } else if (
+          result &&
+          "letterEditUrl" in result &&
+          result.letterEditUrl &&
+          result.letterItemId &&
+          result.engagementId
+        ) {
+          // Editor-mode letter: the action RETURNED instead of redirecting
+          // (a redirect would strand the one-shot placement URL). Open the
+          // SHARED placement editor (open + finalize live in exactly one
+          // place — placement-editor.ts), then land on the engagement like
+          // every other create. Closed-without-finishing leaves the draft
+          // pending — the engagement page's letter-placement card resumes it.
+          const dest = `/engagements/${result.engagementId}`;
+          try {
+            await openPlacementEditor({
+              url: result.letterEditUrl,
+              itemId: result.letterItemId,
+              onSettled: () => router.push(dest),
+            });
+          } catch {
+            router.push(dest);
+          }
         }
       } catch (e) {
         const digest = (e as { digest?: string })?.digest;
@@ -2117,6 +2280,10 @@ export function EngagementBuilder({
               // Still a SUGGESTION: a line that carries its own rate wins, the
               // same rule the service catalogue already follows.
               fallbackTaxPct={engagementTaxPct}
+              // Recurrence lives on the Automation step now — one screen
+              // decides whether and how this repeats, so these pills would
+              // be a second place to answer the same question.
+              hideBillingType={workflowsOn}
             />
           </CardContent>
         </Card>
@@ -2640,20 +2807,82 @@ export function EngagementBuilder({
             ))}
           </div>
 
+          {/* The letter honesty block, keyed to the ONE service whose letter
+              actually rides the send (the first catalogue line, in proposal
+              order — resolveServiceId's rule). Missing + allowed to fix =
+              attach it RIGHT HERE (founder: "you can't attach the engagement
+              letter you'd like to be automatically sent out"), via the SAME
+              ServiceLetterSection the service builder mounts. */}
           {flowSendsLetter(activeFlow) &&
             (pickedServiceIds.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 {tAuto("flow_letter_needs_service")}
               </p>
-            ) : lettersMissingCount > 0 ? (
+            ) : sendingServiceId &&
+              canUploadLetters &&
+              (sendingLetterMissing ||
+                attachedLetterServiceIds.includes(sendingServiceId)) ? (
+              // Stays mounted after the first upload (the attached-ids check)
+              // so the second language's PDF can go up — or a mis-pick come
+              // back down — without leaving the builder.
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.04] p-4">
+                <p className="text-xs text-muted-foreground">
+                  {sendingLetterMissing
+                    ? tAuto("flow_letter_attach_here", {
+                        service: sendingServiceName ?? "",
+                      })
+                    : tAuto("flow_letter_ok_for", {
+                        service: sendingServiceName ?? "",
+                      })}
+                </p>
+                <div className="mt-2.5">
+                  <ServiceLetterSection
+                    key={sendingServiceId}
+                    serviceId={sendingServiceId}
+                    initial={[]}
+                    onRowsChange={(rows) =>
+                      setAttachedLetterServiceIds((prev) =>
+                        rows.length > 0
+                          ? [...new Set([...prev, sendingServiceId])]
+                          : prev.filter((x) => x !== sendingServiceId),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ) : sendingLetterMissing ? (
               <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letters_missing", { count: lettersMissingCount })}
+                {tAuto("flow_letter_missing_for", {
+                  service: sendingServiceName ?? "",
+                })}
               </p>
             ) : (
+              // Keyed to the ONE service that sends — the old "every picked
+              // service has its letter" line claimed more than the send does.
               <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letters_ok")}
+                {sendingServiceName
+                  ? tAuto("flow_letter_ok_for", { service: sendingServiceName })
+                  : tAuto("flow_letters_ok")}
               </p>
             ))}
+
+          {/* Field placement — asked ONLY when the flow sends a letter
+              (founder: "should only ask if you'd like to if send engagement
+              letter is on") and the SignWell editor is configured. */}
+          {flowSendsLetter(activeFlow) && signwellEditorOn && (
+            <label className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+              <Switch
+                checked={letterPlacement === "editor"}
+                onCheckedChange={(on) =>
+                  setLetterPlacement(on === true ? "editor" : "auto")
+                }
+              />
+              {tAuto("flow_letter_place_myself")}
+              <span className="text-xs text-muted-foreground">
+                {tAuto("flow_letter_place_note")}
+              </span>
+            </label>
+          )}
 
           <details className="rounded-xl border border-border p-4">
             <summary className="cursor-pointer text-sm font-medium">
@@ -2769,57 +2998,188 @@ export function EngagementBuilder({
         </Card>
       )}
 
-      {/* Repeat (recurring series, migration 0770) — "what runs by itself",
-          so with the switch on it lives on the AUTOMATION step (founder:
-          "repeat should be in automation"); unflagged firms keep it on
-          Billing exactly as before. ONE block, two homes — never a copy.
-          Invoice recurrence stays IN here with Repeat: it's a property of
-          the series. */}
+      {/* ── TWO QUESTIONS, ASKED SEPARATELY (founder ruling) ──────────────
+          One dropdown that changed the meaning of the dropdown beneath it —
+          sometimes "how often money moves", sometimes "how often work
+          happens" — is what made this unreadable ("i'm not understanding
+          anymore"). They are two labelled rows now, each answerable on its
+          own, and an annual job paid monthly is finally expressible. What
+          made the combination dangerous is fixed in the engine, not by
+          forbidding it. Unflagged firms keep the old single Repeat card. */}
       {(workflowsOn ? step === "automation" : step === "billing") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
                 <Repeat className="size-4 text-muted-foreground" aria-hidden />
-                {t("repeat_section_label")}
+                {workflowsOn
+                  ? t("cadence_card_title")
+                  : t("repeat_section_label")}
               </CardTitle>
-              <Select
-                value={repeatFrequency}
-                onValueChange={(value) => {
-                  const next = value as
-                    | "off"
-                    | "monthly"
-                    | "quarterly"
-                    | "yearly"
-                    | "custom";
-                  setRepeatFrequency(next);
-                  // Default the day to today when Custom is first chosen (the fixed
-                  // frequencies anchor on the setup day implicitly). Set on a real
-                  // interaction so first paint stays deterministic.
-                  if (next === "custom" && repeatAnchorDay === "") {
-                    setRepeatAnchorDay(String(new Date().getDate()));
-                  }
-                }}
-              >
-                <SelectTrigger
-                  id="repeat-frequency"
-                  className="w-40"
-                  aria-label={t("repeat_section_label")}
+              {workflowsOn ? (
+                // ONE question at the top: does anything here repeat?
+                <Select
+                  value={recurringOpen ? "recurring" : "none"}
+                  onValueChange={(v) => setRecurring(v === "recurring")}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">{t("repeat_off")}</SelectItem>
-                  <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
-                  <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
-                  <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
-                  <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    className="w-48"
+                    aria-label={t("cadence_card_title")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("cadence_none")}</SelectItem>
+                    <SelectItem value="recurring">
+                      {t("cadence_recurring")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select
+                  value={repeatFrequency}
+                  onValueChange={(value) => {
+                    const next = value as
+                      | "off"
+                      | "monthly"
+                      | "quarterly"
+                      | "yearly"
+                      | "custom";
+                    setRepeatFrequency(next);
+                    if (next === "custom" && repeatAnchorDay === "") {
+                      setRepeatAnchorDay(String(new Date().getDate()));
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    id="repeat-frequency"
+                    className="w-40"
+                    aria-label={t("repeat_section_label")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">{t("repeat_off")}</SelectItem>
+                    <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
+                    <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
+                    <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+                    <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {t("repeat_section_hint")}
-              </p>
+              {/* Nothing repeats: the card says so and stops. No knobs to
+                  read, no frequency sitting there meaning nothing. */}
+              {workflowsOn && !recurringOpen && (
+                <p className="text-xs text-muted-foreground">
+                  {t("cadence_none_hint")}
+                </p>
+              )}
+              {workflowsOn && recurringOpen && (
+                <>
+                  {/* 1 — the MONEY. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label
+                      htmlFor="pay-cadence"
+                      className="text-sm font-normal"
+                    >
+                      {t("cadence_pay_label")}
+                    </Label>
+                    <Select
+                      value={payCadence}
+                      onValueChange={(v) =>
+                        setPayCadence(v as "once" | BlockFrequency)
+                      }
+                    >
+                      <SelectTrigger
+                        id="pay-cadence"
+                        className="w-52"
+                        aria-label={t("cadence_pay_label")}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="once">
+                          {t("cadence_pay_once")}
+                        </SelectItem>
+                        {BLOCK_FREQUENCIES.map((f) => (
+                          <SelectItem key={f} value={f}>
+                            {tTpl(`freq_${f}` as "freq_monthly")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 2 — the WORK. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    <Label
+                      htmlFor="repeat-frequency"
+                      className="text-sm font-normal"
+                    >
+                      {t("cadence_work_label")}
+                    </Label>
+                    <Select
+                      value={repeatFrequency}
+                      onValueChange={(value) => {
+                        const next = value as
+                          | "off"
+                          | "monthly"
+                          | "quarterly"
+                          | "yearly"
+                          | "custom";
+                        setRepeatFrequency(next);
+                        if (next === "custom" && repeatAnchorDay === "") {
+                          setRepeatAnchorDay(String(new Date().getDate()));
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="repeat-frequency"
+                        className="w-52"
+                        aria-label={t("cadence_work_label")}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">
+                          {t("cadence_work_once")}
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          {t("repeat_monthly")}
+                        </SelectItem>
+                        <SelectItem value="quarterly">
+                          {t("repeat_quarterly")}
+                        </SelectItem>
+                        <SelectItem value="yearly">
+                          {t("repeat_yearly")}
+                        </SelectItem>
+                        <SelectItem value="custom">
+                          {t("repeat_custom")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Says the pair back as one sentence, so a combination
+                      like "yearly work, monthly payments" is confirmed in
+                      words rather than inferred from two dropdowns. */}
+                  <p className="text-xs text-muted-foreground">
+                    {payCadence === "once" && repeatFrequency === "off"
+                      ? t("cadence_summary_neither")
+                      : payCadence !== "once" && repeatFrequency === "off"
+                        ? t("cadence_summary_pay_only")
+                        : payCadence === "once" && repeatFrequency !== "off"
+                          ? t("cadence_summary_work_only")
+                          : t("cadence_summary_both")}
+                  </p>
+                </>
+              )}
+              {!workflowsOn && (
+                <p className="text-xs text-muted-foreground">
+                  {t("repeat_section_hint")}
+                </p>
+              )}
 
               {/* Custom schedule: every N months, on a chosen day. */}
               {repeatFrequency === "custom" && (
@@ -2874,56 +3234,32 @@ export function EngagementBuilder({
                   invoice" shortcut that scrolls there, so the setting stays
                   discoverable. The recurrence decides WHETHER each occurrence
                   bills; the invoice timing decides WHEN. */}
+              {/* ── NO "recreate the invoice" SWITCH ────────────────────────
+                  Founder, seeing it under the recurrence picker: "are these
+                  not the same thing?" Near enough. A recreated occurrence
+                  already carries the priced service lines AND their timing,
+                  and those lines bill themselves through the ordinary
+                  acceptance path — so the switch was asking a question the
+                  proposal already answered, in the vocabulary of a typed
+                  flat amount that predates priced lines.
+                  Each occurrence now simply bills the way this one does;
+                  the sentence below says so instead of a control. */}
+              {/* SAY THE MONEY, don't gesture at it. "Bills the way this one
+                  does" told the founder nothing about what THIS one bills,
+                  so the card read as though it might contradict the
+                  frequency above it. The amount and the timing are both
+                  known right here — state them, and any contradiction
+                  becomes visible instead of suspected. */}
               {repeatFrequency !== "off" && connectReady && (
-                <div className="flex items-start justify-between gap-4 border-t border-border/60 pt-3">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor="repeat-invoice-recreate"
-                      className="flex cursor-pointer items-center gap-1.5"
-                    >
-                      <Receipt
-                        className="size-4 text-muted-foreground"
-                        aria-hidden
-                      />
-                      {t("repeat_invoice_label")}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {invoiceMode !== "off"
-                        ? t("repeat_invoice_hint")
-                        : t("repeat_invoice_off_hint")}
-                    </p>
-                  </div>
-                  {invoiceMode !== "off" ? (
-                    <Switch
-                      id="repeat-invoice-recreate"
-                      checked={repeatInvoiceRecreate}
-                      onCheckedChange={setRepeatInvoiceRecreate}
-                      ariaLabel={t("repeat_invoice_label")}
-                    />
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => {
-                        // With flows on, this card sits on the Automation
-                        // step while the Invoice card stays on Billing —
-                        // jump steps instead of scrolling at nothing.
-                        if (workflowsOn) {
-                          setStep("billing");
-                          return;
-                        }
-                        invoiceSectionRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "center",
-                        });
-                      }}
-                    >
-                      {t("repeat_invoice_set_button")}
-                    </Button>
-                  )}
-                </div>
+                <p className="flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                  <Receipt className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  {invoiceMode === "off" || currentInvoiceAmountCents() == null
+                    ? t("repeat_invoice_none_yet")
+                    : t("repeat_invoice_each", {
+                        amount: money(currentInvoiceAmountCents() ?? 0),
+                        when: invoiceWhenPhrase(),
+                      })}
+                </p>
               )}
             </CardContent>
           </Card>

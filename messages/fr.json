@@ -1524,7 +1524,8 @@
     "action_time_entry_deleted": "Entrée de temps supprimée",
     "action_member_rate_changed": "Taux horaire d'un membre modifié",
     "action_engagement_handoff_note": "Note de transfert ajoutée",
-    "action_team_permissions_changed": "Permissions d'un membre modifiées"
+    "action_team_permissions_changed": "Permissions d'un membre modifiées",
+    "action_repeat_dropped": "Répétition retirée (les services se facturent déjà selon un calendrier)"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -2869,11 +2870,6 @@
     "repeat_sync_dismiss": "Pas maintenant",
     "repeat_sync_applied": "Série mise à jour. Les occurrences futures suivront ce mandat.",
     "repeat_control_error": "Impossible de mettre à jour la série. Veuillez réessayer.",
-    "repeat_invoice_label": "Recréer la facture à chaque cycle",
-    "repeat_invoice_hint": "Chaque nouvelle occurrence reçoit sa propre facture avec le même montant et les mêmes réglages, y compris le verrouillage du paiement. Le moment d'envoi suit le réglage de la facture (immédiat, à la fin ou différé).",
-    "repeat_invoice_none": "Ce mandat n'a pas de facture à copier. Configurez-en une d'abord dans les options de facture.",
-    "repeat_invoice_off_hint": "Aucune facture n'est configurée pour ce mandat. Configurez-en une ci-dessous et chaque occurrence pourra facturer automatiquement.",
-    "repeat_invoice_set_button": "Configurer la facture",
     "repeat_invoice_timing_at_spawn": "créée dès l'ouverture de l'occurrence",
     "repeat_invoice_timing_on_completion": "envoyée quand l'occurrence est terminée",
     "repeat_invoice_timing_delayed": "envoyée {days} jours après la fin",
@@ -3245,7 +3241,26 @@
     "board_tasks": "tâches",
     "filter_chip_search": "Recherche",
     "filter_chip_clear": "Effacer la recherche",
-    "reminder_preset_flow": "Selon le flux"
+    "reminder_preset_flow": "Selon le flux",
+    "repeat_invoice_each": "Chaque occurrence facture {amount}, {when}.",
+    "repeat_invoice_none_yet": "Aucune facture n'est configurée : les occurrences ne factureront rien.",
+    "repeat_invoice_when_now": "dès son ouverture",
+    "repeat_invoice_when_on_acceptance": "à l'acceptation du client",
+    "repeat_invoice_when_on_completion": "quand vous la marquez terminée",
+    "repeat_invoice_when_delayed": "{days} jours après la fin du travail",
+    "repeat_invoice_each_is": "Chaque occurrence facture :",
+    "cadence_card_title": "Comment cela se répète",
+    "cadence_pay_label": "À quelle fréquence le client paie",
+    "cadence_pay_once": "Une seule fois",
+    "cadence_work_label": "À quelle fréquence le travail se répète",
+    "cadence_work_once": "Une seule fois — sans reprise",
+    "cadence_summary_neither": "Choisissez au moins une option ci-dessous — la fréquence de paiement, la répétition du travail, ou les deux.",
+    "cadence_summary_pay_only": "Un mandat continu, avec des frais à chaque période — le calendrier démarre à l'acceptation du client.",
+    "cadence_summary_work_only": "Un nouveau mandat à chaque cycle — même client, même liste, un nouveau lien — facturé une fois par cycle.",
+    "cadence_summary_both": "Un nouveau mandat à chaque cycle, avec un seul calendrier de paiement continu en parallèle — le client est facturé selon sa propre fréquence, pas une fois par mandat.",
+    "cadence_none": "Ne se répète pas",
+    "cadence_recurring": "Récurrent",
+    "cadence_none_hint": "Un mandat ponctuel : le client est facturé une fois et le travail ne revient pas."
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3611,7 +3626,7 @@
     "template_saved_toast": "Modèle enregistré — {access}",
     "draft_saved_toast": "Brouillon enregistré",
     "remove_block": "Supprimer ce groupe de facturation",
-    "doc_kicker": "Lettre de mission",
+    "doc_kicker": "Proposition",
     "doc_date_label": "Date",
     "doc_prepared_for": "Préparée pour",
     "doc_prepared_by": "Préparée par",
@@ -3622,7 +3637,7 @@
     "doc_accepted_by": "Accepté par",
     "doc_col_service": "Service",
     "doc_col_amount": "Montant",
-    "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette lettre. Votre acceptation est enregistrée avec la date et l'heure.",
+    "doc_acceptance_body": "En acceptant ci-dessous, {client} accepte les services, les honoraires et les conditions énoncés dans cette proposition. Votre acceptation est enregistrée avec la date et l'heure.",
     "totals_determined_later": "Déterminé plus tard",
     "preview_step_acceptance": "Acceptation",
     "service_budget_hours": "Heures habituellement requises",
@@ -4376,7 +4391,13 @@
     "gate_unavailable": "Une erreur est survenue. Réessayez.",
     "deposit_accepted_title": "Merci — {firm} a votre accord",
     "deposit_accepted_body": "Une dernière étape. Payez l'acompte ci-dessous et votre portail s'ouvre aussitôt, avec tout ce qu'il vous faut.",
-    "deposit_credited_note": "Cet acompte sera déduit de votre facture finale."
+    "deposit_credited_note": "Cet acompte sera déduit de votre facture finale.",
+    "proposal_letter_note": "Pour accepter, lisez et signez la lettre de mission de {firm}. Votre signature vaut acceptation de cette proposition.",
+    "proposal_letter_sign": "Lire et signer la lettre de mission",
+    "proposal_letter_preparing": "{firm} prépare votre lettre de mission — vous pourrez la lire et la signer ici dès qu'elle sera prête.",
+    "proposal_letter_signed_title": "Signature reçue",
+    "proposal_letter_signed_body": "Nous finalisons votre acceptation — cela ne prend généralement que quelques secondes.",
+    "proposal_letter_declined": "Vous avez refusé la lettre de mission. Si vous avez changé d'avis, contactez {firm} — une nouvelle copie pourra vous être envoyée pour signature."
   },
   "Integrations": {
     "index_title": "Intégrations",
@@ -5216,7 +5237,17 @@
     "ai_save_to_library": "Enregistrer dans la bibliothèque",
     "ai_draft_not_configured": "La rédaction par IA n'est pas encore configurée sur ce serveur.",
     "ai_draft_failed": "L'IA n'a pas pu produire un brouillon utilisable — reformulez votre description.",
-    "ai_draft_rate_limited": "Vous avez beaucoup rédigé dans la dernière heure — patientez quelques minutes et réessayez."
+    "ai_draft_rate_limited": "Vous avez beaucoup rédigé dans la dernière heure — patientez quelques minutes et réessayez.",
+    "flow_letter_attach_here": "La lettre de mission pour {service} part avec l'envoi — mais aucune n'est enregistrée. Ajoutez-la ici :",
+    "flow_letter_missing_for": "Aucune lettre de mission n'est enregistrée pour {service}, donc rien ne partira. Un propriétaire du cabinet peut en ajouter une sous Modèles → Services.",
+    "flow_letter_place_myself": "Placer moi-même les champs de signature",
+    "flow_letter_place_note": "L'éditeur SignWell s'ouvre juste après l'envoi ; la lettre part au client une fois les champs placés.",
+    "letter_placement_waiting": "La lettre de mission attend le placement de ses champs de signature.",
+    "letter_placement_note": "Le client ne peut ni la lire, ni la signer, ni accepter tant que ce n'est pas terminé.",
+    "letter_placement_button": "Terminer le placement",
+    "letter_placement_error": "Impossible d'ouvrir l'éditeur — réessayez dans un instant.",
+    "flow_letter_ok_for": "La lettre de mission pour {service} est enregistrée — elle partira pour signature avec l'envoi.",
+    "timeline_letter_awaiting_placement": "Lettre rédigée — les champs de signature restent à placer"
   },
   "Files": {
     "page_title": "Fichiers",
@@ -5655,6 +5686,12 @@
     "feedback_empty": "Personne n'a encore utilisé la boîte à commentaires.",
     "adoption_requested_signature": "A demandé une signature",
     "adoption_used_assistant": "A posé une question à l'assistant",
-    "adoption_reached_clients": "Leurs clients se sont connectés"
+    "adoption_reached_clients": "Leurs clients se sont connectés",
+    "panel_tracking": "Sous surveillance ({count})",
+    "firms_only_pinned": "Surveillés seulement ({count})",
+    "pin_add": "Surveiller {name}",
+    "pin_remove": "Ne plus surveiller {name}",
+    "pin_failed": "Impossible d'enregistrer. Réessayez.",
+    "pin_needs_migration": "L'épinglage nécessite la mise à jour 1810 de la base de données. Le SQL est dans la pull request."
   }
 }

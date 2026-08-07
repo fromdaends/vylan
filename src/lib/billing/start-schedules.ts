@@ -159,6 +159,70 @@ export type StartedSchedules = {
  * acceptance recorded twice, or a retry after a partial failure, cannot leave a
  * client billed twice for one arrangement. A duplicate is reported, not raised.
  */
+/**
+ * Frequencies already billing on OTHER occurrences of this engagement's
+ * series — the arrangement's existing schedules.
+ *
+ * NOT-ENDED, not merely 'active': a PAUSED schedule is a live arrangement
+ * with its charges suspended (the cron pauses one while its client is
+ * archived, and un-archiving resumes EVERY paused schedule that client has).
+ * Treating paused as absent would open a second schedule beside it, and the
+ * un-archive would then switch both on — the exact double charge this
+ * function exists to prevent.
+ *
+ * FAILS CLOSED on a read it cannot complete: "I don't know whether this
+ * client is already being billed" must never resolve to "so bill them
+ * again". `unknown: true` makes the caller skip creation rather than risk a
+ * duplicate; the schedule is one acceptance (or one Repeat re-save) away
+ * from existing, whereas a duplicate charges real money every period until
+ * somebody notices.
+ */
+async function seriesBillingFrequencies(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  engagementId: string,
+): Promise<{ frequencies: Set<ChargeFrequency>; unknown: boolean }> {
+  const frequencies = new Set<ChargeFrequency>();
+  try {
+    const { data: row, error } = await sb
+      .from("engagements")
+      .select("series_id")
+      .eq("id", engagementId)
+      .maybeSingle();
+    // Pre-0770 (no series_id column) genuinely means "series cannot exist",
+    // so there is nothing to collide with — that one reads as known-empty.
+    if (error) {
+      return { frequencies, unknown: !isMissingSchema(error) };
+    }
+    const seriesId = (row as { series_id?: string | null } | null)?.series_id;
+    if (!seriesId) return { frequencies, unknown: false };
+
+    const { data: siblings, error: sibErr } = await sb
+      .from("engagements")
+      .select("id")
+      .eq("series_id", seriesId);
+    if (sibErr) return { frequencies, unknown: true };
+    const ids = (siblings ?? [])
+      .map((s) => (s as { id: string }).id)
+      .filter((id) => id !== engagementId);
+    if (ids.length === 0) return { frequencies, unknown: false };
+
+    const { data: scheds, error: schedErr } = await sb
+      .from("engagement_billing_schedules")
+      .select("frequency, status")
+      .in("engagement_id", ids)
+      .neq("status", "ended");
+    if (schedErr) return { frequencies, unknown: true };
+    for (const s of scheds ?? []) {
+      const f = (s as { frequency: string }).frequency;
+      if (isChargeFrequency(f)) frequencies.add(f);
+    }
+  } catch (e) {
+    console.error("[start-schedules] series schedule lookup failed:", e);
+    return { frequencies, unknown: true };
+  }
+  return { frequencies, unknown: false };
+}
+
 export async function startRecurringSchedules(
   engagementId: string,
   today: string,
@@ -182,6 +246,22 @@ export async function startRecurringSchedules(
   } | null;
   if (!engagement) return out;
 
+  // ── ONE PAYMENT SCHEDULE PER SERIES, NOT PER OCCURRENCE ─────────────────
+  //
+  // The founder's arrangement: an annual T2 whose fee is paid monthly. The
+  // WORK repeats yearly (a fresh engagement each year); the MONEY is one
+  // continuous monthly schedule. Because the unique key is
+  // (engagement_id, frequency), each spawned occurrence would otherwise
+  // start its OWN monthly schedule while last year's kept running — $300/mo
+  // becoming $600/mo, then $900/mo. That stacking is the only reason the two
+  // cadences were ever mutually exclusive.
+  //
+  // So: an occurrence inherits the series' live schedule rather than opening
+  // a second one. Tolerant of pre-0770 (no series_id column) and of any read
+  // failure — falling through to the old per-engagement behaviour, which is
+  // what every non-repeating engagement does anyway.
+  const seriesBilling = await seriesBillingFrequencies(sb, engagementId);
+
   // start_date is read separately and best-effort: it arrived in 1510, and an
   // environment without it simply starts billing today.
   let startDate: string | null = null;
@@ -196,6 +276,14 @@ export async function startRecurringSchedules(
   const engagementStart = startDate && startDate > today ? startDate : today;
 
   for (const frequency of frequencies) {
+    // A sibling occurrence is already billing this cadence: that schedule IS
+    // this arrangement's schedule. Reported as `existing`, exactly like the
+    // re-run/retry case the unique index catches. `unknown` (a read that
+    // failed) lands here too — see seriesBillingFrequencies.
+    if (seriesBilling.unknown || seriesBilling.frequencies.has(frequency)) {
+      out.existing.push(frequency);
+      continue;
+    }
     // A block that named its own start date wins over the engagement's — that
     // is the whole point of "from a date you pick" (1740). Still floored at
     // today, so a date already in the past cannot bill for periods that elapsed

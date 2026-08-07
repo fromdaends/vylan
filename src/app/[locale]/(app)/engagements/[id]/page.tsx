@@ -31,6 +31,7 @@ import { listEngagementItems } from "@/lib/db/engagements";
 import { WorkflowGateCard } from "@/components/engagements/workflow-gate-card";
 import { getPendingWorkflowGate } from "@/lib/engagements/stage-sync";
 import { WorkflowTimelineCard } from "@/components/engagements/workflow-timeline-card";
+import { LetterPlacementCard } from "@/components/engagements/letter-placement-card";
 import { parseWorkflowSnapshot } from "@/lib/workflow/definition";
 import { flowSendsLetter } from "@/lib/workflow/plan";
 import { buildFlowTimeline } from "@/lib/workflow/timeline";
@@ -712,7 +713,9 @@ export default async function EngagementDetailPage({
         }
       : null,
   );
-  const repeatInvoiceAvailable = currentInvoiceSnap != null;
+  // (An "is there invoice material to copy?" flag used to gate the
+  // recreate-invoice switch. The switch is gone — an occurrence inherits this
+  // engagement's billing either way — so only the SUMMARY sentence remains.)
   const storedInvoiceSnap = repeatSeriesRow
     ? parseInvoiceSnapshot(repeatSeriesRow.invoice_snapshot)
     : null;
@@ -1379,7 +1382,6 @@ export default async function EngagementDetailPage({
                     : undefined
                 }
                 repeatSeries={repeatSeries}
-                repeatInvoiceAvailable={repeatInvoiceAvailable}
                 repeatInvoiceSummary={repeatInvoiceSummary}
                 repeatSeriesOutOfSync={repeatSeriesOutOfSync}
                 status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
@@ -1461,6 +1463,8 @@ export default async function EngagementDetailPage({
             engagementId={engagement.id}
             gatePromise={gatePromise}
           />
+          {/* The letter draft awaiting field placement, when one is. */}
+          <LetterPlacementSection engagementId={engagement.id} />
 
           {isDraft && (
             <Alert>
@@ -1726,9 +1730,19 @@ async function WorkflowTimelineSection({
   memberNames: Record<string, string>;
 }) {
   const sb = await getServerSupabase();
-  const [events, gate] = await Promise.all([
+  const [events, gate, letterRes] = await Promise.all([
     listWorkflowEvents(sb, engagement.id),
     gatePromise,
+    // The letter's LIVE status — the ledger only knows the effect ran, not
+    // whether an editor-mode draft is still awaiting field placement.
+    // Tolerant of pre-1580 (no letter_key column): reads as no letter.
+    sb
+      .from("signature_requests")
+      .select("status")
+      .eq("engagement_id", engagement.id)
+      .not("letter_key", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
 
   const timeline = buildFlowTimeline(
@@ -1740,6 +1754,10 @@ async function WorkflowTimelineSection({
       acceptedAt: engagement.accepted_at ?? null,
       hasProposalItems,
       pendingGateStage: gate?.from ?? null,
+      letterLiveStatus: letterRes.error
+        ? null
+        : ((letterRes.data?.[0] as { status?: string } | undefined)?.status ??
+          null),
       events,
     },
     { flowSendsLetter: flowSendsLetter(wf) },
@@ -1753,6 +1771,29 @@ async function WorkflowTimelineSection({
       style={{ animationDelay: "130ms" }}
     />
   );
+}
+
+// The pending editor-mode letter, when one exists: the accountant must
+// finish placing its signature fields before the client can sign — and the
+// portal blocks acceptance until then, so this card is the only way forward.
+// Null on any read hiccup or pre-1580 (no letter_key): nothing renders.
+async function LetterPlacementSection({
+  engagementId,
+}: {
+  engagementId: string;
+}) {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("signature_requests")
+    .select("request_item_id, status, signwell_document_id")
+    .eq("engagement_id", engagementId)
+    .not("letter_key", "is", null)
+    .eq("status", "pending")
+    .not("signwell_document_id", "is", null)
+    .limit(1);
+  const row = (data?.[0] ?? null) as { request_item_id: string | null } | null;
+  if (error || !row?.request_item_id) return null;
+  return <LetterPlacementCard itemId={row.request_item_id} />;
 }
 
 // The confirm-gate loader, split out so the main render never pays for it:

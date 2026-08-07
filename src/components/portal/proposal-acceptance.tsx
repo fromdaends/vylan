@@ -23,9 +23,10 @@
 // should have to have. Declining asks for a reason and accepts silence — a
 // client who will not explain must still be able to say no.
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, PenLine } from "lucide-react";
 import {
   ProposalPreview,
   type ProposalPreviewData,
@@ -37,6 +38,7 @@ import {
   acceptProposalAction,
   declineProposalAction,
 } from "@/app/actions/proposal";
+import { usePortalSigning } from "@/components/portal/use-portal-signing";
 
 export function ProposalAcceptance({
   token,
@@ -45,19 +47,61 @@ export function ProposalAcceptance({
   firmName,
   /** Already declined — they can still read it, and change their mind. */
   declinedAt,
+  /** A live engagement letter riding this proposal (founder's ruling: when
+   *  one exists, SIGNING IT is the acceptance — the plain Accept button is
+   *  replaced, and the server refuses to accept past it). */
+  letter,
 }: {
   token: string;
   data: ProposalPreviewData;
   locale: "en" | "fr";
   firmName: string;
   declinedAt?: string | null;
+  letter?: {
+    itemId: string;
+    status: "pending" | "sent" | "viewed" | "declined";
+  } | null;
 }) {
   const t = useTranslations("Portal");
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState(false);
+
+  // The letter's embedded signing — the SAME hook the checklist's signature
+  // card uses. On completion the SignWell webhook writes accepted_at; the
+  // extra delayed refreshes cover its lag so the client watches the page
+  // move on rather than wondering whether anything happened.
+  const signing = usePortalSigning({
+    token,
+    itemId: letter?.itemId ?? "",
+    activityLabel: "Engagement letter",
+  });
+  const letterSignable =
+    letter != null &&
+    (letter.status === "sent" || letter.status === "viewed") &&
+    signing.local !== "submitted";
+  const letterPreparing = letter?.status === "pending";
+  const letterDeclined =
+    letter?.status === "declined" && signing.local !== "submitted";
+  const letterSubmitted = signing.local === "submitted";
+
+  // After signing, the SignWell WEBHOOK is what writes the acceptance — and
+  // it can lag. Poll until the server view moves past the proposal (this
+  // component unmounts then, clearing the interval); a hard minute-long cap
+  // keeps a dead webhook from polling forever (the reconcile backstop picks
+  // those up later).
+  useEffect(() => {
+    if (!letterSubmitted) return;
+    const iv = setInterval(() => router.refresh(), 3000);
+    const cap = setTimeout(() => clearInterval(iv), 60_000);
+    return () => {
+      clearInterval(iv);
+      clearTimeout(cap);
+    };
+  }, [letterSubmitted, router]);
 
   function accept() {
     setError(false);
@@ -134,7 +178,94 @@ export function ProposalAcceptance({
           pressable button, with the decline as a quiet text link UNDER it
           rather than a sibling competing for the same row. */}
       <div className="mx-auto mt-6 w-full max-w-[47rem] rounded-2xl border border-border bg-card p-6 sm:p-8">
-        {!confirming && !declining && (
+        {/* ── SIGNING THE LETTER IS THE ACCEPTANCE ─────────────────────────
+            When an engagement letter rides this proposal, there is ONE agree
+            moment: the signature. No plain Accept renders (and the server
+            refuses one), so a client can never accept without signing. */}
+        {letterSubmitted && (
+          <>
+            <p className="inline-flex items-center gap-2 text-base font-semibold text-success">
+              <CheckCircle2 className="size-5" aria-hidden />
+              {t("proposal_letter_signed_title")}
+            </p>
+            <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
+              {t("proposal_letter_signed_body")}
+            </p>
+          </>
+        )}
+        {!letterSubmitted && letterSignable && !declining && (
+          <>
+            <p className="text-[15px] leading-relaxed">
+              {t("proposal_letter_note", { firm: firmName })}
+            </p>
+            <Button
+              type="button"
+              className="mt-5 h-14 w-full rounded-xl text-base font-semibold shadow-sm transition-transform active:scale-[0.99]"
+              disabled={signing.busy}
+              onClick={signing.openSigning}
+            >
+              {signing.busy ? (
+                <Loader2 className="size-5 animate-spin" aria-hidden />
+              ) : (
+                <PenLine className="size-5" aria-hidden />
+              )}
+              {signing.busy
+                ? t("sign_opening")
+                : signing.local === "error"
+                  ? t("sign_retry")
+                  : t("proposal_letter_sign")}
+            </Button>
+            {signing.local === "error" && (
+              <p className="mt-3 text-center text-sm text-destructive">
+                {t("sign_error")}
+              </p>
+            )}
+            {!declinedAt && (
+              <button
+                type="button"
+                disabled={signing.busy}
+                onClick={() => setDeclining(true)}
+                className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {t("proposal_decline")}
+              </button>
+            )}
+          </>
+        )}
+        {!letterSubmitted && letterDeclined && !declining && (
+          <>
+            <p className="text-[15px] leading-relaxed text-muted-foreground">
+              {t("proposal_letter_declined", { firm: firmName })}
+            </p>
+            {!declinedAt && (
+              <button
+                type="button"
+                onClick={() => setDeclining(true)}
+                className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {t("proposal_decline")}
+              </button>
+            )}
+          </>
+        )}
+        {!letterSubmitted && letterPreparing && !declining && (
+          <>
+            <p className="text-[15px] leading-relaxed text-muted-foreground">
+              {t("proposal_letter_preparing", { firm: firmName })}
+            </p>
+            {!declinedAt && (
+              <button
+                type="button"
+                onClick={() => setDeclining(true)}
+                className="mx-auto mt-4 block text-[13px] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {t("proposal_decline")}
+              </button>
+            )}
+          </>
+        )}
+
+        {!letter && !confirming && !declining && (
           <>
             <p className="text-[15px] leading-relaxed">
               {t("proposal_agree_note")}

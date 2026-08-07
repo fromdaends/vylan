@@ -59,7 +59,7 @@ import {
   parseWorkflowDefinition,
   type WorkflowSnapshot,
 } from "@/lib/workflow/definition";
-import { flowSendsInvoice } from "@/lib/workflow/plan";
+import { flowSendsInvoice, flowSendsLetter } from "@/lib/workflow/plan";
 import { runWorkflowSendEffects } from "@/lib/workflow/effects";
 import { isWorkflowsEnabledForFirm } from "@/lib/workflow/flags";
 import { getClient } from "@/lib/db/clients";
@@ -98,6 +98,11 @@ export type CreateEngagementState = {
   engagementId?: string;
   error?: string;
   fieldErrors?: Record<string, string>;
+  /** Editor-mode letter only: the action RETURNS these instead of
+   *  redirecting, so the builder can open SignWell's one-shot field editor
+   *  before navigating itself. */
+  letterEditUrl?: string;
+  letterItemId?: string;
 } | null;
 
 const ItemSchema = z.object({
@@ -382,6 +387,10 @@ export async function createEngagementAction(
     workflow_definition?: unknown;
     // Provenance of the override's pick, display-only. Never read through.
     automation_id?: string | null;
+    // Builder's Automation step: place the letter's signature fields in
+    // SignWell's editor at send time, instead of the appended signature
+    // page. Only meaningful when the flow sends a letter.
+    workflow_letter_placement?: "editor" | null;
     items: TemplateItem[];
     send: boolean;
     /**
@@ -459,6 +468,9 @@ export async function createEngagementAction(
   // instantiation, per the spec. Fail-soft top to bottom: any hiccup creates
   // the engagement without automation rather than not creating it.
   let workflowSnapshot: WorkflowSnapshot | null = null;
+  // Editor-mode letter placement (set by the create-and-send block below).
+  let letterEditUrl: string | null = null;
+  let letterItemId: string | null = null;
   try {
     const creator = await getCurrentUser();
     if (creator?.firm_id) {
@@ -504,6 +516,15 @@ export async function createEngagementAction(
           },
           automationId,
         );
+        // The creator's placement choice rides the snapshot — only when the
+        // flow actually sends a letter, so a stale toggle can't mark an
+        // engagement that sends nothing.
+        if (
+          payload.workflow_letter_placement === "editor" &&
+          flowSendsLetter(def)
+        ) {
+          workflowSnapshot = { ...workflowSnapshot, letter_placement: "editor" };
+        }
       }
     }
   } catch (e) {
@@ -727,10 +748,15 @@ export async function createEngagementAction(
       // The engagement letter rides the SEND (founder's correction): signing
       // it is how the client accepts, so it goes out with the engagement,
       // never after the acceptance it produces. Exactly-once via the ledger.
-      await runWorkflowSendEffects({
+      // allowEditor: an accountant is on this call, so a flow that asked for
+      // field placement gets the one-shot editor URL bubbled to the builder.
+      const sendFx = await runWorkflowSendEffects({
         engagementId,
         firmId: created.firm_id,
+        allowEditor: true,
       });
+      letterEditUrl = sendFx.letterEditUrl;
+      letterItemId = sendFx.letterItemId;
       await deliverInviteEmail(engagementId);
       if (sent.sent_at) {
         await scheduleEngagementReminders({
@@ -789,6 +815,13 @@ export async function createEngagementAction(
   // create must never fail creation; the state stays visible (the engagement
   // page's Repeat dialog shows "does not repeat") and re-enabling there is the
   // recovery path.
+  // ── WORK CADENCE AND PAY CADENCE ARE INDEPENDENT (founder ruling) ───────
+  // An annual T2 whose fee is paid monthly is an ordinary arrangement, so
+  // recurring lines and a repeating series may both be set. What used to make
+  // that dangerous — every spawned occurrence opening a SECOND payment
+  // schedule beside the last — is fixed where it lived: start-schedules.ts
+  // keeps one schedule per SERIES, so the money is one continuous
+  // arrangement no matter how many times the work recurs.
   if (parsed.data.repeat_frequency !== "off") {
     try {
       const [firmForRepeat, userForRepeat, created] = await Promise.all([
@@ -864,6 +897,13 @@ export async function createEngagementAction(
   }
 
   revalidateEngagementPaths(engagementId);
+  // Editor-mode letter: RETURN instead of redirecting — the one-shot
+  // placement URL only exists in this response, and the builder opens
+  // SignWell's editor with it before navigating itself. Every other create
+  // redirects exactly as before.
+  if (letterEditUrl && letterItemId) {
+    return { engagementId, letterEditUrl, letterItemId };
+  }
   redirect(
     getPathname({
       locale: payload.locale,
@@ -913,7 +953,15 @@ export async function sendEngagementAction(formData: FormData) {
   const sent = await sendEngagement(id);
   // The engagement letter rides the SEND (founder's correction): signing it
   // is how the client accepts. Ledger-deduped, so a re-send never re-asks.
-  await runWorkflowSendEffects({ engagementId: id, firmId: sent.firm_id });
+  // allowEditor: the Send button is a human's click. A flow that asked for
+  // field placement gets a pending draft; the engagement row's "Finish
+  // placing signature" is the affordance that opens the editor from here
+  // (a form action has nowhere to bubble the one-shot URL to).
+  await runWorkflowSendEffects({
+    engagementId: id,
+    firmId: sent.firm_id,
+    allowEditor: true,
+  });
   await deliverInviteEmail(id);
   if (sent.sent_at) {
     await scheduleEngagementReminders({

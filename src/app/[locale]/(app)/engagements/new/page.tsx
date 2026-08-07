@@ -13,6 +13,7 @@ import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { can } from "@/lib/auth/capabilities";
+import { isSignwellEmbeddedEditingEnabled } from "@/lib/signwell/client";
 import { listFirmServices } from "@/lib/db/firm-services";
 import { listEngagementTemplates } from "@/lib/db/engagement-templates";
 import { listTaskTemplates } from "@/lib/db/task-templates";
@@ -214,6 +215,11 @@ export default async function NewEngagementPage({
           definition: a.definition,
         }))}
         serviceIdsWithLetters={serviceIdsWithLetters}
+        // Inline letter attach on the Automation step — same capability the
+        // upload action enforces.
+        canUploadLetters={can(user, "firm.settings")}
+        // Field placement is available only with the SignWell editor app id.
+        signwellEditorOn={isSignwellEmbeddedEditingEnabled()}
       />
   );
 }

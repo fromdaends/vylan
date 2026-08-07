@@ -17,8 +17,7 @@
 import { revalidatePath } from "next/cache";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { findEngagementForToken, logActivity } from "@/lib/db/portal";
-import { applyAcceptedBilling } from "@/lib/engagements/on-accepted";
-import { acceptanceStartsWorkNow } from "@/lib/engagements/deposit-state";
+import { runAcceptanceConsequences } from "@/lib/engagements/on-accepted";
 
 export type ProposalResult = { ok: boolean };
 
@@ -62,6 +61,40 @@ export async function acceptProposalAction(
   if (!found) return { ok: false };
 
   const sb = getServiceRoleSupabase();
+
+  // ── NO ACCEPTING PAST A LIVE ENGAGEMENT LETTER ─────────────────────────
+  // Founder's ruling: when a letter rides the proposal, SIGNING IT is the
+  // acceptance — "it doesn't allow the client to accept the proposal
+  // without signing the engagement letter." The screen already swaps the
+  // Accept button for the signing flow; this is the server refusing the
+  // bypass (a stale tab, a replayed request). Pre-1580 (no letter_key
+  // column) and any read hiccup fail OPEN to the plain accept — a broken
+  // lookup must not lock a client out of agreeing.
+  // 'declined' is in the list ON PURPOSE: a client who declined the letter
+  // in SignWell has refused the agreement — letting the plain Accept back in
+  // would record an acceptance with no signature, the exact bypass this
+  // gate exists to stop. 'error' is NOT: an infrastructure failure must not
+  // lock a client out of agreeing.
+  const { data: letterRows, error: letterErr } = await sb
+    .from("signature_requests")
+    .select("id")
+    .eq("engagement_id", found.id)
+    .not("letter_key", "is", null)
+    .in("status", ["pending", "sent", "viewed", "declined"])
+    .limit(1);
+  if (letterErr) {
+    // Pre-1580 (no letter_key column) means no letter can exist — accept
+    // proceeds. Any OTHER read failure fails CLOSED: the client sees the
+    // retryable error and clicks again, which is a smaller harm than an
+    // outage window that silently waives the signature requirement.
+    if (letterErr.code !== "42703" && letterErr.code !== "PGRST204") {
+      console.error("[proposal] letter gate read failed:", letterErr);
+      return { ok: false };
+    }
+  } else if ((letterRows?.length ?? 0) > 0) {
+    return { ok: false };
+  }
+
   const now = new Date().toISOString();
 
   const { error } = await sb
@@ -97,35 +130,11 @@ export async function acceptProposalAction(
   await logActivity(found.firm_id, found.id, "proposal_accepted", {
     accepted_by: "client",
   });
-  // Raise whatever the acceptance owes — the deposit the proposal promised,
-  // and the engagement invoice when the firm chose to bill on acceptance.
-  // Shared with the firm's own accept path so the two cannot diverge, and
-  // best-effort inside: a billing hiccup must never turn a recorded agreement
-  // into an error on the client's screen.
-  await applyAcceptedBilling(found.id);
-
-  // NOW decide whether work starts.
-  //
-  // The deposit and any on-acceptance invoice exist by this point, so the
-  // question has a real answer. Nothing owed (or no way to collect it) and the
-  // engagement goes live exactly as it always did; anything outstanding and the
-  // portal shows the payment screen until recordInvoicePaid settles the last of
-  // it.
-  //
-  // Best-effort: the agreement is already recorded, and an engagement that is
-  // accepted-but-not-activated is a visible, recoverable state. Failing the
-  // client's Accept click over it would not be.
-  try {
-    if (await acceptanceStartsWorkNow(found.id)) {
-      await sb
-        .from("engagements")
-        .update({ activated_at: now, status: "in_progress" })
-        .eq("id", found.id)
-        .is("activated_at", null);
-    }
-  } catch (e) {
-    console.error("[proposal] activation decision failed:", e);
-  }
+  // Billing (deposit, on-acceptance invoice, schedules), THEN the activation
+  // decision — the shared pipeline every acceptance path runs (plain accept
+  // here, the firm's on-behalf, and a signed engagement letter), extracted so
+  // the half that charges money can never drift between them.
+  await runAcceptanceConsequences(found.id);
 
   // Both sides: the client's portal now shows their documents, and the firm's
   // engagement is live.
