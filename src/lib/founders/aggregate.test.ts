@@ -319,6 +319,27 @@ describe("buildFirmRows", () => {
   });
 });
 
+describe("pinning", () => {
+  it("marks only the pinned firms", () => {
+    const rows = buildFirmRows(sources({ pinnedFirmIds: ["f2"] }), NOW);
+    expect(rows.find((r) => r.id === "f1")!.pinned).toBe(false);
+    expect(rows.find((r) => r.id === "f2")!.pinned).toBe(true);
+  });
+
+  // 1810 unapplied reads exactly like "nothing pinned yet", which is correct:
+  // both mean the watchlist is empty as far as a reader is concerned.
+  it("treats a missing watchlist as nothing pinned, never as an error", () => {
+    expect(buildFirmRows(sources(), NOW).every((r) => !r.pinned)).toBe(true);
+    expect(buildFirmRows(sources({ pinnedFirmIds: [] }), NOW).every((r) => !r.pinned)).toBe(true);
+  });
+
+  it("ignores a pinned id for a firm that no longer exists", () => {
+    const rows = buildFirmRows(sources({ pinnedFirmIds: ["gone"] }), NOW);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => !r.pinned)).toBe(true);
+  });
+});
+
 describe("sortFirmRows", () => {
   const rows = buildFirmRows(sources(), NOW);
 
@@ -337,6 +358,28 @@ describe("sortFirmRows", () => {
   it("puts firms that have NEVER been active last, whichever direction", () => {
     expect(sortFirmRows(rows, "lastActivityAt", "desc").at(-1)!.id).toBe("f2");
     expect(sortFirmRows(rows, "lastActivityAt", "asc").at(-1)!.id).toBe("f2");
+  });
+
+  // The whole point of a pin: the firm stays where you left it whichever
+  // column you are sorting by, in either direction.
+  it("floats pinned firms to the top of EVERY sort and direction", () => {
+    const pinned = buildFirmRows(sources({ pinnedFirmIds: ["f2"] }), NOW);
+    for (const key of ["clients", "engagements", "events30d", "name", "createdAt"] as const) {
+      for (const dir of ["asc", "desc"] as const) {
+        expect(sortFirmRows(pinned, key, dir)[0].id).toBe("f2");
+      }
+    }
+  });
+
+  it("still sorts pinned firms among THEMSELVES by the chosen column", () => {
+    const both = buildFirmRows(sources({ pinnedFirmIds: ["f1", "f2"] }), NOW);
+    expect(sortFirmRows(both, "clients", "desc").map((r) => r.id)).toEqual(["f1", "f2"]);
+    expect(sortFirmRows(both, "clients", "asc").map((r) => r.id)).toEqual(["f2", "f1"]);
+  });
+
+  it("can be told to ignore pins for a genuinely flat ordering", () => {
+    const pinned = buildFirmRows(sources({ pinnedFirmIds: ["f2"] }), NOW);
+    expect(sortFirmRows(pinned, "clients", "desc", false)[0].id).toBe("f1");
   });
 
   it("breaks ties on name so the order is stable between renders", () => {

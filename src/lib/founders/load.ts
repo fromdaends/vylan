@@ -31,6 +31,7 @@ import {
   type FirmSources,
 } from "@/lib/founders/aggregate";
 import { activityCategory, actorLabel } from "@/lib/founders/actions";
+import { listPinnedFirmIds } from "@/lib/founders/pins";
 import type {
   AdoptionRow,
   CappedRead,
@@ -121,6 +122,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     leads,
     jobs,
     feedback,
+    pins,
   ] = await Promise.all([
     read<FirmSources["firms"][number]>("firms", (q) =>
       q
@@ -247,6 +249,10 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
         .order("created_at", { ascending: false })
         .limit(200),
     ),
+    // The watchlist. Its own reader (lib/founders/pins.ts) because it is also
+    // WRITTEN, and because it has to answer "is 1810 applied" — which the
+    // generic read() helper deliberately cannot distinguish from "empty".
+    listPinnedFirmIds(),
   ]);
 
   // Signups over a year need their own read: the firms read above is already
@@ -285,6 +291,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     },
     aiUsage: aiUsage.rows,
     events: events.rows,
+    pinnedFirmIds: pins.ids,
   };
 
   const firmRows = buildFirmRows(sources, nowMs);
@@ -377,6 +384,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     adoption,
     leads: leadRows,
     health,
+    pinsAvailable: pins.available,
     capped,
     windowDays: WINDOW_DAYS,
     generatedAt: new Date(nowMs).toISOString(),
@@ -574,6 +582,7 @@ export async function loadFirmDetail(
 
   return {
     generatedAt: new Date(nowMs).toISOString(),
+    pinsAvailable: data.pinsAvailable,
     firm,
     people: people.rows.map((u) => ({
       id: u.id,

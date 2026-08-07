@@ -27,6 +27,7 @@ import {
   type FirmSortKey,
 } from "@/lib/founders/aggregate";
 import type { FirmRow } from "@/lib/founders/types";
+import { PinButton } from "@/components/founders/pin-button";
 
 type Column = {
   key: FirmSortKey;
@@ -88,19 +89,30 @@ const COLUMNS: Column[] = [
   },
 ];
 
-export function FirmsTable({ rows, nowMs }: { rows: FirmRow[]; nowMs: number }) {
+export function FirmsTable({
+  rows,
+  nowMs,
+  pinsAvailable = false,
+}: {
+  rows: FirmRow[];
+  nowMs: number;
+  pinsAvailable?: boolean;
+}) {
   const t = useTranslations("Founders");
   const [query, setQuery] = useState("");
   const [includeDemo, setIncludeDemo] = useState(true);
+  const [onlyPinned, setOnlyPinned] = useState(false);
   const [sortKey, setSortKey] = useState<FirmSortKey>("events30d");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
 
   const visible = useMemo(() => {
-    const base = includeDemo ? rows : rows.filter((r) => !r.isDemo);
+    let base = includeDemo ? rows : rows.filter((r) => !r.isDemo);
+    if (onlyPinned) base = base.filter((r) => r.pinned);
     return sortFirmRows(filterFirmRows(base, query), sortKey, dir);
-  }, [rows, query, includeDemo, sortKey, dir]);
+  }, [rows, query, includeDemo, onlyPinned, sortKey, dir]);
 
   const demoCount = rows.filter((r) => r.isDemo).length;
+  const pinnedCount = rows.filter((r) => r.pinned).length;
 
   function toggleSort(key: FirmSortKey) {
     if (key === sortKey) {
@@ -127,6 +139,20 @@ export function FirmsTable({ rows, nowMs }: { rows: FirmRow[]; nowMs: number }) 
           />
         </div>
         <div className="flex items-center gap-3">
+          {/* Only offered once something IS pinned — a "tracking only" filter
+              that can only ever produce an empty table is a trap, not a
+              control. */}
+          {pinsAvailable && pinnedCount > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={onlyPinned}
+                onChange={(e) => setOnlyPinned(e.target.checked)}
+                className="size-3.5 accent-[var(--accent)]"
+              />
+              {t("firms_only_pinned", { count: pinnedCount })}
+            </label>
+          )}
           {demoCount > 0 && (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
               <input
@@ -180,20 +206,28 @@ export function FirmsTable({ rows, nowMs }: { rows: FirmRow[]; nowMs: number }) 
               </tr>
             ) : (
               visible.map((row) => (
-                <tr key={row.id} className="border-b border-border/50 hover:bg-muted/40">
+                <tr key={row.id} className="group border-b border-border/50 hover:bg-muted/40">
                   <td className="py-2 pr-3">
-                    <Link
-                      href={`/founders/firms/${row.id}`}
-                      className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {row.name}
-                    </Link>
-                    <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                    <div className="flex items-center gap-1.5">
+                      <PinButton
+                        firmId={row.id}
+                        firmName={row.name}
+                        pinned={row.pinned}
+                        available={pinsAvailable}
+                      />
+                      <Link
+                        href={`/founders/firms/${row.id}`}
+                        className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {row.name}
+                      </Link>
                       <PlanBadge plan={row.plan} />
                       {row.isDemo && <Tag label={t("tag_demo")} />}
                       {row.isPilot && <Tag label={t("tag_pilot")} />}
-                    </span>
-                    <p className="text-xs text-muted-foreground">
+                    </div>
+                    {/* Indented to clear the pin, so the two lines of the cell
+                        line up with each other rather than with the icon. */}
+                    <p className={cn("text-xs text-muted-foreground", pinsAvailable && "pl-7.5")}>
                       {t("firms_joined", { age: relativeAge(row.createdAt, nowMs) })}
                       {!row.onboardedAt && ` · ${t("tag_not_onboarded")}`}
                     </p>

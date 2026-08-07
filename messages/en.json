@@ -5661,6 +5661,12 @@
     "feedback_empty": "Nobody has used the feedback box yet.",
     "adoption_requested_signature": "Asked for a signature",
     "adoption_used_assistant": "Asked the assistant something",
-    "adoption_reached_clients": "Their clients showed up"
+    "adoption_reached_clients": "Their clients showed up",
+    "panel_tracking": "Tracking ({count})",
+    "firms_only_pinned": "Tracking only ({count})",
+    "pin_add": "Track {name}",
+    "pin_remove": "Stop tracking {name}",
+    "pin_failed": "Could not save that. Try again.",
+    "pin_needs_migration": "Pinning needs database update 1810. The SQL is in the pull request."
   }
 }
