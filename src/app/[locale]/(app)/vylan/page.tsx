@@ -1,4 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { isAssistantConfigured } from "@/lib/ai/assistant";
 import { redirect, Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { cn } from "@/lib/cn";
@@ -159,6 +160,9 @@ async function AutomationsSection() {
         id: m.id,
         name: m.display_name ?? m.name,
       }))}
+      // Server-decided: drafting needs the Anthropic key. Missing key = the
+      // create dialog is exactly what it was, no AI affordance at all.
+      aiDraftEnabled={isAssistantConfigured()}
     />
   );
 }

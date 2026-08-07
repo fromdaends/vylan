@@ -5202,7 +5202,21 @@
     "flow_reminders_mode_custom": "Custom for this flow",
     "flow_reminders_mode_off": "Off",
     "flow_chase_interval_label": "Days between",
-    "flow_chase_max_label": "Max sends"
+    "flow_chase_max_label": "Max sends",
+    "ai_draft_label": "Or describe it and let AI draft it",
+    "ai_draft_placeholder": "e.g. Monthly bookkeeping: collect statements, I review, staff reconciles, invoice when the work is done — no signature step",
+    "ai_draft_hint": "You review the draft before anything is saved.",
+    "ai_draft_button": "Draft with AI",
+    "ai_drafting": "Drafting…",
+    "ai_draft_title": "AI draft",
+    "ai_draft_review_note": "Review it, adjust anything, then save it to your library.",
+    "ai_refine_placeholder": "Ask for a change — e.g. skip the review stage",
+    "ai_refine_button": "Update draft",
+    "ai_discard": "Discard",
+    "ai_save_to_library": "Save to library",
+    "ai_draft_not_configured": "AI drafting isn't set up on this server yet.",
+    "ai_draft_failed": "The AI couldn't produce a usable draft — try rewording your description.",
+    "ai_draft_rate_limited": "You've drafted a lot in the last hour — give it a few minutes and try again."
   },
   "Files": {
     "page_title": "Files",
