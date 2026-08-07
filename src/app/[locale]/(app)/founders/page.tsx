@@ -38,6 +38,7 @@ import { Panel, ProportionBar, StatGrid } from "@/components/founders/stat-grid"
 import { ActivityChart, SignupsChart } from "@/components/founders/charts";
 import { ActivityFeed } from "@/components/founders/activity-feed";
 import { FirmsTable } from "@/components/founders/firms-table";
+import { PinButton } from "@/components/founders/pin-button";
 import { LeadsTable } from "@/components/founders/leads-table";
 import { HealthView } from "@/components/founders/health-view";
 
@@ -74,6 +75,12 @@ export default async function FoundersPage({
   const nowMs = Date.parse(data.generatedAt);
   const { totals } = data;
 
+  // Pinned firms keep the table's default ordering (busiest first) so the
+  // watchlist and the Firms tab agree about which of them is most active.
+  const trackedFirms = data.firms
+    .filter((f) => f.pinned)
+    .sort((a, b) => b.events30d - a.events30d || a.name.localeCompare(b.name));
+
   const tabs = [
     { key: "overview", label: t("tab_overview"), href: "/founders" },
     { key: "firms", label: t("tab_firms"), href: "/founders?tab=firms", count: totals.firms },
@@ -106,6 +113,65 @@ export default async function FoundersPage({
 
       {tab === "overview" && (
         <div className="space-y-6">
+          {/* THE WATCHLIST, FIRST ON THE PAGE. Founder: "make it so we can pin
+              firms we'd like to track." A watchlist you have to scroll to is a
+              watchlist you stop checking, so it sits above even the KPI cards —
+              and it renders NOTHING at all when empty rather than showing an
+              "add your first firm" placeholder that would push the real content
+              down forever. */}
+          {trackedFirms.length > 0 && (
+            <Panel
+              title={t("panel_tracking", { count: trackedFirms.length })}
+              action={
+                <Link
+                  href="/founders?tab=firms"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  {t("see_all")}
+                </Link>
+              }
+            >
+              <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+                {trackedFirms.map((f) => (
+                  <li
+                    key={f.id}
+                    className="group flex items-start justify-between gap-3 border-l border-border/40 pl-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/founders/firms/${f.id}`}
+                          className="truncate text-sm font-medium hover:underline"
+                        >
+                          {f.name}
+                        </Link>
+                        <PinButton
+                          firmId={f.id}
+                          firmName={f.name}
+                          pinned
+                          available={data.pinsAvailable}
+                        />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {t("most_active_line", {
+                          clients: f.activeClients,
+                          engagements: f.engagements,
+                          age: relativeAge(f.lastActivityAt, nowMs),
+                        })}
+                      </p>
+                    </div>
+                    <span
+                      className="shrink-0 text-sm tabular-nums"
+                      title={t("col_events")}
+                    >
+                      {f.events30d}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
+
           {/* The four numbers worth a 40px numeral. Everything else is the
               quieter grid underneath — a page of nineteen giant figures has no
               headline at all. */}
@@ -327,7 +393,7 @@ export default async function FoundersPage({
 
       {tab === "firms" && (
         <Panel title={t("panel_firms")}>
-          <FirmsTable rows={data.firms} nowMs={nowMs} />
+          <FirmsTable rows={data.firms} nowMs={nowMs} pinsAvailable={data.pinsAvailable} />
         </Panel>
       )}
 

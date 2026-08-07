@@ -23,6 +23,7 @@ import { humaniseAction } from "@/lib/founders/actions";
 import { Panel, StatGrid } from "@/components/founders/stat-grid";
 import { ActivityChart } from "@/components/founders/charts";
 import { ActivityFeed } from "@/components/founders/activity-feed";
+import { PinButton } from "@/components/founders/pin-button";
 
 export default async function FounderFirmPage({
   params,
@@ -61,8 +62,15 @@ export default async function FounderFirmPage({
       </Link>
 
       <header className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="group flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{firm.name}</h1>
+          <PinButton
+            firmId={firm.id}
+            firmName={firm.name}
+            pinned={firm.pinned}
+            available={detail.pinsAvailable}
+            size="md"
+          />
           <span className="rounded border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
             {firm.plan}
           </span>

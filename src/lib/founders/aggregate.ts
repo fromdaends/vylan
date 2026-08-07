@@ -171,6 +171,8 @@ export type FirmSources = {
   aiUsage: Array<{ firm_id: string; used: number | null }>;
   /** Every activity row inside the window — used for the pulse columns. */
   events: Array<{ firm_id: string; created_at: string; actor_type?: string | null }>;
+  /** The founders' watchlist (migration 1800). Empty while unapplied. */
+  pinnedFirmIds?: readonly string[];
 };
 
 /**
@@ -264,6 +266,7 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
     sources.events.filter((e) => e.created_at >= cut7),
     (e) => e.firm_id,
   );
+  const pinned = new Set(sources.pinnedFirmIds ?? []);
   const clientEvents = countBy(
     sources.events.filter((e) => e.actor_type === "client"),
     (e) => e.firm_id,
@@ -331,6 +334,7 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
     clientEvents30d: clientEvents[f.id] ?? 0,
     lastActivityAt: lastEvent[f.id] ?? null,
     aiUsedThisMonth: aiUsed[f.id] ?? 0,
+    pinned: pinned.has(f.id),
   }));
 }
 
@@ -372,14 +376,23 @@ export function isFirmSortKey(v: unknown): v is FirmSortKey {
  * on "last activity" in either direction: `null` is not "the beginning of
  * time", it is "no answer", and putting silent firms at the top of a descending
  * activity sort would bury the ones you actually want to look at.
+ *
+ * PINNED FIRMS FLOAT TO THE TOP OF EVERY SORT, in every direction. That is the
+ * point of pinning: "the firms we're tracking" have to be where you left them
+ * whichever column you happen to be looking at, or the pin is just decoration.
+ * They are sorted among THEMSELVES by the chosen column, so the feature adds a
+ * grouping and never takes the sort away. Pass `pinnedFirst: false` for a
+ * genuinely flat ordering.
  */
 export function sortFirmRows(
   rows: readonly FirmRow[],
   key: FirmSortKey,
   dir: "asc" | "desc",
+  pinnedFirst = true,
 ): FirmRow[] {
   const sign = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
+    if (pinnedFirst && a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (key === "name") return sign * a.name.localeCompare(b.name);
     if (key === "createdAt") return sign * a.createdAt.localeCompare(b.createdAt);
     if (key === "lastActivityAt") {

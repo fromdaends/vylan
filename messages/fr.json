@@ -5655,6 +5655,12 @@
     "feedback_empty": "Personne n'a encore utilisé la boîte à commentaires.",
     "adoption_requested_signature": "A demandé une signature",
     "adoption_used_assistant": "A posé une question à l'assistant",
-    "adoption_reached_clients": "Leurs clients se sont connectés"
+    "adoption_reached_clients": "Leurs clients se sont connectés",
+    "panel_tracking": "Sous surveillance ({count})",
+    "firms_only_pinned": "Surveillés seulement ({count})",
+    "pin_add": "Surveiller {name}",
+    "pin_remove": "Ne plus surveiller {name}",
+    "pin_failed": "Impossible d'enregistrer. Réessayez.",
+    "pin_needs_migration": "L'épinglage nécessite la mise à jour 1800 de la base de données. Le SQL est dans la pull request."
   }
 }
