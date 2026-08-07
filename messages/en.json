@@ -5222,7 +5222,17 @@
     "ai_save_to_library": "Save to library",
     "ai_draft_not_configured": "AI drafting isn't set up on this server yet.",
     "ai_draft_failed": "The AI couldn't produce a usable draft — try rewording your description.",
-    "ai_draft_rate_limited": "You've drafted a lot in the last hour — give it a few minutes and try again."
+    "ai_draft_rate_limited": "You've drafted a lot in the last hour — give it a few minutes and try again.",
+    "flow_letter_attach_here": "The engagement letter for {service} goes out with the send — but none is on file yet. Attach it here:",
+    "flow_letter_missing_for": "No engagement letter is on file for {service}, so nothing will go out. A firm owner can attach one under Templates → Services.",
+    "flow_letter_place_myself": "Place the signature fields myself",
+    "flow_letter_place_note": "SignWell's editor opens right after you send; the letter goes to the client once you've placed the fields.",
+    "letter_placement_waiting": "The engagement letter needs its signature fields placed.",
+    "letter_placement_note": "The client can't review, sign, or accept until you finish.",
+    "letter_placement_button": "Finish placing",
+    "letter_placement_error": "Couldn't open the editor — try again in a moment.",
+    "flow_letter_ok_for": "The engagement letter for {service} is on file — it goes out for signature with the send.",
+    "timeline_letter_awaiting_placement": "Letter drafted — the signature fields still need placing"
   },
   "Files": {
     "page_title": "Files",

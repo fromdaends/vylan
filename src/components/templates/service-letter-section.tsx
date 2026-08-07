@@ -32,11 +32,15 @@ export type ServiceLetterRow = {
 export function ServiceLetterSection({
   serviceId,
   initial,
+  onRowsChange,
 }: {
   /** Null while the service is still being created — there is no row to hang
    *  a file on yet, so the section explains that instead of half-working. */
   serviceId: string | null;
   initial: ServiceLetterRow[];
+  /** Fired after any successful upload/remove — the engagement builder's
+   *  inline mount uses it to keep its letter honesty line truthful. */
+  onRowsChange?: (rows: ServiceLetterRow[]) => void;
 }) {
   const t = useTranslations("Templates");
   const [, startTransition] = useTransition();
@@ -63,10 +67,16 @@ export function ServiceLetterSection({
       const res = await uploadEngagementLetterAction(fd);
       setBusy(null);
       if (res.ok) {
-        setRows((prev) => [
-          ...prev.filter((r) => r.locale !== locale),
+        // Computed OUTSIDE the state updater: onRowsChange sets PARENT state,
+        // and a side effect inside an updater runs during render (React
+        // "cannot update a component while rendering" — updaters must be
+        // pure). `rows` is current here: uploads are single-flight (busy).
+        const next = [
+          ...rows.filter((r) => r.locale !== locale),
           { locale, fileName: file.name, uploadedAt: new Date().toISOString() },
-        ]);
+        ];
+        setRows(next);
+        onRowsChange?.(next);
         toast.success(t("service_letter_saved"));
       } else {
         toast.error(
@@ -90,7 +100,10 @@ export function ServiceLetterSection({
       const res = await removeEngagementLetterAction(fd);
       setBusy(null);
       if (res.ok) {
-        setRows((prev) => prev.filter((r) => r.locale !== locale));
+        // Same purity rule as upload() above.
+        const next = rows.filter((r) => r.locale !== locale);
+        setRows(next);
+        onRowsChange?.(next);
         toast.success(t("service_letter_removed"));
       } else {
         toast.error(t("service_letter_error_save"));

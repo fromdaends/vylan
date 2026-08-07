@@ -40,6 +40,7 @@ import {
 import {
   createSignatureDocument,
   isSignwellConfigured,
+  isSignwellEmbeddedEditingEnabled,
   isSignwellTestMode,
 } from "@/lib/signwell/client";
 import { buildSignatureRequestEmail, sendEmail } from "@/lib/email";
@@ -51,6 +52,10 @@ export type LetterSendOutcome =
       itemId: string;
       documentId: string | null;
       letterKey: string | null;
+      /** Present only in editor mode: the one-shot SignWell field-placement
+       *  URL (it expires once opened — never store it; getDocument re-reads
+       *  a fresh one for the resume path). */
+      editUrl?: string | null;
     }
   | {
       ok: false;
@@ -92,6 +97,13 @@ const LABEL_FR = "Lettre de mission";
 export async function sendEngagementLetter(input: {
   engagementId: string;
   firmId: string;
+  /** An accountant is PRESENT (create-and-send / the Send button) and asked
+   *  to place the signature fields themselves: SignWell draft + embedded
+   *  editor, with the client email deferred until placement finalizes
+   *  (finalizeSignaturePlacementAction) — the manual dialog's exact rhythm.
+   *  Never set on unattended paths (recurring spawns), where the appended
+   *  signature page is what makes the send legal. */
+  embeddedEdit?: boolean;
 }): Promise<LetterSendOutcome> {
   const sb = getServiceRoleSupabase();
 
@@ -212,7 +224,8 @@ export async function sendEngagementLetter(input: {
   // ── The SignWell request ──────────────────────────────────────────────────
   const testMode = isSignwellTestMode();
   let documentId: string | null = null;
-  let status: "sent" | "error" = "sent";
+  let status: "sent" | "pending" | "error" = "sent";
+  let editUrl: string | null = null;
   let errorDetail: string | null = null;
   try {
     const doc = await createSignatureDocument({
@@ -221,8 +234,12 @@ export async function sendEngagementLetter(input: {
       fileName: letter.fileName,
       signerEmail: client.email,
       signerName: client.display_name,
-      // Deliberately NOT embeddedEdit: nobody is here to place a field, and
-      // the appended signature page is what makes an unattended send legal.
+      // embeddedEdit only when an accountant asked to place the fields and
+      // is present to do it; otherwise the appended signature page is what
+      // makes an unattended send legal. The client silently falls back to
+      // the default mode when the editor app id isn't configured — status
+      // keys off the URL actually coming back, not off what was asked.
+      embeddedEdit: input.embeddedEdit === true,
       metadata: {
         request_item_id: itemId,
         engagement_id: eng.id,
@@ -230,6 +247,22 @@ export async function sendEngagementLetter(input: {
       },
     });
     documentId = doc.documentId;
+    if (input.embeddedEdit === true && isSignwellEmbeddedEditingEnabled()) {
+      if (doc.embeddedEditUrl) {
+        editUrl = doc.embeddedEditUrl;
+        // A draft awaiting placement — the same status the manual dialog's
+        // editor mode uses; finalizeSignaturePlacementAction sends it.
+        status = "pending";
+      } else {
+        // The wrapper made a DRAFT (editor requested + app id present) but
+        // SignWell returned no edit URL — the manual path's 'no_edit_url'
+        // case. Calling this 'sent' would email the client an unsendable
+        // draft wearing a healthy status; it is a setup error, retryable
+        // via the existing retry affordance.
+        status = "error";
+        errorDetail = "no_edit_url";
+      }
+    }
   } catch (e) {
     // The item exists and shows "Signing setup needed" with a Retry, exactly
     // as a failed manual send does — the accountant is never left guessing.
@@ -254,23 +287,32 @@ export async function sendEngagementLetter(input: {
     return { ok: false, reason: "failed", detail: "signature_request" };
   }
 
-  await logServiceRoleActivity(eng.firm_id, eng.id, "signature_requested", {
-    item_id: itemId,
-    label: LABEL_FR,
-    test_mode: testMode,
-    auto: true,
-    source: "engagement_letter",
-    ...(letterKey ? { letter_key: letterKey } : {}),
-    ...(documentId ? { signwell_document_id: documentId } : {}),
-  });
+  // Pending drafts defer the audit to placement finalize (announceSignature-
+  // Request logs it then) — the manual dialog's rule, and without it every
+  // editor-mode letter logged 'signature_requested' twice, the first stamp
+  // dated before anything had gone out.
+  if (status !== "pending") {
+    await logServiceRoleActivity(eng.firm_id, eng.id, "signature_requested", {
+      item_id: itemId,
+      label: LABEL_FR,
+      test_mode: testMode,
+      auto: true,
+      source: "engagement_letter",
+      ...(letterKey ? { letter_key: letterKey } : {}),
+      ...(documentId ? { signwell_document_id: documentId } : {}),
+    });
+  }
 
+  // Pending (editor mode) defers the email to placement finalize, exactly
+  // like the manual dialog — a client must never be invited to sign a draft
+  // whose fields aren't placed yet.
   if (status === "sent") {
     await notifyClient(eng, client, locale).catch((e) =>
       console.error("[workflow-letter] client email failed:", e),
     );
   }
 
-  return { ok: true, itemId, documentId, letterKey };
+  return { ok: true, itemId, documentId, letterKey, editUrl };
 }
 
 // The engagement's headline service: the first priced line, in proposal

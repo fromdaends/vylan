@@ -199,3 +199,35 @@ describe("buildFlowTimeline", () => {
     expect(pay.fired.map((f) => f.action)).toEqual(["send_invoice"]);
   });
 });
+
+describe("editor-mode letter (awaiting placement)", () => {
+  it("ledger-done + live-pending reads as preparing, not sent", () => {
+    const tl = buildFlowTimeline(
+      returnTypeWorkflow(),
+      {
+        ...baseFacts,
+        status: "sent",
+        sentAt: "2026-08-07T10:00:00Z",
+        letterLiveStatus: "pending",
+        events: [ev("sent", "send_engagement_letter")],
+      },
+      { flowSendsLetter: true },
+    );
+    expect(tl.letter).toEqual({ status: "preparing", reason: null });
+  });
+
+  it("once the live row moves past pending, the letter reads done", () => {
+    const tl = buildFlowTimeline(
+      returnTypeWorkflow(),
+      {
+        ...baseFacts,
+        status: "sent",
+        sentAt: "2026-08-07T10:00:00Z",
+        letterLiveStatus: "sent",
+        events: [ev("sent", "send_engagement_letter")],
+      },
+      { flowSendsLetter: true },
+    );
+    expect(tl.letter).toEqual({ status: "done", reason: null });
+  });
+});

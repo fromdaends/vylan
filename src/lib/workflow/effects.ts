@@ -315,10 +315,27 @@ export async function runWorkflowStageEffects(
  * send path — create-and-send, the detail page's Send button, and recurring
  * spawns all call this; only the first claim fires.
  */
+export type SendEffectsOutcome = {
+  /** Editor mode only: the one-shot placement URL + its item, bubbled to a
+   *  PRESENT caller (the builder) so it can open SignWell's editor right
+   *  away. Null everywhere else; the engagement page's "Finish placing
+   *  signature" resume affordance covers a URL that was never opened. */
+  letterEditUrl: string | null;
+  letterItemId: string | null;
+};
+
 export async function runWorkflowSendEffects(input: {
   engagementId: string;
   firmId: string;
-}): Promise<void> {
+  /** True only when a human is on the other end of this call (create-and-
+   *  send, the Send button). Unattended paths (recurring spawns) leave it
+   *  unset and always get the appended signature page. */
+  allowEditor?: boolean;
+}): Promise<SendEffectsOutcome> {
+  const outcome: SendEffectsOutcome = {
+    letterEditUrl: null,
+    letterItemId: null,
+  };
   try {
     const sb = getServiceRoleSupabase();
     const { data } = await sb
@@ -329,8 +346,8 @@ export async function runWorkflowSendEffects(input: {
     const wf = parseWorkflowSnapshot(
       (data as { workflow?: unknown } | null)?.workflow,
     );
-    if (!wf || !flowSendsLetter(wf)) return;
-    if (!(await isWorkflowsEnabledForFirm(sb, input.firmId))) return;
+    if (!wf || !flowSendsLetter(wf)) return outcome;
+    if (!(await isWorkflowsEnabledForFirm(sb, input.firmId))) return outcome;
 
     const claim = await claimEvent(sb, {
       firm_id: input.firmId,
@@ -338,10 +355,33 @@ export async function runWorkflowSendEffects(input: {
       stage: "sent",
       action: "send_engagement_letter",
     });
-    if (claim !== "claimed") return;
+    if (claim !== "claimed") return outcome;
 
+    const embeddedEdit =
+      input.allowEditor === true && wf.letter_placement === "editor";
     const { sendEngagementLetter } = await import("./letter");
-    const res = await sendEngagementLetter(input);
+    const res = await sendEngagementLetter({
+      engagementId: input.engagementId,
+      firmId: input.firmId,
+      embeddedEdit,
+    });
+    if (res.ok) {
+      outcome.letterEditUrl = res.editUrl ?? null;
+      outcome.letterItemId = res.editUrl ? res.itemId : null;
+      if (res.editUrl) {
+        // Not sent yet — a draft awaiting field placement. The ledger detail
+        // is what lets the flow timeline say so instead of "letter sent".
+        await markEvent(
+          sb,
+          {
+            engagement_id: input.engagementId,
+            stage: "sent",
+            action: "send_engagement_letter",
+          },
+          { status: "done", detail: { placement: "awaiting_placement" } },
+        );
+      }
+    }
     if (!res.ok) {
       await markEvent(
         sb,
@@ -371,6 +411,7 @@ export async function runWorkflowSendEffects(input: {
   } catch (e) {
     console.error("[workflow] send effects failed:", e);
   }
+  return outcome;
 }
 
 // Reassign the engagement to the stage's person. Returns the user id when the

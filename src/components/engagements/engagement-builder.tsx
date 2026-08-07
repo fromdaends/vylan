@@ -75,6 +75,8 @@ import {
   type ComboboxClient,
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
+import { openPlacementEditor } from "@/components/engagements/placement-editor";
+import { ServiceLetterSection } from "@/components/templates/service-letter-section";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import {
   familyDefaultWorkflow,
@@ -300,6 +302,8 @@ export function EngagementBuilder({
   workflowsOn = false,
   automations = [],
   serviceIdsWithLetters = [],
+  canUploadLetters = false,
+  signwellEditorOn = false,
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
@@ -361,6 +365,11 @@ export function EngagementBuilder({
   /** Which services have an engagement letter uploaded (1700) — the
    *  Automation step's letter status line. */
   serviceIdsWithLetters?: string[];
+  /** can(user, "firm.settings") — whether the inline letter-attach renders.
+   *  The upload action enforces the same capability server-side. */
+  canUploadLetters?: boolean;
+  /** SIGNWELL_API_APPLICATION_ID present — field placement is available. */
+  signwellEditorOn?: boolean;
   /** Saved sets of tasks (migration 1570). Empty before it is applied, which
    *  hides the picker entirely — there is nothing to pick. */
   taskTemplates?: {
@@ -533,6 +542,19 @@ export function EngagementBuilder({
   });
   const [reminderPreviewBase] = useState(() => new Date());
   const [remindersExpanded, setRemindersExpanded] = useState(false);
+  // Letters attached INLINE on the Automation step this session (founder:
+  // "you can't attach the engagement letter you'd like to be automatically
+  // sent out"). Uploads write to the service's own letter rows — the same
+  // storage the Templates → Services tab manages — this list only keeps the
+  // honesty line truthful without a server round-trip.
+  const [attachedLetterServiceIds, setAttachedLetterServiceIds] = useState<
+    string[]
+  >([]);
+  // "Place the signature fields myself": SignWell's editor opens right
+  // after send, instead of the auto-appended signature page.
+  const [letterPlacement, setLetterPlacement] = useState<"auto" | "editor">(
+    "auto",
+  );
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
   // ── BILLED WHEN THEY ACCEPT, BY DEFAULT ────────────────────────────────
@@ -1046,9 +1068,22 @@ export function EngagementBuilder({
         .filter((x): x is string => Boolean(x)),
     ),
   ];
-  const lettersMissingCount = pickedServiceIds.filter(
-    (id) => !serviceIdsWithLetters.includes(id),
-  ).length;
+  // THE letter rides the FIRST catalogue line, in proposal order — the exact
+  // rule resolveServiceId applies at send time (workflow/letter.ts). The old
+  // count-all-missing warning could both cry wolf (a letterless second
+  // service whose letter would never send) and stay silent about the one
+  // that mattered.
+  // Same filter the submit payload applies (empty-named lines are dropped
+  // before they reach the server), so the service named here can never
+  // differ from the one resolveServiceId picks at send time.
+  const sendingService =
+    serviceItems.find((x) => x.serviceId && x.name.trim().length > 0) ?? null;
+  const sendingServiceId = sendingService?.serviceId ?? null;
+  const sendingServiceName = sendingService?.name.trim() || null;
+  const sendingLetterMissing =
+    sendingServiceId != null &&
+    !serviceIdsWithLetters.includes(sendingServiceId) &&
+    !attachedLetterServiceIds.includes(sendingServiceId);
   // The plan line's "handed to" wording. A helper because TypeScript loses
   // the null-narrowing inside a .find callback in JSX.
   function flowAssigneeName(rule: StageAssigneeRule): string {
@@ -1467,6 +1502,14 @@ export function EngagementBuilder({
                   automation_id: flowPick.automationId,
                 }
               : {}),
+            // Field placement rides only when the flow sends a letter — a
+            // toggle left on from an earlier flow pick must not mark an
+            // engagement that sends nothing.
+            ...(workflowsOn &&
+            letterPlacement === "editor" &&
+            flowSendsLetter(activeFlow)
+              ? { workflow_letter_placement: "editor" as const }
+              : {}),
             tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
@@ -1574,6 +1617,29 @@ export function EngagementBuilder({
         } else if (result?.fieldErrors) {
           const first = Object.entries(result.fieldErrors)[0];
           setError(first ? `${first[0]}: ${first[1]}` : "create_failed");
+        } else if (
+          result &&
+          "letterEditUrl" in result &&
+          result.letterEditUrl &&
+          result.letterItemId &&
+          result.engagementId
+        ) {
+          // Editor-mode letter: the action RETURNED instead of redirecting
+          // (a redirect would strand the one-shot placement URL). Open the
+          // SHARED placement editor (open + finalize live in exactly one
+          // place — placement-editor.ts), then land on the engagement like
+          // every other create. Closed-without-finishing leaves the draft
+          // pending — the engagement page's letter-placement card resumes it.
+          const dest = `/engagements/${result.engagementId}`;
+          try {
+            await openPlacementEditor({
+              url: result.letterEditUrl,
+              itemId: result.letterItemId,
+              onSettled: () => router.push(dest),
+            });
+          } catch {
+            router.push(dest);
+          }
         }
       } catch (e) {
         const digest = (e as { digest?: string })?.digest;
@@ -2640,20 +2706,82 @@ export function EngagementBuilder({
             ))}
           </div>
 
+          {/* The letter honesty block, keyed to the ONE service whose letter
+              actually rides the send (the first catalogue line, in proposal
+              order — resolveServiceId's rule). Missing + allowed to fix =
+              attach it RIGHT HERE (founder: "you can't attach the engagement
+              letter you'd like to be automatically sent out"), via the SAME
+              ServiceLetterSection the service builder mounts. */}
           {flowSendsLetter(activeFlow) &&
             (pickedServiceIds.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 {tAuto("flow_letter_needs_service")}
               </p>
-            ) : lettersMissingCount > 0 ? (
+            ) : sendingServiceId &&
+              canUploadLetters &&
+              (sendingLetterMissing ||
+                attachedLetterServiceIds.includes(sendingServiceId)) ? (
+              // Stays mounted after the first upload (the attached-ids check)
+              // so the second language's PDF can go up — or a mis-pick come
+              // back down — without leaving the builder.
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.04] p-4">
+                <p className="text-xs text-muted-foreground">
+                  {sendingLetterMissing
+                    ? tAuto("flow_letter_attach_here", {
+                        service: sendingServiceName ?? "",
+                      })
+                    : tAuto("flow_letter_ok_for", {
+                        service: sendingServiceName ?? "",
+                      })}
+                </p>
+                <div className="mt-2.5">
+                  <ServiceLetterSection
+                    key={sendingServiceId}
+                    serviceId={sendingServiceId}
+                    initial={[]}
+                    onRowsChange={(rows) =>
+                      setAttachedLetterServiceIds((prev) =>
+                        rows.length > 0
+                          ? [...new Set([...prev, sendingServiceId])]
+                          : prev.filter((x) => x !== sendingServiceId),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            ) : sendingLetterMissing ? (
               <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letters_missing", { count: lettersMissingCount })}
+                {tAuto("flow_letter_missing_for", {
+                  service: sendingServiceName ?? "",
+                })}
               </p>
             ) : (
+              // Keyed to the ONE service that sends — the old "every picked
+              // service has its letter" line claimed more than the send does.
               <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letters_ok")}
+                {sendingServiceName
+                  ? tAuto("flow_letter_ok_for", { service: sendingServiceName })
+                  : tAuto("flow_letters_ok")}
               </p>
             ))}
+
+          {/* Field placement — asked ONLY when the flow sends a letter
+              (founder: "should only ask if you'd like to if send engagement
+              letter is on") and the SignWell editor is configured. */}
+          {flowSendsLetter(activeFlow) && signwellEditorOn && (
+            <label className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+              <Switch
+                checked={letterPlacement === "editor"}
+                onCheckedChange={(on) =>
+                  setLetterPlacement(on === true ? "editor" : "auto")
+                }
+              />
+              {tAuto("flow_letter_place_myself")}
+              <span className="text-xs text-muted-foreground">
+                {tAuto("flow_letter_place_note")}
+              </span>
+            </label>
+          )}
 
           <details className="rounded-xl border border-border p-4">
             <summary className="cursor-pointer text-sm font-medium">
