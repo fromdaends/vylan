@@ -5601,6 +5601,16 @@
     "health_truncation_warning": "These reads hit their row ceiling, so the numbers above UNDERSTATE reality. Raise the ceiling in lib/founders/load.ts or move that table's count into SQL.",
     "health_truncation_none": "Every read returned in full — no numbers are truncated.",
     "health_access": "Who can open this page",
-    "health_access_hint": "Set by FOUNDER_EMAILS (and FOUNDER_NOTIFY_EMAIL) in the environment. Nobody else can reach this page, and nothing in the app can add to this list."
+    "health_access_hint": "Set by FOUNDER_EMAILS (and FOUNDER_NOTIFY_EMAIL) in the environment. Nobody else can reach this page, and nothing in the app can add to this list.",
+    "stat_client_events": "Client events",
+    "stat_client_events_hint": "done by their clients, not them",
+    "stat_assistant": "Assistant questions",
+    "stat_assistant_hint": "typed at the in-app assistant",
+    "stat_signatures": "Signature requests",
+    "panel_feedback": "What they are telling us",
+    "feedback_empty": "Nobody has used the feedback box yet.",
+    "adoption_requested_signature": "Asked for a signature",
+    "adoption_used_assistant": "Asked the assistant something",
+    "adoption_reached_clients": "Their clients showed up"
   }
 }

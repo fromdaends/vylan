@@ -192,6 +192,8 @@ function sources(over: Partial<FirmSources> = {}): FirmSources {
       { firm_id: "f1", amount_cents: 50000, status: "requested" },
     ],
     messages: [{ firm_id: "f1" }],
+    assistantMessages: [{ firm_id: "f1" }, { firm_id: "f1" }],
+    signatures: [{ firm_id: "f1" }],
     timeEntries: [
       { firm_id: "f1", duration_minutes: 90 },
       { firm_id: "f1", duration_minutes: null },
@@ -207,9 +209,9 @@ function sources(over: Partial<FirmSources> = {}): FirmSources {
     },
     aiUsage: [{ firm_id: "f1", used: 42 }],
     events: [
-      { firm_id: "f1", created_at: "2026-08-06T10:00:00Z" },
-      { firm_id: "f1", created_at: "2026-08-05T10:00:00Z" },
-      { firm_id: "f1", created_at: "2026-07-20T10:00:00Z" },
+      { firm_id: "f1", created_at: "2026-08-06T10:00:00Z", actor_type: "user" },
+      { firm_id: "f1", created_at: "2026-08-05T10:00:00Z", actor_type: "client" },
+      { firm_id: "f1", created_at: "2026-07-20T10:00:00Z", actor_type: "system" },
     ],
     ...over,
   };
@@ -265,6 +267,29 @@ describe("buildFirmRows", () => {
     expect(f1.events30d).toBe(3);
     expect(f1.events7d).toBe(2); // the 20 July one is outside 7 days
     expect(f1.lastActivityAt).toBe("2026-08-06T10:00:00Z");
+  });
+
+  // The number that separates "an accountant is clicking around" from "the
+  // product reached the people it is for".
+  it("counts CLIENT-actor events separately from the firm's own", () => {
+    const f1 = buildFirmRows(sources(), NOW).find((r) => r.id === "f1")!;
+    expect(f1.clientEvents30d).toBe(1);
+  });
+
+  it("counts assistant turns and signature requests", () => {
+    const f1 = buildFirmRows(sources(), NOW).find((r) => r.id === "f1")!;
+    expect(f1.assistantMessages).toBe(2);
+    expect(f1.signatures).toBe(1);
+  });
+
+  // activity_log rows read before actor_type was selected (or from a source
+  // that does not carry it) must not silently become "client".
+  it("treats a missing actor_type as not-a-client", () => {
+    const rows = buildFirmRows(
+      sources({ events: [{ firm_id: "f1", created_at: "2026-08-06T10:00:00Z" }] }),
+      NOW,
+    );
+    expect(rows.find((r) => r.id === "f1")!.clientEvents30d).toBe(0);
   });
 
   it("names an unnamed firm rather than rendering an unclickable gap", () => {

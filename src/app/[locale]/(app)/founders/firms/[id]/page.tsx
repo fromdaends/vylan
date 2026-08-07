@@ -137,6 +137,25 @@ export default async function FounderFirmPage({
               { key: "messages", label: t("stat_messages"), value: String(firm.messages) },
               { key: "time", label: t("stat_time"), value: formatMinutes(firm.timeMinutes) },
               {
+                key: "clientevents",
+                label: t("stat_client_events"),
+                value: String(firm.clientEvents30d),
+                hint: t("stat_client_events_hint"),
+                muted: firm.clientEvents30d === 0,
+              },
+              {
+                key: "assistant",
+                label: t("stat_assistant"),
+                value: String(firm.assistantMessages),
+                muted: firm.assistantMessages === 0,
+              },
+              {
+                key: "signatures",
+                label: t("stat_signatures"),
+                value: String(firm.signatures),
+                muted: firm.signatures === 0,
+              },
+              {
                 key: "ai",
                 label: t("stat_ai"),
                 value: String(firm.aiUsedThisMonth),

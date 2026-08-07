@@ -46,6 +46,11 @@ export type FirmRow = {
 
   // Conversation
   messages: number;
+  /** Turns the firm typed at the in-app assistant. A firm that talks to Vylan
+   *  is a firm that has decided Vylan is worth talking to. */
+  assistantMessages: number;
+  /** e-signature requests raised. */
+  signatures: number;
 
   // Effort
   timeMinutes: number;
@@ -61,8 +66,22 @@ export type FirmRow = {
   // Pulse
   events7d: number;
   events30d: number;
+  /** Events whose actor was the firm's CLIENT, not the firm. The number that
+   *  says whether the product reached the people it is ultimately for — a firm
+   *  can look busy while every event is an accountant clicking around. */
+  clientEvents30d: number;
   lastActivityAt: string | null;
   aiUsedThisMonth: number;
+};
+
+/** Something a user typed into the in-app feedback box. */
+export type FeedbackNote = {
+  id: string;
+  firmId: string | null;
+  firmName: string;
+  message: string;
+  pageUrl: string | null;
+  createdAt: string;
 };
 
 /** One row in the cross-firm activity feed. */
@@ -115,8 +134,12 @@ export type PlatformTotals = {
   paidCents: number;
   messages: number;
   timeMinutes: number;
+  assistantMessages: number;
+  signatures: number;
   events30d: number;
   events7d: number;
+  /** How much of that 30-day activity came from firms' CLIENTS. */
+  clientEvents30d: number;
   activeFirms7d: number;
   activeFirms30d: number;
   newFirms30d: number;
@@ -162,6 +185,9 @@ export type FoundersData = {
   totals: PlatformTotals;
   firms: FirmRow[];
   feed: FeedEvent[];
+  /** What users typed into the in-app feedback box, newest first. Until now
+   *  these rows had no reader at all. */
+  feedback: FeedbackNote[];
   signups: DayBucket[];
   activityByDay: DayBucket[];
   adoption: AdoptionRow[];

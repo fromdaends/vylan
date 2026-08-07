@@ -105,6 +105,8 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     uploads,
     invoices,
     messages,
+    assistantMessages,
+    signatures,
     timeEntries,
     automations,
     services,
@@ -118,6 +120,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     feedRows,
     leads,
     jobs,
+    feedback,
   ] = await Promise.all([
     read<FirmSources["firms"][number]>("firms", (q) =>
       q
@@ -159,6 +162,12 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
       (q) => q.select("firm_id, amount_cents, status").limit(CAP),
     ),
     read<{ firm_id: string }>("client_messages", (q) => q.select("firm_id").limit(CAP)),
+    // USER turns only — counting the assistant's replies would double every
+    // conversation.
+    read<{ firm_id: string }>("chat_messages", (q) =>
+      q.select("firm_id").eq("role", "user").limit(CAP),
+    ),
+    read<{ firm_id: string }>("signature_requests", (q) => q.select("firm_id").limit(CAP)),
     read<{ firm_id: string; duration_minutes: number | null }>("time_entries", (q) =>
       q.select("firm_id, duration_minutes").is("deleted_at", null).limit(CAP),
     ),
@@ -174,8 +183,13 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     ),
     // The pulse window: enough to answer "who is alive" without dragging the
     // whole history across the wire.
-    read<{ firm_id: string; created_at: string; action: string }>("activity_log", (q) =>
-      q.select("firm_id, created_at, action").gte("created_at", since).limit(CAP),
+    read<{ firm_id: string; created_at: string; action: string; actor_type: string | null }>(
+      "activity_log",
+      (q) =>
+        q
+          .select("firm_id, created_at, action, actor_type")
+          .gte("created_at", since)
+          .limit(CAP),
     ),
     // The feed itself — richer columns, hard limit, newest first.
     read<{
@@ -219,6 +233,20 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
       "jobs",
       (q) => q.select("id, kind, status, attempts, last_error, created_at").limit(CAP),
     ),
+    // The in-app feedback box (migration 0007) has had NO reader since the day
+    // it was written — the rows just accumulated. This is that reader.
+    read<{
+      id: string;
+      firm_id: string | null;
+      message: string;
+      page_url: string | null;
+      created_at: string;
+    }>("feedback", (q) =>
+      q
+        .select("id, firm_id, message, page_url, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ),
   ]);
 
   // Signups over a year need their own read: the firms read above is already
@@ -243,6 +271,8 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     documents: [...imported.rows, ...finals.rows, ...uploadDocs],
     invoices: invoices.rows,
     messages: messages.rows,
+    assistantMessages: assistantMessages.rows,
+    signatures: signatures.rows,
     timeEntries: timeEntries.rows,
     automations: automations.rows,
     services: services.rows,
@@ -320,12 +350,24 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
     ["activity_log", events],
     ["demo_requests", leads],
     ["jobs", jobs],
+    ["chat_messages", assistantMessages],
+    ["signature_requests", signatures],
   ]);
 
   return {
     totals,
     firms: firmRows,
     feed,
+    feedback: feedback.rows.map((f) => ({
+      id: f.id,
+      firmId: f.firm_id,
+      // firm_id is ON DELETE SET NULL (0007), so a note can outlive its firm.
+      // Say so rather than rendering a blank byline.
+      firmName: f.firm_id ? (firmName.get(f.firm_id) ?? "(deleted firm)") : "(no firm)",
+      message: f.message,
+      pageUrl: f.page_url,
+      createdAt: f.created_at,
+    })),
     signups: bucketByDay(signupTimestamps, 365, nowMs),
     activityByDay: bucketByDay(
       events.rows.map((e) => e.created_at),
@@ -345,7 +387,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
 
 function computeTotals(
   firms: readonly FirmRow[],
-  events: ReadonlyArray<{ firm_id: string; created_at: string }>,
+  events: ReadonlyArray<{ firm_id: string; created_at: string; actor_type: string | null }>,
   leads: ReadonlyArray<{ booked_at: string | null }>,
   nowMs: number,
 ): PlatformTotals {
@@ -365,8 +407,11 @@ function computeTotals(
     paidCents: sum((f) => f.paidCents),
     messages: sum((f) => f.messages),
     timeMinutes: sum((f) => f.timeMinutes),
+    assistantMessages: sum((f) => f.assistantMessages),
+    signatures: sum((f) => f.signatures),
     events30d: events.length,
     events7d: events.filter((e) => e.created_at >= cut7).length,
+    clientEvents30d: events.filter((e) => e.actor_type === "client").length,
     activeFirms7d: firms.filter((f) => f.events7d > 0).length,
     activeFirms30d: firms.filter((f) => f.events30d > 0).length,
     newFirms30d: firms.filter((f) => f.createdAt >= cut30).length,
@@ -394,6 +439,9 @@ function computeAdoption(firms: readonly FirmRow[]): AdoptionRow[] {
     { key: "raised_invoice", firms: has((f) => f.invoices > 0), outOf },
     { key: "got_paid", firms: has((f) => f.paidCents > 0), outOf },
     { key: "messaged_client", firms: has((f) => f.messages > 0), outOf },
+    { key: "requested_signature", firms: has((f) => f.signatures > 0), outOf },
+    { key: "used_assistant", firms: has((f) => f.assistantMessages > 0), outOf },
+    { key: "reached_clients", firms: has((f) => f.clientEvents30d > 0), outOf },
     { key: "tracked_time", firms: has((f) => f.timeMinutes > 0), outOf },
     { key: "built_services", firms: has((f) => f.services > 0), outOf },
     { key: "built_templates", firms: has((f) => f.templates > 0), outOf },

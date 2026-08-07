@@ -158,6 +158,11 @@ export type FirmSources = {
   documents: Array<{ firm_id: string }>;
   invoices: Array<{ firm_id: string; amount_cents: number | null; status: string | null }>;
   messages: Array<{ firm_id: string }>;
+  /** Only the USER turns of the in-app assistant — counting the assistant's own
+   *  replies would double every conversation and make a firm that asked one
+   *  question look like two. */
+  assistantMessages: Array<{ firm_id: string }>;
+  signatures: Array<{ firm_id: string }>;
   timeEntries: Array<{ firm_id: string; duration_minutes: number | null }>;
   automations: Array<{ firm_id: string }>;
   services: Array<{ firm_id: string }>;
@@ -165,7 +170,7 @@ export type FirmSources = {
   integrations: Record<IntegrationKey, Array<{ firm_id: string }>>;
   aiUsage: Array<{ firm_id: string; used: number | null }>;
   /** Every activity row inside the window — used for the pulse columns. */
-  events: Array<{ firm_id: string; created_at: string }>;
+  events: Array<{ firm_id: string; created_at: string; actor_type?: string | null }>;
 };
 
 /**
@@ -230,6 +235,8 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
   );
 
   const messages = countBy(sources.messages, (m) => m.firm_id);
+  const assistantMessages = countBy(sources.assistantMessages, (m) => m.firm_id);
+  const signatures = countBy(sources.signatures, (s) => s.firm_id);
   const timeMinutes = sumBy(
     sources.timeEntries,
     (t) => t.firm_id,
@@ -255,6 +262,10 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
   const events30 = countBy(sources.events, (e) => e.firm_id);
   const events7 = countBy(
     sources.events.filter((e) => e.created_at >= cut7),
+    (e) => e.firm_id,
+  );
+  const clientEvents = countBy(
+    sources.events.filter((e) => e.actor_type === "client"),
     (e) => e.firm_id,
   );
   const lastEvent = maxBy(
@@ -299,6 +310,8 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
     paidCents: paidCents[f.id] ?? 0,
 
     messages: messages[f.id] ?? 0,
+    assistantMessages: assistantMessages[f.id] ?? 0,
+    signatures: signatures[f.id] ?? 0,
     timeMinutes: timeMinutes[f.id] ?? 0,
 
     integrations: {
@@ -315,6 +328,7 @@ export function buildFirmRows(sources: FirmSources, nowMs: number): FirmRow[] {
 
     events7d: events7[f.id] ?? 0,
     events30d: events30[f.id] ?? 0,
+    clientEvents30d: clientEvents[f.id] ?? 0,
     lastActivityAt: lastEvent[f.id] ?? null,
     aiUsedThisMonth: aiUsed[f.id] ?? 0,
   }));

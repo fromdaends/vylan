@@ -167,6 +167,23 @@ export default async function FoundersPage({
                   value: formatMinutes(totals.timeMinutes),
                 },
                 {
+                  key: "clientevents",
+                  label: t("stat_client_events"),
+                  value: String(totals.clientEvents30d),
+                  hint: t("stat_client_events_hint"),
+                },
+                {
+                  key: "assistant",
+                  label: t("stat_assistant"),
+                  value: String(totals.assistantMessages),
+                  hint: t("stat_assistant_hint"),
+                },
+                {
+                  key: "signatures",
+                  label: t("stat_signatures"),
+                  value: String(totals.signatures),
+                },
+                {
                   key: "new",
                   label: t("stat_new_firms"),
                   value: String(totals.newFirms30d),
@@ -253,19 +270,58 @@ export default async function FoundersPage({
             </Panel>
           </div>
 
-          <Panel
-            title={t("panel_latest")}
-            action={
-              <Link
-                href="/founders?tab=activity"
-                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-              >
-                {t("see_all")}
-              </Link>
-            }
-          >
-            <ActivityFeed events={data.feed.slice(0, 15)} locale={locale} compact />
-          </Panel>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel
+              title={t("panel_latest")}
+              action={
+                <Link
+                  href="/founders?tab=activity"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  {t("see_all")}
+                </Link>
+              }
+            >
+              <ActivityFeed events={data.feed.slice(0, 15)} locale={locale} compact />
+            </Panel>
+
+            {/* The in-app feedback box has written rows since migration 0007
+                and nothing has ever read them. This is that reader — the one
+                place on the platform where a customer is talking to us in
+                their own words. */}
+            <Panel title={t("panel_feedback")}>
+              {data.feedback.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {t("feedback_empty")}
+                </p>
+              ) : (
+                <ul className="divide-y divide-border/50">
+                  {data.feedback.slice(0, 10).map((f) => (
+                    <li key={f.id} className="py-2.5">
+                      {/* Not truncated: the whole value of this panel is the
+                          words somebody actually typed. */}
+                      <p className="whitespace-pre-wrap text-sm">{f.message}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {f.firmId ? (
+                          <Link
+                            href={`/founders/firms/${f.firmId}`}
+                            className="hover:text-foreground hover:underline"
+                          >
+                            {f.firmName}
+                          </Link>
+                        ) : (
+                          f.firmName
+                        )}
+                        {" · "}
+                        {relativeAge(f.createdAt, nowMs)}
+                        {f.pageUrl ? ` · ${f.pageUrl}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </div>
         </div>
       )}
 

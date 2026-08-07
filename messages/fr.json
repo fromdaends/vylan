@@ -5601,6 +5601,16 @@
     "health_truncation_warning": "Ces lectures ont atteint leur plafond de lignes : les chiffres ci-dessus SOUS-ESTIMENT la réalité. Augmentez le plafond dans lib/founders/load.ts ou déplacez ce compte vers SQL.",
     "health_truncation_none": "Toutes les lectures sont complètes — aucun chiffre n'est tronqué.",
     "health_access": "Qui peut ouvrir cette page",
-    "health_access_hint": "Défini par FOUNDER_EMAILS (et FOUNDER_NOTIFY_EMAIL) dans l'environnement. Personne d'autre ne peut atteindre cette page, et rien dans l'application ne peut ajouter à cette liste."
+    "health_access_hint": "Défini par FOUNDER_EMAILS (et FOUNDER_NOTIFY_EMAIL) dans l'environnement. Personne d'autre ne peut atteindre cette page, et rien dans l'application ne peut ajouter à cette liste.",
+    "stat_client_events": "Événements clients",
+    "stat_client_events_hint": "faits par leurs clients, pas par eux",
+    "stat_assistant": "Questions à l'assistant",
+    "stat_assistant_hint": "écrites à l'assistant intégré",
+    "stat_signatures": "Demandes de signature",
+    "panel_feedback": "Ce qu'ils nous disent",
+    "feedback_empty": "Personne n'a encore utilisé la boîte à commentaires.",
+    "adoption_requested_signature": "A demandé une signature",
+    "adoption_used_assistant": "A posé une question à l'assistant",
+    "adoption_reached_clients": "Leurs clients se sont connectés"
   }
 }
