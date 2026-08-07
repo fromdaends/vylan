@@ -75,7 +75,9 @@ describe("the proposal reads as a document, not an app screen", () => {
     // in the acceptance block. That is what a letter does.
     expect(screen.getAllByText("Cabinet Tremblay & Associés").length).toBeGreaterThan(0);
     expect(screen.getByText(/August 6, 2026/)).toBeTruthy();
-    expect(screen.getByText(/Engagement letter/i)).toBeTruthy();
+    // Renamed from "Engagement letter" (founder decision): that name now
+    // belongs solely to the per-service PDF the client SIGNS.
+    expect(screen.getByText(/^Proposal$/i)).toBeTruthy();
   });
 
   it("addresses the client and states the period", () => {
@@ -130,7 +132,7 @@ describe("the proposal reads as a document, not an app screen", () => {
     // The page used to draw signature lines and never state what clicking
     // Accept meant. This sentence IS the acceptance instrument.
     expect(
-      screen.getByText(/agrees to the services, fees and terms set out in this letter/i),
+      screen.getByText(/agrees to the services, fees and terms set out in this proposal/i),
     ).toBeTruthy();
     expect(screen.getByText("Accepted by")).toBeTruthy();
     expect(screen.getByText("Prepared by")).toBeTruthy();
