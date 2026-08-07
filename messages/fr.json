@@ -4376,7 +4376,13 @@
     "gate_unavailable": "Une erreur est survenue. Réessayez.",
     "deposit_accepted_title": "Merci — {firm} a votre accord",
     "deposit_accepted_body": "Une dernière étape. Payez l'acompte ci-dessous et votre portail s'ouvre aussitôt, avec tout ce qu'il vous faut.",
-    "deposit_credited_note": "Cet acompte sera déduit de votre facture finale."
+    "deposit_credited_note": "Cet acompte sera déduit de votre facture finale.",
+    "proposal_letter_note": "Pour accepter, lisez et signez la lettre de mission de {firm}. Votre signature vaut acceptation de cette proposition.",
+    "proposal_letter_sign": "Lire et signer la lettre de mission",
+    "proposal_letter_preparing": "{firm} prépare votre lettre de mission — vous pourrez la lire et la signer ici dès qu'elle sera prête.",
+    "proposal_letter_signed_title": "Signature reçue",
+    "proposal_letter_signed_body": "Nous finalisons votre acceptation — cela ne prend généralement que quelques secondes.",
+    "proposal_letter_declined": "Vous avez refusé la lettre de mission. Si vous avez changé d'avis, contactez {firm} — une nouvelle copie pourra vous être envoyée pour signature."
   },
   "Integrations": {
     "index_title": "Intégrations",
@@ -5661,6 +5667,6 @@
     "pin_add": "Surveiller {name}",
     "pin_remove": "Ne plus surveiller {name}",
     "pin_failed": "Impossible d'enregistrer. Réessayez.",
-    "pin_needs_migration": "L'épinglage nécessite la mise à jour 1800 de la base de données. Le SQL est dans la pull request."
+    "pin_needs_migration": "L'épinglage nécessite la mise à jour 1810 de la base de données. Le SQL est dans la pull request."
   }
 }

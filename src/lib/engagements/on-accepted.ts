@@ -26,7 +26,45 @@ import {
   acceptanceDueCents,
   acceptanceDueLines,
 } from "@/lib/billing/acceptance-lines";
+import { acceptanceStartsWorkNow } from "@/lib/engagements/deposit-state";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
+
+/**
+ * EVERYTHING a client's acceptance sets in motion, after accepted_at is
+ * written: the billing (deposit / on-acceptance invoice / schedules) and
+ * then the activation decision — in that order, because "is anything owed?"
+ * only means something once the invoices exist (the founder walked into the
+ * portal on a $459.90 engagement when the order was wrong).
+ *
+ * THREE places record a client's agreement and all of them must land here:
+ * the portal's Accept button, the firm's accept-on-behalf, and — since
+ * sign-to-accept — a signed engagement letter (signwell/complete.ts). The
+ * letter path shipping without this was a live blocker: accepted engagements
+ * with deposits that were never raised and portals that opened unpaid.
+ *
+ * Best-effort throughout: the agreement is already recorded, and an
+ * accepted-but-not-activated engagement is a visible, recoverable state.
+ */
+export async function runAcceptanceConsequences(
+  engagementId: string,
+): Promise<void> {
+  await applyAcceptedBilling(engagementId);
+  try {
+    if (await acceptanceStartsWorkNow(engagementId)) {
+      const sb = getServiceRoleSupabase();
+      await sb
+        .from("engagements")
+        .update({
+          activated_at: new Date().toISOString(),
+          status: "in_progress",
+        })
+        .eq("id", engagementId)
+        .is("activated_at", null);
+    }
+  } catch (e) {
+    console.error("[on-accepted] activation decision failed:", e);
+  }
+}
 
 export type AcceptedBillingResult = {
   /** The deposit the proposal said was due on acceptance, if one was raised. */

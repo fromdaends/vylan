@@ -171,7 +171,7 @@ export type FirmSources = {
   aiUsage: Array<{ firm_id: string; used: number | null }>;
   /** Every activity row inside the window — used for the pulse columns. */
   events: Array<{ firm_id: string; created_at: string; actor_type?: string | null }>;
-  /** The founders' watchlist (migration 1800). Empty while unapplied. */
+  /** The founders' watchlist (migration 1810). Empty while unapplied. */
   pinnedFirmIds?: readonly string[];
 };
 

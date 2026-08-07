@@ -1,11 +1,11 @@
-// THE WATCHLIST — reading and writing founder_pinned_firms (migration 1800).
+// THE WATCHLIST — reading and writing founder_pinned_firms (migration 1810).
 //
 // ⚠️ THIS IS THE ONE PART OF THE FOUNDERS CONSOLE THAT WRITES. Everything else
 // in lib/founders reads. Both functions here are still gated the same way: the
 // server action that calls them re-checks getFounderUser() first, and this
 // table is unreachable by `authenticated` at all (RLS on, zero policies).
 //
-// ── FAIL-SOFT WHILE 1800 IS UNAPPLIED ──────────────────────────────────────
+// ── FAIL-SOFT WHILE 1810 IS UNAPPLIED ──────────────────────────────────────
 //
 // The code ships before the migration is run — that is the normal order in this
 // repo, not an accident. So:
@@ -21,7 +21,7 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export type PinState = {
   ids: string[];
-  /** False when migration 1800 has not been applied (or the read failed). */
+  /** False when migration 1810 has not been applied (or the read failed). */
   available: boolean;
 };
 

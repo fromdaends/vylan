@@ -326,7 +326,7 @@ describe("pinning", () => {
     expect(rows.find((r) => r.id === "f2")!.pinned).toBe(true);
   });
 
-  // 1800 unapplied reads exactly like "nothing pinned yet", which is correct:
+  // 1810 unapplied reads exactly like "nothing pinned yet", which is correct:
   // both mean the watchlist is empty as far as a reader is concerned.
   it("treats a missing watchlist as nothing pinned, never as an error", () => {
     expect(buildFirmRows(sources(), NOW).every((r) => !r.pinned)).toBe(true);

@@ -41,6 +41,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ClientCombobox,
+  type ComboboxClient,
+} from "@/components/clients/client-combobox";
 import { parseDurationToMinutes } from "@/lib/time/duration";
 import { localDay } from "@/lib/time/dates";
 import {
@@ -125,7 +129,7 @@ function SheetForm({
   const t = useTranslations("Time");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [clients, setClients] = useState<ComboboxClient[]>([]);
   const [engagements, setEngagements] = useState<
     { id: string; title: string }[]
   >([]);
@@ -143,7 +147,6 @@ function SheetForm({
   const [runningDecision, setRunningDecision] = useState<
     "save" | "discard" | null
   >(null);
-  const [loaded, setLoaded] = useState(false);
 
   // Pickers load lazily on mount (= on open, since the form is keyed): the
   // shell never pays for a closed sheet. Async callback setState only.
@@ -156,7 +159,6 @@ function SheetForm({
       if (cancelled || !res.ok) return;
       setClients(res.value.clients);
       setEngagements(res.value.engagements);
-      setLoaded(true);
     })();
     return () => {
       cancelled = true;
@@ -259,30 +261,32 @@ function SheetForm({
     <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="start-client">{t("sheet_client")}</Label>
-        <Select value={clientId} onValueChange={pickClient}>
-          <SelectTrigger id="start-client" className="w-full">
-            <SelectValue placeholder={t("sheet_client_placeholder")}>
-              {clientId === NONE
-                ? t("sheet_client_placeholder")
-                : clients.find((c) => c.id === clientId)?.name ??
-                  prefill?.clientName ??
-                  ""}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {!loaded && clientId !== NONE && (
-              <SelectItem value={clientId}>
-                {prefill?.clientName ?? "…"}
-              </SelectItem>
-            )}
-            {loaded &&
-              clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
+        {/* THE SAME searchable picker Add task and the engagement builder use
+            — founder: "set a search feature when starting a timer for
+            clients". A plain <Select> was fine at 11 clients and unusable at
+            300; a second search box would have been the drift the cohesion
+            rule names. It shows the prefilled client immediately by seeding
+            the list with it, so one-tap start still works before the roster
+            has loaded. */}
+        <ClientCombobox
+          id="start-client"
+          clients={
+            clients.length > 0
+              ? clients
+              : prefill?.clientId && prefill.clientName
+                ? [
+                    {
+                      id: prefill.clientId,
+                      display_name: prefill.clientName,
+                      type: "individual" as const,
+                      email: null,
+                    },
+                  ]
+                : []
+          }
+          value={clientId === NONE ? null : clientId}
+          onChange={pickClient}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="start-engagement">{t("log_engagement")}</Label>

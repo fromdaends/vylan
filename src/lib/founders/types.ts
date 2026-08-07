@@ -73,7 +73,7 @@ export type FirmRow = {
   lastActivityAt: string | null;
   aiUsedThisMonth: number;
 
-  /** On the founders' shared watchlist (migration 1800). Always false while
+  /** On the founders' shared watchlist (migration 1810). Always false while
    *  that migration is unapplied, which is indistinguishable from "nothing is
    *  pinned yet" — correct, because both mean the same thing to a reader. */
   pinned: boolean;
@@ -198,7 +198,7 @@ export type FoundersData = {
   adoption: AdoptionRow[];
   leads: LeadRow[];
   health: HealthSnapshot;
-  /** False until migration 1800 is applied. The UI hides the pin control
+  /** False until migration 1810 is applied. The UI hides the pin control
    *  entirely rather than showing one that silently does nothing. */
   pinsAvailable: boolean;
   capped: CappedRead[];
@@ -213,7 +213,7 @@ export type FirmDetail = {
    *  itself — react-hooks/purity forbids an impure call in render, and every
    *  relative age on the page has to be measured from one instant anyway. */
   generatedAt: string;
-  /** False until migration 1800 is applied — hides the pin control. */
+  /** False until migration 1810 is applied — hides the pin control. */
   pinsAvailable: boolean;
   firm: FirmRow;
   people: Array<{

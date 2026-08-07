@@ -250,7 +250,7 @@ export async function loadFoundersData(nowMs: number = Date.now()): Promise<Foun
         .limit(200),
     ),
     // The watchlist. Its own reader (lib/founders/pins.ts) because it is also
-    // WRITTEN, and because it has to answer "is 1800 applied" — which the
+    // WRITTEN, and because it has to answer "is 1810 applied" — which the
     // generic read() helper deliberately cannot distinguish from "empty".
     listPinnedFirmIds(),
   ]);

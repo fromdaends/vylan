@@ -278,6 +278,7 @@ export function PortalShell({
           token={ctx.engagement.magic_token ?? ""}
           data={ctx.awaiting_proposal.data}
           declinedAt={ctx.awaiting_proposal.declinedAt}
+          letter={ctx.awaiting_proposal.letter}
           locale={locale}
           firmName={ctx.firm.name}
         />

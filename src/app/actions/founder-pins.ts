@@ -11,7 +11,7 @@
 //      find this action's id. The env allowlist is the gate, again, here.
 //   2. The action takes a firm id and a boolean. Nothing else. There is no code
 //      path from this file to a firm's own data.
-//   3. The table is unreachable by `authenticated` at all (1800: RLS on, zero
+//   3. The table is unreachable by `authenticated` at all (1810: RLS on, zero
 //      policies), so even a bug in point 1 does not hand anyone the ability to
 //      write it through PostgREST directly.
 //
@@ -27,7 +27,7 @@ export type PinActionResult = {
   ok: boolean;
   /** The state the firm is in AFTER the call — what the button should show. */
   pinned?: boolean;
-  /** Set when migration 1800 has not been applied yet. */
+  /** Set when migration 1810 has not been applied yet. */
   needsMigration?: boolean;
   error?: "not_founder" | "bad_input" | "failed";
 };

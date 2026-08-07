@@ -13,7 +13,7 @@
 // effect, not the toast" trap: the founder would come back tomorrow expecting a
 // watchlist and find an empty one.
 //
-// ── IT DOES NOT RENDER AT ALL WHEN 1800 IS UNAPPLIED ───────────────────────
+// ── IT DOES NOT RENDER AT ALL WHEN 1810 IS UNAPPLIED ───────────────────────
 //
 // The caller passes `available={data.pinsAvailable}`. False ⇒ no button. A
 // disabled star with a tooltip explaining a migration is a dead control that
