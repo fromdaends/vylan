@@ -1089,50 +1089,37 @@ export function EngagementBuilder({
   // So the mode card is a CONTROL, not a readout: picking "Bills repeatedly"
   // converts the priced blocks to recurring at the frequency chosen right
   // there, and the One-time/Recurring pills leave the Services step entirely
-  // (BillingBlocksEditor's hideBillingType). Still exactly one recurrence:
-  // the two modes write each other's state off.
+  // (BillingBlocksEditor's hideBillingType).
+  // ── TWO QUESTIONS, NOT ONE (founder ruling, after three attempts) ───────
+  //
+  // "How often does the WORK repeat?" and "How often do they PAY?" are
+  // different facts, and an annual T2 paid $300/month is an ordinary
+  // arrangement this app could not express while they were one either/or
+  // control. They are independent now; what made them dangerous together —
+  // each spawned occurrence opening a SECOND payment schedule on top of the
+  // last — is fixed at the source (start-schedules.ts keeps one schedule per
+  // series), not papered over by forbidding the combination.
   const recurringBlocks = blocks.filter((b) => b.billingType === "recurring");
   const hasRecurringItems = recurringBlocks.length > 0;
-  const recurMode: "none" | "bills" | "recreates" = hasRecurringItems
-    ? "bills"
-    : repeatFrequency !== "off"
-      ? "recreates"
-      : "none";
-  // The frequency those blocks bill at. They are set together from this card,
-  // so the first one speaks for all; monthly is the default a firm means when
-  // they say "bill them repeatedly".
-  const billsFrequency: BlockFrequency =
-    recurringBlocks[0]?.frequency ?? "monthly";
+  // What the client pays on: "once" or a cadence. All priced lines share it —
+  // a proposal that bills some lines monthly and others quarterly is a thing
+  // the block editor can still express, but this card speaks for the common
+  // case and shows the first cadence when they differ.
+  const payCadence: "once" | BlockFrequency = hasRecurringItems
+    ? (recurringBlocks[0]?.frequency ?? "monthly")
+    : "once";
 
-  /** The single writer for "how this repeats". Each mode clears the other's
-   *  state, which is what makes both-at-once unreachable from the UI (the
-   *  server refuses it too, for stale payloads). */
-  function applyRecurMode(next: "none" | "bills" | "recreates") {
-    if (next === "bills") {
-      setRepeatFrequency("off");
-      setBlocks((prev) =>
-        prev.map((b) =>
-          b.billingType === "recurring"
-            ? b
-            : { ...withBillingType(b, "recurring"), frequency: billsFrequency },
-        ),
-      );
+  /** Sets how often the CLIENT PAYS. Never touches the work schedule. */
+  function setPayCadence(next: "once" | BlockFrequency) {
+    if (next === "once") {
+      setBlocks((prev) => prev.map((b) => withBillingType(b, "one_time")));
       return;
     }
-    // Both remaining modes bill their items once; only the job's own
-    // repetition differs.
-    setBlocks((prev) => prev.map((b) => withBillingType(b, "one_time")));
-    if (next === "recreates") {
-      if (repeatFrequency === "off") setRepeatFrequency("yearly");
-    } else {
-      setRepeatFrequency("off");
-    }
-  }
-
-  function setBillsFrequency(freq: BlockFrequency) {
     setBlocks((prev) =>
       prev.map((b) =>
-        b.billingType === "recurring" ? { ...b, frequency: freq } : b,
+        b.billingType === "recurring"
+          ? { ...b, frequency: next }
+          : { ...withBillingType(b, "recurring"), frequency: next },
       ),
     );
   }
@@ -2985,53 +2972,24 @@ export function EngagementBuilder({
         </Card>
       )}
 
-      {/* ── HOW THIS REPEATS — one concept, one card (founder ruling) ─────
-          "Bills repeatedly" (recurring service items: ONE engagement, a
-          charge each period) and "recreates the whole job" (a series
-          spawning fresh engagements) were two knobs on two steps that read
-          as the same thing twice — "that's just recurrence twice? no sense."
-          With the switch on, this card is the single home: a mode picker,
-          never both (the server refuses the combination too). Unflagged
-          firms keep the old Repeat card on Billing byte-identically.
-          Invoice recurrence stays IN here with Repeat: it's a property of
-          the series. */}
+      {/* ── TWO QUESTIONS, ASKED SEPARATELY (founder ruling) ──────────────
+          One dropdown that changed the meaning of the dropdown beneath it —
+          sometimes "how often money moves", sometimes "how often work
+          happens" — is what made this unreadable ("i'm not understanding
+          anymore"). They are two labelled rows now, each answerable on its
+          own, and an annual job paid monthly is finally expressible. What
+          made the combination dangerous is fixed in the engine, not by
+          forbidding it. Unflagged firms keep the old single Repeat card. */}
       {(workflowsOn ? step === "automation" : step === "billing") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
                 <Repeat className="size-4 text-muted-foreground" aria-hidden />
                 {workflowsOn
-                  ? t("recur_mode_label")
+                  ? t("cadence_card_title")
                   : t("repeat_section_label")}
               </CardTitle>
-              {workflowsOn ? (
-                <Select
-                  value={recurMode}
-                  onValueChange={(value) =>
-                    applyRecurMode(value as "none" | "bills" | "recreates")
-                  }
-                >
-                  <SelectTrigger
-                    className="w-56"
-                    aria-label={t("recur_mode_label")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t("recur_mode_none")}</SelectItem>
-                    {/* Both are real choices HERE now — picking one writes
-                        the state it describes (and clears the other's), so
-                        the founder never has to go hunting on another step
-                        for the switch that makes this option available. */}
-                    <SelectItem value="bills">
-                      {t("recur_mode_bills")}
-                    </SelectItem>
-                    <SelectItem value="recreates">
-                      {t("recur_mode_recreates")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
+              {!workflowsOn && (
                 <Select
                   value={repeatFrequency}
                   onValueChange={(value) => {
@@ -3065,32 +3023,33 @@ export function EngagementBuilder({
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              {workflowsOn && recurMode === "none" && (
-                <p className="text-xs text-muted-foreground">
-                  {t("recur_none_hint")}
-                </p>
-              )}
-              {workflowsOn && recurMode === "bills" && (
+              {workflowsOn && (
                 <>
-                  {/* The frequency the founder came here for — weekly through
-                      yearly, set once for every priced line. */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {t("recur_bills_every")}
-                    </span>
+                  {/* 1 — the MONEY. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label
+                      htmlFor="pay-cadence"
+                      className="text-sm font-normal"
+                    >
+                      {t("cadence_pay_label")}
+                    </Label>
                     <Select
-                      value={billsFrequency}
+                      value={payCadence}
                       onValueChange={(v) =>
-                        setBillsFrequency(v as BlockFrequency)
+                        setPayCadence(v as "once" | BlockFrequency)
                       }
                     >
                       <SelectTrigger
-                        className="w-40"
-                        aria-label={t("recur_mode_bills")}
+                        id="pay-cadence"
+                        className="w-52"
+                        aria-label={t("cadence_pay_label")}
                       >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="once">
+                          {t("cadence_pay_once")}
+                        </SelectItem>
                         {BLOCK_FREQUENCIES.map((f) => (
                           <SelectItem key={f} value={f}>
                             {tTpl(`freq_${f}` as "freq_monthly")}
@@ -3099,50 +3058,72 @@ export function EngagementBuilder({
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* 2 — the WORK. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    <Label
+                      htmlFor="repeat-frequency"
+                      className="text-sm font-normal"
+                    >
+                      {t("cadence_work_label")}
+                    </Label>
+                    <Select
+                      value={repeatFrequency}
+                      onValueChange={(value) => {
+                        const next = value as
+                          | "off"
+                          | "monthly"
+                          | "quarterly"
+                          | "yearly"
+                          | "custom";
+                        setRepeatFrequency(next);
+                        if (next === "custom" && repeatAnchorDay === "") {
+                          setRepeatAnchorDay(String(new Date().getDate()));
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="repeat-frequency"
+                        className="w-52"
+                        aria-label={t("cadence_work_label")}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="off">
+                          {t("cadence_work_once")}
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          {t("repeat_monthly")}
+                        </SelectItem>
+                        <SelectItem value="quarterly">
+                          {t("repeat_quarterly")}
+                        </SelectItem>
+                        <SelectItem value="yearly">
+                          {t("repeat_yearly")}
+                        </SelectItem>
+                        <SelectItem value="custom">
+                          {t("repeat_custom")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Says the pair back as one sentence, so a combination
+                      like "yearly work, monthly payments" is confirmed in
+                      words rather than inferred from two dropdowns. */}
                   <p className="text-xs text-muted-foreground">
-                    {t("recur_bills_hint")}
+                    {payCadence === "once" && repeatFrequency === "off"
+                      ? t("cadence_summary_neither")
+                      : payCadence !== "once" && repeatFrequency === "off"
+                        ? t("cadence_summary_pay_only")
+                        : payCadence === "once" && repeatFrequency !== "off"
+                          ? t("cadence_summary_work_only")
+                          : t("cadence_summary_both")}
                   </p>
                 </>
               )}
-              {workflowsOn && recurMode === "recreates" && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={repeatFrequency}
-                    onValueChange={(value) => {
-                      const next = value as
-                        | "monthly"
-                        | "quarterly"
-                        | "yearly"
-                        | "custom";
-                      setRepeatFrequency(next);
-                      if (next === "custom" && repeatAnchorDay === "") {
-                        setRepeatAnchorDay(String(new Date().getDate()));
-                      }
-                    }}
-                  >
-                    <SelectTrigger
-                      id="repeat-frequency"
-                      className="w-40"
-                      // Named after the MODE, not "Repeat" — screen readers
-                      // must hear what sighted users are choosing under.
-                      aria-label={t("recur_mode_recreates")}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">
-                        {t("repeat_monthly")}
-                      </SelectItem>
-                      <SelectItem value="quarterly">
-                        {t("repeat_quarterly")}
-                      </SelectItem>
-                      <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
-                      <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {(!workflowsOn || recurMode === "recreates") && (
+              {!workflowsOn && (
                 <p className="text-xs text-muted-foreground">
                   {t("repeat_section_hint")}
                 </p>

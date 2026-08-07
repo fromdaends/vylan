@@ -61,6 +61,7 @@ import { formatCurrency } from "@/lib/format";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
+import { resolveScheduleSource } from "@/lib/billing/schedule-source";
 import {
   chargeDescription,
   resolveDueCharge,
@@ -136,10 +137,17 @@ export async function chargeSchedulePeriod(
   // A cancelled engagement stops billing; a completed one does NOT — an
   // ongoing arrangement that has delivered this month's work is exactly when
   // the money is owed.
+  //
+  // WHICH engagement, though: a schedule that spans a repeating series reads
+  // from the series' CURRENT occurrence, not the finished one it was pinned
+  // to (see schedule-source.ts). Without that, cancelling or tidying last
+  // year's job ends this year's arrangement, and every invoice carries last
+  // year's price and title.
+  const source = await resolveScheduleSource(sb, schedule.engagement_id);
   const { data: engRow } = await sb
     .from("engagements")
     .select("id, title, status, magic_token")
-    .eq("id", schedule.engagement_id)
+    .eq("id", source.engagementId)
     .maybeSingle();
   const engagement = engRow as {
     id: string;
@@ -188,7 +196,7 @@ export async function chargeSchedulePeriod(
   // untouched, because they are already raised — which is how a price change
   // mid-arrangement is supposed to behave.
   const lines = await recurringLinesFor(
-    schedule.engagement_id,
+    source.engagementId,
     schedule.frequency,
   );
   if (lines.length === 0) {
@@ -216,8 +224,14 @@ export async function chargeSchedulePeriod(
 
   // ── 2. RAISE THE INVOICE ─────────────────────────────────────────────────
   const settings = await getFirmInvoiceSettingsSR(schedule.firm_id);
+  // A series schedule's frozen description is the FIRST occurrence's title —
+  // "Corporate return — 2026" would head every invoice of 2028. The live
+  // occurrence's title wins there; a standalone schedule keeps its own
+  // description exactly as before.
   const label = chargeDescription(
-    schedule.description ?? engagement.title,
+    source.fromSeries
+      ? engagement.title
+      : (schedule.description ?? engagement.title),
     due.periodKey,
   );
   const locale: "en" | "fr" = client.locale === "en" ? "en" : "fr";
@@ -270,7 +284,9 @@ export async function chargeSchedulePeriod(
 
   const created = await createPaymentRequestSR({
     firm_id: schedule.firm_id,
-    engagement_id: schedule.engagement_id,
+    // The CURRENT occurrence: the firm should find this period's invoice on
+    // the job they are working, not on one they finished years ago.
+    engagement_id: source.engagementId,
     client_id: schedule.client_id,
     amount_cents: chargeCents,
     currency: "cad",
@@ -324,7 +340,7 @@ export async function chargeSchedulePeriod(
   try {
     await sb.from("activity_log").insert({
       firm_id: schedule.firm_id,
-      engagement_id: schedule.engagement_id,
+      engagement_id: source.engagementId,
       actor_type: "system",
       action: "recurring_charge_raised",
       metadata: {
@@ -356,7 +372,7 @@ export async function chargeSchedulePeriod(
     );
     const chase = await chaseSettingsWithFlowOverride(sb, {
       base: await getChaseSettingsSR(schedule.firm_id),
-      engagementId: schedule.engagement_id,
+      engagementId: source.engagementId,
       firmId: schedule.firm_id,
     });
     if (chase.enabledDefault) {
