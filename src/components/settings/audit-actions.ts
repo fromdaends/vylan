@@ -84,6 +84,9 @@ export const AUDIT_ACTIONS = [
   // raw code. series_reassigned is new with the /repeating screen.
   "recurrence_paused",
   "recurrence_resumed",
+  // One-recurrence rule: create dropped a Repeat because the items already
+  // bill on a schedule (founder ruling — never both, it double-charges).
+  "repeat_dropped",
   "recurrence_ended",
   "series_reassigned",
   // Files section. Registered in the SAME change that starts logging them —

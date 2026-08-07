@@ -1524,7 +1524,8 @@
     "action_time_entry_deleted": "Entrée de temps supprimée",
     "action_member_rate_changed": "Taux horaire d'un membre modifié",
     "action_engagement_handoff_note": "Note de transfert ajoutée",
-    "action_team_permissions_changed": "Permissions d'un membre modifiées"
+    "action_team_permissions_changed": "Permissions d'un membre modifiées",
+    "action_repeat_dropped": "Répétition retirée (les services se facturent déjà selon un calendrier)"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -3245,7 +3246,18 @@
     "board_tasks": "tâches",
     "filter_chip_search": "Recherche",
     "filter_chip_clear": "Effacer la recherche",
-    "reminder_preset_flow": "Selon le flux"
+    "reminder_preset_flow": "Selon le flux",
+    "recur_mode_label": "Comment cela se répète",
+    "recur_mode_none": "Ne se répète pas",
+    "recur_mode_bills": "Facture de façon récurrente",
+    "recur_mode_recreates": "Recrée le mandat au complet",
+    "recur_none_hint": "Travail ponctuel. Pour facturer le client selon un calendrier, rendez un service récurrent ; pour refaire tout le mandat à chaque cycle, choisissez « Recrée le mandat au complet ».",
+    "recur_bills_summary": "{count, plural, one {# service se facture} other {# services se facturent}} selon un calendrier dans ce seul mandat — les frais démarrent à l'acceptation du client.",
+    "recur_bills_jump": "Modifier les services",
+    "recur_recreates_every": "Chaque",
+    "recur_conflict_items": "Vos services se facturent déjà de façon récurrente — recréer le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels.",
+    "recur_conflict_repeat": "Ce mandat se recrée à chaque cycle — facturez dans chaque occurrence plutôt que de répéter des frais ici.",
+    "repeat_error_recurring_items": "Les services de ce mandat se facturent déjà selon un calendrier — répéter le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels."
   },
   "Attention": {
     "metric_active": "Actifs",
