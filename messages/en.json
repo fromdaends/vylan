@@ -3254,10 +3254,13 @@
     "cadence_pay_once": "Once",
     "cadence_work_label": "How often the work repeats",
     "cadence_work_once": "Once — it doesn't come back",
-    "cadence_summary_neither": "A one-time job, billed once.",
+    "cadence_summary_neither": "Choose at least one below — how often they pay, how often the work repeats, or both.",
     "cadence_summary_pay_only": "One job that keeps going, with a charge each period — the schedule starts when the client accepts.",
     "cadence_summary_work_only": "A fresh job each cycle — same client, same checklist, a new client link — billed once each time.",
-    "cadence_summary_both": "A fresh job each cycle, and one continuous payment schedule running alongside it — the client is charged on their own cadence, not once per job."
+    "cadence_summary_both": "A fresh job each cycle, and one continuous payment schedule running alongside it — the client is charged on their own cadence, not once per job.",
+    "cadence_none": "Doesn't repeat",
+    "cadence_recurring": "Recurring",
+    "cadence_none_hint": "A one-time job: the client is billed once and the work doesn't come back."
   },
   "Attention": {
     "metric_active": "Active",

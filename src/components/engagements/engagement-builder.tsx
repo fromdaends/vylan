@@ -1109,6 +1109,32 @@ export function EngagementBuilder({
     ? (recurringBlocks[0]?.frequency ?? "monthly")
     : "once";
 
+  // ── ONE ON/OFF, THEN THE DETAILS ────────────────────────────────────────
+  // Founder: "have it in one little button so you could select doesn't repeat
+  // if you don't want anything repeating. Then... you click on recurring, and
+  // it shows billing... it shows the entire work job option."
+  //
+  // So: does anything about this job repeat — yes or no. Yes reveals BOTH
+  // knobs (bill the client / redo the job); no clears them. Three sibling
+  // modes were the mistake: "doesn't repeat" was never the same KIND of
+  // answer as the other two, so listing them together read as nonsense.
+  //
+  // Held as state rather than derived, so answering "yes" can show the two
+  // rows before either has been set — otherwise the control would snap back
+  // to "no" the moment it was opened.
+  const [recurringOpen, setRecurringOpen] = useState(
+    () => hasRecurringItems || repeatFrequency !== "off",
+  );
+
+  function setRecurring(open: boolean) {
+    setRecurringOpen(open);
+    if (!open) {
+      // "Doesn't repeat" means exactly that — neither the money nor the work.
+      setPayCadence("once");
+      setRepeatFrequency("off");
+    }
+  }
+
   /** Sets how often the CLIENT PAYS. Never touches the work schedule. */
   function setPayCadence(next: "once" | BlockFrequency) {
     if (next === "once") {
@@ -2989,7 +3015,26 @@ export function EngagementBuilder({
                   ? t("cadence_card_title")
                   : t("repeat_section_label")}
               </CardTitle>
-              {!workflowsOn && (
+              {workflowsOn ? (
+                // ONE question at the top: does anything here repeat?
+                <Select
+                  value={recurringOpen ? "recurring" : "none"}
+                  onValueChange={(v) => setRecurring(v === "recurring")}
+                >
+                  <SelectTrigger
+                    className="w-48"
+                    aria-label={t("cadence_card_title")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("cadence_none")}</SelectItem>
+                    <SelectItem value="recurring">
+                      {t("cadence_recurring")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
                 <Select
                   value={repeatFrequency}
                   onValueChange={(value) => {
@@ -3023,7 +3068,14 @@ export function EngagementBuilder({
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              {workflowsOn && (
+              {/* Nothing repeats: the card says so and stops. No knobs to
+                  read, no frequency sitting there meaning nothing. */}
+              {workflowsOn && !recurringOpen && (
+                <p className="text-xs text-muted-foreground">
+                  {t("cadence_none_hint")}
+                </p>
+              )}
+              {workflowsOn && recurringOpen && (
                 <>
                   {/* 1 — the MONEY. */}
                   <div className="flex flex-wrap items-center justify-between gap-2">

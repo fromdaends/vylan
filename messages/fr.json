@@ -3254,10 +3254,13 @@
     "cadence_pay_once": "Une seule fois",
     "cadence_work_label": "À quelle fréquence le travail se répète",
     "cadence_work_once": "Une seule fois — sans reprise",
-    "cadence_summary_neither": "Un mandat ponctuel, facturé une fois.",
+    "cadence_summary_neither": "Choisissez au moins une option ci-dessous — la fréquence de paiement, la répétition du travail, ou les deux.",
     "cadence_summary_pay_only": "Un mandat continu, avec des frais à chaque période — le calendrier démarre à l'acceptation du client.",
     "cadence_summary_work_only": "Un nouveau mandat à chaque cycle — même client, même liste, un nouveau lien — facturé une fois par cycle.",
-    "cadence_summary_both": "Un nouveau mandat à chaque cycle, avec un seul calendrier de paiement continu en parallèle — le client est facturé selon sa propre fréquence, pas une fois par mandat."
+    "cadence_summary_both": "Un nouveau mandat à chaque cycle, avec un seul calendrier de paiement continu en parallèle — le client est facturé selon sa propre fréquence, pas une fois par mandat.",
+    "cadence_none": "Ne se répète pas",
+    "cadence_recurring": "Récurrent",
+    "cadence_none_hint": "Un mandat ponctuel : le client est facturé une fois et le travail ne revient pas."
   },
   "Attention": {
     "metric_active": "Actifs",
