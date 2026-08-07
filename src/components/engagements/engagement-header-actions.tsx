@@ -79,7 +79,6 @@ export function EngagementMoreMenu({
   invoiceAutomation,
   invoiceBuilder,
   repeatSeries,
-  repeatInvoiceAvailable,
   repeatInvoiceSummary,
   repeatSeriesOutOfSync,
   privacy,
@@ -112,7 +111,6 @@ export function EngagementMoreMenu({
   // isn't in one. Powers the Repeat menu entry + dialog.
   repeatSeries?: EngagementRepeatInfo | null;
   // Invoice recurrence (Phase 4): switch gating + the stored-snapshot summary.
-  repeatInvoiceAvailable?: boolean;
   repeatInvoiceSummary?: string | null;
   // Whether this engagement's setup differs from its series (edit-future box
   // gating).
@@ -259,7 +257,6 @@ export function EngagementMoreMenu({
               engagementId={engagementId}
               locale={locale}
               series={repeatSeries ?? null}
-              invoiceAvailable={repeatInvoiceAvailable === true}
               invoiceSummary={repeatInvoiceSummary ?? null}
               seriesOutOfSync={repeatSeriesOutOfSync === true}
               trigger={

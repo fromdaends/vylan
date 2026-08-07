@@ -2870,11 +2870,6 @@
     "repeat_sync_dismiss": "Pas maintenant",
     "repeat_sync_applied": "Série mise à jour. Les occurrences futures suivront ce mandat.",
     "repeat_control_error": "Impossible de mettre à jour la série. Veuillez réessayer.",
-    "repeat_invoice_label": "Recréer la facture à chaque cycle",
-    "repeat_invoice_hint": "Chaque nouvelle occurrence reçoit sa propre facture avec le même montant et les mêmes réglages, y compris le verrouillage du paiement. Le moment d'envoi suit le réglage de la facture (immédiat, à la fin ou différé).",
-    "repeat_invoice_none": "Ce mandat n'a pas de facture à copier. Configurez-en une d'abord dans les options de facture.",
-    "repeat_invoice_off_hint": "Aucune facture n'est configurée pour ce mandat. Configurez-en une ci-dessous et chaque occurrence pourra facturer automatiquement.",
-    "repeat_invoice_set_button": "Configurer la facture",
     "repeat_invoice_timing_at_spawn": "créée dès l'ouverture de l'occurrence",
     "repeat_invoice_timing_on_completion": "envoyée quand l'occurrence est terminée",
     "repeat_invoice_timing_delayed": "envoyée {days} jours après la fin",
@@ -3254,7 +3249,8 @@
     "recur_none_hint": "Travail ponctuel : le client est facturé une fois et le mandat ne revient pas.",
     "repeat_error_recurring_items": "Les services de ce mandat se facturent déjà selon un calendrier — répéter le mandat en plus facturerait le client deux fois. Rendez d'abord les services ponctuels.",
     "recur_bills_every": "Facturer le client tous les",
-    "recur_bills_hint": "Un seul mandat, des frais à chaque période — le calendrier démarre à l'acceptation du client. Vos services gardent leurs prix ; ceci définit la fréquence de facturation."
+    "recur_bills_hint": "Un seul mandat, des frais à chaque période — le calendrier démarre à l'acceptation du client. Vos services gardent leurs prix ; ceci définit la fréquence de facturation.",
+    "repeat_invoice_inherits": "Chaque occurrence se facture comme celle-ci — mêmes services, même calendrier."
   },
   "Attention": {
     "metric_active": "Actifs",

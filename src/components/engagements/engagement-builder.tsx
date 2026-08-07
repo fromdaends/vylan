@@ -513,7 +513,12 @@ export function EngagementBuilder({
   const [repeatAnchorDay, setRepeatAnchorDay] = useState<string>("");
   // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
   // occurrence. OFF by default — billing repeats only when explicitly chosen.
-  const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
+  // No switch any more (founder: the recreate-invoice toggle asked what the
+  // priced lines already answer). A recreated occurrence always inherits this
+  // engagement's invoice settings; parseInvoiceSnapshot still stores nothing
+  // when there is no invoice to inherit, so a job with no billing stays
+  // unbilled.
+  const repeatInvoiceRecreate = true;
   // Scroll target for the Repeat section's "Set up the invoice" shortcut.
   const invoiceSectionRef = useRef<HTMLDivElement>(null);
   // Seeded at INIT, never by a mount effect (same doctrine as the template
@@ -3176,56 +3181,21 @@ export function EngagementBuilder({
                   invoice" shortcut that scrolls there, so the setting stays
                   discoverable. The recurrence decides WHETHER each occurrence
                   bills; the invoice timing decides WHEN. */}
+              {/* ── NO "recreate the invoice" SWITCH ────────────────────────
+                  Founder, seeing it under the recurrence picker: "are these
+                  not the same thing?" Near enough. A recreated occurrence
+                  already carries the priced service lines AND their timing,
+                  and those lines bill themselves through the ordinary
+                  acceptance path — so the switch was asking a question the
+                  proposal already answered, in the vocabulary of a typed
+                  flat amount that predates priced lines.
+                  Each occurrence now simply bills the way this one does;
+                  the sentence below says so instead of a control. */}
               {repeatFrequency !== "off" && connectReady && (
-                <div className="flex items-start justify-between gap-4 border-t border-border/60 pt-3">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor="repeat-invoice-recreate"
-                      className="flex cursor-pointer items-center gap-1.5"
-                    >
-                      <Receipt
-                        className="size-4 text-muted-foreground"
-                        aria-hidden
-                      />
-                      {t("repeat_invoice_label")}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {invoiceMode !== "off"
-                        ? t("repeat_invoice_hint")
-                        : t("repeat_invoice_off_hint")}
-                    </p>
-                  </div>
-                  {invoiceMode !== "off" ? (
-                    <Switch
-                      id="repeat-invoice-recreate"
-                      checked={repeatInvoiceRecreate}
-                      onCheckedChange={setRepeatInvoiceRecreate}
-                      ariaLabel={t("repeat_invoice_label")}
-                    />
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => {
-                        // With flows on, this card sits on the Automation
-                        // step while the Invoice card stays on Billing —
-                        // jump steps instead of scrolling at nothing.
-                        if (workflowsOn) {
-                          setStep("billing");
-                          return;
-                        }
-                        invoiceSectionRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "center",
-                        });
-                      }}
-                    >
-                      {t("repeat_invoice_set_button")}
-                    </Button>
-                  )}
-                </div>
+                <p className="flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                  <Receipt className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  {t("repeat_invoice_inherits")}
+                </p>
               )}
             </CardContent>
           </Card>
