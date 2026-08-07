@@ -218,3 +218,83 @@ describe("parseWorkflowSnapshot / parseStageGates", () => {
     ).toEqual({ in_review: { by: "u1", at: "2026-08-04T00:00:00Z" } });
   });
 });
+
+describe("flow-level reminders (parse-total)", () => {
+  it("absent, junk, or empty reminders read as no opinion", () => {
+    const base = { stages: {} };
+    expect(parseWorkflowDefinition(base)?.reminders).toBeUndefined();
+    expect(
+      parseWorkflowDefinition({ ...base, reminders: "junk" })?.reminders,
+    ).toBeUndefined();
+    expect(
+      parseWorkflowDefinition({ ...base, reminders: {} })?.reminders,
+    ).toBeUndefined();
+  });
+
+  it("documents cadence rides the SAME normalizer as the engagement column", () => {
+    const def = parseWorkflowDefinition({
+      stages: {},
+      reminders: {
+        documents: {
+          enabled: false,
+          steps: [{ tone: "gentle", days: 900, repeatCount: 40 }],
+        },
+      },
+    });
+    const docs = def?.reminders?.documents;
+    expect(docs?.enabled).toBe(false);
+    // Bounds clamp exactly like normalizeReminderSettings everywhere else.
+    const gentle = docs?.steps.find((s) => s.tone === "gentle");
+    expect(gentle?.days).toBe(365);
+    expect(gentle?.repeatCount).toBe(12);
+    expect(def?.reminders?.invoice).toBeNull();
+  });
+
+  it("invoice chase is bounded by the billing CHECK mirror and defaults enabled", () => {
+    const def = parseWorkflowDefinition({
+      stages: {},
+      reminders: { invoice: { intervalDays: 999, maxReminders: 0 } },
+    });
+    expect(def?.reminders?.invoice).toEqual({
+      enabled: true,
+      intervalDays: 60,
+      maxReminders: 1,
+    });
+  });
+
+  it("reminders survive the snapshot (copy-on-use carries the whole opinion)", () => {
+    const def = parseWorkflowDefinition({
+      stages: {},
+      reminders: { invoice: { enabled: false, intervalDays: 7, maxReminders: 4 } },
+    })!;
+    const snap = buildWorkflowSnapshot(def, {
+      ownerId: null,
+      staffId: null,
+      activeMemberIds: new Set(),
+      fallbackId: null,
+    });
+    expect(parseWorkflowSnapshot(snap)?.reminders?.invoice?.enabled).toBe(false);
+  });
+});
+
+describe("flow reminders — junk-degrades contracts (review findings)", () => {
+  it("a partial invoice payload gets the DEFAULTS, never the minimum bounds", () => {
+    const def = parseWorkflowDefinition({
+      stages: {},
+      reminders: { invoice: { enabled: true } },
+    });
+    expect(def?.reminders?.invoice).toEqual({
+      enabled: true,
+      intervalDays: 7,
+      maxReminders: 4,
+    });
+  });
+
+  it("a bare {} documents object is NO opinion, not an enabled cadence", () => {
+    const def = parseWorkflowDefinition({
+      stages: {},
+      reminders: { documents: {} },
+    });
+    expect(def?.reminders).toBeUndefined();
+  });
+});

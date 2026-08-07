@@ -88,6 +88,7 @@ function renderShell(
         invoiceDefaultMode="off"
         invoiceDefaultDelayDays={null}
         reminderDefaultSettings={null}
+        chaseDefaults={{ enabledDefault: true, intervalDays: 7, maxReminders: 4 }}
         aiUsage={{
           used: 0,
           cap: 400,

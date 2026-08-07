@@ -498,6 +498,53 @@ export async function sendEngagementInvoice(
     },
   });
 
+  // ── Start chasing what we just billed ────────────────────────────────────
+  //
+  // The manual create path has scheduled a chase since 1310; THIS path never
+  // did — every invoice the automation raised showed "auto-chase on" in
+  // Billing while nothing was ever queued. Same rules as create.ts, plus one:
+  // the engagement's flow may carry its own invoice cadence (the founder's
+  // "reminders live inside the automations"), and for the engagement invoice
+  // a flow raises, that opinion outranks the firm default. A deposit is
+  // acceptance money, not flow money — it always chases per firm default.
+  // Best-effort and swallowed, exactly like the manual path: an unchased
+  // invoice is a smaller problem than one that reads as failed.
+  try {
+    const { getChaseSettingsSR } = await import("@/lib/db/invoice-settings");
+    const { scheduleInvoiceChase } = await import("./chase");
+    const { chaseSettingsWithFlowOverride } = await import("./chase-flow");
+    let chase = await getChaseSettingsSR(engagement.firm_id);
+    if (kind === "engagement") {
+      chase = await chaseSettingsWithFlowOverride(sb, {
+        base: chase,
+        engagementId: engagement.id,
+        firmId: engagement.firm_id,
+      });
+    }
+    if (chase.enabledDefault) {
+      await scheduleInvoiceChase({
+        invoiceId: row.id,
+        issuedOn:
+          (invoiceFields.issue_date as string | undefined) ??
+          new Date().toISOString().slice(0, 10),
+        dueDate: (invoiceFields.due_date as string | null | undefined) ?? null,
+        settings: chase,
+      });
+    } else {
+      // Off (by flow or by firm): the row must not read as armed in the UI
+      // when nothing is queued — the exact lie this block exists to end.
+      // Direct service-role write (setInvoiceAutoChase is session-bound and
+      // this runs from cron/webhook paths with no cookies). Pre-1310 the
+      // column is missing; the swallow below treats that as "nothing to do".
+      await sb
+        .from("payment_requests")
+        .update({ auto_chase: false })
+        .eq("id", row.id);
+    }
+  } catch (e) {
+    console.error("[invoices] scheduling automated invoice chase failed:", e);
+  }
+
   // The automated invoice is now owed. This is the hook for BOTH deferred modes
   // — "invoice on completion" (dispatched the moment the engagement completes)
   // and the delayed cron worker N days later. It's what settles a just-completed

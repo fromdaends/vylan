@@ -47,6 +47,8 @@ import { PaymentsInvoicingSection } from "@/components/settings/payments-invoici
 import type { FirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
+import { InvoiceChaseDefaults } from "@/components/settings/invoice-chase-defaults";
+import type { ChaseSettings } from "@/lib/invoices/chase-settings";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import type { NotificationSettingsBundle } from "@/lib/db/notification-settings";
 import { PaymentsList } from "@/components/payments/payments-list";
@@ -123,6 +125,7 @@ export function SettingsShell({
   invoiceDefaultMode,
   invoiceDefaultDelayDays,
   reminderDefaultSettings,
+  chaseDefaults,
   aiUsage,
   isOwner,
   billingSlot,
@@ -155,6 +158,7 @@ export function SettingsShell({
   invoiceDefaultMode: "off" | "on_completion" | "delayed";
   invoiceDefaultDelayDays: number | null;
   reminderDefaultSettings: ReminderSettings | null;
+  chaseDefaults: ChaseSettings;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -422,6 +426,14 @@ export function SettingsShell({
               </p>
             </section>
             {repeatingSlot}
+            {/* Invoice reminders — moved here from Billing → Settings
+                (founder: reminders live in automations, nowhere else).
+                OUTSIDE the owner gate on purpose: the old Billing surface
+                was reachable by any member with money access, and the save
+                action still gates on money.view — narrowing the UI to
+                owners would strand members behind the read-only window's
+                "manage in Settings" link. */}
+            <InvoiceChaseDefaults chase={chaseDefaults} />
             {isOwner && (
               <>
                 <ReminderAutomationDefaults

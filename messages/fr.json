@@ -3244,7 +3244,8 @@
     "board_docs": "documents",
     "board_tasks": "tâches",
     "filter_chip_search": "Recherche",
-    "filter_chip_clear": "Effacer la recherche"
+    "filter_chip_clear": "Effacer la recherche",
+    "reminder_preset_flow": "Selon le flux"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3901,7 +3902,9 @@
     "filter_active": "Filtré : {list}",
     "new_invoice_pick_label": "Mandat à facturer",
     "new_invoice_footnote": "Une ébauche, pas un envoi — vous fixez le montant sur le mandat et le révisez avant qu'il parvienne à votre client.",
-    "new_invoice_draft": "Créer l'ébauche"
+    "new_invoice_draft": "Créer l'ébauche",
+    "settings_reminders_off_window": "Les relances automatiques de factures sont désactivées.",
+    "settings_reminders_moved_link": "Gérer les relances de factures dans les Réglages"
   },
   "Footer": {
     "based_in": "Construit au Canada.",
@@ -5190,7 +5193,16 @@
     "timeline_letter_no_service": "Aucun service facturé sur ce mandat — pas de lettre à envoyer",
     "timeline_letter_missing": "Aucune lettre téléversée pour ce service — ajoutez-en une dans les réglages du service",
     "timeline_letter_failed": "La lettre n'est pas partie — envoyez-la à la main",
-    "timeline_waiting_client": "En attente du client"
+    "timeline_waiting_client": "En attente du client",
+    "flow_reminders_card_title": "Rappels",
+    "flow_reminders_note": "Les relances de ce flux — les documents pendant la collecte, la facture une fois émise. « Réglage du cabinet » suit vos paramètres : figés à la création pour les documents, lus au moment de la facturation pour la facture.",
+    "flow_reminders_documents": "Documents",
+    "flow_reminders_invoice": "Facture",
+    "flow_reminders_mode_default": "Réglage du cabinet",
+    "flow_reminders_mode_custom": "Personnalisé pour ce flux",
+    "flow_reminders_mode_off": "Désactivé",
+    "flow_chase_interval_label": "Jours d'intervalle",
+    "flow_chase_max_label": "Envois max"
   },
   "Files": {
     "page_title": "Fichiers",

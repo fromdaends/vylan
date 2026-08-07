@@ -3244,7 +3244,8 @@
     "board_docs": "docs",
     "board_tasks": "tasks",
     "filter_chip_search": "Search",
-    "filter_chip_clear": "Clear the search"
+    "filter_chip_clear": "Clear the search",
+    "reminder_preset_flow": "From the flow"
   },
   "Attention": {
     "metric_active": "Active",
@@ -3901,7 +3902,9 @@
     "filter_active": "Filtered: {list}",
     "new_invoice_pick_label": "Engagement to invoice",
     "new_invoice_footnote": "Drafted, not sent — you set the amount on the engagement and review it before anything reaches your client.",
-    "new_invoice_draft": "Draft invoice"
+    "new_invoice_draft": "Draft invoice",
+    "settings_reminders_off_window": "Automatic invoice reminders are off.",
+    "settings_reminders_moved_link": "Manage invoice reminders in Settings"
   },
   "Footer": {
     "based_in": "Built in Canada.",
@@ -5190,7 +5193,16 @@
     "timeline_letter_no_service": "No priced service on this engagement — no letter to send",
     "timeline_letter_missing": "No letter uploaded for this service — add one in the service's settings",
     "timeline_letter_failed": "The letter didn't go out — send it by hand",
-    "timeline_waiting_client": "Waiting on the client"
+    "timeline_waiting_client": "Waiting on the client",
+    "flow_reminders_card_title": "Reminders",
+    "flow_reminders_note": "The chases this flow runs — documents while collecting, the invoice once it's raised. \"Firm default\" follows your settings: locked in at creation for documents, read at billing time for the invoice.",
+    "flow_reminders_documents": "Documents",
+    "flow_reminders_invoice": "Invoice",
+    "flow_reminders_mode_default": "Firm default",
+    "flow_reminders_mode_custom": "Custom for this flow",
+    "flow_reminders_mode_off": "Off",
+    "flow_chase_interval_label": "Days between",
+    "flow_chase_max_label": "Max sends"
   },
   "Files": {
     "page_title": "Files",
