@@ -2769,13 +2769,13 @@ export function EngagementBuilder({
         </Card>
       )}
 
-      {/* STEP 3 — money. Repeat and Invoice belong together: whether the job recurs and what it costs are one decision, and they were separated by the whole reminders section. */}
-      {step === "billing" && (
-        <>
-          {/* Repeat (recurring series, migration 0770) — its own top-level card
-              (founder feedback: Repeat / Reminders / Invoice should read as
-              separate sections, not one packed Details card). Invoice recurrence
-              stays IN here with Repeat: it's a property of the series. */}
+      {/* Repeat (recurring series, migration 0770) — "what runs by itself",
+          so with the switch on it lives on the AUTOMATION step (founder:
+          "repeat should be in automation"); unflagged firms keep it on
+          Billing exactly as before. ONE block, two homes — never a copy.
+          Invoice recurrence stays IN here with Repeat: it's a property of
+          the series. */}
+      {(workflowsOn ? step === "automation" : step === "billing") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
@@ -2906,12 +2906,19 @@ export function EngagementBuilder({
                       variant="outline"
                       size="sm"
                       className="shrink-0"
-                      onClick={() =>
+                      onClick={() => {
+                        // With flows on, this card sits on the Automation
+                        // step while the Invoice card stays on Billing —
+                        // jump steps instead of scrolling at nothing.
+                        if (workflowsOn) {
+                          setStep("billing");
+                          return;
+                        }
                         invoiceSectionRef.current?.scrollIntoView({
                           behavior: "smooth",
                           block: "center",
-                        })
-                      }
+                        });
+                      }}
                     >
                       {t("repeat_invoice_set_button")}
                     </Button>
@@ -2920,7 +2927,11 @@ export function EngagementBuilder({
               )}
             </CardContent>
           </Card>
+      )}
 
+      {/* STEP — money. */}
+      {step === "billing" && (
+        <>
           {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
               wrapper div is the scroll target of the Repeat card's "Set up the
               invoice" shortcut. Without Stripe Connect the card still shows, with
