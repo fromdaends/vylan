@@ -5168,7 +5168,10 @@
     "plan_accept_title": "Le client accepte",
     "plan_accept_note": "Puis le flux démarre",
     "plan_accept_note_letter": "Signer la lettre de mission enregistre son acceptation — puis le flux démarre",
-    "plan_completed_note": "Automatique — les rappels s'arrêtent et les documents sont classés dans votre stockage"
+    "plan_completed_note": "Automatique — les rappels s'arrêtent et les documents sont classés dans votre stockage",
+    "flow_send_card_title": "À l'envoi au client",
+    "flow_letter_toggle": "Envoyer la lettre de mission pour signature",
+    "flow_letter_toggle_note": "La lettre part avec la proposition dès l'envoi — et sa signature enregistre l'acceptation du client. Elle n'est liée à aucune étape."
   },
   "Files": {
     "page_title": "Fichiers",
