@@ -1197,6 +1197,26 @@ export function EngagementBuilder({
   // The amount to bill from the current invoice choices (shared pure helper).
   // The helper only distinguishes "off" from any billing mode, so "now" maps to
   // a non-off mode for the amount calculation.
+  const money = (cents: number) =>
+    new Intl.NumberFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+      style: "currency",
+      currency: "CAD",
+    }).format(cents / 100);
+
+  /** When the occurrence's invoice goes out, as a sentence FRAGMENT. The
+   *  Billing step's dropdown labels are written as options ("Now, so they can
+   *  pay right away") and read as gibberish mid-sentence. */
+  function invoiceWhenPhrase(): string {
+    if (invoiceMode === "delayed") {
+      return t("repeat_invoice_when_delayed", {
+        days: Math.max(1, Math.floor(Number(invoiceDelayDays) || 0)),
+      });
+    }
+    return t(
+      `repeat_invoice_when_${invoiceMode}` as "repeat_invoice_when_now",
+    );
+  }
+
   function currentInvoiceAmountCents(): number | null {
     return resolveInvoiceAmountCents({
       mode: invoiceMode === "off" ? "off" : "on_completion",
@@ -3191,10 +3211,21 @@ export function EngagementBuilder({
                   flat amount that predates priced lines.
                   Each occurrence now simply bills the way this one does;
                   the sentence below says so instead of a control. */}
+              {/* SAY THE MONEY, don't gesture at it. "Bills the way this one
+                  does" told the founder nothing about what THIS one bills,
+                  so the card read as though it might contradict the
+                  frequency above it. The amount and the timing are both
+                  known right here — state them, and any contradiction
+                  becomes visible instead of suspected. */}
               {repeatFrequency !== "off" && connectReady && (
                 <p className="flex items-start gap-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
                   <Receipt className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                  {t("repeat_invoice_inherits")}
+                  {invoiceMode === "off" || currentInvoiceAmountCents() == null
+                    ? t("repeat_invoice_none_yet")
+                    : t("repeat_invoice_each", {
+                        amount: money(currentInvoiceAmountCents() ?? 0),
+                        when: invoiceWhenPhrase(),
+                      })}
                 </p>
               )}
             </CardContent>

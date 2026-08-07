@@ -3250,7 +3250,13 @@
     "repeat_error_recurring_items": "This engagement's service items already bill on a schedule — repeating the whole job too would charge the client twice. Make the items one-time first.",
     "recur_bills_every": "Bill the client every",
     "recur_bills_hint": "One engagement, a charge each period — the schedule starts when the client accepts. Your service items keep their prices; this sets how often they bill.",
-    "repeat_invoice_inherits": "Each occurrence bills the way this one does — same services, same timing."
+    "repeat_invoice_each": "Each occurrence bills {amount}, {when}.",
+    "repeat_invoice_none_yet": "No invoice is set up, so occurrences won't bill anything.",
+    "repeat_invoice_when_now": "as soon as it opens",
+    "repeat_invoice_when_on_acceptance": "when the client accepts it",
+    "repeat_invoice_when_on_completion": "when you mark it complete",
+    "repeat_invoice_when_delayed": "{days} days after you complete it",
+    "repeat_invoice_each_is": "Each occurrence bills:"
   },
   "Attention": {
     "metric_active": "Active",
