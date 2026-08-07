@@ -30,6 +30,14 @@ import { formatDate, formatCurrency } from "@/lib/format";
 import { listEngagementItems } from "@/lib/db/engagements";
 import { WorkflowGateCard } from "@/components/engagements/workflow-gate-card";
 import { getPendingWorkflowGate } from "@/lib/engagements/stage-sync";
+import { WorkflowTimelineCard } from "@/components/engagements/workflow-timeline-card";
+import { parseWorkflowSnapshot } from "@/lib/workflow/definition";
+import { flowSendsLetter } from "@/lib/workflow/plan";
+import { buildFlowTimeline } from "@/lib/workflow/timeline";
+import { listWorkflowEvents } from "@/lib/db/workflow-events";
+import type { Engagement } from "@/lib/db/engagements";
+import type { EngagementStage } from "@/lib/engagements/stage";
+import type { AppLocale } from "@/lib/format";
 import { getServerSupabase } from "@/lib/supabase/server";
 // The key builders MUST come from the plain comment-keys module, NOT from
 // comment-thread ("use client"): this page is a Server Component and CALLS
@@ -239,6 +247,27 @@ export default async function EngagementDetailPage({
   // them together — "billed monthly" and "next invoice Sept 1" are one fact.
   const engagementItems = await listEngagementItems(engagement.id);
   const collectionItems = items.filter((i) => i.kind !== "signature");
+
+  // The flow surfaces (gate banner + timeline rail) share ONE gate lookup.
+  // Both facts that decide whether a flow exists at all are already in hand
+  // — the snapshot on the engagement row, the flag on the firm row — so
+  // legacy and flag-off engagements never pay a single extra query, and the
+  // two sections can never run the stage-fact pipeline twice per render
+  // (which matters at AutoRefresh's 5s cadence). Deliberately NOT awaited
+  // here: the sections await it, off the main render's critical path.
+  const workflowSnapshot = parseWorkflowSnapshot(engagement.workflow);
+  const workflowsOn =
+    (firm as { workflows_enabled?: boolean } | null)?.workflows_enabled ===
+    true;
+  const flowActive =
+    workflowSnapshot !== null &&
+    workflowsOn &&
+    engagement.status !== "cancelled";
+  const gatePromise = flowActive
+    ? getServerSupabase().then((sb) =>
+        getPendingWorkflowGate(sb, engagement.id),
+      )
+    : null;
 
   // Time tracking (1750, reshaped by timer v2) — the Time TAB is gone; what
   // remains here is the flat-fee reality check line. Hours are firm-shared;
@@ -1388,7 +1417,10 @@ export default async function EngagementDetailPage({
       <div className="mt-5 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_316px]">
         <div className="flex min-w-0 flex-col gap-5">
           {/* The workflow's confirm gate, when one is waiting. */}
-          <WorkflowGateSection engagementId={engagement.id} />
+          <WorkflowGateSection
+            engagementId={engagement.id}
+            gatePromise={gatePromise}
+          />
 
           {isDraft && (
             <Alert>
@@ -1504,6 +1536,22 @@ export default async function EngagementDetailPage({
             style={{ animationDelay: "100ms" }}
           />
 
+          {/* The flow's timeline — what fired, where the job is, what's
+              next. Renders nothing for legacy/flag-off engagements (the
+              null gatePromise), and costs them zero queries. */}
+          {flowActive && workflowSnapshot && gatePromise && (
+            <WorkflowTimelineSection
+              engagement={engagement}
+              wf={workflowSnapshot}
+              gatePromise={gatePromise}
+              hasProposalItems={engagementItems.length > 0}
+              locale={locale}
+              // reviewerNameById, not activeMembers: "handed to X" is
+              // history, and history keeps the names of people who left.
+              memberNames={Object.fromEntries(reviewerNameById)}
+            />
+          )}
+
           {(teamEnabled || teamPeople.length > 0) && (
             <EngagementTeamBox
               people={teamPeople}
@@ -1618,14 +1666,66 @@ export default async function EngagementDetailPage({
   );
 }
 
-// The confirm-gate loader, split out so the main render never pays for it:
-// getPendingWorkflowGate short-circuits on no-workflow/flag-off engagements,
-// and rendering null keeps the page byte-identical for them.
-async function WorkflowGateSection({ engagementId }: { engagementId: string }) {
-  const gate = await getPendingWorkflowGate(
-    await getServerSupabase(),
-    engagementId,
+// The flow-timeline loader, the gate section's twin. The page already
+// established the flow exists (snapshot parsed, flag on, not cancelled) and
+// shares ONE gate lookup between both sections — all this pays for itself is
+// the ledger read.
+async function WorkflowTimelineSection({
+  engagement,
+  wf,
+  gatePromise,
+  hasProposalItems,
+  locale,
+  memberNames,
+}: {
+  engagement: Engagement;
+  wf: NonNullable<ReturnType<typeof parseWorkflowSnapshot>>;
+  gatePromise: Promise<{ from: EngagementStage; to: EngagementStage } | null>;
+  hasProposalItems: boolean;
+  locale: AppLocale;
+  memberNames: Record<string, string>;
+}) {
+  const sb = await getServerSupabase();
+  const [events, gate] = await Promise.all([
+    listWorkflowEvents(sb, engagement.id),
+    gatePromise,
+  ]);
+
+  const timeline = buildFlowTimeline(
+    wf,
+    {
+      status: engagement.status,
+      stage: engagement.stage ?? null,
+      sentAt: engagement.sent_at ?? null,
+      acceptedAt: engagement.accepted_at ?? null,
+      hasProposalItems,
+      pendingGateStage: gate?.from ?? null,
+      events,
+    },
+    { flowSendsLetter: flowSendsLetter(wf) },
   );
+
+  return (
+    <WorkflowTimelineCard
+      timeline={timeline}
+      locale={locale}
+      memberNames={memberNames}
+      style={{ animationDelay: "130ms" }}
+    />
+  );
+}
+
+// The confirm-gate loader, split out so the main render never pays for it:
+// the shared promise is null for legacy/flag-off engagements, and rendering
+// null keeps the page byte-identical for them.
+async function WorkflowGateSection({
+  engagementId,
+  gatePromise,
+}: {
+  engagementId: string;
+  gatePromise: Promise<{ from: EngagementStage; to: EngagementStage } | null> | null;
+}) {
+  const gate = gatePromise ? await gatePromise : null;
   if (!gate) return null;
   return (
     <WorkflowGateCard engagementId={engagementId} from={gate.from} to={gate.to} />
