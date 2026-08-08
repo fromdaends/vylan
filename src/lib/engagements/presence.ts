@@ -101,38 +101,20 @@ export function splitPresence(
 
 // ── COLOUR ───────────────────────────────────────────────────────────────────
 //
-// Every person gets a stable colour, the way Google Docs and Figma give each
-// collaborator one. It is what turns a row of grey circles into "oh, Sarah's in
-// here" recognisable at a glance without reading anything.
+// MOVED to lib/members/color.ts and re-exported here, unchanged in palette and
+// in algorithm, so every presence ring keeps the exact colour it had. The move
+// is the founder's ruling that a teammate's colour is ONE fact used everywhere
+// ("every member on the team has a distinct colour"), not a presence detail —
+// @mentions now paint from the same function, and two private copies of this
+// idea in team-chat and the messages tab can retire onto it too.
 //
-// These are the app's OWN icon tokens, not new colours: each is already tuned
-// separately for light and dark mode in globals.css, so the ring stays legible
-// on both without a second palette to maintain. Rose is left out — it reads as
-// an error state everywhere else in this app, and "someone is looking at this"
-// is not a warning.
-export const PRESENCE_COLORS = [
-  "icon-blue",
-  "icon-emerald",
-  "icon-purple",
-  "icon-amber",
-  "icon-cyan",
-  "icon-indigo",
-] as const;
-
-export type PresenceColor = (typeof PRESENCE_COLORS)[number];
-
-// Stable per-person colour. Derived from the id, so the same person is the same
-// colour on every engagement, in every session, for every viewer — a colour that
-// shuffled on reload would be worse than no colour at all.
-//
-// A plain sum of char codes is deliberate: uuids differ in far more than one
-// position, the palette is tiny, and a cryptographic hash here would buy nothing
-// but a dependency. Never negative, so the modulo is safe.
-export function presenceColor(userId: string): PresenceColor {
-  let sum = 0;
-  for (let i = 0; i < userId.length; i++) sum += userId.charCodeAt(i);
-  return PRESENCE_COLORS[sum % PRESENCE_COLORS.length];
-}
+// The aliases stay because presence's own call sites and tests read better in
+// its vocabulary; they are the same values, not a second palette.
+export {
+  MEMBER_COLORS as PRESENCE_COLORS,
+  memberColor as presenceColor,
+  type MemberColor as PresenceColor,
+} from "@/lib/members/color";
 
 // Everyone present, grouped by the engagement they are looking at.
 //
