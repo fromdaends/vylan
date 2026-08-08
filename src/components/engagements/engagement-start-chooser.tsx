@@ -57,12 +57,15 @@ export function EngagementStartChooser({
   const mine = templates.filter((x) => x.access === "private");
 
   return (
-    // Top-aligned, like every other step. It used to centre itself because it
-    // was alone in a tall empty dialog; inside the wizard it is one step among
-    // six and starting where they start is what makes the transition read as a
-    // change of content rather than a change of screen.
-    <div className="flex max-w-xl flex-col gap-5">
-      <div>
+    // Centred in the middle of the card, and that is the whole design.
+    // Founder: "minimalist in the middle. Just how do you want it? And then
+    // it's those two things in the middle. That's it. Plain and simple."
+    //
+    // The card is the wizard's full size and holds one question, so the
+    // question sits in the middle of it. The shell centres it vertically (a
+    // single-tab card does that for its content); this centres it across.
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+      <div className="text-center">
         <h2 className="text-lg font-semibold tracking-tight">
           {t("start_title")}
         </h2>

@@ -365,6 +365,13 @@ export function BuilderChrome({
             key={activeTab}
             className={cn(
               "px-[22px] pb-[26px] pt-5",
+              // A ONE-SCREEN CARD CENTRES ITS CONTENT. A wizard step fills its
+              // card and belongs at the top; a card that asks a single question
+              // does not, and top-aligning three lines in a 1040px box leaves
+              // them stranded against the ceiling with a field of white below.
+              // `min-h-full` rather than `h-full`: content taller than the card
+              // must still be able to scroll.
+              !showSteps && "flex min-h-full flex-col justify-center",
               progress.direction >= 0
                 ? "wizard-step-forward"
                 : "wizard-step-back",
