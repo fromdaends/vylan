@@ -1923,6 +1923,10 @@ export function EngagementBuilder({
         // it, and `step` keeps pointing at where Continue will land. That is what
         // lets Back walk into the question and out again without a second piece
         // of state that could disagree with this one.
+        // The opening question is one tab, but it must not shrink: it is the
+        // same card the wizard is about to fill in, so it stays the same size
+        // and only its contents change.
+        size="wizard"
         activeTab={started ? step : "start"}
         onTabChange={(k) => setStep(k as WizardStep)}
         onClose={() => router.push("/engagements")}
@@ -1986,10 +1990,10 @@ export function EngagementBuilder({
         // seeing it — they're not using it, they're only getting their own
         // engagement letter." The whole pane goes, not just the document.
         preview={
-          // Nothing chosen, nothing to preview. The panel appears the moment
-          // they pick a card — the founder's "then have the client preview
-          // appear when they select one or the other".
-          (!started && startMode == null) || letterMode ? null : (
+          // The question screen has NO preview. It arrives with the wizard, on
+          // Continue — founder: "the preview only shows up after you click on
+          // continue on that page."
+          !started || letterMode ? null : (
             <div className="w-full space-y-4">
               <ProposalPreview
                 data={proposalData}

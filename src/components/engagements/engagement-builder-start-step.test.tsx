@@ -95,8 +95,11 @@ describe("The opening question is a blank card", () => {
     ).toBe(false);
   });
 
-  it("shows no client preview until something is chosen", () => {
+  it("shows no client preview at all — it belongs to the wizard, not the question", () => {
     mountFresh();
+    expect(previewPanel()).toBeNull();
+    // Still none after answering: the preview arrives with Continue.
+    fireEvent.click(screen.getByText(en.Engagements.start_from_scratch));
     expect(previewPanel()).toBeNull();
   });
 
@@ -107,19 +110,22 @@ describe("The opening question is a blank card", () => {
     expect(go).toBeDisabled();
   });
 
-  it("brings the preview in when a card is picked", () => {
+  it("wakes Continue once a card is picked", () => {
     mountFresh();
     fireEvent.click(screen.getByText(en.Engagements.start_from_scratch));
-    expect(previewPanel()).toBeTruthy();
-    // And the way forward opens with it.
     expect(continueButton()).not.toBeDisabled();
   });
 
-  it("picking the other card works the same way", () => {
-    mountFresh();
-    fireEvent.click(screen.getByText(en.Engagements.start_with_template));
-    expect(previewPanel()).toBeTruthy();
-    expect(continueButton()).not.toBeDisabled();
+  it("is the SAME size as the wizard it opens — the card must not resize", () => {
+    const { container } = mountFresh();
+    const card = () => container.querySelector('[role="dialog"]')!;
+    // The full setup footprint, not the 560px one-step sheet.
+    expect(card().className).toContain("wizard-card-setup");
+    expect(card().className).not.toContain("wizard-card-single");
+
+    fireEvent.click(screen.getByText(en.Engagements.start_from_scratch));
+    fireEvent.click(continueButton()!);
+    expect(card().className).toContain("wizard-card-setup");
   });
 
   it("opens the wizard on Continue — rail and counter arrive together", () => {
@@ -129,6 +135,8 @@ describe("The opening question is a blank card", () => {
 
     expect(screen.queryByText(en.Engagements.start_title)).toBeNull();
     expect(screen.getByText(en.Engagements.field_title)).toBeTruthy();
+    // NOW the preview exists.
+    expect(previewPanel()).toBeTruthy();
     // Numbered from the first REAL step, because the question was never one.
     expect(
       screen.getByText(
