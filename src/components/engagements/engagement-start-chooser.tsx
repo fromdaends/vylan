@@ -44,7 +44,8 @@ export function EngagementStartChooser({
   onTemplateChange,
 }: {
   templates: StartTemplate[];
-  mode: "template" | "scratch";
+  /** NULL until they answer — neither card starts chosen. */
+  mode: "template" | "scratch" | null;
   templateId: string;
   onModeChange: (mode: "template" | "scratch") => void;
   onTemplateChange: (id: string) => void;
