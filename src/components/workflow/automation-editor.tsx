@@ -88,6 +88,7 @@ export function AutomationEditor({
   disabled = false,
   aspect = "all",
   hideDocumentReminders = false,
+  hideLetterToggle = false,
 }: {
   value: WorkflowDefinition;
   onChange: (next: WorkflowDefinition) => void;
@@ -101,6 +102,29 @@ export function AutomationEditor({
    *  whose edits are dead for this engagement. The invoice side stays: the
    *  snapshot's reminders.invoice IS what send.ts reads at billing time. */
   hideDocumentReminders?: boolean;
+  /**
+   * Hide the "Send the engagement letter for signature" switch.
+   *
+   * TRUE in the engagement builder, and for the same reason hideFrequency is
+   * true inside a billing block: the answer is thrown away.
+   *
+   * A FLOW carries "this flow sends the letter", and in the automations library
+   * or a request template that is the real setting — the flow is reusable and
+   * nothing outranks it. An ENGAGEMENT also has an agreement choice (proposal
+   * vs letter), and that choice is the whole question of how this client
+   * agrees, so the builder forces the flag to match it on save:
+   * `withFlowLetter(activeFlow, letterMode)`. Whatever the switch said is
+   * overwritten every single time.
+   *
+   * Founder, seeing it on an engagement with no letter: "If I've selected no
+   * engagement letter and they just accept the proposal, why send the
+   * engagement letter for signature there? It shouldn't be there."
+   *
+   * Right on both counts — it is meaningless with no letter, and it is inert
+   * WITH one. A control whose answer is discarded is worse than no control,
+   * because the accountant believes it.
+   */
+  hideLetterToggle?: boolean;
 }) {
   const t = useTranslations("Automations");
   const tStage = useTranslations("Stage");
@@ -153,7 +177,7 @@ export function AutomationEditor({
           the letter goes out, and signing it is how the client accepts. One
           flow-level switch — the same fact flowSendsLetter() reads — never a
           per-stage toggle. */}
-      {showFlow && (
+      {showFlow && !hideLetterToggle && (
         <section
           aria-label={t("flow_send_card_title")}
           className="rounded-xl border border-border bg-muted/20 p-4"

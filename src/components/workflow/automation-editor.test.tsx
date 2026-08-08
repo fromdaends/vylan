@@ -10,10 +10,16 @@ import type { WorkflowDefinition } from "@/lib/workflow/definition";
 function mount(
   value: WorkflowDefinition,
   onChange: (next: WorkflowDefinition) => void = () => {},
+  props: { hideLetterToggle?: boolean } = {},
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <AutomationEditor value={value} onChange={onChange} members={[]} />
+      <AutomationEditor
+        value={value}
+        onChange={onChange}
+        members={[]}
+        {...props}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -51,5 +57,32 @@ describe("AutomationEditor letter placement", () => {
     expect(flowSendsLetter(next)).toBe(false);
     // Collecting keeps its other entry action.
     expect(next.stages.collecting.on_entry).toEqual(["activate_checklist"]);
+  });
+});
+
+// The engagement builder forces the flow's letter flag to match the agreement
+// choice on save -- withFlowLetter(activeFlow, letterMode) -- so the switch
+// there took an answer and discarded it, and on a proposal-only engagement it
+// offered to sign a document that did not exist. The library and request
+// template keep it: their flow IS the setting, nothing outranks it.
+describe("AutomationEditor — hiding the letter switch where it would lie", () => {
+  it("drops the whole send card when the caller owns the letter decision", () => {
+    mount(returnTypeWorkflow(), () => {}, { hideLetterToggle: true });
+    expect(screen.queryByText("When it's sent to the client")).toBeNull();
+    expect(
+      screen.queryByText("Send the engagement letter for signature"),
+    ).toBeNull();
+  });
+
+  it("keeps the rest of the editor working when the card is hidden", () => {
+    // Hiding one card must not take the stage editor with it — that is the
+    // half of the panel the builder's "Change it for this engagement" is for.
+    mount(returnTypeWorkflow(), () => {}, { hideLetterToggle: true });
+    expect(screen.getAllByText("Send the invoice").length).toBeGreaterThan(1);
+  });
+
+  it("still shows it by default, for the automations library", () => {
+    mount(returnTypeWorkflow());
+    expect(screen.getByText("When it's sent to the client")).toBeTruthy();
   });
 });

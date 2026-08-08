@@ -219,6 +219,65 @@ interactive client-side editor. "It was easier" is not an exception. When you
 do keep them separate, they must still share the pieces they can (row, cell,
 formatter, type), and the shared piece is where behaviour lives.
 
+## Contradiction sweep — NO CONTROL MAY LIE
+
+Founder, after finding the same class of bug for roughly the tenth time:
+"ensure that nothing else is contradicting it when we change different things
+across the software. Everything has to match properly."
+
+This is the single most common defect in this product, and it is never caught by
+tests, typecheck or the build — all of them pass straight through it. Every
+instance looks like this: **a control on screen offers an answer that something
+else overwrites, discards, or never reads.** The accountant believes the
+control. It does nothing. Months later the founder finds it.
+
+Confirmed instances, all of them shipped and all of them green:
+
+- The service item **"Due"** picker. Four options; the only producer of
+  `service_items` never sent the field, so no row ever stored a timing and the
+  reader matched zero rows — the control was inert end to end.
+- The **"Send the engagement letter for signature"** switch in the engagement
+  builder, while the save did `withFlowLetter(activeFlow, letterMode)` — the
+  agreement choice overwrote the switch every time, and on a proposal-only
+  engagement it offered to sign a document that did not exist.
+- The per-item **billing frequency** inside a billing block, which
+  `flattenBlocks` overwrote (caught in time — that one is why `hideFrequency`
+  exists).
+- The rail's red **"not answered yet"** dot sitting beside a green "this step
+  has what it needs" tick — two contradictory claims about one step.
+
+### The sweep — run it BEFORE you write, every time you touch a control
+
+For the setting you are adding, keeping, or changing, answer all four **out
+loud in your summary**. Grep; do not reason from memory.
+
+1. **WRITE** — who sends this value on save? Follow it from the input to the
+   payload to the database column. If any hop drops it, the control is a lie.
+2. **OVERWRITE** — does anything else set the same field afterwards? A
+   `with*(x, y)` at save time, a server-side default, a trigger. If something
+   outranks it, the control is a lie.
+3. **READ** — who reads the stored value, and does it change behaviour? If
+   nothing reads it, the control is a lie.
+4. **RIVAL** — is this same question asked anywhere else in the app? Grep the
+   vocabulary, not just the field name (`on_acceptance` appeared in two
+   unrelated enums). Two controls for one question is the bug even when both
+   technically work — the user cannot see which one wins.
+
+If any answer is bad, the fix is to **remove or hide the control**, not to
+finish wiring it — unless the founder asks for the behaviour. A control whose
+answer is discarded is worse than no control at all.
+
+### When you change a rule, sweep what the rule touches
+
+Changing behaviour is not done when the code compiles. Before you call it done,
+grep for every surface that reads, writes, or *displays* the thing you changed,
+and confirm none of them now says something different. Name the surfaces you
+checked in your summary. "I changed X" is not a report; "I changed X, and Y and
+Z read it and still agree" is.
+
+This applies to comments too. A comment asserting the old behaviour becomes a
+lie the moment you change it, and the next session will believe it.
+
 ## Autonomy and decision authority
 
 This project is run by a solo founder. The user wants to maximize velocity. Default to **doing**, not asking. The bar for asking a question is: "would a wrong choice here cost me more than 30 minutes to undo?"
