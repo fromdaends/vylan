@@ -83,6 +83,13 @@ export type BuilderFinalAction = {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /**
+   * The tick is right for a card that FINISHES ("Create client") and wrong for
+   * one that hands you on to something else — a single-card screen whose only
+   * job is to ask a question before the real wizard starts. Defaults to the
+   * tick, so every existing caller is unchanged.
+   */
+  icon?: "check" | "arrow";
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -390,8 +397,13 @@ export function BuilderChrome({
                 onClick={finalAction.onClick}
                 className="h-[34px]"
               >
-                <Check className="size-3.5" />
+                {finalAction.icon === "arrow" ? null : (
+                  <Check className="size-3.5" />
+                )}
                 {finalAction.label}
+                {finalAction.icon === "arrow" && (
+                  <ArrowRight className="size-3.5" />
+                )}
               </Button>
             )
           ) : (
@@ -570,8 +582,7 @@ function useStepProgress(index: number) {
     setState((s) => ({
       // Moving FORWARD marks the step you left as done — including a jump,
       // because passing a step is passing a step however you did it.
-      done:
-        index > from && !s.done.includes(from) ? [...s.done, from] : s.done,
+      done: index > from && !s.done.includes(from) ? [...s.done, from] : s.done,
       maxVisited: Math.max(s.maxVisited, index),
       direction: index > from ? 1 : -1,
     }));
