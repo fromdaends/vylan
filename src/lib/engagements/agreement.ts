@@ -66,6 +66,20 @@ export type AgreementFacts = {
    */
   acceptedAt?: string | null;
   /**
+   * Whether this engagement ASKS the client to accept (1640).
+   *
+   * The line that makes `clientHasEngaged` safe again. That flag was written as
+   * "the honest stand-in until acceptance exists to draw that line properly" —
+   * and acceptance now exists, so on an engagement that asks for it the
+   * stand-in has stopped being honest and started guessing over the top of a
+   * real answer.
+   *
+   * False / absent means the engagement predates the accept step or never asks
+   * for one, which is exactly the case the stand-in was written for and where
+   * it still applies.
+   */
+  requiresAcceptance?: boolean;
+  /**
    * When the firm said work could begin (1630).
    *
    * A SEPARATE decision from acceptance, which is Karbon's model too — their
@@ -106,9 +120,38 @@ export function resolveAgreementStatus(f: AgreementFacts): AgreementStatus {
       : "accepted";
   }
 
-  // Sent but not accepted. `activatedAt` is deliberately NOT consulted here:
-  // activating something nobody agreed to is not a state the UI offers, and
-  // honouring a stray value would let a bad write skip the agreement.
+  // ── SENT, AND NOT ACCEPTED ────────────────────────────────────────────
+  //
+  // ⚠️ IF THE ENGAGEMENT ASKS FOR ACCEPTANCE, THIS IS WHERE IT STOPS.
+  //
+  // The founder, looking at a proposal the client had neither accepted nor
+  // signed: "it says draft ✓ sent ✓ accepted ✓ ... It should not say accepted
+  // because it has not been accepted. It was — it's just been sent, nor is it
+  // active."
+  //
+  // Exactly right, and the rail ticks every step BEFORE the current one, so
+  // returning "active" here silently claimed an acceptance that never
+  // happened — on a contract. Two inferences were doing it:
+  //
+  //   `clientHasEngaged` — the client opening the proposal, or any activity at
+  //     all, read as agreement. It was written as a stand-in "until acceptance
+  //     exists"; acceptance exists now, so on these engagements it is guessing
+  //     over the top of a real answer.
+  //   `status === "in_progress"` — a lifecycle column, not a decision. 31 of 80
+  //     engagements on production were sent-but-unaccepted and in_progress,
+  //     every one of them drawing a tick it had not earned.
+  //
+  // Neither may speak for a client. Only `acceptedAt` can, and it is checked
+  // above.
+  if (f.requiresAcceptance) return "sent";
+
+  // No acceptance asked for — a historical engagement, or one the firm never
+  // required agreement on. Here the old stand-in is still the best available
+  // reading, and there is no acceptance for it to overrule.
+  //
+  // `activatedAt` is deliberately NOT consulted: activating something nobody
+  // agreed to is not a state the UI offers, and honouring a stray value would
+  // let a bad write skip the agreement.
   return f.clientHasEngaged || f.status === "in_progress" ? "active" : "sent";
 }
 
@@ -150,12 +193,20 @@ export function agreementStatusForRow(row: {
   status: EngagementStatus;
   startedAt?: string | null;
   daysSinceClientActivity: number | null;
+  acceptedAt?: string | null;
+  requiresAcceptance?: boolean;
 }): AgreementStatus {
   return resolveAgreementStatus({
     status: row.status,
     sentAt: row.status === "draft" ? null : (row.startedAt ?? null),
     completedAt: null,
     clientHasEngaged: row.daysSinceClientActivity != null,
+    // ⚠️ THE LIST AND THE DETAIL PAGE MUST AGREE. These were missing, so a
+    // row inferred agreement from client activity while the engagement's own
+    // page (which does read them) said "sent" — the same job, two answers,
+    // one of them claiming a contract had been accepted.
+    acceptedAt: row.acceptedAt ?? null,
+    requiresAcceptance: row.requiresAcceptance === true,
   });
 }
 

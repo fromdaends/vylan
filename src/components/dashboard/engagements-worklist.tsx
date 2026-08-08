@@ -174,6 +174,11 @@ export type WorklistRow = {
   type?: EngagementType;
   /** When it went to the client; falls back to creation for a draft. */
   startedAt?: string | null;
+  /** When the client accepted. Null = they have not. */
+  acceptedAt?: string | null;
+  /** Whether this engagement asks for acceptance at all — see
+   *  resolveAgreementStatus. Absent behaves exactly as before. */
+  requiresAcceptance?: boolean;
   itemsDone: number;
   itemsTotal: number;
   attentionScore: number;

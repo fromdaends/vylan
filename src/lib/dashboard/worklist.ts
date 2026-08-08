@@ -232,6 +232,11 @@ export const loadEngagementWorklist = cache(
         serviceNames: itemNamesByEng.get(e.id) ?? [],
         type: e.type,
         startedAt: e.sent_at ?? e.created_at ?? null,
+        // Acceptance, so the LIST cannot claim one the detail page denies.
+        // Without these the row falls back to inferring agreement from client
+        // activity — the exact lie fixed in resolveAgreementStatus.
+        acceptedAt: e.accepted_at ?? null,
+        requiresAcceptance: e.requires_acceptance === true,
         itemsDone: a.itemsDone,
         itemsTotal: a.itemsTotal,
         attentionScore: attentionScore(a),
