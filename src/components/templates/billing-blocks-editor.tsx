@@ -33,11 +33,9 @@ import {
   BLOCK_FREQUENCIES,
   blockTotal,
   emptyBlock,
-  timingsFor,
   withBillingType,
   type BillingBlock,
   type BlockFrequency,
-  type BlockTiming,
   type PriceVisibility,
 } from "@/lib/engagements/billing-blocks";
 import {
@@ -49,11 +47,6 @@ import {
 
 // Spelled out so a typo is a compile error rather than a `Templates.x`
 // rendering on screen — next-intl fails silently.
-type TimingKey =
-  | "timing_on_acceptance"
-  | "timing_on_completion"
-  | "timing_engagement_start"
-  | "timing_custom_date";
 type FrequencyKey =
   | "freq_weekly"
   | "freq_monthly"
@@ -193,23 +186,21 @@ export function BillingBlocksEditor({
                   </button>
                 ))}
 
-              <span className="text-xs text-muted-foreground">
-                {t("billing_when")}
-              </span>
-              <select
-                value={b.timing}
-                onChange={(e) =>
-                  patch(idx, { ...b, timing: e.target.value as BlockTiming })
-                }
-                aria-label={t("billing_when")}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-              >
-                {timingsFor(b.billingType).map((timing) => (
-                  <option key={timing} value={timing}>
-                    {t(`timing_${timing}` as TimingKey)}
-                  </option>
-                ))}
-              </select>
+              {/* ── NO "WHEN DOES THIS BILL" PICKER ────────────────────────
+                  There was one here — on acceptance / on completion /
+                  engagement start / a date — and it was the second answer to a
+                  question the engagement's Billing and payments step already
+                  asks, in nearly the same words.
+
+                  Founder: "You cannot decide a time when it's paid on service
+                  items. That just does not happen. It cannot happen. Only have
+                  it be in billing and payments, and if the automation does it,
+                  then it's in the automation section. It's one or the other."
+
+                  Removed from the MODEL, not hidden here, so no surface can put
+                  it back by accident — see billing-blocks.ts. Same cut the
+                  founder already made to recurrence (hideBillingType below),
+                  for the same reason. */}
 
               {b.billingType === "recurring" && !hideBillingType && (
                 <select

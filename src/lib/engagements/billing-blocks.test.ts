@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   emptyBlock,
-  timingsFor,
   withBillingType,
   blockItemFrequency,
   blockTotal,
@@ -27,52 +26,38 @@ const block = (over: Partial<BillingBlock> = {}): BillingBlock => ({
 });
 
 describe("emptyBlock", () => {
-  it("starts one-time, due on acceptance", () => {
-    const b = emptyBlock();
-    expect(b.billingType).toBe("one_time");
-    expect(b.timing).toBe("on_acceptance");
+  it("starts one-time", () => {
+    expect(emptyBlock().billingType).toBe("one_time");
   });
 
-  it("starts a recurring block at the engagement start", () => {
-    expect(emptyBlock("recurring").timing).toBe("engagement_start");
-  });
-});
-
-describe("timingsFor", () => {
-  it("offers only the timings that mean something for the type", () => {
-    expect(timingsFor("one_time")).toEqual(["on_acceptance", "on_completion"]);
-    expect(timingsFor("recurring")).toEqual([
-      "engagement_start",
-      "custom_date",
-    ]);
-  });
-
-  it("never offers a completion timing to a recurring block", () => {
-    expect(timingsFor("recurring")).not.toContain("on_completion");
+  // A block used to be born saying WHEN it billed, and one-time blocks were
+  // born saying "on acceptance". The engagement's Billing and payments step is
+  // the only thing that answers that now, so the shape cannot carry it at all —
+  // this asserts the absence, because a field silently reappearing here is
+  // exactly how the second answer would come back.
+  it("carries no billing timing at all", () => {
+    expect(emptyBlock()).not.toHaveProperty("timing");
+    expect(emptyBlock("recurring")).not.toHaveProperty("timing");
+    expect(emptyBlock()).not.toHaveProperty("startDate");
   });
 });
 
 describe("withBillingType", () => {
-  it("resets a timing the new type has no meaning for", () => {
-    const b = block({ billingType: "one_time", timing: "on_completion" });
-    expect(withBillingType(b, "recurring").timing).toBe("engagement_start");
-  });
-
   it("keeps the items, the note and the frequency", () => {
     const b = block({
-      timing: "on_completion",
       clientNote: "Paid on filing",
       frequency: "quarterly",
       items: [item()],
     });
     const next = withBillingType(b, "recurring");
+    expect(next.billingType).toBe("recurring");
     expect(next.items).toHaveLength(1);
     expect(next.clientNote).toBe("Paid on filing");
     expect(next.frequency).toBe("quarterly");
   });
 
   it("is a no-op when the type has not changed", () => {
-    const b = block({ billingType: "one_time", timing: "on_completion" });
+    const b = block({ billingType: "one_time" });
     expect(withBillingType(b, "one_time")).toBe(b);
   });
 });
@@ -209,11 +194,37 @@ describe("flattenBlocks", () => {
 
   it("keeps everything else about the item", () => {
     const out = flattenBlocks([
-      block({ items: [item({ rateCents: 4200, rateType: "hour", taxPct: 5 })] }),
+      block({
+        items: [
+          item({ rateCents: 4200, rateType: "hour", taxPct: 5, budgetMinutes: 120 }),
+        ],
+      }),
     ]);
     expect(out[0].rateCents).toBe(4200);
     expect(out[0].rateType).toBe("hour");
     expect(out[0].taxPct).toBe(5);
+    // The line's own hours (1820) survive the flatten — without this the
+    // capacity board never sees them.
+    expect(out[0].budgetMinutes).toBe(120);
+  });
+
+  it("writes NO billing timing, even when the item was carrying one", () => {
+    // The item is spread into the output, so a draft reconstructed from an
+    // older engagement could smuggle a timing back through. It must not: the
+    // engagement's Billing and payments step is the only answer now, and NULL
+    // is what every reader already treats as "the firm's settings decide".
+    const out = flattenBlocks([
+      block({
+        items: [
+          item({
+            billingTiming: "on_acceptance",
+            billingStartDate: "2026-03-01",
+          }),
+        ],
+      }),
+    ]);
+    expect(out[0].billingTiming).toBeNull();
+    expect(out[0].billingStartDate).toBeNull();
   });
 
   it("is empty for no blocks at all", () => {

@@ -3032,6 +3032,8 @@
     "item_name_placeholder": "Tenue de livres mensuelle",
     "item_rate": "Tarif",
     "item_rate_placeholder": "Laissez vide si non défini",
+    "item_hours": "Heures",
+    "item_hours_placeholder": "p. ex. 2",
     "item_rate_type": "Par",
     "item_rate_item": "Élément",
     "item_rate_hour": "Heure",

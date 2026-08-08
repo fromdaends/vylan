@@ -14,8 +14,6 @@
 import {
   BLOCK_FREQUENCIES,
   BILLING_TYPES,
-  ONE_TIME_TIMINGS,
-  RECURRING_TIMINGS,
   defaultPriceVisibility,
   type BillingBlock,
   type PriceVisibility,
@@ -358,10 +356,19 @@ function readPeriodMonths(v: unknown): number | null {
 /**
  * One billing block, read defensively.
  *
- * Null for anything that is not an object. A block with an unrecognised type or
- * timing falls back to the safe pair (one-time, on acceptance) rather than being
- * dropped: losing the block loses its SERVICES, and a wrong-but-visible billing
- * rule is one the accountant can see and fix, where a missing block is not.
+ * Null for anything that is not an object. A block with an unrecognised type
+ * falls back to one-time rather than being dropped: losing the block loses its
+ * SERVICES, and a wrong-but-visible billing rule is one the accountant can see
+ * and fix, where a missing block is not.
+ *
+ * ── `timing` IS READ AND DISCARDED (1820) ─────────────────────────────────
+ *
+ * Templates saved before 1820 have a `timing` on every block. A block no longer
+ * has one — the engagement's Billing and payments step is the only thing that
+ * says when money is taken — so the key is simply not carried across. It is not
+ * an error to find it and there is nothing to migrate: the value never reached
+ * engagement_items from any path (see billing-blocks.ts), so dropping it here
+ * changes what a template SAYS and nothing about what it ever DID.
  */
 function readBillingBlock(raw: unknown): BillingBlock | null {
   const o = obj(raw);
@@ -373,15 +380,8 @@ function readBillingBlock(raw: unknown): BillingBlock | null {
     ? (o.billingType as BillingBlock["billingType"])
     : "one_time";
 
-  const allowed: readonly string[] =
-    billingType === "one_time" ? ONE_TIME_TIMINGS : RECURRING_TIMINGS;
-  const timing = allowed.includes(o.timing as string)
-    ? (o.timing as BillingBlock["timing"])
-    : (allowed[0] as BillingBlock["timing"]);
-
   return {
     billingType,
-    timing,
     frequency: (BLOCK_FREQUENCIES as readonly string[]).includes(
       o.frequency as string,
     )

@@ -1651,6 +1651,11 @@ export function EngagementBuilder({
                 rate_type: i.rateType,
                 billing_frequency: i.billingFrequency,
                 tax_pct: i.taxPct,
+                // How long this line is expected to take (1820), seeded from
+                // the catalogue when a service was picked and editable on the
+                // row. Without it a hand-typed line reached the capacity board
+                // as zero hours, silently.
+                budget_minutes: i.budgetMinutes ?? null,
               })),
             // What the work consists of. Titled rows only — an untitled row
             // left over from a stray "+ Add task" click must not land on the

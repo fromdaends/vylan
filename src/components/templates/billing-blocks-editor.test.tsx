@@ -54,9 +54,38 @@ describe("BillingBlocksEditor — who owns recurrence", () => {
     expect(screen.queryByLabelText(en.Templates.billing_frequency)).toBeNull();
   });
 
-  it("keeps the timing control either way — when a charge falls due is not recurrence", () => {
+  // This used to assert the OPPOSITE — "keeps the timing control either way,
+  // when a charge falls due is not recurrence". That reasoning was wrong twice
+  // over. The founder: "You cannot decide a time when it's paid on service
+  // items. That just does not happen. It cannot happen. Only have it be in
+  // billing and payments." And the control never worked: nothing ever wrote
+  // billing_timing to a row, so every option was inert.
+  //
+  // Asserted on BOTH surfaces, because they share this component and the whole
+  // point is that neither can offer the choice.
+  it("offers no billing-timing control — that question belongs to Billing and payments", () => {
     mount([emptyBlock("one_time")], true);
-    expect(screen.getByText("Due")).toBeTruthy();
+    expect(screen.queryByText(en.Templates.billing_when)).toBeNull();
+    expect(screen.queryByLabelText(en.Templates.billing_when)).toBeNull();
+
+    cleanup();
+    mount([emptyBlock("one_time")]);
+    expect(screen.queryByText(en.Templates.billing_when)).toBeNull();
+    expect(screen.queryByLabelText(en.Templates.billing_when)).toBeNull();
+  });
+
+  it("offers no timing OPTION either, on a recurring block", () => {
+    // The options were type-dependent, so a recurring block was the other half
+    // of the picker. Neither half may render.
+    mount([emptyBlock("recurring")]);
+    for (const label of [
+      en.Templates.timing_on_acceptance,
+      en.Templates.timing_on_completion,
+      en.Templates.timing_engagement_start,
+      en.Templates.timing_custom_date,
+    ]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
   });
 });
 
