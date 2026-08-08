@@ -71,7 +71,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { Plus, Lock, FileText } from "lucide-react";
+import { Plus, Lock, FileText, Clock } from "lucide-react";
 import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -843,6 +843,49 @@ export default async function ClientDetailPage({
                 </div>
               </div>
             </div>
+            {/* ── TIME, AS A BUBBLE IN THE CORNER ───────────────────────────
+            Founder: "remove it from that section and just have it sit in a
+            bubble on the top right of the screen above the header line."
+
+            It was a Panel in the overview grid, where it never fit: pinned to
+            a row no other column used, so it hung below an otherwise square
+            page. A client's total time is a FACT ABOUT THE CLIENT, not a
+            section of their overview — so it belongs beside their name, not
+            in the stack of sections underneath it. Living in the header also
+            means it follows you across the tabs, which a panel could not do.
+
+            Hidden at zero rather than reading "no time yet": an empty section
+            has to hold its place in a grid, but a bubble that says nothing is
+            just something to look at. The Work → Time page is where you go to
+            confirm a client has none. */}
+            {timeEnabled && clientTimeMinutesThisYear > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-3.5 py-1.5">
+                <Clock
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="text-[13px] tabular-nums">
+                  {tTime("client_stat", {
+                    duration: formatMinutes(clientTimeMinutesThisYear),
+                  })}
+                </span>
+                {/* Money only where the billing RLS answered — a viewer
+                    without rates sees the hours alone, never a blank. */}
+                {clientTimeValueCents != null && (
+                  <>
+                    <span aria-hidden className="text-border">
+                      ·
+                    </span>
+                    <span className="text-[13px] font-medium tabular-nums">
+                      {formatCurrency(clientTimeValueCents / 100, locale, {
+                        fractionDigits: 0,
+                      })}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* The corner is now empty of controls — everything moved onto the
             name. The archive form stays here and is reached BY ID from the
             menu, because a <form> cannot be a dropdown item and still submit
@@ -1165,99 +1208,24 @@ export default async function ClientDetailPage({
         {/* canSeeMoney stays — that is a PERMISSION, not an emptiness check, and
           someone who may not see money must still not see this panel at all.
           Only the "has rows" half is dropped, for the reason above. */}
-        {tab === "overview" && (canSeeMoney || timeEnabled) && (
-          // ── ONE CELL, TWO PANELS ──────────────────────────────────────────
-          // Time used to be pinned to its own grid row (row 3 of the right
-          // rail), and columns 1 and 2 had nothing in that row. Every other
-          // column finished at the same line and Time hung 20px below all of
-          // it, alone — measured on prod: three columns ending at y=999, Time
-          // starting at 1019. Founder: "the entire box itself, it doesn't align
-          // properly with everything else."
-          //
-          // Grid rows are shared across columns, so no amount of sizing on the
-          // panel could pull it back up — it had to stop being its own row.
-          // Payments and Time now share the rail's second cell as a stack:
-          // Payments takes the slack (`flex-1`, which it was already doing by
-          // stretching) and Time keeps its natural height beneath it, so the
-          // rail ends exactly where Notes and Portal access end.
-          <div className="flex flex-col gap-5 min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2">
-            {canSeeMoney && (
-              <Panel
-                className="min-h-[190px] flex-1"
-                title={tEng("payments_history")}
-                flush={clientPayments.length > 0}
-              >
-                {clientPayments.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    {tEng("payments_history_empty")}
-                  </p>
-                ) : (
-                  <PaymentsList
-                    rows={clientPayments}
-                    showClient={false}
-                    currentUserId={me?.id}
-                  />
-                )}
-              </Panel>
+        {tab === "overview" && canSeeMoney && (
+          <Panel
+            className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
+            title={tEng("payments_history")}
+            flush={clientPayments.length > 0}
+          >
+            {clientPayments.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {tEng("payments_history_empty")}
+              </p>
+            ) : (
+              <PaymentsList
+                rows={clientPayments}
+                showClient={false}
+                currentUserId={me?.id}
+              />
             )}
-
-            {/* TIME (timer v2) — a small STAT, not a list: hours this year, plus
-              value for viewers the billing RLS answers. The start buttons are
-              gone by doctrine (ONE global control at the launcher) and the
-              entry list lives on the Work → Time timesheet. */}
-            {timeEnabled && (
-              <Panel
-                // No `self-start` here: inside a flex COLUMN that would align the
-                // cross axis and shrink the card's width to its text. It keeps its
-                // natural height simply by not being told to grow.
-                className="min-h-[90px]"
-                title={t("time_title")}
-              >
-                {/* ── A STAT, DRAWN LIKE ONE ────────────────────────────────────
-              Founder: "make time fit better with the client page, it's so off
-              compared to everything else."
-
-              It was one small grey sentence — "12h this year · $1,894 value" —
-              left-aligned at the top of a card, while every panel beside it
-              draws structured rows or a centred empty state. It read as a line
-              somebody forgot to finish rather than as a section.
-
-              So it uses the vocabulary this product already has for a number
-              worth looking at (the capacity board's stats bar): the figure
-              large and tabular, its meaning small and quiet underneath. Two
-              cells where value is visible, one where it is not — and the empty
-              state is the same centred `py-6` line the Files and Tasks panels
-              beside it use, so all three agree about what "nothing here" looks
-              like. */}
-                {clientTimeMinutesThisYear > 0 ? (
-                  <div className="flex flex-wrap gap-x-10 gap-y-3 py-1">
-                    <Stat
-                      value={formatMinutes(clientTimeMinutesThisYear)}
-                      label={tTime("client_stat_hours_label")}
-                    />
-                    {/* Money only where the billing RLS answered — a viewer without
-                  rates sees the hours alone, never a blank or a zero. */}
-                    {clientTimeValueCents != null && (
-                      <Stat
-                        value={formatCurrency(
-                          clientTimeValueCents / 100,
-                          locale,
-                          {
-                            fractionDigits: 0,
-                          },
-                        )}
-                        label={tTime("client_stat_value_label")}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    {tTime("client_stat_empty")}
-                  </p>
-                )}
-              </Panel>
-            )}
-          </div>
+          </Panel>
         )}
 
         {/* ── The other tabs render one full-width column ───────────────── */}
@@ -1629,29 +1597,6 @@ function DetailRow({
       >
         {value ?? placeholder ?? "—"}
       </dd>
-    </div>
-  );
-}
-
-/**
- * One number and what it means.
- *
- * The same shape the capacity board's stats bar uses — figure first and
- * tabular so digits line up between clients, meaning underneath in the quiet
- * uppercase — same 0.1em as the Panel title above it — that this page's
- * table headers already wear. Local to this page for now; if a
- * third surface wants it, lift it into ui/ rather than copying it a second
- * time.
- */
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <p className="text-xl font-semibold tabular-nums leading-tight">
-        {value}
-      </p>
-      <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
-      </p>
     </div>
   );
 }
