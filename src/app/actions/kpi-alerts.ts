@@ -92,7 +92,7 @@ export async function createKpiAlertAction(input: {
   });
 
   if (!res.ok) return { ok: false, error: res.error };
-  revalidateAllLocales("/work/overview");
+  revalidateAllLocales("/work");
   return { ok: true, alert: res.alert };
 }
 
@@ -105,6 +105,6 @@ export async function deleteKpiAlertAction(input: {
   // matches no row.
   const res = await deleteKpiAlert(input.id);
   if (!res.ok) return { ok: false, error: "failed" };
-  revalidateAllLocales("/work/overview");
+  revalidateAllLocales("/work");
   return { ok: true };
 }

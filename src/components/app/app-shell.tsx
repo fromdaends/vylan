@@ -48,8 +48,6 @@ type Labels = {
   // One line each, under the label in the rail's second sidebar.
   workTasksHint: string;
   workEngagementsHint: string;
-  workDashboard: string;
-  workDashboardHint: string;
   closePanel: string;
   engagementsToggle: string;
   templates: string;
@@ -252,13 +250,6 @@ export function AppShell({
             href: "/work",
             label: labels.workTasks,
             description: labels.workTasksHint,
-          },
-          // Canopy's fifth row, and the only one of their three we could
-          // build: Resolution Cases and Tax Organizers have no home here.
-          {
-            href: "/work/overview",
-            label: labels.workDashboard,
-            description: labels.workDashboardHint,
           },
           // Every logged hour. The route moved from /work/time to /time when
           // the page was redesigned (week / day / month); the old path still
