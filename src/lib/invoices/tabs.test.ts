@@ -1,21 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
-  resolveBillingTab,
   resolveInvoiceFilters,
   billingHref,
   hasAnyFilter,
 } from "./tabs";
-
-describe("resolveBillingTab", () => {
-  it("defaults to invoices", () => {
-    expect(resolveBillingTab({})).toBe("invoices");
-    expect(resolveBillingTab({ tab: "nonsense" })).toBe("invoices");
-  });
-
-  it("honours the settings tab", () => {
-    expect(resolveBillingTab({ tab: "settings" })).toBe("settings");
-  });
-});
 
 describe("resolveInvoiceFilters", () => {
   it("defaults to everything, page 1", () => {
@@ -104,11 +92,6 @@ describe("billingHref", () => {
     expect(billingHref(f, { page: 1 })).toBe("/billing");
   });
 
-  it("routes to the settings tab", () => {
-    expect(billingHref(BASE, { tab: "settings" })).toBe(
-      "/billing?tab=settings",
-    );
-  });
 });
 
 describe("hasAnyFilter", () => {

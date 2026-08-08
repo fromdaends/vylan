@@ -41,6 +41,9 @@ export function IntegrationsSection({
   cardsSlot: ReactNode;
 }) {
   const t = useTranslations("Settings");
+  // The rescued ledger note keeps its original FirmBilling key — moving the
+  // sentence, not rewording it, so both languages come along untouched.
+  const tBilling = useTranslations("FirmBilling");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
@@ -131,6 +134,14 @@ export function IntegrationsSection({
           state. This used to be a link out to a standalone /integrations page;
           that page is gone from the sidebar and now redirects back here. */}
       {cardsSlot}
+
+      {/* RESCUED from the Billing page's Settings tab when that tab was
+          deleted. It is the ONLY place the product says Vylan posts nothing
+          about the FIRM'S OWN invoices to a connected ledger — a Phase-0 audit
+          found firms assume the opposite, so losing the sentence with the card
+          would have been the one real content loss in that deletion. It reads
+          correctly here, next to the ledger connections it is about. */}
+      <p className="mt-3 text-xs text-muted-foreground">{tBilling("settings_books_note")}</p>
 
       {callbackError && (
         <div

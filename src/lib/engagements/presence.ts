@@ -101,38 +101,26 @@ export function splitPresence(
 
 // ── COLOUR ───────────────────────────────────────────────────────────────────
 //
-// Every person gets a stable colour, the way Google Docs and Figma give each
-// collaborator one. It is what turns a row of grey circles into "oh, Sarah's in
-// here" recognisable at a glance without reading anything.
+// MOVED to lib/members/color.ts and re-exported here. A teammate's colour is
+// ONE fact used everywhere (the founder's ruling), not a presence detail —
+// @mentions paint from the same function.
 //
-// These are the app's OWN icon tokens, not new colours: each is already tuned
-// separately for light and dark mode in globals.css, so the ring stays legible
-// on both without a second palette to maintain. Rose is left out — it reads as
-// an error state everywhere else in this app, and "someone is looking at this"
-// is not a warning.
-export const PRESENCE_COLORS = [
-  "icon-blue",
-  "icon-emerald",
-  "icon-purple",
-  "icon-amber",
-  "icon-cyan",
-  "icon-indigo",
-] as const;
-
-export type PresenceColor = (typeof PRESENCE_COLORS)[number];
-
-// Stable per-person colour. Derived from the id, so the same person is the same
-// colour on every engagement, in every session, for every viewer — a colour that
-// shuffled on reload would be worse than no colour at all.
+// ⚠️ THE RING COLOURS SHIFTED SLIGHTLY, deliberately and once: the shared
+// palette moved onto --member-* tokens, which are the same hues at a lightness
+// that also clears WCAG AA as 13px TEXT (the --icon-* set did not, amber
+// worst). A ring is forgiving about a tenth of a lightness step; a name is not,
+// and one palette that works for both beats two that drift.
 //
-// A plain sum of char codes is deliberate: uuids differ in far more than one
-// position, the palette is tiny, and a cryptographic hash here would buy nothing
-// but a dependency. Never negative, so the modulo is safe.
-export function presenceColor(userId: string): PresenceColor {
-  let sum = 0;
-  for (let i = 0; i < userId.length; i++) sum += userId.charCodeAt(i);
-  return PRESENCE_COLORS[sum % PRESENCE_COLORS.length];
-}
+// Two more private copies of this idea still exist, in team-chat and the
+// messages tab. They are NOT retired yet — say so rather than implying it.
+//
+// The aliases stay because presence's own call sites and tests read better in
+// its vocabulary; they are the same values, not a second palette.
+export {
+  MEMBER_COLORS as PRESENCE_COLORS,
+  memberColor as presenceColor,
+  type MemberColor as PresenceColor,
+} from "@/lib/members/color";
 
 // Everyone present, grouped by the engagement they are looking at.
 //

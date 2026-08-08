@@ -2,23 +2,13 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { cn } from "@/lib/cn";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { can } from "@/lib/auth/capabilities";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { firmPaymentRails } from "@/lib/payments/rails";
-import { listFirmQuickbooksConnectedClients } from "@/lib/db/quickbooks";
-import { listFirmXeroConnectedClients } from "@/lib/db/xero";
-import {
-  getFirmInvoiceSettings,
-  chaseSettingsFrom,
-} from "@/lib/db/invoice-settings";
-import { formatInvoiceNumber } from "@/lib/invoices/number";
 import { listFirmInvoices, INVOICE_PAGE_SIZE } from "@/lib/invoices/list";
 import { loadBillingStats } from "@/lib/invoices/stats";
 import {
-  resolveBillingTab,
   resolveInvoiceFilters,
   billingHref,
   hasAnyFilter,
@@ -26,7 +16,6 @@ import {
 import { InvoiceStatsStrip } from "@/components/invoicing/invoice-stats-strip";
 import { InvoiceFilters } from "@/components/invoicing/invoice-filters";
 import { InvoicesTable } from "@/components/invoicing/invoices-table";
-import { BillingSettings } from "@/components/invoicing/billing-settings";
 import { NewInvoiceButton } from "@/components/invoicing/new-invoice-button";
 import { HeaderSearch } from "@/components/ui/header-search";
 import { StatementButton } from "@/components/invoicing/statement-button";
@@ -57,16 +46,12 @@ export default async function BillingPage({
   if (!firm) redirect(`/${locale}/dashboard`);
 
   const t = await getTranslations("FirmBilling");
-  const tab = resolveBillingTab(sp);
-  const tabs = [
-    { id: "invoices" as const, label: t("tab_invoices"), href: "/billing" },
-    {
-      id: "settings" as const,
-      label: t("tab_settings"),
-      href: "/billing?tab=settings",
-    },
-  ];
-
+  // ⚠️ NO TABS. The Settings tab is GONE — founder: "delete billing settings
+  // and move it all into actual settings." Every card on it was either a
+  // read-only window onto a control that already lived in Settings (five of
+  // them) or, in the case of Payment terms, the only editor of a setting —
+  // which MOVED to Settings > Automation rather than being deleted. Billing is
+  // the invoice list, full stop.
   return (
     // Full width, like Files: an invoice table has seven columns and a firm
     // reads it across a monitor, not down a centred column.
@@ -80,45 +65,15 @@ export default async function BillingPage({
             {t("page_subtitle")}
           </p>
         </div>
-        {/* Settings has no list to search and its own Save is that screen's one
-            coloured button, so the pair only appears on Invoices. */}
-        {tab === "invoices" && (
-          <div className="flex w-full items-center gap-2.5 sm:w-auto">
-            <HeaderSearch basePath="/billing" placeholder={t("filter_search")} />
-            <NewInvoiceButton />
-          </div>
-        )}
+        <div className="flex w-full items-center gap-2.5 sm:w-auto">
+          <HeaderSearch basePath="/billing" placeholder={t("filter_search")} />
+          <NewInvoiceButton />
+        </div>
       </header>
 
-      <nav
-        aria-label={t("page_title")}
-        className="mt-[22px] mb-6 flex items-center gap-[26px] border-b border-border"
-      >
-        {tabs.map((item) => {
-          const active = item.id === tab;
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "-mb-px border-b-2 px-0.5 pb-[11px] text-sm transition-colors",
-                active
-                  ? "border-accent font-semibold text-foreground"
-                  : "border-transparent font-medium text-muted-foreground hover:border-border hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {tab === "settings" ? (
-        <SettingsTab />
-      ) : (
+      <div className="mt-[22px]">
         <InvoicesTab sp={sp} locale={locale} />
-      )}
+      </div>
     </div>
   );
 }
@@ -253,48 +208,6 @@ async function listClientsForFilter(): Promise<
     id: c.id as string,
     name: c.display_name as string,
   }));
-}
-
-async function SettingsTab() {
-  // QuickBooks and Xero connect PER CLIENT in Vylan, not per firm — which is
-  // itself the reason the bookkeeping card here says what it says. "Connected"
-  // means the firm has at least one client's ledger linked; it has never meant
-  // the firm's OWN books are wired up, because they are not.
-  const [firm, settings, qboClients, xeroClients] = await Promise.all([
-    getCurrentFirm(),
-    getFirmInvoiceSettings(),
-    listFirmQuickbooksConnectedClients(),
-    listFirmXeroConnectedClients(),
-  ]);
-  const rails = firmPaymentRails(firm ?? {});
-  const chase = chaseSettingsFrom(settings);
-
-  return (
-    <BillingSettings
-      chase={chase}
-      // `undefined` on a pre-1330 read collapses to null, which reads as "no
-      // due date" — exactly how the app behaved before this setting existed.
-      defaultDueDays={settings?.default_due_days ?? null}
-      taxProvince={settings?.province ?? null}
-      invoicingConfigured={Boolean(settings)}
-      numbering={
-        settings
-          ? {
-              prefix: settings.invoice_prefix,
-              nextNumber: formatInvoiceNumber(
-                settings.invoice_prefix,
-                settings.next_invoice_seq,
-              ),
-            }
-          : null
-      }
-      rails={{ stripe: rails.stripe, paypal: rails.paypal }}
-      books={{
-        quickbooks: qboClients.length > 0,
-        xero: xeroClients.length > 0,
-      }}
-    />
-  );
 }
 
 export { INVOICE_PAGE_SIZE };

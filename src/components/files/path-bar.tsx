@@ -106,8 +106,13 @@ export async function PathBar({
         </ol>
       </nav>
 
+      {/* WRAPS rather than clipping. This group was `shrink-0` when it held one
+          search box and a Sort button; the Download button joined it and a
+          narrow window then pushed Sort off the edge with no way to reach it.
+          flex-wrap + justify-end folds it onto a second line instead, and
+          min-w-0 lets it actually give ground to the path. */}
       {(clientProfileId || trailing) && (
-        <div className="flex shrink-0 items-center gap-3.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3.5 gap-y-2">
           {clientProfileId && (
             <Link
               href={`/clients/${clientProfileId}`}

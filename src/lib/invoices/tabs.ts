@@ -1,4 +1,4 @@
-// Which Billing tab a URL lands on, and how the Invoices tab's filters are
+// How Billing's filters are
 // read out of the query string.
 //
 // Pure and neutral (no "use client"), so the server page and the client filter
@@ -13,13 +13,7 @@ import {
   type InvoiceStatusFilter,
 } from "@/lib/invoices/filters";
 
-export type BillingTab = "invoices" | "settings";
 
-export function resolveBillingTab(
-  sp: Record<string, string | undefined>,
-): BillingTab {
-  return sp.tab === "settings" ? "settings" : "invoices";
-}
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -52,11 +46,10 @@ export function resolveInvoiceFilters(
 // accidentally drop the client filter.
 export function billingHref(
   filters: InvoiceListFilters,
-  change: Partial<InvoiceListFilters> & { tab?: BillingTab } = {},
+  change: Partial<InvoiceListFilters> = {},
 ): string {
   const next = { ...filters, ...change };
   const params = new URLSearchParams();
-  if (change.tab === "settings") params.set("tab", "settings");
   if (next.status !== "all") params.set("status", next.status);
   if (next.clientId) params.set("client", next.clientId);
   if (next.from) params.set("from", next.from);

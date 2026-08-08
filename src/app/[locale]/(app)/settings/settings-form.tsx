@@ -19,7 +19,6 @@ import {
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
 import { isOwnerOnlySettingsSection } from "@/lib/settings/owner-sections";
-import { FirmSecuritySection } from "@/components/settings/firm-security-section";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -48,6 +47,7 @@ import type { FirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
 import { InvoiceChaseDefaults } from "@/components/settings/invoice-chase-defaults";
+import { PaymentTermsDefaults } from "@/components/settings/payment-terms-defaults";
 import type { ChaseSettings } from "@/lib/invoices/chase-settings";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import type { NotificationSettingsBundle } from "@/lib/db/notification-settings";
@@ -126,6 +126,7 @@ export function SettingsShell({
   invoiceDefaultDelayDays,
   reminderDefaultSettings,
   chaseDefaults,
+  defaultDueDays,
   aiUsage,
   isOwner,
   billingSlot,
@@ -159,6 +160,8 @@ export function SettingsShell({
   invoiceDefaultDelayDays: number | null;
   reminderDefaultSettings: ReminderSettings | null;
   chaseDefaults: ChaseSettings;
+  /** The firm's payment terms, for the Automation section. Null = no terms set. */
+  defaultDueDays: number | null;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -330,10 +333,10 @@ export function SettingsShell({
         {section === "security" && (
           <div className="space-y-12">
             <MfaSection initialEnabled={mfaEnabled} />
-            {/* Yours above, the firm's below. Owner-only: these settings decide
-                what other people may do, so deciding them cannot be one of the
-                things other people may do. */}
-            {isOwner && <FirmSecuritySection invitePolicy={invitePolicy} />}
+            {/* "Your firm" (who may invite) MOVED to the Team section on the
+                founder's ruling — "your firm should be in team setting". This
+                page is about YOUR sign-in; who may add teammates is a team
+                fact. Security keeps your MFA and the firm's data controls. */}
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
@@ -355,6 +358,9 @@ export function SettingsShell({
               <TeamSettings
                 clientsPrivateByDefault={teamSettings.clientsPrivateByDefault}
                 notifyOnAssignment={teamSettings.notifyOnAssignment}
+                // Owner-only: setInvitePolicy refuses anyone else, and a
+                // control that always errors is worse than none.
+                invitePolicy={isOwner ? invitePolicy : null}
               />
             </div>
           </section>
@@ -433,6 +439,12 @@ export function SettingsShell({
                 action still gates on money.view — narrowing the UI to
                 owners would strand members behind the read-only window's
                 "manage in Settings" link. */}
+            {/* Payment terms — MOVED from Billing → Settings, where it was the
+                ONLY editor of default_due_days in the repo. Above reminders on
+                purpose: the chase schedule counts FROM this date, so the two
+                read in the order they happen. Outside the owner gate for the
+                same reason InvoiceChaseDefaults is (money.view, not owner). */}
+            <PaymentTermsDefaults initialDays={defaultDueDays} />
             <InvoiceChaseDefaults chase={chaseDefaults} />
             {isOwner && (
               <>

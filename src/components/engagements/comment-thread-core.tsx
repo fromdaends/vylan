@@ -28,6 +28,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ArrowUp, AtSign, Loader2, Trash2 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { MentionText } from "@/components/ui/mention-text";
 import { cn } from "@/lib/cn";
 import { formatRelative, type AppLocale } from "@/lib/format";
 import type { FileComment } from "@/lib/db/file-comments";
@@ -218,6 +219,9 @@ export function useCommentThread({
   );
 
   return {
+    // The roster the composer picks from is the same roster the LIST needs to
+    // paint a mention in that person's colour — exposed rather than re-fetched.
+    members,
     comments,
     setComments,
     body,
@@ -300,9 +304,16 @@ export function CommentList({
               {quotedText}
             </p>
           )}
-          <p className="mt-1 ml-[30px] whitespace-pre-wrap break-words text-[13px] leading-snug">
-            {c.body}
-          </p>
+          {/* Mentions in each teammate's own colour — the ONE renderer, so
+              every surface that mounts this list gets it at once. `c.mentions`
+              are the ids the server sanitized at write time, so only a real
+              (notified) mention is painted. */}
+          <MentionText
+            body={c.body}
+            members={state.members}
+            mentioned={c.mentions}
+            className="mt-1 ml-[30px] block whitespace-pre-wrap break-words text-[13px] leading-snug"
+          />
         </article>
       ))}
     </div>

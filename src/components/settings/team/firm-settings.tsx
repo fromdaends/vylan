@@ -6,6 +6,7 @@ import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import { Lock, BellRing } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { FirmSecuritySection } from "@/components/settings/firm-security-section";
 import { setClientsPrivateDefault, setFirmTeamFlag } from "@/app/actions/team";
 
 // Team Wave 4 — the owner-only team firm settings. ONE reusable block rendered
@@ -51,9 +52,21 @@ function ToggleRow({
 export function TeamSettings({
   clientsPrivateByDefault,
   notifyOnAssignment,
+  invitePolicy = null,
 }: {
   clientsPrivateByDefault: boolean;
   notifyOnAssignment: boolean;
+  /**
+   * WHO MAY INVITE — folded in here on the founder's ruling ("your firm should
+   * be in team setting"). It used to live alone under Settings → Security,
+   * which is a page about YOUR sign-in, not about the firm's team.
+   *
+   * Null for anyone who may not set it: the action refuses a non-OWNER outright
+   * (setInvitePolicy), and a radio that always errors is worse than no radio.
+   * Passed in rather than read here so both surfaces that mount this block —
+   * Settings → Team and the firm page's Settings tab — get it from one edit.
+   */
+  invitePolicy?: "owner" | "members" | null;
 }) {
   const t = useTranslations("Team");
   const router = useRouter();
@@ -91,6 +104,12 @@ export function TeamSettings({
 
   return (
     <div className="space-y-3">
+      {invitePolicy && (
+        <div className="rounded-xl border border-border bg-card px-4 py-3.5">
+          {/* No heading of its own: the surrounding block already says Team. */}
+          <FirmSecuritySection invitePolicy={invitePolicy} showHeading={false} />
+        </div>
+      )}
       <ToggleRow
         icon={<Lock className="size-4" aria-hidden="true" />}
         label={t("firm_private_default_label")}
