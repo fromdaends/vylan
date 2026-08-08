@@ -19,7 +19,11 @@ import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
 import { FilterLinks } from "@/components/ui/filter-links";
 import { deriveEngagementStatus } from "@/lib/attention";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { listClientMembers } from "@/lib/db/client-members";
 import { ClientAccess } from "@/components/clients/client-access";
 import { ClientNotes } from "@/components/clients/client-notes";
@@ -67,7 +71,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { Plus, Lock, FileText } from "lucide-react";
+import { Plus, Lock, FileText, Clock } from "lucide-react";
 import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -149,9 +153,9 @@ export default async function ClientDetailPage({
   const bkView = parseClientBookkeepingView(bkParam);
   const period = isPeriodKey(periodParam)
     ? periodParam
-    // Last month, not this one: you close July during August, and opening on a
-    // month nobody can finish yet is the firm-wide board's default too.
-    : defaultPeriod(new Date().toISOString().slice(0, 10));
+    : // Last month, not this one: you close July during August, and opening on a
+      // month nobody can finish yet is the firm-wide board's default too.
+      defaultPeriod(new Date().toISOString().slice(0, 10));
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -257,9 +261,7 @@ export default async function ClientDetailPage({
       const engagements =
         tab === "overview" ? await listEngagements({ client_id: id }) : [];
       const signals =
-        engagements.length > 0
-          ? await loadEngagementSignals("active", id)
-          : [];
+        engagements.length > 0 ? await loadEngagementSignals("active", id) : [];
       return { engagements, signals };
     })(),
     getCurrentFirm(),
@@ -333,10 +335,7 @@ export default async function ClientDetailPage({
     // firm reads it needs are cache-shared with the destructured ones).
     (async () => {
       if (tab !== "organizers") return [];
-      const [f, users] = await Promise.all([
-        getCurrentFirm(),
-        listFirmUsers(),
-      ]);
+      const [f, users] = await Promise.all([getCurrentFirm(), listFirmUsers()]);
       const team = hasActiveTeam({
         teamEnabled: f?.team_enabled === true,
         activeMemberCount: users.filter((u) => !u.deactivated_at).length,
@@ -381,10 +380,7 @@ export default async function ClientDetailPage({
       ? listDocuments({ clientId: id, sort: "date", page: 1 })
           .then((page) => page.documents.slice(0, 5))
           .catch(
-            () =>
-              [] as Awaited<
-                ReturnType<typeof listDocuments>
-              >["documents"],
+            () => [] as Awaited<ReturnType<typeof listDocuments>>["documents"],
           )
       : Promise.resolve(
           [] as Awaited<ReturnType<typeof listDocuments>>["documents"],
@@ -480,15 +476,16 @@ export default async function ClientDetailPage({
   const thisYear = todayInTimeZone(firm?.timezone ?? "UTC").slice(0, 4);
   const clientYearEntries = clientTimeEntries.filter(
     (e) =>
-      (dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ?? "").slice(0, 4) ===
-      thisYear,
+      (dateInTimeZone(e.started_at, firm?.timezone ?? "UTC") ?? "").slice(
+        0,
+        4,
+      ) === thisYear,
   );
   const clientTimeMinutesThisYear = clientYearEntries.reduce(
     (sum, e) => sum + e.duration_minutes,
     0,
   );
-  const canSeeTimeValue =
-    can(me, "insights.view") || can(me, "rates.manage");
+  const canSeeTimeValue = can(me, "insights.view") || can(me, "rates.manage");
   let clientTimeValueCents: number | null = null;
   if (timeEnabled && canSeeTimeValue && clientYearEntries.length > 0) {
     const rates = await listBillableRates(clientYearEntries.map((e) => e.id));
@@ -502,9 +499,7 @@ export default async function ClientDetailPage({
     }
   }
   const tTime = await getTranslations("Time");
-  const clientNameById = new Map(
-    allClients.map((c) => [c.id, c.display_name]),
-  );
+  const clientNameById = new Map(allClients.map((c) => [c.id, c.display_name]));
   const relationshipRows: RelationshipCardRow[] = resolveRelationshipRows(
     client.id,
     relationships,
@@ -549,8 +544,7 @@ export default async function ClientDetailPage({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: firmUsers.filter((u) => !u.deactivated_at).length,
   });
-  const owner =
-    firmUsers.find((u) => u.id === client.assigned_user_id) ?? null;
+  const owner = firmUsers.find((u) => u.id === client.assigned_user_id) ?? null;
   const assignableMembers = firmUsers
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
@@ -590,7 +584,10 @@ export default async function ClientDetailPage({
     for (const r of selectForClient(organizerWorklist, id)) {
       if (r.status === "complete" || r.status === "cancelled") continue;
       if (!r.assigneeUserId) continue;
-      liveByUser.set(r.assigneeUserId, (liveByUser.get(r.assigneeUserId) ?? 0) + 1);
+      liveByUser.set(
+        r.assigneeUserId,
+        (liveByUser.get(r.assigneeUserId) ?? 0) + 1,
+      );
     }
     const ownerIds = new Set(firmOwners.map((o) => o.id));
     const byId = new Map<
@@ -722,13 +719,7 @@ export default async function ClientDetailPage({
     xeroParam === "other" ||
     xeroParam === "enc"
       ? (xeroParam as
-          | "done"
-          | "denied"
-          | "error"
-          | "setup"
-          | "inuse"
-          | "other"
-          | "enc")
+          "done" | "denied" | "error" | "setup" | "inuse" | "other" | "enc")
       : null;
   const clientXero = {
     configured: isXeroConfigured(),
@@ -781,117 +772,191 @@ export default async function ClientDetailPage({
           Grouped this way the rhythm still works — the group as a whole keeps
           its 24px from whatever follows. */}
       <div className="space-y-2">
-      {/* One way back, stated plainly. A two-crumb breadcrumb ("Clients /
+        {/* One way back, stated plainly. A two-crumb breadcrumb ("Clients /
           Zachary Thresh") spends a line telling you the name you can already
           read at 26px directly underneath it. */}
-      <BackLink href="/clients" label={t("back_all_clients")} />
+        <BackLink href="/clients" label={t("back_all_clients")} />
 
-      {/* Canopy puts the identity AND the section tabs in one bordered card at
+        {/* Canopy puts the identity AND the section tabs in one bordered card at
           the top, so "who am I looking at" and "which part of them" are one
           object. Vylan had a bare header floating above loose sections. */}
-      <header>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          {/* The picture if there is one (1530), initials if not — the circle
+        <header>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-4">
+              {/* The picture if there is one (1530), initials if not — the circle
               was previously always initials, which the founder called "a
               redudant circle". AvatarInitials already handled both; nothing had
               ever given it a src for a CLIENT. */}
-          <AvatarInitials
-            src={clientAvatarUrl ?? undefined}
-            name={client.display_name}
-            size={52}
-          />
-          <div className="min-w-0">
-          {/* The client's name IS the menu — the same NameMenu the firm page
+              <AvatarInitials
+                src={clientAvatarUrl ?? undefined}
+                name={client.display_name}
+                size={52}
+              />
+              <div className="min-w-0">
+                {/* The client's name IS the menu — the same NameMenu the firm page
               uses, because the founder asked for "the exact same thing". It
               replaces BOTH the pen that used to sit here and the "⋯" that used
               to sit in the corner: two anonymous controls answering one
               question, which is the shape the firm page just shed. */}
-          <div className="flex items-center gap-1">
-            <ClientNameMenu
-              client={client}
-              avatarUrl={clientAvatarUrl}
-              locale={locale}
-              canManage={canManageClients}
-              isOwner={isOwner}
-              archiveFormId={CLIENT_ARCHIVE_FORM_ID}
-            />
-          </div>
-          {/* Just what they ARE. The old row said "Individual · Active · EN"
+                <div className="flex items-center gap-1">
+                  <ClientNameMenu
+                    client={client}
+                    avatarUrl={clientAvatarUrl}
+                    locale={locale}
+                    canManage={canManageClients}
+                    isOwner={isOwner}
+                    archiveFormId={CLIENT_ARCHIVE_FORM_ID}
+                  />
+                </div>
+                {/* Just what they ARE. The old row said "Individual · Active · EN"
               on every client on every visit — three chips that are the same for
               almost everyone, which is the noise the kit's "colour marks the
               exception" rule exists to remove. Archived and Private still
               show, because those genuinely are exceptions. */}
-          <div className="mt-1 flex items-center gap-2">
-            <p className="text-[13.5px] text-muted-foreground">
-              {client.type === "individual"
-                ? t("type_individual")
-                : t("type_business")}
-            </p>
-            {client.archived_at && (
-              <StatusCapsule tone="muted">{t("archived")}</StatusCapsule>
-            )}
-            {isOwner && client.is_private && (
-              <StatusCapsule tone="warning">
-                <Lock className="size-3" aria-hidden="true" />
-                {t("private_badge")}
-              </StatusCapsule>
-            )}
-            {/* Who owns this client, beside the name — the one thing added to
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-[13.5px] text-muted-foreground">
+                    {client.type === "individual"
+                      ? t("type_individual")
+                      : t("type_business")}
+                  </p>
+                  {client.archived_at && (
+                    <StatusCapsule tone="muted">{t("archived")}</StatusCapsule>
+                  )}
+                  {isOwner && client.is_private && (
+                    <StatusCapsule tone="warning">
+                      <Lock className="size-3" aria-hidden="true" />
+                      {t("private_badge")}
+                    </StatusCapsule>
+                  )}
+                  {/* Who owns this client, beside the name — the one thing added to
                 the design, because "whose client is this" is the question the
                 header is asked most and it was a row further down. */}
-            {teamEnabled && (
-              <ClientAssignee
-                clientId={client.id}
-                assigneeId={client.assigned_user_id}
-                assigneeName={owner ? userDisplayLabel(owner) : null}
-                assigneeDeactivated={!!owner?.deactivated_at}
-                members={assignableMembers}
-              />
+                  {teamEnabled && (
+                    <ClientAssignee
+                      clientId={client.id}
+                      assigneeId={client.assigned_user_id}
+                      assigneeName={owner ? userDisplayLabel(owner) : null}
+                      assigneeDeactivated={!!owner?.deactivated_at}
+                      members={assignableMembers}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* ── TIME, AS A BUBBLE IN THE CORNER ───────────────────────────
+            Founder: "remove it from that section and just have it sit in a
+            bubble on the top right of the screen above the header line."
+
+            It was a Panel in the overview grid, where it never fit: pinned to
+            a row no other column used, so it hung below an otherwise square
+            page. A client's total time is a FACT ABOUT THE CLIENT, not a
+            section of their overview — so it belongs beside their name, not
+            in the stack of sections underneath it. Living in the header also
+            means it follows you across the tabs, which a panel could not do.
+
+            Hidden at zero rather than reading "no time yet": an empty section
+            has to hold its place in a grid, but a bubble that says nothing is
+            just something to look at. The Work → Time page is where you go to
+            confirm a client has none. */}
+            {timeEnabled && clientTimeMinutesThisYear > 0 && (
+              <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-3.5 py-1.5">
+                <Clock
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="text-[13px] tabular-nums">
+                  {tTime("client_stat", {
+                    duration: formatMinutes(clientTimeMinutesThisYear),
+                  })}
+                </span>
+                {/* Money only where the billing RLS answered — a viewer
+                    without rates sees the hours alone, never a blank. */}
+                {clientTimeValueCents != null && (
+                  <>
+                    <span aria-hidden className="text-border">
+                      ·
+                    </span>
+                    <span className="text-[13px] font-medium tabular-nums">
+                      {formatCurrency(clientTimeValueCents / 100, locale, {
+                        fractionDigits: 0,
+                      })}
+                    </span>
+                  </>
+                )}
+              </div>
             )}
-          </div>
-          </div>
-        </div>
-        {/* The corner is now empty of controls — everything moved onto the
+
+            {/* The corner is now empty of controls — everything moved onto the
             name. The archive form stays here and is reached BY ID from the
             menu, because a <form> cannot be a dropdown item and still submit
             cleanly. */}
-        <form
-          id={CLIENT_ARCHIVE_FORM_ID}
-          action={client.archived_at ? restoreClientAction : archiveClientAction}
-          className="hidden"
-        >
-          <input type="hidden" name="id" value={client.id} />
-        </form>
-      </div>
+            <form
+              id={CLIENT_ARCHIVE_FORM_ID}
+              action={
+                client.archived_at ? restoreClientAction : archiveClientAction
+              }
+              className="hidden"
+            >
+              <input type="hidden" name="id" value={client.id} />
+            </form>
+          </div>
 
-      {/* The tab row, sitting on the card's bottom edge with the active tab
+          {/* The tab row, sitting on the card's bottom edge with the active tab
           underlined — Canopy's exact treatment. Rendered by the SHARED
           ProfileTabs: the teammate profile has the identical row, and two
           copies of it is precisely the drift the repo's Cohesion rule names.
           A tab that would open an empty section isn't offered at all (no
           bookkeeping provider configured → no Bookkeeping tab). */}
-      <ProfileTabs
-        label={client.display_name}
-        items={[
-          { key: "overview", href: clientTabHref(client.id, "overview"), label: t("tab_overview"), active: tab === "overview" },
-          { key: "engagements", href: clientTabHref(client.id, "engagements"), label: t("engagements"), active: tab === "engagements" },
-          // "Organizers" rather than "Who works on it": the founder asked for
-          // the Canopy word, and "team" reads as the firm's own staff list,
-          // which is a different page.
-          ...(teamEnabled
-            ? [{ key: "team", href: clientTabHref(client.id, "organizers"), label: t("tab_organizers"), active: tab === "organizers" }]
-            : []),
-          ...(clientQuickbooks.configured || clientXero.configured
-            ? [{ key: "bookkeeping", href: clientTabHref(client.id, "bookkeeping"), label: t("bk_section_title"), active: tab === "bookkeeping" }]
-            : []),
-          // Files is still a route of its own, so this tab NAVIGATES away.
-          // Files is a real tab now, not a link away: it hosts the same browser
-          // /files renders, locked to this client.
-          { key: "files", href: clientTabHref(client.id, "files"), label: t("tab_files"), active: tab === "files" },
-        ]}
-      />
-      </header>
+          <ProfileTabs
+            label={client.display_name}
+            items={[
+              {
+                key: "overview",
+                href: clientTabHref(client.id, "overview"),
+                label: t("tab_overview"),
+                active: tab === "overview",
+              },
+              {
+                key: "engagements",
+                href: clientTabHref(client.id, "engagements"),
+                label: t("engagements"),
+                active: tab === "engagements",
+              },
+              // "Organizers" rather than "Who works on it": the founder asked for
+              // the Canopy word, and "team" reads as the firm's own staff list,
+              // which is a different page.
+              ...(teamEnabled
+                ? [
+                    {
+                      key: "team",
+                      href: clientTabHref(client.id, "organizers"),
+                      label: t("tab_organizers"),
+                      active: tab === "organizers",
+                    },
+                  ]
+                : []),
+              ...(clientQuickbooks.configured || clientXero.configured
+                ? [
+                    {
+                      key: "bookkeeping",
+                      href: clientTabHref(client.id, "bookkeeping"),
+                      label: t("bk_section_title"),
+                      active: tab === "bookkeeping",
+                    },
+                  ]
+                : []),
+              // Files is still a route of its own, so this tab NAVIGATES away.
+              // Files is a real tab now, not a link away: it hosts the same browser
+              // /files renders, locked to this client.
+              {
+                key: "files",
+                href: clientTabHref(client.id, "files"),
+                label: t("tab_files"),
+                active: tab === "files",
+              },
+            ]}
+          />
+        </header>
       </div>
 
       {/* Two columns on the OVERVIEW only. Every other tab is ONE full-width
@@ -929,7 +994,7 @@ export default async function ClientDetailPage({
             : ""
         }
       >
-      {/* ── Left rail (overview only): reference ─────────────────────────
+        {/* ── Left rail (overview only): reference ─────────────────────────
           It used to hold five panels including the two most action-heavy ones
           on the page (connect QuickBooks, set a portal PIN) under a comment
           claiming it was "reference, not action". That is what made the page
@@ -938,97 +1003,95 @@ export default async function ClientDetailPage({
           two boxes of it stacked was arbitrary), and the action panels moved
           across to the work. Sticky, so a long engagements table no longer
           scrolls the rail away into whitespace. */}
-      {tab === "overview" && (
-      <div className="space-y-5 self-start min-[880px]:row-span-4 min-[1180px]:row-span-2">
-      <Panel title={t("details_title")}>
-        {/* Read-only by default. Every field renders as a labeled value,
+        {tab === "overview" && (
+          <div className="space-y-5 self-start min-[880px]:row-span-4 min-[1180px]:row-span-2">
+            <Panel title={t("details_title")}>
+              {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
             the "Edit client" dialog in the header. This protects the email
             in particular, since it's where document-request links and
             reminders get sent. */}
-        {/* One column in the rail — the old two-column grid put a phone
+              {/* One column in the rail — the old two-column grid put a phone
             number beside an email in a space too narrow for either. */}
-        <dl className="space-y-3 text-sm">
-          <DetailRow label={t("col_email")} value={client.email} />
-          <DetailRow label={t("col_phone")} value={client.phone} mono />
-          <DetailRow
-            label={t("field_external_ref")}
-            value={client.external_ref}
-            placeholder={t("field_none_yet")}
-            mono
-          />
-          <li className="!mt-4 border-t border-border/60" aria-hidden />
-          <DetailRow
-            label={t("field_type")}
-            value={
-              client.type === "individual"
-                ? t("type_individual")
-                : t("type_business")
-            }
-          />
-          <DetailRow
-            label={t("field_industry")}
-            value={fieldLabel(INDUSTRIES, client.industry, locale)}
-            placeholder={t("field_none_yet")}
-          />
-          <DetailRow
-            label={t("field_province")}
-            value={fieldLabel(PROVINCES, client.province, locale)}
-            placeholder={t("field_none_yet")}
-          />
-          <DetailRow
-            label={t("field_locale")}
-            value={client.locale === "fr" ? "Français" : "English"}
-          />
-          <DetailRow
-            label={t("client_since")}
-            value={formatDate(client.created_at, locale, "medium")}
-          />
-          {/* The old single notes FIELD is gone from here. Authored notes
+              <dl className="space-y-3 text-sm">
+                <DetailRow label={t("col_email")} value={client.email} />
+                <DetailRow label={t("col_phone")} value={client.phone} mono />
+                <DetailRow
+                  label={t("field_external_ref")}
+                  value={client.external_ref}
+                  placeholder={t("field_none_yet")}
+                  mono
+                />
+                <li className="!mt-4 border-t border-border/60" aria-hidden />
+                <DetailRow
+                  label={t("field_type")}
+                  value={
+                    client.type === "individual"
+                      ? t("type_individual")
+                      : t("type_business")
+                  }
+                />
+                <DetailRow
+                  label={t("field_industry")}
+                  value={fieldLabel(INDUSTRIES, client.industry, locale)}
+                  placeholder={t("field_none_yet")}
+                />
+                <DetailRow
+                  label={t("field_province")}
+                  value={fieldLabel(PROVINCES, client.province, locale)}
+                  placeholder={t("field_none_yet")}
+                />
+                <DetailRow
+                  label={t("field_locale")}
+                  value={client.locale === "fr" ? "Français" : "English"}
+                />
+                <DetailRow
+                  label={t("client_since")}
+                  value={formatDate(client.created_at, locale, "medium")}
+                />
+                {/* The old single notes FIELD is gone from here. Authored notes
               (1270) live in their own panel with an author and a date, and
               the same page showing both meant "Notes —" beside a box that
               already had notes in it. */}
-        </dl>
-      </Panel>
+              </dl>
+            </Panel>
 
-      {/* Relationships — the entity tree (spec §2). Between About and
+            {/* Relationships — the entity tree (spec §2). Between About and
           Bookkeeping, always rendered (the empty state keeps the feature
           discoverable). Renders its own Panel-identical section because the
           [+], kebabs and View-all need client state.
           No tab check of its own: the whole rail is already overview-only. */}
-      <RelationshipsCard
-        clientId={client.id}
-        clientType={client.type}
-        rows={relationshipRows}
-        candidates={pickerCandidates}
-        canManage={canManageClients && !client.archived_at}
-      />
+            <RelationshipsCard
+              clientId={client.id}
+              clientType={client.type}
+              rows={relationshipRows}
+              candidates={pickerCandidates}
+              canManage={canManageClients && !client.archived_at}
+            />
 
-      {/* Portal access — the optional code that gates this client's portal
+            {/* Portal access — the optional code that gates this client's portal
           link. Left column with the other reference cards, and compact: it is
           one switch and a link, not a section. The code itself is deliberately
           NOT passed in — the card fetches it through an audit-logged action, so
           it never sits in this page's HTML. */}
-      <Panel title={t("portal_access_title")}>
-        <ClientPortalPinCard
-          clientId={client.id}
-          initialEnabled={client.portal_pin_enabled === true}
-        />
-      </Panel>
+            <Panel title={t("portal_access_title")}>
+              <ClientPortalPinCard
+                clientId={client.id}
+                initialEnabled={client.portal_pin_enabled === true}
+              />
+            </Panel>
 
-      {/* Portal access — the optional 6-digit code that gates this client's
+            {/* Portal access — the optional 6-digit code that gates this client's
           portal link. Off for everyone by default; the frictionless link stays
           the product's default story. Owners and staff both manage it, in line
           with the rest of this profile.
           The code itself is deliberately NOT passed in: the card fetches it
           through an audit-logged action, so it never sits in this page's
           HTML. */}
+          </div>
+        )}
 
-
-      </div>
-      )}
-
-      {/* TASKS — a VIEW of the one task list (see the Tasks rule in
+        {/* TASKS — a VIEW of the one task list (see the Tasks rule in
           CLAUDE.md), not a second store. Whatever is created on an engagement
           for this client, or straight on the client, shows up here the moment
           it exists; this page owns none of it.
@@ -1036,268 +1099,260 @@ export default async function ClientDetailPage({
           Status sits in a FIXED left column so the titles line up down the
           card — Canopy's treatment, and the reason a mixed-status list stays
           scannable instead of zig-zagging. */}
-      {tab === "overview" && (
-        <Panel
-          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-1"
-          title={t("tasks_title")}
-          action={
-            <Link
-              href="/work"
-              className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
-            >
-              {t("tasks_view_all")}
-            </Link>
-          }
-        >
-          {clientTasks.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {t("tasks_empty")}
-            </p>
-          ) : (
-            <ul className="divide-y divide-border/45">
-              {clientTasks.slice(0, 6).map((task) => (
-                <li key={task.id} className="flex items-center gap-3 py-2.5">
-                  <span className="w-[138px] shrink-0">
-                    <StatusCapsule
-                      tone={
-                        task.status === "done"
-                          ? "success"
-                          : task.status === "doing"
-                            ? "accent"
-                            : "muted"
-                      }
-                    >
-                      {t(`task_status_${task.status}`)}
-                    </StatusCapsule>
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {task.title}
-                  </span>
-                  <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                    {task.dueDate
-                      ? formatDate(task.dueDate, locale, "compact")
-                      : "—"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      )}
+        {tab === "overview" && (
+          <Panel
+            className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-1"
+            title={t("tasks_title")}
+            action={
+              <Link
+                href="/work"
+                className="text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+              >
+                {t("tasks_view_all")}
+              </Link>
+            }
+          >
+            {clientTasks.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t("tasks_empty")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/45">
+                {clientTasks.slice(0, 6).map((task) => (
+                  <li key={task.id} className="flex items-center gap-3 py-2.5">
+                    <span className="w-[138px] shrink-0">
+                      <StatusCapsule
+                        tone={
+                          task.status === "done"
+                            ? "success"
+                            : task.status === "doing"
+                              ? "accent"
+                              : "muted"
+                        }
+                      >
+                        {t(`task_status_${task.status}`)}
+                      </StatusCapsule>
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {task.title}
+                    </span>
+                    <span className="shrink-0 text-[12.5px] text-muted-foreground">
+                      {task.dueDate
+                        ? formatDate(task.dueDate, locale, "compact")
+                        : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
 
-      {tab === "overview" && (
-        <Panel
-          className="min-h-[240px] min-[880px]:col-start-2 min-[880px]:row-start-2"
-          title={t("notes_title")}
-        >
-          <ClientNotes
-            clientId={client.id}
-            notes={clientNotes}
-            viewerId={me?.id ?? null}
-            locale={locale}
-          />
-        </Panel>
-      )}
+        {tab === "overview" && (
+          <Panel
+            className="min-h-[240px] min-[880px]:col-start-2 min-[880px]:row-start-2"
+            title={t("notes_title")}
+          >
+            <ClientNotes
+              clientId={client.id}
+              notes={clientNotes}
+              viewerId={me?.id ?? null}
+              locale={locale}
+            />
+          </Panel>
+        )}
 
-      {/* Renders EMPTY rather than disappearing. A panel that vanishes when it
+        {/* Renders EMPTY rather than disappearing. A panel that vanishes when it
           has nothing in it makes the overview reflow into a different shape per
           client, so you cannot learn where anything lives — and it hides the
           "View all" link exactly when a new client most needs somewhere to put
           a first file. Same reasoning as Tasks and Notes above. */}
-      {tab === "overview" && (
-        <Panel
-          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-3 min-[1180px]:col-start-3 min-[1180px]:row-start-1"
-          title={t("recent_files")}
-          action={
-            <Link
-              href={`/clients/${client.id}/archive`}
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {t("view_all_files")}
-            </Link>
-          }
-        >
-          {recentFiles.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {t("recent_files_empty")}
-            </p>
-          ) : (
-          <ul className="divide-y divide-border/50">
-            {recentFiles.map((file) => (
-              <li key={file.id} className="flex items-center gap-3 py-2.5">
-                <FileText
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{file.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {formatDate(file.createdAt, locale, "medium")}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-          )}
-        </Panel>
-      )}
+        {tab === "overview" && (
+          <Panel
+            className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-3 min-[1180px]:col-start-3 min-[1180px]:row-start-1"
+            title={t("recent_files")}
+            action={
+              <Link
+                href={`/clients/${client.id}/archive`}
+                className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                {t("view_all_files")}
+              </Link>
+            }
+          >
+            {recentFiles.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t("recent_files_empty")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/50">
+                {recentFiles.map((file) => (
+                  <li key={file.id} className="flex items-center gap-3 py-2.5">
+                    <FileText
+                      className="size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{file.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatDate(file.createdAt, locale, "medium")}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
 
-      {/* canSeeMoney stays — that is a PERMISSION, not an emptiness check, and
+        {/* canSeeMoney stays — that is a PERMISSION, not an emptiness check, and
           someone who may not see money must still not see this panel at all.
           Only the "has rows" half is dropped, for the reason above. */}
-      {tab === "overview" && canSeeMoney && (
-        <Panel
-          className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
-          title={tEng("payments_history")}
-          flush={clientPayments.length > 0}
-        >
-          {clientPayments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {tEng("payments_history_empty")}
-            </p>
-          ) : (
-            <PaymentsList
-              rows={clientPayments}
-              showClient={false}
-              currentUserId={me?.id}
-            />
-          )}
-        </Panel>
-      )}
+        {tab === "overview" && canSeeMoney && (
+          <Panel
+            className="min-h-[190px] min-[880px]:col-start-2 min-[880px]:row-start-4 min-[1180px]:col-start-3 min-[1180px]:row-start-2"
+            title={tEng("payments_history")}
+            flush={clientPayments.length > 0}
+          >
+            {clientPayments.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {tEng("payments_history_empty")}
+              </p>
+            ) : (
+              <PaymentsList
+                rows={clientPayments}
+                showClient={false}
+                currentUserId={me?.id}
+              />
+            )}
+          </Panel>
+        )}
 
-      {/* TIME (timer v2) — a small STAT, not a list: hours this year, plus
-          value for viewers the billing RLS answers. The start buttons are
-          gone by doctrine (ONE global control at the launcher) and the entry
-          list lives on the Work → Time timesheet. */}
-      {tab === "overview" && timeEnabled && (
-        <Panel
-          className="min-h-[90px] min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
-          title={t("time_title")}
-        >
-          <p className="py-3 text-sm text-muted-foreground">
-            {clientTimeMinutesThisYear > 0
-              ? tTime("client_stat", {
-                  duration: formatMinutes(clientTimeMinutesThisYear),
-                }) + (clientTimeValueCents != null
-                  ? " · " +
-                    tTime("client_stat_value", {
-                      amount: formatCurrency(
-                        clientTimeValueCents / 100,
-                        locale,
-                        { fractionDigits: 0 },
-                      ),
-                    })
-                  : "")
-              : tTime("client_stat_empty")}
-          </p>
-        </Panel>
-      )}
-
-      {/* ── The other tabs render one full-width column ───────────────── */}
-      {tab !== "overview" && (
-      <div className="space-y-6">
-
-      {/* ── ORGANIZERS TAB: who works on this client ──────────────────────
+        {/* ── The other tabs render one full-width column ───────────────── */}
+        {tab !== "overview" && (
+          <div className="space-y-6">
+            {/* ── ORGANIZERS TAB: who works on this client ──────────────────────
           Two panels, full width. "Who can see this" is the control (add
           someone, give them a role); the table beside it is the ANSWER — every
           person with access, why they have it, and how much of this client's
           live work is actually on them. The tab used to be the access card
           alone, floating in a rail with two thirds of the screen empty. */}
-      {teamEnabled && tab === "organizers" && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
-          <Panel title={t("access_title")}>
-            <ClientAccess
-              clientId={id}
-              members={cast}
-              owners={firmOwners}
-              assignee={owner ? { id: owner.id, name: userDisplayLabel(owner) } : null}
-              candidates={castCandidates}
-              canEdit={canManageClients}
-            />
-          </Panel>
+            {teamEnabled && tab === "organizers" && (
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+                <Panel title={t("access_title")}>
+                  <ClientAccess
+                    clientId={id}
+                    members={cast}
+                    owners={firmOwners}
+                    assignee={
+                      owner
+                        ? { id: owner.id, name: userDisplayLabel(owner) }
+                        : null
+                    }
+                    candidates={castCandidates}
+                    canEdit={canManageClients}
+                  />
+                </Panel>
 
-          <Panel title={t("organizers_workload_title")} flush>
-            {organizerRows.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">
-                {t("organizers_workload_empty")}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">{t("organizers_col_person")}</th>
-                      <th className="px-4 py-2 font-medium">{t("organizers_col_why")}</th>
-                      <th className="px-4 py-2 text-right font-medium">{t("organizers_col_live")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {organizerRows.map((r) => (
-                      <tr
-                        key={r.userId}
-                        className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
-                      >
-                        <td className="px-4 py-3 align-middle">
-                          <Link
-                            href={`/settings/team/${r.userId}`}
-                            className="flex items-center gap-2.5 font-medium hover:underline"
-                          >
-                            <AvatarInitials name={r.name} size={26} />
-                            <span className="truncate">{r.name}</span>
-                          </Link>
-                          {r.position && (
-                            <span className="ml-[2.3rem] block text-xs text-muted-foreground">
-                              {r.position}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 align-middle">
-                          {/* WHY they can see this client, not just that they
+                <Panel title={t("organizers_workload_title")} flush>
+                  {organizerRows.length === 0 ? (
+                    <p className="px-4 py-6 text-sm text-muted-foreground">
+                      {t("organizers_workload_empty")}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                            <th className="px-4 py-2 font-medium">
+                              {t("organizers_col_person")}
+                            </th>
+                            <th className="px-4 py-2 font-medium">
+                              {t("organizers_col_why")}
+                            </th>
+                            <th className="px-4 py-2 text-right font-medium">
+                              {t("organizers_col_live")}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {organizerRows.map((r) => (
+                            <tr
+                              key={r.userId}
+                              className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
+                            >
+                              <td className="px-4 py-3 align-middle">
+                                <Link
+                                  href={`/settings/team/${r.userId}`}
+                                  className="flex items-center gap-2.5 font-medium hover:underline"
+                                >
+                                  <AvatarInitials name={r.name} size={26} />
+                                  <span className="truncate">{r.name}</span>
+                                </Link>
+                                {r.position && (
+                                  <span className="ml-[2.3rem] block text-xs text-muted-foreground">
+                                    {r.position}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 align-middle">
+                                {/* WHY they can see this client, not just that they
                               can. An owner sees every client whether or not
                               anyone added them, and a panel that doesn't say so
                               is simply wrong about who is looking. */}
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {r.isOwner && (
-                              <Badge variant="secondary" className="font-normal">
-                                {t("organizers_why_owner")}
-                              </Badge>
-                            )}
-                            {r.isAssignee && (
-                              <Badge variant="secondary" className="font-normal">
-                                {t("organizers_why_assignee")}
-                              </Badge>
-                            )}
-                            {r.isMember && (
-                              <Badge variant="outline" className="font-normal">
-                                {t("organizers_why_member")}
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right align-middle tabular-nums">
-                          {r.liveCount > 0 ? (
-                            r.liveCount
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {r.isOwner && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="font-normal"
+                                    >
+                                      {t("organizers_why_owner")}
+                                    </Badge>
+                                  )}
+                                  {r.isAssignee && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="font-normal"
+                                    >
+                                      {t("organizers_why_assignee")}
+                                    </Badge>
+                                  )}
+                                  {r.isMember && (
+                                    <Badge
+                                      variant="outline"
+                                      className="font-normal"
+                                    >
+                                      {t("organizers_why_member")}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right align-middle tabular-nums">
+                                {r.liveCount > 0 ? (
+                                  r.liveCount
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Panel>
               </div>
             )}
-          </Panel>
-        </div>
-      )}
 
-      {/* Canopy's "Active Tasks (4)" panel: a titled box whose body is a real
+            {/* Canopy's "Active Tasks (4)" panel: a titled box whose body is a real
           TABLE with column headers, not a bare list of links. The columns are
           the questions you actually ask of a client's work — where is it, what
           is it, who has it, when is it due — and the status reads as a coloured
           dot plus a word, which is Canopy's treatment and quieter than a row of
           filled pills. */}
-      {/* ── FILES TAB: the firm's file browser, locked to this client ──────
+            {/* ── FILES TAB: the firm's file browser, locked to this client ──────
           Literally the component /files renders — path bar, folder rows, drag
           to move, bulk bar, upload, sort, the lot — with `lockedClientId` set
           so you start inside this client's folders and no link can wander out
@@ -1308,88 +1363,89 @@ export default async function ClientDetailPage({
           /clients/[id]/archive is now a redirect that lands here.
           No Panel around it: the browser draws its own toolbar and path bar,
           and a titled box around a file manager is a second frame. */}
-      {tab === "files" && (
-        <div className="space-y-4">
-          {/* The one thing the retired archive page had that the browser
+            {tab === "files" && (
+              <div className="space-y-4">
+                {/* The one thing the retired archive page had that the browser
               doesn't: give me everything, as a zip. It handles its own empty
               case, so it needs no file count to decide whether to render —
               which is a whole archive load saved on every visit to this tab. */}
-          <div className="flex justify-end">
-            <ArchiveDownloadZipButton
-              endpoint={`/api/clients/${client.id}/archive`}
-              label={tArchive("download_everything")}
-              preparingLabel={tArchive("preparing")}
-              emptyLabel={tArchive("download_empty")}
-              failedLabel={tArchive("download_failed")}
-              tooLargeLabel={tArchive("download_too_large")}
-              variant="outline"
-            />
-          </div>
-          <BrowseTab
-            locale={locale}
-            sp={sp}
-            basePath={`/clients/${client.id}`}
-            // Rides on every link the browser writes, so a folder click stays
-            // on this tab instead of dropping back to the overview.
-            baseParams={{ tab: "files" }}
-            lockedClientId={client.id}
-          />
-        </div>
-      )}
+                <div className="flex justify-end">
+                  <ArchiveDownloadZipButton
+                    endpoint={`/api/clients/${client.id}/archive`}
+                    label={tArchive("download_everything")}
+                    preparingLabel={tArchive("preparing")}
+                    emptyLabel={tArchive("download_empty")}
+                    failedLabel={tArchive("download_failed")}
+                    tooLargeLabel={tArchive("download_too_large")}
+                    variant="outline"
+                  />
+                </div>
+                <BrowseTab
+                  locale={locale}
+                  sp={sp}
+                  basePath={`/clients/${client.id}`}
+                  // Rides on every link the browser writes, so a folder click stays
+                  // on this tab instead of dropping back to the overview.
+                  baseParams={{ tab: "files" }}
+                  lockedClientId={client.id}
+                />
+              </div>
+            )}
 
-      {/* The ENGAGEMENTS TAB — the real list, not this preview. Same table the
+            {/* The ENGAGEMENTS TAB — the real list, not this preview. Same table the
           /engagements section renders (progress, attention, presence, the row
           menu), narrowed to this client, with the lifecycle filter and a search
           box of its own. */}
-      {tab === "engagements" && (
-        <Panel
-          title={t("engagements")}
-          aside={
-            <FilterLinks
-              label={t("engagements")}
-              items={CLIENT_ENGAGEMENT_VIEWS.map((v) => ({
-                key: v,
-                href: clientEngagementViewHref(client.id, v),
-                label: tEng(viewLabelKey(v) as Parameters<typeof tEng>[0]),
-                active: v === engView,
-                count: engagementCounts[v],
-              }))}
-            />
-          }
-          action={
-            !client.archived_at ? (
-              <Link href={`/engagements/new?client=${client.id}`}>
-                <Button size="sm">
-                  <Plus className="size-4" />
-                  {tEng("new")}
-                </Button>
-              </Link>
-            ) : null
-          }
-          flush
-        >
-          <WorklistBrowser
-            rows={engagementRows}
-            locale={locale}
-            emptyText={tEng(`view_${engView}_empty`)}
-            emptySearchText={tWl("wl_empty_search")}
-            emptyStageText={tStage("empty_for_stage")}
-            canDelete={canManageClients}
-            teamEnabled={teamEnabled}
-            assignMembers={assignableMembers}
-            viewerId={me?.id ?? null}
-            firmId={firm?.id ?? null}
-          />
-        </Panel>
-      )}
+            {tab === "engagements" && (
+              <Panel
+                title={t("engagements")}
+                aside={
+                  <FilterLinks
+                    label={t("engagements")}
+                    items={CLIENT_ENGAGEMENT_VIEWS.map((v) => ({
+                      key: v,
+                      href: clientEngagementViewHref(client.id, v),
+                      label: tEng(
+                        viewLabelKey(v) as Parameters<typeof tEng>[0],
+                      ),
+                      active: v === engView,
+                      count: engagementCounts[v],
+                    }))}
+                  />
+                }
+                action={
+                  !client.archived_at ? (
+                    <Link href={`/engagements/new?client=${client.id}`}>
+                      <Button size="sm">
+                        <Plus className="size-4" />
+                        {tEng("new")}
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+                flush
+              >
+                <WorklistBrowser
+                  rows={engagementRows}
+                  locale={locale}
+                  emptyText={tEng(`view_${engView}_empty`)}
+                  emptySearchText={tWl("wl_empty_search")}
+                  emptyStageText={tStage("empty_for_stage")}
+                  canDelete={canManageClients}
+                  teamEnabled={teamEnabled}
+                  assignMembers={assignableMembers}
+                  viewerId={me?.id ?? null}
+                  firmId={firm?.id ?? null}
+                />
+              </Panel>
+            )}
 
-
-        {/* Moved out of the rail. Connecting a client's books and setting
+            {/* Moved out of the rail. Connecting a client's books and setting
             their portal PIN are ACTIONS on the client, and the rail is
             reference — the comment above it said so while these two sat in
             it. They also give the work column something to hold on a client
             with few engagements, which is what left the right side empty. */}
-        {/* ── THE WORK, above the plumbing ───────────────────────────────
+            {/* ── THE WORK, above the plumbing ───────────────────────────────
             The tab used to be the connection card and nothing else, which
             answered "are this client's books hooked up" — a question you ask
             once — and never "what is outstanding for them", which is the one
@@ -1398,108 +1454,110 @@ export default async function ClientDetailPage({
 
             Every piece here is the SAME component the firm-wide Bookkeeping
             page renders, given one client instead of all of them. */}
-        {tab === "bookkeeping" && clientBooksConnected && (
-          <Panel title={tQb("close_title")}>
-            <CloseBoard
-              scope="client"
-              period={period}
-              locale={locale}
-              rows={[
-                {
-                  clientId: client.id,
-                  name: client.display_name,
-                  provider: clientQuickbooks.connected
-                    ? "quickbooks"
-                    : "xero",
-                  openRequests: bookkeeping.openRequests,
-                  closedAt: bookkeeping.closedAt,
-                  closedBy: bookkeeping.closedBy
-                    ? (nameOf.get(bookkeeping.closedBy) ?? null)
-                    : null,
-                },
-              ]}
-            />
-          </Panel>
-        )}
+            {tab === "bookkeeping" && clientBooksConnected && (
+              <Panel title={tQb("close_title")}>
+                <CloseBoard
+                  scope="client"
+                  period={period}
+                  locale={locale}
+                  rows={[
+                    {
+                      clientId: client.id,
+                      name: client.display_name,
+                      provider: clientQuickbooks.connected
+                        ? "quickbooks"
+                        : "xero",
+                      openRequests: bookkeeping.openRequests,
+                      closedAt: bookkeeping.closedAt,
+                      closedBy: bookkeeping.closedBy
+                        ? (nameOf.get(bookkeeping.closedBy) ?? null)
+                        : null,
+                    },
+                  ]}
+                />
+              </Panel>
+            )}
 
-        {/* The two working lists, as tabs of one panel — the shape the
+            {/* The two working lists, as tabs of one panel — the shape the
             firm-wide page uses, for the reason it uses it: each is a LIVE read
             of this client's ledger, so only the one you are looking at runs.
             QuickBooks only. A Xero client gets the same honest note the close
             board's own books column gives them rather than an empty list,
             which would read as "nothing outstanding". */}
-        {tab === "bookkeeping" && clientBooksConnected && (
-          <Panel
-            title={tQb("bk_logs_title")}
-            aside={
-              clientQuickbooks.connected ? (
-                <FilterLinks
-                  label={tQb("bk_logs_title")}
-                  items={CLIENT_BOOKKEEPING_VIEWS.map((v) => ({
-                    key: v,
-                    href: clientBookkeepingViewHref(client.id, v, period),
-                    label:
-                      v === "receipts" ? tQb("gaps_title") : tQb("uncat_title"),
-                    active: v === bkView,
-                  }))}
-                />
-              ) : undefined
-            }
-          >
-            {!clientQuickbooks.connected ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {tQb("close_ledger_xero_pending")}
-              </p>
-            ) : bkView === "uncategorized" ? (
-              <UncategorizedTab sp={sp} lockedClientId={client.id} />
-            ) : (
-              <ReceiptsTab
-                locale={locale}
-                sp={sp}
-                lockedClientId={client.id}
-              />
+            {tab === "bookkeeping" && clientBooksConnected && (
+              <Panel
+                title={tQb("bk_logs_title")}
+                aside={
+                  clientQuickbooks.connected ? (
+                    <FilterLinks
+                      label={tQb("bk_logs_title")}
+                      items={CLIENT_BOOKKEEPING_VIEWS.map((v) => ({
+                        key: v,
+                        href: clientBookkeepingViewHref(client.id, v, period),
+                        label:
+                          v === "receipts"
+                            ? tQb("gaps_title")
+                            : tQb("uncat_title"),
+                        active: v === bkView,
+                      }))}
+                    />
+                  ) : undefined
+                }
+              >
+                {!clientQuickbooks.connected ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {tQb("close_ledger_xero_pending")}
+                  </p>
+                ) : bkView === "uncategorized" ? (
+                  <UncategorizedTab sp={sp} lockedClientId={client.id} />
+                ) : (
+                  <ReceiptsTab
+                    locale={locale}
+                    sp={sp}
+                    lockedClientId={client.id}
+                  />
+                )}
+              </Panel>
             )}
-          </Panel>
-        )}
 
-        {/* Bookkeeping lives on the client's own page: an OWNER can connect
+            {/* Bookkeeping lives on the client's own page: an OWNER can connect
             this client here (the client is known from context — no
             name-matching), and once connected everyone sees the status. ONE
             system per client: once QuickBooks is connected the Xero card hides
             (and vice versa) — a receipt can only belong in one set of books.
             Hidden entirely for staff on a not-yet-connected client. */}
-        {tab === "bookkeeping" &&
-          (clientQuickbooks.connected ||
-          clientXero.connected ||
-          (canConnectBooks && (clientQuickbooks.configured || clientXero.configured))) && (
-          <Panel title={t("bk_section_title")}>
-            {(clientQuickbooks.connected ||
-              (canConnectBooks &&
-                clientQuickbooks.configured &&
-                !clientXero.connected)) && (
-                <ClientQuickbooksCard
-                  clientId={client.id}
-                  clientName={client.display_name}
-                  status={clientQuickbooks}
-                  canManage={canConnectBooks}
-                />
+            {tab === "bookkeeping" &&
+              (clientQuickbooks.connected ||
+                clientXero.connected ||
+                (canConnectBooks &&
+                  (clientQuickbooks.configured || clientXero.configured))) && (
+                <Panel title={t("bk_section_title")}>
+                  {(clientQuickbooks.connected ||
+                    (canConnectBooks &&
+                      clientQuickbooks.configured &&
+                      !clientXero.connected)) && (
+                    <ClientQuickbooksCard
+                      clientId={client.id}
+                      clientName={client.display_name}
+                      status={clientQuickbooks}
+                      canManage={canConnectBooks}
+                    />
+                  )}
+                  {(clientXero.connected ||
+                    (canConnectBooks &&
+                      clientXero.configured &&
+                      !clientQuickbooks.connected)) && (
+                    <ClientXeroCard
+                      clientId={client.id}
+                      clientName={client.display_name}
+                      status={clientXero}
+                      canManage={canConnectBooks}
+                    />
+                  )}
+                </Panel>
               )}
-            {(clientXero.connected ||
-              (canConnectBooks &&
-                clientXero.configured &&
-                !clientQuickbooks.connected)) && (
-                <ClientXeroCard
-                  clientId={client.id}
-                  clientName={client.display_name}
-                  status={clientXero}
-                  canManage={canConnectBooks}
-                />
-              )}
-          </Panel>
+          </div>
         )}
-
-      </div>
-      )}
       </div>
     </div>
   );
@@ -1542,4 +1600,3 @@ function DetailRow({
     </div>
   );
 }
-

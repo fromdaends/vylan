@@ -27,6 +27,26 @@ import {
 // stage on a path — a cancelled job renders one destructive pill instead.
 const STAGES = AGREEMENT_STATUSES.filter((s) => s !== "cancelled");
 
+/**
+ * The rail for THIS engagement.
+ *
+ * ⚠️ "Accepted" is dropped when the engagement never asks for acceptance.
+ *
+ * The pills tick every stage BEFORE the current one, so an engagement that
+ * reached "active" without an accept step drew a checkmark on Accepted — a
+ * claim that a client agreed to something, on a screen about a contract. The
+ * founder caught the sharper version of this ("it should not say accepted
+ * because it has not been accepted"); this is the same lie on the engagements
+ * that never had an accept step to begin with.
+ *
+ * A stage nobody was asked to pass should not be drawn as passed. Dropping the
+ * pill says the truth — this engagement's life has four stages, not five —
+ * where ticking it says something false about a person.
+ */
+function stagesFor(showAccepted: boolean): AgreementStatus[] {
+  return showAccepted ? STAGES : STAGES.filter((s) => s !== "accepted");
+}
+
 const PILL_BASE =
   "inline-flex flex-none items-center gap-1.5 rounded-full px-[11px] py-1 text-xs font-medium transition-colors duration-150";
 
@@ -61,11 +81,19 @@ function PassedPill({
 
 export function EngagementStagePills({
   status,
+  showAccepted = true,
 }: {
   status: AgreementStatus;
+  /**
+   * Whether this engagement has an acceptance step at all. Defaults TRUE so
+   * every existing caller keeps the full rail; the engagement page passes the
+   * real answer.
+   */
+  showAccepted?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
+  const stages = stagesFor(showAccepted || status === "accepted");
 
   if (status === "cancelled") {
     return (
@@ -79,9 +107,9 @@ export function EngagementStagePills({
     );
   }
 
-  const currentIndex = STAGES.indexOf(status);
-  const passed = STAGES.slice(0, currentIndex);
-  const rest = STAGES.slice(currentIndex);
+  const currentIndex = stages.indexOf(status);
+  const passed = stages.slice(0, currentIndex);
+  const rest = stages.slice(currentIndex);
   // One passed stage reads faster shown than summarized; the collapse earns
   // its click only once there are at least two behind you.
   const collapsible = passed.length >= 2;

@@ -89,7 +89,7 @@ import {
 } from "@/lib/workflow/definition";
 import {
   flowSendsInvoice,
-  flowSendsLetter,
+  withFlowLetter,
   workflowPlan,
 } from "@/lib/workflow/plan";
 import { AutomationEditor } from "@/components/workflow/automation-editor";
@@ -558,11 +558,27 @@ export function EngagementBuilder({
   const [attachedLetterServiceIds, setAttachedLetterServiceIds] = useState<
     string[]
   >([]);
-  // "Place the signature fields myself": SignWell's editor opens right
-  // after send, instead of the auto-appended signature page.
-  const [letterPlacement, setLetterPlacement] = useState<"auto" | "editor">(
-    "auto",
+  // ── HOW THE CLIENT AGREES — one question, asked first ───────────────────
+  //
+  // Founder: "you could just choose whether you wanna use the actual proposal
+  // ... they just click on accept, they don't have to actually esign
+  // anything. Or the option for the firm to upload their own engagement
+  // letter for their client to sign. It's one or the two."
+  //
+  //   "proposal" — the client reads the generated document and taps Accept.
+  //                No signature, no SignWell, no letter anywhere in the UI.
+  //   "letter"   — the firm's own PDF goes out for signature and signing IS
+  //                the acceptance. The proposal preview disappears: they are
+  //                not using that document, so showing it is noise.
+  //
+  // Field placement is NOT a question (founder: "that shouldn't even be a
+  // button"). Letter mode always opens SignWell's editor on create-and-send
+  // when the editor is configured, and falls back to the appended signature
+  // page when it isn't.
+  const [agreementMode, setAgreementMode] = useState<"proposal" | "letter">(
+    "proposal",
   );
+  const letterMode = workflowsOn && agreementMode === "letter";
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
   // ── BILLED WHEN THEY ACCEPT, BY DEFAULT ────────────────────────────────
@@ -1593,18 +1609,23 @@ export function EngagementBuilder({
             template_id: selectedTemplate.id,
             // The Automation step's answer, when the user gave one. Absent =
             // the server derives from template_id exactly as before.
-            ...(workflowsOn && flowPick
+            // The flow, with the LETTER forced to match the agreement choice
+            // — that choice is the whole question of how the client agrees,
+            // so it outranks whatever the picked flow happened to carry.
+            // Sent whenever the switch is on (not only when a flow was
+            // picked), because "use the proposal" has to be able to turn a
+            // template's letter OFF.
+            ...(workflowsOn
               ? {
-                  workflow_definition: flowPick.def,
-                  automation_id: flowPick.automationId,
+                  workflow_definition: withFlowLetter(activeFlow, letterMode),
+                  automation_id: flowPick?.automationId ?? null,
                 }
               : {}),
-            // Field placement rides only when the flow sends a letter — a
-            // toggle left on from an earlier flow pick must not mark an
-            // engagement that sends nothing.
-            ...(workflowsOn &&
-            letterPlacement === "editor" &&
-            flowSendsLetter(activeFlow)
+            // Placement is automatic, not a choice: letter mode uses
+            // SignWell's editor whenever it is configured. Without the
+            // editor app id the sender falls back to the appended signature
+            // page on its own, so sending this is always safe.
+            ...(letterMode && signwellEditorOn
               ? { workflow_letter_placement: "editor" as const }
               : {}),
             tax_year: taxYear ? Number(taxYear) : null,
@@ -1837,8 +1858,14 @@ export function EngagementBuilder({
         // With the switch, the standalone Reminders step disappears instead:
         // the founder's ruling is that reminders live INSIDE the automations,
         // so the same card renders on the Automation step and nowhere else.
+        // And in LETTER mode the Proposal step goes with the preview: it
+        // builds the intro, terms and acceptance block of a document this
+        // client will never open — their engagement letter carries all of
+        // that. A step that composes something nobody reads is exactly the
+        // kind of useless surface this wizard keeps being cleared of.
         (k) =>
-          workflowsOn ? k !== "reminders" : k !== "automation",
+          (workflowsOn ? k !== "reminders" : k !== "automation") &&
+          !(letterMode && k === "proposal"),
       ).map((k): BuilderTab => ({
         key: k,
         label: t(`wizard_step_${k}` as WizardStepKey),
@@ -1888,7 +1915,12 @@ export function EngagementBuilder({
       // It is the same component the client opens, so every step now shows
       // what your edits are doing to the document they will read. The step it
       // highlights follows where you are working.
+      // LETTER MODE SHOWS NO PREVIEW. Founder: "they do not see the sample
+      // client, the preview of the sample client because there's no point in
+      // seeing it — they're not using it, they're only getting their own
+      // engagement letter." The whole pane goes, not just the document.
       preview={
+        letterMode ? null : (
         <div className="w-full space-y-4">
           <ProposalPreview
             data={proposalData}
@@ -1934,6 +1966,7 @@ export function EngagementBuilder({
             )}
           </div>
         </div>
+        )
       }
     >
       {error && (
@@ -2237,6 +2270,52 @@ export function EngagementBuilder({
               </div>
             </CardContent>
           </Card>
+
+          {/* ── HOW THEY AGREE ────────────────────────────────────────────
+              Asked HERE, first, because it decides what the rest of the
+              wizard even shows: the proposal document and its preview, or a
+              signed engagement letter. Two radio cards rather than a switch
+              — neither answer is the "off" state of the other. */}
+          {workflowsOn && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {t("agreement_mode_title")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(["proposal", "letter"] as const).map((mode) => (
+                    <RadioCard
+                      key={mode}
+                      name="engagement-agreement-mode"
+                      checked={agreementMode === mode}
+                      onSelect={() => setAgreementMode(mode)}
+                      // caption renders ABOVE the bold label in this shared
+                      // card, so it carries the short descriptor.
+                      caption={t(
+                        mode === "proposal"
+                          ? "agreement_mode_proposal_kicker"
+                          : "agreement_mode_letter_kicker",
+                      )}
+                      label={t(
+                        mode === "proposal"
+                          ? "agreement_mode_proposal"
+                          : "agreement_mode_letter",
+                      )}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t(
+                    agreementMode === "proposal"
+                      ? "agreement_mode_proposal_hint"
+                      : "agreement_mode_letter_hint",
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
@@ -2735,7 +2814,7 @@ export function EngagementBuilder({
                 document request starts the moment it is sent. */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
               <span className="font-medium">{tAuto("plan_sent_title")}</span>
-              {flowSendsLetter(activeFlow) && (
+              {letterMode && (
                 <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
                   {tAuto("action_send_engagement_letter")}
                 </span>
@@ -2750,7 +2829,7 @@ export function EngagementBuilder({
                   {tAuto("plan_accept_title")}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground">
-                  {flowSendsLetter(activeFlow)
+                  {letterMode
                     ? tAuto("plan_accept_note_letter")
                     : tAuto("plan_accept_note")}
                 </span>
@@ -2813,7 +2892,7 @@ export function EngagementBuilder({
               attach it RIGHT HERE (founder: "you can't attach the engagement
               letter you'd like to be automatically sent out"), via the SAME
               ServiceLetterSection the service builder mounts. */}
-          {flowSendsLetter(activeFlow) &&
+          {letterMode &&
             (pickedServiceIds.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 {tAuto("flow_letter_needs_service")}
@@ -2866,22 +2945,14 @@ export function EngagementBuilder({
               </p>
             ))}
 
-          {/* Field placement — asked ONLY when the flow sends a letter
-              (founder: "should only ask if you'd like to if send engagement
-              letter is on") and the SignWell editor is configured. */}
-          {flowSendsLetter(activeFlow) && signwellEditorOn && (
-            <label className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
-              <Switch
-                checked={letterPlacement === "editor"}
-                onCheckedChange={(on) =>
-                  setLetterPlacement(on === true ? "editor" : "auto")
-                }
-              />
-              {tAuto("flow_letter_place_myself")}
-              <span className="text-xs text-muted-foreground">
-                {tAuto("flow_letter_place_note")}
-              </span>
-            </label>
+          {/* NO placement switch (founder: "that shouldn't even be a button
+              ... the e-signing process will be automatic when they click
+              create and send"). Letter mode opens SignWell's editor by
+              itself; this line just says so, once. */}
+          {letterMode && signwellEditorOn && (
+            <p className="text-xs text-muted-foreground">
+              {tAuto("flow_letter_place_note")}
+            </p>
           )}
 
           <details className="rounded-xl border border-border p-4">

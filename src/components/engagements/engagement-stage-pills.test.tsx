@@ -3,6 +3,7 @@ import { render, fireEvent, cleanup, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import { EngagementStagePills } from "./engagement-stage-pills";
+import type { AgreementStatus } from "@/lib/engagements/agreement";
 
 function mount(status: Parameters<typeof EngagementStagePills>[0]["status"]) {
   return render(
@@ -52,5 +53,34 @@ describe("EngagementStagePills", () => {
     expect(screen.getByText("Cancelled")).toBeTruthy();
     expect(screen.queryByText("Draft")).toBeNull();
     expect(screen.queryByText("Complete")).toBeNull();
+  });
+});
+
+function renderPills(status: AgreementStatus, showAccepted: boolean) {
+  return (
+    <NextIntlClientProvider locale="en" messages={en}>
+      <EngagementStagePills status={status} showAccepted={showAccepted} />
+    </NextIntlClientProvider>
+  );
+}
+
+describe("⚠️ the rail never ticks a stage nobody was asked to pass", () => {
+  it("drops Accepted when the engagement has no accept step", () => {
+    // The pills tick every stage BEFORE the current one, so an engagement that
+    // reached "active" without an accept step drew a checkmark on Accepted —
+    // a claim that a client agreed to something, on a screen about a contract.
+    render(renderPills("active", false));
+    expect(screen.queryByText(en.Engagements.agr_accepted)).toBeNull();
+  });
+
+  it("keeps Accepted when acceptance IS part of this engagement", () => {
+    render(renderPills("sent", true));
+    expect(screen.getByText(en.Engagements.agr_accepted)).toBeTruthy();
+  });
+
+  it("keeps Accepted on an engagement that was actually accepted", () => {
+    // Even with the flag off — it happened, so the rail must show it.
+    render(renderPills("accepted", false));
+    expect(screen.getByText(en.Engagements.agr_accepted)).toBeTruthy();
   });
 });

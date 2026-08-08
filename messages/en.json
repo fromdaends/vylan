@@ -3260,7 +3260,14 @@
     "cadence_summary_both": "A fresh job each cycle, and one continuous payment schedule running alongside it — the client is charged on their own cadence, not once per job.",
     "cadence_none": "Doesn't repeat",
     "cadence_recurring": "Recurring",
-    "cadence_none_hint": "A one-time job: the client is billed once and the work doesn't come back."
+    "cadence_none_hint": "A one-time job: the client is billed once and the work doesn't come back.",
+    "agreement_mode_title": "How does the client agree?",
+    "agreement_mode_proposal_kicker": "No signing",
+    "agreement_mode_proposal": "They accept the proposal",
+    "agreement_mode_letter_kicker": "E-signature",
+    "agreement_mode_letter": "They sign your engagement letter",
+    "agreement_mode_proposal_hint": "The client opens their portal, reads the proposal you're building here, and taps Accept. Nothing to sign.",
+    "agreement_mode_letter_hint": "Your own engagement letter goes out for signature the moment you send, and signing it records their acceptance. They won't see the proposal document, so there's no preview to build."
   },
   "Attention": {
     "metric_active": "Active",
