@@ -120,7 +120,6 @@ import {
 } from "@/lib/engagements/task-drafts";
 import { taskKindLabelKey } from "@/lib/tasks/kinds";
 import type { TaskKind } from "@/lib/db/engagement-tasks";
-import { EngagementModalShell } from "@/components/engagements/engagement-modal-shell";
 import { EngagementStartChooser } from "@/components/engagements/engagement-start-chooser";
 import { SaveAsTemplateDialog } from "@/components/engagements/save-as-template-dialog";
 import {
@@ -197,11 +196,7 @@ export type { InvoiceAutoMode };
 // creation (payable right away), vs. the deferred on_completion / delayed
 // automation. "off" = no invoice.
 export type InvoiceTiming =
-  | "off"
-  | "now"
-  | "on_acceptance"
-  | "on_completion"
-  | "delayed";
+  "off" | "now" | "on_acceptance" | "on_completion" | "delayed";
 
 // The rail's order IS the order of the decision: who it is for, what you are
 // asking them for, what it costs, how hard you chase.
@@ -224,6 +219,9 @@ const PREVIEW_STEP_FOR: Record<
   string,
   "introduction" | "services" | "terms" | "acceptance"
 > = {
+  // Nothing has been chosen yet, so the preview shows the document's neutral
+  // top rather than pretending a section is being edited.
+  start: "introduction",
   // Who it is for and what it is called — the top of the client's document.
   details: "introduction",
   // The priced lines, and the work and money that hang off them. All three
@@ -270,6 +268,7 @@ type PlaceholderKey =
   | "placeholder_firmname";
 
 type WizardStepKey =
+  | "wizard_step_start"
   | "wizard_step_details"
   | "wizard_step_services"
   | "wizard_step_tasks"
@@ -280,6 +279,7 @@ type WizardStepKey =
 
 // The one line under each step's name in the wizard's steps box.
 type WizardStepDescKey =
+  | "wizard_step_desc_start"
   | "wizard_step_desc_details"
   | "wizard_step_desc_services"
   | "wizard_step_desc_tasks"
@@ -438,7 +438,10 @@ export function EngagementBuilder({
   const orderedTemplates = useMemo(() => {
     const blank = templates.find((tt) => tt.id === BLANK_TEMPLATE_SEED_ID);
     if (!blank) return templates;
-    return [blank, ...templates.filter((tt) => tt.id !== BLANK_TEMPLATE_SEED_ID)];
+    return [
+      blank,
+      ...templates.filter((tt) => tt.id !== BLANK_TEMPLATE_SEED_ID),
+    ];
   }, [templates]);
 
   // Open on the template the user picked via "Use" (matched by id); fall back to
@@ -479,8 +482,9 @@ export function EngagementBuilder({
         ? payloadDocTemplateId
         : ""),
   );
-  const seededTitle =
-    initialEngagementTemplate?.payload.title.trim() ? initialEngagementTemplate.payload.title : "";
+  const seededTitle = initialEngagementTemplate?.payload.title.trim()
+    ? initialEngagementTemplate.payload.title
+    : "";
 
   const [title, setTitle] = useState(seededTitle);
   // Seeded titles count as touched, so the auto-title does not overwrite what
@@ -704,9 +708,9 @@ export function EngagementBuilder({
   const [proposalPeriodStartsOn, setProposalPeriodStartsOn] = useState<
     "acceptance" | "custom"
   >(tpl?.periodStartsOn ?? "acceptance");
-  const [proposalPeriodMonths, setProposalPeriodMonths] = useState<number | null>(
-    tpl?.periodMonths ?? null,
-  );
+  const [proposalPeriodMonths, setProposalPeriodMonths] = useState<
+    number | null
+  >(tpl?.periodMonths ?? null);
   const [proposalDeposit, setProposalDeposit] = useState(
     tpl?.depositCents != null ? String(tpl.depositCents / 100) : "",
   );
@@ -784,7 +788,10 @@ export function EngagementBuilder({
     // when the template actually carries requests, never speculatively.
     if ((initialEngagementTemplate?.payload.checklist.length ?? 0) > 0) {
       next = [
-        { ...emptyTask("document_collection"), title: t("task_seed_documents") },
+        {
+          ...emptyTask("document_collection"),
+          title: t("task_seed_documents"),
+        },
       ];
     }
 
@@ -878,7 +885,12 @@ export function EngagementBuilder({
    */
   function pullServiceWork(service: {
     name: string;
-    work?: { templateId: string; name: string; kind: string; stepCount: number } | null;
+    work?: {
+      templateId: string;
+      name: string;
+      kind: string;
+      stepCount: number;
+    } | null;
   }) {
     const work = service.work;
     if (!work) return;
@@ -1027,6 +1039,55 @@ export function EngagementBuilder({
   // so skipping the chooser shows a form that is filled in, not a blank one.
   const [started, setStarted] = useState(initialEngagementTemplate != null);
 
+  // ── THE OPENING QUESTION IS STEP ONE, NOT A DOORWAY ────────────────────
+  //
+  // Founder: "have this tab and the other be the same thing instead of two
+  // separate steps, they transition into one another... so it doesn't look
+  // weird."
+  //
+  // It used to be its own EngagementModalShell — a bare dialog with a lone
+  // Next button — which then vanished and was replaced by a three-column
+  // wizard. Two different objects for one continuous act. Now the question is
+  // simply the wizard's first step: same card, same rail, same preview, same
+  // footer, and only the middle changes. Nothing about the flow moved; the
+  // chrome around it stopped changing shape.
+  //
+  // Its answer lives here rather than inside the chooser because the SHELL's
+  // Continue is what commits it now. The chooser draws the question and
+  // reports what was picked; it no longer owns a button.
+  const [startMode, setStartMode] = useState<"template" | "scratch">(
+    // Scratch when there is nothing to pick — leading with "use a template" on
+    // a firm that has none is a dead end.
+    engagementTemplates.length > 0 ? "template" : "scratch",
+  );
+  const [startTemplateId, setStartTemplateId] = useState<string>(
+    engagementTemplates[0]?.id ?? "",
+  );
+  // What the last commit actually applied. Re-answering the same way must NOT
+  // re-apply — otherwise stepping Back to look at the question and pressing
+  // Continue silently wipes everything typed since.
+  const [appliedStart, setAppliedStart] = useState<string | null>(null);
+
+  // The question was asked iff no template was preselected — the same
+  // condition that seeds `started`.
+  const showStartStep = initialEngagementTemplate == null;
+
+  function commitStart(target: WizardStep) {
+    const choice =
+      startMode === "template" && startTemplateId !== ""
+        ? startTemplateId
+        : null;
+    // Only a CHANGED template overwrites the form. Switching to "from scratch"
+    // deliberately leaves what is there rather than blanking work — undoing a
+    // template is not what that card promises.
+    if (choice !== null && choice !== appliedStart) {
+      applyEngagementTemplate(choice);
+    }
+    setAppliedStart(choice);
+    setStarted(true);
+    setStep(target);
+  }
+
   // A tick means "this step has what it NEEDS", not "you have been here".
   // Rewarding a visit would put a tick on an empty Documents step, which is the
   // one thing that actually blocks sending.
@@ -1043,8 +1104,7 @@ export function EngagementBuilder({
     // Titled work, or a checklist with something in it. Either alone is a real
     // answer: "meet the client, then file" needs no documents, and a plain
     // document request needs no other task.
-    tasks:
-      meaningfulTasks(tasks).length > 0 || items.length > 0,
+    tasks: meaningfulTasks(tasks).length > 0 || items.length > 0,
     // Money and chasing are genuinely optional — a draft with neither is a
     // valid engagement — so they are complete by definition. They still get a
     // tick rather than nothing, because an empty circle beside a step you were
@@ -1241,9 +1301,7 @@ export function EngagementBuilder({
         days: Math.max(1, Math.floor(Number(invoiceDelayDays) || 0)),
       });
     }
-    return t(
-      `repeat_invoice_when_${invoiceMode}` as "repeat_invoice_when_now",
-    );
+    return t(`repeat_invoice_when_${invoiceMode}` as "repeat_invoice_when_now");
   }
 
   function currentInvoiceAmountCents(): number | null {
@@ -1392,7 +1450,6 @@ export function EngagementBuilder({
   // array would let editing a draft engagement reach back into the template
   // object the page loaded.
 
-
   // An empty checklist is no longer an error, so nothing needs ringing: an
   // engagement that asks the client for nothing is an ordinary engagement.
   const highlightEmptyChecklist = false;
@@ -1420,7 +1477,9 @@ export function EngagementBuilder({
   }
 
   function updateItem(idx: number, patch: Partial<TemplateItem>) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
+    );
   }
 
   function addItem() {
@@ -1792,45 +1851,16 @@ export function EngagementBuilder({
     });
   }
 
-  if (!started) {
-    return (
-      <EngagementModalShell
-        title={t("new_title")}
-        closeHref="/engagements"
-        labels={{
-          close: tc("cancel"),
-          save: t("wizard_save"),
-          saveDraft: t("save_draft"),
-          saveAndSend: t("create_and_send"),
-          saveAsTemplate: t("save_as_template"),
-          saving: tc("saving"),
-        }}
-      >
-        <EngagementStartChooser
-          templates={engagementTemplates.map((x) => ({
-            id: x.id,
-            name: x.name,
-            access: x.access,
-          }))}
-          onStart={(id) => {
-            if (id) applyEngagementTemplate(id);
-            setStarted(true);
-          }}
-        />
-      </EngagementModalShell>
-    );
-  }
-
   return (
     <>
-    <SaveAsTemplateDialog
-      open={savingTemplate}
-      onOpenChange={setSavingTemplate}
-      payload={currentTemplatePayload()}
-      suggestedName={title.trim()}
-    />
+      <SaveAsTemplateDialog
+        open={savingTemplate}
+        onOpenChange={setSavingTemplate}
+        payload={currentTemplatePayload()}
+        suggestedName={title.trim()}
+      />
 
-    {/* ── THE SAME CHROME AS EVERY TEMPLATE BUILDER ────────────────────
+      {/* ── THE SAME CHROME AS EVERY TEMPLATE BUILDER ────────────────────
         The founder: "the engagement creation ui is still lacking. IT still has
         that Vylan UI look not the canopy Ui look that you can see on the
         template builders. I want the same feel on engagement creation."
@@ -1846,89 +1876,126 @@ export function EngagementBuilder({
         EngagementModalShell is gone from this path. It drew its own overlay,
         title bar and save dropdown, and the wizard draws all three — keeping it
         would have meant two backdrops and two save controls. The opening
-        "start from a template?" question still uses it, because that screen is
-        a question and not a wizard. */}
-    <TemplateBuilderShell
-      kicker={t("kicker_engagement")}
-      title={t("new_title")}
-      explainer={t("wizard_explainer")}
-      tabs={WIZARD_STEPS.filter(
-        // No switch, no step — the wizard reads exactly as before for
-        // unflagged firms, and a stale deep link to the step falls to details.
-        // With the switch, the standalone Reminders step disappears instead:
-        // the founder's ruling is that reminders live INSIDE the automations,
-        // so the same card renders on the Automation step and nowhere else.
-        // And in LETTER mode the Proposal step goes with the preview: it
-        // builds the intro, terms and acceptance block of a document this
-        // client will never open — their engagement letter carries all of
-        // that. A step that composes something nobody reads is exactly the
-        // kind of useless surface this wizard keeps being cleared of.
-        (k) =>
-          (workflowsOn ? k !== "reminders" : k !== "automation") &&
-          !(letterMode && k === "proposal"),
-      ).map((k): BuilderTab => ({
-        key: k,
-        label: t(`wizard_step_${k}` as WizardStepKey),
-        description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
-        // The red mark means "required and not answered yet" — the same thing
-        // the rail's asterisk-plus-empty-circle used to say, in the template
-        // builders' vocabulary. Only the two that actually stop you sending.
-        incomplete: (k === "details" || k === "tasks") && !stepComplete[k],
-      }))}
-      activeTab={step}
-      onTabChange={(k) => setStep(k as WizardStep)}
-      onClose={() => router.push("/engagements")}
-      // Save draft keeps a half-finished engagement; Save as template keeps its
-      // SHAPE. Both were in the old split button, and both survive — they are
-      // the two ways of leaving this screen without sending, and the handoff's
-      // header (one outline button + ✕) has room for them.
-      headerActions={[
-        {
-          label: pending ? tc("saving") : t("save_draft"),
-          variant: "outline" as const,
+        "start from a template?" question no longer uses it either: it is this
+        wizard's first step, so the card never changes shape between asking the
+        question and answering it. */}
+      <TemplateBuilderShell
+        kicker={t("kicker_engagement")}
+        title={t("new_title")}
+        explainer={t("wizard_explainer")}
+        tabs={[
+          // Only when the question was asked. Opening straight from a template
+          // never showed it, so its rail must not grow a step nobody used.
+          ...(showStartStep
+            ? [
+                {
+                  key: "start",
+                  label: t("wizard_step_start"),
+                  description: t("wizard_step_desc_start"),
+                } satisfies BuilderTab,
+              ]
+            : []),
+          ...WIZARD_STEPS.filter(
+            // No switch, no step — the wizard reads exactly as before for
+            // unflagged firms, and a stale deep link to the step falls to details.
+            // With the switch, the standalone Reminders step disappears instead:
+            // the founder's ruling is that reminders live INSIDE the automations,
+            // so the same card renders on the Automation step and nowhere else.
+            // And in LETTER mode the Proposal step goes with the preview: it
+            // builds the intro, terms and acceptance block of a document this
+            // client will never open — their engagement letter carries all of
+            // that. A step that composes something nobody reads is exactly the
+            // kind of useless surface this wizard keeps being cleared of.
+            (k) =>
+              (workflowsOn ? k !== "reminders" : k !== "automation") &&
+              !(letterMode && k === "proposal"),
+          ).map((k): BuilderTab => ({
+            key: k,
+            label: t(`wizard_step_${k}` as WizardStepKey),
+            description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
+            // The red mark means "required and not answered yet" — the same thing
+            // the rail's asterisk-plus-empty-circle used to say, in the template
+            // builders' vocabulary. Only the two that actually stop you sending.
+            incomplete: (k === "details" || k === "tasks") && !stepComplete[k],
+          })),
+        ]}
+        // Derived, not stored: while the question is unanswered the wizard is ON
+        // it, and `step` keeps pointing at where Continue will land. That is what
+        // lets Back walk into the question and out again without a second piece
+        // of state that could disagree with this one.
+        activeTab={started ? step : "start"}
+        onTabChange={(k) => {
+          // Back, into the question. The answer is kept, so returning and
+          // pressing Continue unchanged does nothing to the form.
+          if (k === "start") {
+            setStarted(false);
+            return;
+          }
+          // Continue, out of it — this is the click that applies a template.
+          if (!started) {
+            commitStart(k as WizardStep);
+            return;
+          }
+          setStep(k as WizardStep);
+        }}
+        onClose={() => router.push("/engagements")}
+        // Save draft keeps a half-finished engagement; Save as template keeps its
+        // SHAPE. Both were in the old split button, and both survive — they are
+        // the two ways of leaving this screen without sending, and the handoff's
+        // header (one outline button + ✕) has room for them.
+        // Empty on the question: there is no engagement yet to save as a draft
+        // and no shape yet to save as a template. Buttons that cannot work.
+        headerActions={
+          !started
+            ? []
+            : [
+                {
+                  label: pending ? tc("saving") : t("save_draft"),
+                  variant: "outline" as const,
+                  disabled: pending,
+                  onClick: () => submit(false),
+                },
+                {
+                  label: t("save_as_template"),
+                  variant: "ghost" as const,
+                  disabled: pending,
+                  onClick: () => setSavingTemplate(true),
+                },
+              ]
+        }
+        // On the Proposal step — the last one — Continue becomes the send. It is
+        // the only thing left to do there, and a greyed-out Next said nothing.
+        finalAction={{
+          label: t("create_and_send"),
           disabled: pending,
-          onClick: () => submit(false),
-        },
-        {
-          label: t("save_as_template"),
-          variant: "ghost" as const,
-          disabled: pending,
-          onClick: () => setSavingTemplate(true),
-        },
-      ]}
-      // On the Proposal step — the last one — Continue becomes the send. It is
-      // the only thing left to do there, and a greyed-out Next said nothing.
-      finalAction={{
-        label: t("create_and_send"),
-        disabled: pending,
-        onClick: () => submit(true),
-      }}
-      previewLabel={
-        selectedClient
-          ? t("preview_for_client", { name: selectedClient.display_name })
-          : tTpl("preview_sample_label")
-      }
-      // ── THE PROPOSAL, ON EVERY STEP ─────────────────────────────────
-      // Founder: "Put the preview that you see on proposal appear throughout
-      // the entire engagement creation process."
-      //
-      // It is the same component the client opens, so every step now shows
-      // what your edits are doing to the document they will read. The step it
-      // highlights follows where you are working.
-      // LETTER MODE SHOWS NO PREVIEW. Founder: "they do not see the sample
-      // client, the preview of the sample client because there's no point in
-      // seeing it — they're not using it, they're only getting their own
-      // engagement letter." The whole pane goes, not just the document.
-      preview={
-        letterMode ? null : (
-        <div className="w-full space-y-4">
-          <ProposalPreview
-            data={proposalData}
-            locale={locale}
-            activeStep={PREVIEW_STEP_FOR[step]}
-          />
+          onClick: () => submit(true),
+        }}
+        previewLabel={
+          selectedClient
+            ? t("preview_for_client", { name: selectedClient.display_name })
+            : tTpl("preview_sample_label")
+        }
+        // ── THE PROPOSAL, ON EVERY STEP ─────────────────────────────────
+        // Founder: "Put the preview that you see on proposal appear throughout
+        // the entire engagement creation process."
+        //
+        // It is the same component the client opens, so every step now shows
+        // what your edits are doing to the document they will read. The step it
+        // highlights follows where you are working.
+        // LETTER MODE SHOWS NO PREVIEW. Founder: "they do not see the sample
+        // client, the preview of the sample client because there's no point in
+        // seeing it — they're not using it, they're only getting their own
+        // engagement letter." The whole pane goes, not just the document.
+        preview={
+          letterMode ? null : (
+            <div className="w-full space-y-4">
+              <ProposalPreview
+                data={proposalData}
+                locale={locale}
+                activeStep={PREVIEW_STEP_FOR[step]}
+              />
 
-          {/* ── CANOPY'S ACCEPT CARD ────────────────────────────────────
+              {/* ── CANOPY'S ACCEPT CARD ────────────────────────────────────
               The founder, with Canopy's screenshot: "supposedly you built a
               way to accept proposals on the behalf of the client. Where is
               it... REPLICATE IT."
@@ -1942,233 +2009,254 @@ export function EngagementBuilder({
 
               Recorded as accepted_by = 'firm', never 'client' — a note that an
               agreement was given, not a signature. */}
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-sm leading-relaxed">
-              {t("accept_on_behalf_card")}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              disabled={pending || !clientId}
-              onClick={() => submit(false, true)}
-            >
-              {t("accept_proposal")}
-            </Button>
-            {/* Says WHY it is unavailable rather than sitting greyed out with
+              <div className="rounded-xl border border-border bg-card p-4">
+                <p className="text-sm leading-relaxed">
+                  {t("accept_on_behalf_card")}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  disabled={pending || !clientId}
+                  onClick={() => submit(false, true)}
+                >
+                  {t("accept_proposal")}
+                </Button>
+                {/* Says WHY it is unavailable rather than sitting greyed out with
                 no explanation — the founder has been caught by a dead control
                 before. */}
-            {!clientId && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {t("accept_on_behalf_needs_client")}
-              </p>
-            )}
-          </div>
-        </div>
-        )
-      }
-    >
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {/* Known i18n keys translate; everything else (e.g. server-side
-                field errors like "client_id: invalid_uuid") shows raw. */}
-            {KNOWN_ERRORS.has(error)
-              ? t(`errors.${error}` as KnownErrorKey)
-              : error}
-          </AlertDescription>
-        </Alert>
-      )}
+                {!clientId && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {t("accept_on_behalf_needs_client")}
+                  </p>
+                )}
+              </div>
+            </div>
+          )
+        }
+      >
+        {!started && (
+          <EngagementStartChooser
+            templates={engagementTemplates.map((x) => ({
+              id: x.id,
+              name: x.name,
+              access: x.access,
+            }))}
+            mode={startMode}
+            templateId={startTemplateId}
+            onModeChange={setStartMode}
+            onTemplateChange={setStartTemplateId}
+          />
+        )}
 
-      {/* STEP 1 — who it is for and what it is called. Client, template and the name/dates were three cards in a row already; the wizard just names that group. */}
-      {step === "details" && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("section_client")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {clients.length === 0 ? (
-                /* A firm with no clients yet would otherwise see the combobox's
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {/* Known i18n keys translate; everything else (e.g. server-side
+                field errors like "client_id: invalid_uuid") shows raw. */}
+              {KNOWN_ERRORS.has(error)
+                ? t(`errors.${error}` as KnownErrorKey)
+                : error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* STEP 1 — who it is for and what it is called. Client, template and the name/dates were three cards in a row already; the wizard just names that group. */}
+        {started && step === "details" && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {t("section_client")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {clients.length === 0 ? (
+                  /* A firm with no clients yet would otherwise see the combobox's
                    bare "No client found" — a confusing dead end. Guide them to add
                    a client first (clients are created from the Clients page). */
-                <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
-                  <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <UserPlus className="size-5" aria-hidden />
-                  </span>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {t("no_clients_title")}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("no_clients_body")}
-                    </p>
+                  <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
+                    <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <UserPlus className="size-5" aria-hidden />
+                    </span>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {t("no_clients_title")}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {t("no_clients_body")}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" className="mt-1">
+                      <Link href="/clients">
+                        <UserPlus className="size-4" />
+                        {t("no_clients_cta")}
+                      </Link>
+                    </Button>
                   </div>
-                  <Button asChild size="sm" className="mt-1">
-                    <Link href="/clients">
-                      <UserPlus className="size-4" />
-                      {t("no_clients_cta")}
-                    </Link>
-                  </Button>
-                </div>
-              ) : (
-                /* chooseClient re-filters the checklist for the new client's province */
-                <ClientCombobox
-                  clients={clients}
-                  value={clientId}
-                  onChange={chooseClient}
-                />
-              )}
-              {scopeWarning && (
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-                  {t("rel_scope_warning", {
-                    name: scopeWarning.name,
-                    scopes: scopeWarning.scopes
-                      .map((s) => tClients(`rel_scope_${s}`))
-                      .join(", "),
-                  })}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                ) : (
+                  /* chooseClient re-filters the checklist for the new client's province */
+                  <ClientCombobox
+                    clients={clients}
+                    value={clientId}
+                    onChange={chooseClient}
+                  />
+                )}
+                {scopeWarning && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+                    {t("rel_scope_warning", {
+                      name: scopeWarning.name,
+                      scopes: scopeWarning.scopes
+                        .map((s) => tClients(`rel_scope_${s}`))
+                        .join(", "),
+                    })}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("section_details")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="title">{t("field_title")}</Label>
-                  {/* Canopy's + on the name field. Inserts a token rather than
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {t("section_details")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="title">{t("field_title")}</Label>
+                    {/* Canopy's + on the name field. Inserts a token rather than
                       a value, so the same name works for every client the
                       template is later used on — which is the whole reason a
                       saved template can carry a name at all. */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <Plus className="size-3" aria-hidden />
-                        {t("placeholder_add")}
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      {PLACEHOLDERS.map((token) => (
-                        <DropdownMenuItem
-                          key={token}
-                          onSelect={() => {
-                            // Appended, not inserted at the caret: reading the
-                            // caret out of a controlled input reliably is more
-                            // machinery than this earns, and appending is what
-                            // you want when naming something anyway.
-                            setTitle(
-                              (prev) =>
-                                `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${placeholderText(token)}`,
-                            );
-                            setTitleTouched(true);
-                          }}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {t(`placeholder_${token}` as PlaceholderKey)}
-                          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                            {placeholderText(token)}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                          <Plus className="size-3" aria-hidden />
+                          {t("placeholder_add")}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        {PLACEHOLDERS.map((token) => (
+                          <DropdownMenuItem
+                            key={token}
+                            onSelect={() => {
+                              // Appended, not inserted at the caret: reading the
+                              // caret out of a controlled input reliably is more
+                              // machinery than this earns, and appending is what
+                              // you want when naming something anyway.
+                              setTitle(
+                                (prev) =>
+                                  `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${placeholderText(token)}`,
+                              );
+                              setTitleTouched(true);
+                            }}
+                          >
+                            {t(`placeholder_${token}` as PlaceholderKey)}
+                            <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                              {placeholderText(token)}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <Input
+                    id="title"
+                    value={effectiveTitle}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      setTitleTouched(true);
+                    }}
+                    placeholder={defaultTitle}
+                    required
+                  />
                 </div>
-                <Input
-                  id="title"
-                  value={effectiveTitle}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setTitleTouched(true);
-                  }}
-                  placeholder={defaultTitle}
-                  required
-                />
-              </div>
-              {/* START date — Canopy's step 1 has both, and they answer
+                {/* START date — Canopy's step 1 has both, and they answer
                   different questions: when the work BEGINS versus when it is
                   OWED. Conflating them is why an engagement created in advance
                   for next season had no honest way to say it had not started. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="start_date">{t("field_start_date")}</Label>
-                <Input
-                  id="start_date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-fit"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("start_date_hint")}
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="due_date">{t("field_due_date_optional")}</Label>
-                <Input
-                  id="due_date"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-fit"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("due_date_hint")}
-                </p>
-              </div>
-              {/* Structured tax year (migration 0900). Optional — drives document
+                <div className="space-y-1.5">
+                  <Label htmlFor="start_date">{t("field_start_date")}</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-fit"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("start_date_hint")}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="due_date">
+                    {t("field_due_date_optional")}
+                  </Label>
+                  <Input
+                    id="due_date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-fit"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("due_date_hint")}
+                  </p>
+                </div>
+                {/* Structured tax year (migration 0900). Optional — drives document
                   filing's {year} and, later, the AI's expected-year context. */}
-              <div className="space-y-1.5">
-                <Label htmlFor="tax_year">{t("builder_tax_year_label")}</Label>
-                <select
-                  id="tax_year"
-                  value={taxYear}
-                  onChange={(e) => setTaxYear(e.target.value)}
-                  className="h-10 w-fit min-w-32 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-all hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-                >
-                  <option value="">{t("builder_tax_year_none")}</option>
-                  {TAX_YEAR_OPTIONS.map((y) => (
-                    <option key={y} value={String(y)}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  {t("builder_tax_year_hint")}
-                </p>
-              </div>
-              {/* WHO the work belongs to, from the moment it exists. The save
+                <div className="space-y-1.5">
+                  <Label htmlFor="tax_year">
+                    {t("builder_tax_year_label")}
+                  </Label>
+                  <select
+                    id="tax_year"
+                    value={taxYear}
+                    onChange={(e) => setTaxYear(e.target.value)}
+                    className="h-10 w-fit min-w-32 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-all hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                  >
+                    <option value="">{t("builder_tax_year_none")}</option>
+                    {TAX_YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={String(y)}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {t("builder_tax_year_hint")}
+                  </p>
+                </div>
+                {/* WHO the work belongs to, from the moment it exists. The save
                   path has accepted this since 0001; the form never offered it,
                   so handing work to somebody else was always TWO steps —
                   create it, then reassign. Hidden in a solo firm: a picker with
                   one option is a question with one answer. */}
-              {members.length > 1 && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="assignee">{t("field_assignee")}</Label>
-                  <select
-                    id="assignee"
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="h-9 w-fit min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">{t("assignee_me")}</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                {members.length > 1 && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="assignee">{t("field_assignee")}</Label>
+                    <select
+                      id="assignee"
+                      value={assigneeId}
+                      onChange={(e) => setAssigneeId(e.target.value)}
+                      className="h-9 w-fit min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">{t("assignee_me")}</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-              {/* ── CANOPY'S THREE INTRODUCTION ROWS ─────────────────────
+                {/* ── CANOPY'S THREE INTRODUCTION ROWS ─────────────────────
                   Identical to the template builder's Introduction tab: the
                   same ToggleRow, the same uploader, the same copy. It was a
                   bare textarea with no video and no document at all.
@@ -2177,198 +2265,203 @@ export function EngagementBuilder({
                   editor, and adding one is its own decision. Storing text now
                   and upgrading the EDITOR later is safe; storing HTML from an
                   editor that does not exist is not. */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  {tTpl("tab_introduction")}
-                </p>
-                <ToggleRow
-                  label={tTpl("welcome_message")}
-                  hint={tTpl("welcome_message_hint")}
-                  on={welcomeEnabled}
-                  onToggle={() => setWelcomeEnabled((v) => !v)}
-                >
-                  <Textarea
-                    id="intro_message"
-                    value={introMessage}
-                    onChange={(e) => setIntroMessage(e.target.value)}
-                    placeholder={t("intro_message_placeholder")}
-                    rows={4}
-                  />
-                </ToggleRow>
-                <ToggleRow
-                  label={tTpl("intro_video")}
-                  hint={tTpl("intro_video_hint")}
-                  on={videoEnabled}
-                  onToggle={() => setVideoEnabled((v) => !v)}
-                >
-                  <div className="space-y-2">
-                    <Input
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      placeholder={tTpl("intro_video_placeholder")}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    {tTpl("tab_introduction")}
+                  </p>
+                  <ToggleRow
+                    label={tTpl("welcome_message")}
+                    hint={tTpl("welcome_message_hint")}
+                    on={welcomeEnabled}
+                    onToggle={() => setWelcomeEnabled((v) => !v)}
+                  >
+                    <Textarea
+                      id="intro_message"
+                      value={introMessage}
+                      onChange={(e) => setIntroMessage(e.target.value)}
+                      placeholder={t("intro_message_placeholder")}
+                      rows={4}
                     />
-                    <p className="text-[11px] text-muted-foreground">
-                      {tTpl("or_upload")}
-                    </p>
+                  </ToggleRow>
+                  <ToggleRow
+                    label={tTpl("intro_video")}
+                    hint={tTpl("intro_video_hint")}
+                    on={videoEnabled}
+                    onToggle={() => setVideoEnabled((v) => !v)}
+                  >
+                    <div className="space-y-2">
+                      <Input
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        placeholder={tTpl("intro_video_placeholder")}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        {tTpl("or_upload")}
+                      </p>
+                      <AssetUpload
+                        kind="video"
+                        fileName={videoFileName}
+                        onUploaded={(path, name) => {
+                          setVideoPath(path);
+                          setVideoFileName(name);
+                        }}
+                        onClear={() => {
+                          setVideoPath("");
+                          setVideoFileName("");
+                        }}
+                      />
+                    </div>
+                  </ToggleRow>
+                  <ToggleRow
+                    label={tTpl("intro_document")}
+                    hint={tTpl("intro_document_hint")}
+                    on={documentEnabled}
+                    onToggle={() => setDocumentEnabled((v) => !v)}
+                  >
                     <AssetUpload
-                      kind="video"
-                      fileName={videoFileName}
+                      kind="document"
+                      fileName={documentName}
                       onUploaded={(path, name) => {
-                        setVideoPath(path);
-                        setVideoFileName(name);
+                        setDocumentPath(path);
+                        setDocumentName(name);
                       }}
                       onClear={() => {
-                        setVideoPath("");
-                        setVideoFileName("");
+                        setDocumentPath("");
+                        setDocumentName("");
                       }}
                     />
-                  </div>
-                </ToggleRow>
-                <ToggleRow
-                  label={tTpl("intro_document")}
-                  hint={tTpl("intro_document_hint")}
-                  on={documentEnabled}
-                  onToggle={() => setDocumentEnabled((v) => !v)}
-                >
-                  <AssetUpload
-                    kind="document"
-                    fileName={documentName}
-                    onUploaded={(path, name) => {
-                      setDocumentPath(path);
-                      setDocumentName(name);
-                    }}
-                    onClear={() => {
-                      setDocumentPath("");
-                      setDocumentName("");
-                    }}
-                  />
-                </ToggleRow>
-              </div>
+                  </ToggleRow>
+                </div>
 
-              {/* "AI Analyze" toggle. On by default; turning it off means no
+                {/* "AI Analyze" toggle. On by default; turning it off means no
                   document uploaded to this engagement is ever sent to the AI —
                   helps the firm control AI usage on engagements that don't need it. */}
-              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-                <div className="space-y-0.5">
-                  <Label
-                    htmlFor="ai-analyze"
-                    className="flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Sparkles className="size-4 text-muted-foreground" aria-hidden />
-                    {t("ai_analyze_label")}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("ai_analyze_hint")}
-                  </p>
+                <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                  <div className="space-y-0.5">
+                    <Label
+                      htmlFor="ai-analyze"
+                      className="flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles
+                        className="size-4 text-muted-foreground"
+                        aria-hidden
+                      />
+                      {t("ai_analyze_label")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("ai_analyze_hint")}
+                    </p>
+                  </div>
+                  <Switch
+                    id="ai-analyze"
+                    checked={aiEnabled}
+                    onCheckedChange={setAiEnabled}
+                    ariaLabel={t("ai_analyze_label")}
+                  />
                 </div>
-                <Switch
-                  id="ai-analyze"
-                  checked={aiEnabled}
-                  onCheckedChange={setAiEnabled}
-                  ariaLabel={t("ai_analyze_label")}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* ── HOW THEY AGREE ────────────────────────────────────────────
+            {/* ── HOW THEY AGREE ────────────────────────────────────────────
               Asked HERE, first, because it decides what the rest of the
               wizard even shows: the proposal document and its preview, or a
               signed engagement letter. Two radio cards rather than a switch
               — neither answer is the "off" state of the other. */}
-          {workflowsOn && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {t("agreement_mode_title")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(["proposal", "letter"] as const).map((mode) => (
-                    <RadioCard
-                      key={mode}
-                      name="engagement-agreement-mode"
-                      checked={agreementMode === mode}
-                      onSelect={() => setAgreementMode(mode)}
-                      // caption renders ABOVE the bold label in this shared
-                      // card, so it carries the short descriptor.
-                      caption={t(
-                        mode === "proposal"
-                          ? "agreement_mode_proposal_kicker"
-                          : "agreement_mode_letter_kicker",
-                      )}
-                      label={t(
-                        mode === "proposal"
-                          ? "agreement_mode_proposal"
-                          : "agreement_mode_letter",
-                      )}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t(
-                    agreementMode === "proposal"
-                      ? "agreement_mode_proposal_hint"
-                      : "agreement_mode_letter_hint",
-                  )}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
+            {workflowsOn && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t("agreement_mode_title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(["proposal", "letter"] as const).map((mode) => (
+                      <RadioCard
+                        key={mode}
+                        name="engagement-agreement-mode"
+                        checked={agreementMode === mode}
+                        onSelect={() => setAgreementMode(mode)}
+                        // caption renders ABOVE the bold label in this shared
+                        // card, so it carries the short descriptor.
+                        caption={t(
+                          mode === "proposal"
+                            ? "agreement_mode_proposal_kicker"
+                            : "agreement_mode_letter_kicker",
+                        )}
+                        label={t(
+                          mode === "proposal"
+                            ? "agreement_mode_proposal"
+                            : "agreement_mode_letter",
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t(
+                      agreementMode === "proposal"
+                        ? "agreement_mode_proposal_hint"
+                        : "agreement_mode_letter_hint",
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
 
-      {/* STEP 2 — the SCOPE. What you are doing for them and what it costs.
+        {/* STEP 2 — the SCOPE. What you are doing for them and what it costs.
           Not the document checklist: that answers "what do I need FROM the
           client", this answers "what am I DOING for them". They were the same
           thing only because one of them had no table (migration 1450). */}
-      {step === "services" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("section_services")}</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {t("section_services_hint")}
-            </p>
-          </CardHeader>
-          <CardContent>
-            <BillingBlocksEditor
-              blocks={blocks}
-              onChange={setBlocks}
-              visibility={priceVisibility}
-              onVisibilityChange={setPriceVisibility}
-              // A service that carries work brings it. Automatic, per the
-              // founder — no prompt; the tasks land in the Tasks step labelled
-              // with the service that brought them, and are edited or deleted
-              // there like any other.
-              onServicePicked={pullServiceWork}
-              locale={locale}
-              services={services}
-              // ── THE TAX FILLS ITSELF IN ────────────────────────────────
-              // Founder: "make the tax percentage on a service item fill
-              // automatically based on the province you're in."
-              //
-              // From the CLIENT's province, not the firm's — Canadian
-              // place-of-supply for services puts the rate on the recipient,
-              // which is why a Montreal firm bills an Ontario client 13% and
-              // not 14.975%. It was `null` here, and the only other source
-              // (`firm.default_tax_pct`) is a column that exists in no
-              // migration, so this box has been blank for everybody since it
-              // was built.
-              //
-              // Still a SUGGESTION: a line that carries its own rate wins, the
-              // same rule the service catalogue already follows.
-              fallbackTaxPct={engagementTaxPct}
-              // Recurrence lives on the Automation step now — one screen
-              // decides whether and how this repeats, so these pills would
-              // be a second place to answer the same question.
-              hideBillingType={workflowsOn}
-            />
-          </CardContent>
-        </Card>
-      )}
+        {step === "services" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {t("section_services")}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {t("section_services_hint")}
+              </p>
+            </CardHeader>
+            <CardContent>
+              <BillingBlocksEditor
+                blocks={blocks}
+                onChange={setBlocks}
+                visibility={priceVisibility}
+                onVisibilityChange={setPriceVisibility}
+                // A service that carries work brings it. Automatic, per the
+                // founder — no prompt; the tasks land in the Tasks step labelled
+                // with the service that brought them, and are edited or deleted
+                // there like any other.
+                onServicePicked={pullServiceWork}
+                locale={locale}
+                services={services}
+                // ── THE TAX FILLS ITSELF IN ────────────────────────────────
+                // Founder: "make the tax percentage on a service item fill
+                // automatically based on the province you're in."
+                //
+                // From the CLIENT's province, not the firm's — Canadian
+                // place-of-supply for services puts the rate on the recipient,
+                // which is why a Montreal firm bills an Ontario client 13% and
+                // not 14.975%. It was `null` here, and the only other source
+                // (`firm.default_tax_pct`) is a column that exists in no
+                // migration, so this box has been blank for everybody since it
+                // was built.
+                //
+                // Still a SUGGESTION: a line that carries its own rate wins, the
+                // same rule the service catalogue already follows.
+                fallbackTaxPct={engagementTaxPct}
+                // Recurrence lives on the Automation step now — one screen
+                // decides whether and how this repeats, so these pills would
+                // be a second place to answer the same question.
+                hideBillingType={workflowsOn}
+              />
+            </CardContent>
+          </Card>
+        )}
 
-      {/* The document-request template picker, MOVED HERE from step 1.
+        {/* The document-request template picker, MOVED HERE from step 1.
           Founder: "why am I still being prompted to take a document collection
           template at the beginning of an engagement? wouldn't it only be
           prompted once I choose that I want to collect documents?"
@@ -2378,152 +2471,156 @@ export function EngagementBuilder({
           whole thing, so it belonged at the front. Now that Documents is its
           own step, a picker for document requests belongs in it, and step 1 is
           what Canopy's is: who it is for and what it is called. */}
-      {step === "tasks" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("section_tasks")}{" "}
-              <span className="font-normal text-muted-foreground">
-                ({tasks.length})
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Says what the template could not bring across, rather than
+        {step === "tasks" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {t("section_tasks")}{" "}
+                <span className="font-normal text-muted-foreground">
+                  ({tasks.length})
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Says what the template could not bring across, rather than
                 letting a row quietly arrive as the wrong kind. An engagement
                 holds one document request, one signature step and one set of
                 deliverables (1370), so a template carrying a second lands as a
                 plain task — visible, and one dropdown away from being fixed. */}
-            {downgradedTasks.length > 0 && (
-              <p className="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                {t("task_template_downgraded", {
-                  titles: downgradedTasks.join(", "),
-                })}
-              </p>
-            )}
-            {tasks.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                {t("tasks_empty")}
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {tasks.map((task, idx) => (
-                  <li
-                    key={idx}
-                    className="rounded-lg border border-border bg-card p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="flex flex-col items-center pt-1 text-muted-foreground">
-                        <button
-                          type="button"
-                          onClick={() => moveTask(idx, -1)}
-                          disabled={idx === 0}
-                          className="hover:text-foreground disabled:opacity-30"
-                          aria-label={t("move_up")}
-                        >
-                          ↑
-                        </button>
-                        <GripVertical className="size-3" aria-hidden />
-                        <button
-                          type="button"
-                          onClick={() => moveTask(idx, 1)}
-                          disabled={idx === tasks.length - 1}
-                          className="hover:text-foreground disabled:opacity-30"
-                          aria-label={t("move_down")}
-                        >
-                          ↓
-                        </button>
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        <Input
-                          value={task.title}
-                          onChange={(e) =>
-                            updateTask(idx, { title: e.target.value })
-                          }
-                          placeholder={t("task_title_placeholder")}
-                          aria-label={t("task_title_placeholder")}
-                        />
-                        <div className="flex flex-wrap items-center gap-3 text-xs">
-                          {/* Only kinds this engagement can still take: the
+              {downgradedTasks.length > 0 && (
+                <p className="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  {t("task_template_downgraded", {
+                    titles: downgradedTasks.join(", "),
+                  })}
+                </p>
+              )}
+              {tasks.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  {t("tasks_empty")}
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {tasks.map((task, idx) => (
+                    <li
+                      key={idx}
+                      className="rounded-lg border border-border bg-card p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="flex flex-col items-center pt-1 text-muted-foreground">
+                          <button
+                            type="button"
+                            onClick={() => moveTask(idx, -1)}
+                            disabled={idx === 0}
+                            className="hover:text-foreground disabled:opacity-30"
+                            aria-label={t("move_up")}
+                          >
+                            ↑
+                          </button>
+                          <GripVertical className="size-3" aria-hidden />
+                          <button
+                            type="button"
+                            onClick={() => moveTask(idx, 1)}
+                            disabled={idx === tasks.length - 1}
+                            className="hover:text-foreground disabled:opacity-30"
+                            aria-label={t("move_down")}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <Input
+                            value={task.title}
+                            onChange={(e) =>
+                              updateTask(idx, { title: e.target.value })
+                            }
+                            placeholder={t("task_title_placeholder")}
+                            aria-label={t("task_title_placeholder")}
+                          />
+                          <div className="flex flex-wrap items-center gap-3 text-xs">
+                            {/* Only kinds this engagement can still take: the
                               three screen-backed ones are one-per-job (1370's
                               partial unique index), and offering a second would
                               offer a row the insert will refuse. */}
-                          <select
-                            value={task.kind}
-                            onChange={(e) =>
-                              updateTask(idx, {
-                                kind: e.target.value as TaskKind,
-                              })
-                            }
-                            aria-label={t("task_kind_label")}
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                          >
-                            {availableKinds(tasks, idx).map((kind) => (
-                              <option key={kind} value={kind}>
-                                {t(taskKindLabelKey(kind) as "kind_task")}
-                              </option>
-                            ))}
-                          </select>
-                          {/* Hidden in a solo firm — there is nobody else to
-                              hand it to, so the control would be a dead end. */}
-                          {members.length > 0 && (
                             <select
-                              value={task.assigneeIds[0] ?? ""}
+                              value={task.kind}
                               onChange={(e) =>
                                 updateTask(idx, {
-                                  assigneeIds: e.target.value
-                                    ? [e.target.value]
-                                    : [],
+                                  kind: e.target.value as TaskKind,
                                 })
                               }
-                              aria-label={t("task_assignee_label")}
+                              aria-label={t("task_kind_label")}
                               className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                             >
-                              <option value="">{t("task_assignee_none")}</option>
-                              {members.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name}
+                              {availableKinds(tasks, idx).map((kind) => (
+                                <option key={kind} value={kind}>
+                                  {t(taskKindLabelKey(kind) as "kind_task")}
                                 </option>
                               ))}
                             </select>
-                          )}
-                          {task.kind === "document_collection" && (
-                            <span className="text-muted-foreground">
-                              {t("task_documents_count")}: {items.length}
-                            </span>
-                          )}
-                          {/* Steps arrive with a task template. Shown as a
+                            {/* Hidden in a solo firm — there is nobody else to
+                              hand it to, so the control would be a dead end. */}
+                            {members.length > 0 && (
+                              <select
+                                value={task.assigneeIds[0] ?? ""}
+                                onChange={(e) =>
+                                  updateTask(idx, {
+                                    assigneeIds: e.target.value
+                                      ? [e.target.value]
+                                      : [],
+                                  })
+                                }
+                                aria-label={t("task_assignee_label")}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                              >
+                                <option value="">
+                                  {t("task_assignee_none")}
+                                </option>
+                                {members.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            {task.kind === "document_collection" && (
+                              <span className="text-muted-foreground">
+                                {t("task_documents_count")}: {items.length}
+                              </span>
+                            )}
+                            {/* Steps arrive with a task template. Shown as a
                               count rather than a list: the row is one line and
                               five step names would wrap it into four. */}
-                          {task.sourceLabel && (
-                            <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[10px] font-medium text-accent">
-                              {t("task_from_service", { name: task.sourceLabel })}
-                            </span>
-                          )}
-                          {(task.subtasks?.length ?? 0) > 0 && (
-                            <span className="text-muted-foreground">
-                              {t("task_steps_count", {
-                                count: task.subtasks?.length ?? 0,
-                              })}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeTask(idx)}
-                            className="ml-auto inline-flex items-center gap-1 text-destructive hover:underline"
-                          >
-                            <Trash2 className="size-3" />
-                            {tc("delete")}
-                          </button>
+                            {task.sourceLabel && (
+                              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[10px] font-medium text-accent">
+                                {t("task_from_service", {
+                                  name: task.sourceLabel,
+                                })}
+                              </span>
+                            )}
+                            {(task.subtasks?.length ?? 0) > 0 && (
+                              <span className="text-muted-foreground">
+                                {t("task_steps_count", {
+                                  count: task.subtasks?.length ?? 0,
+                                })}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeTask(idx)}
+                              className="ml-auto inline-flex items-center gap-1 text-destructive hover:underline"
+                            >
+                              <Trash2 className="size-3" />
+                              {tc("delete")}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-            {/* ── THE ADD CONTROLS SIT UNDER THE LIST ──────────────────────
+              {/* ── THE ADD CONTROLS SIT UNDER THE LIST ──────────────────────
                 Canopy puts "+ Add task template" beneath the box of rows, not
                 in the header beside the title — you read what is there, then
                 add to the end of it. The founder, with their screenshot: "move
@@ -2531,49 +2628,56 @@ export function EngagementBuilder({
                 sits below the actual box in the canopy screenshot."
 
                 The header keeps only the heading and the count. */}
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
-              <Button type="button" variant="ghost" size="sm" onClick={addTask}>
-                <Plus className="size-4" />
-                {t("add_task")}
-              </Button>
-              {/* Hidden when the firm has none — a dropdown whose only entry is
-                  its own placeholder is a control that does nothing. */}
-              {taskTemplates.length > 0 && (
-                <select
-                  // Reset to "" after every apply, so applying the SAME template
-                  // twice works. A <select> whose value already equals the
-                  // chosen option fires no change event, which would read as
-                  // the second click doing nothing.
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) applyTaskTemplate(e.target.value);
-                  }}
-                  aria-label={t("apply_task_template")}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={addTask}
                 >
-                  <option value="">{t("apply_task_template")}</option>
-                  {taskTemplates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  <Plus className="size-4" />
+                  {t("add_task")}
+                </Button>
+                {/* Hidden when the firm has none — a dropdown whose only entry is
+                  its own placeholder is a control that does nothing. */}
+                {taskTemplates.length > 0 && (
+                  <select
+                    // Reset to "" after every apply, so applying the SAME template
+                    // twice works. A <select> whose value already equals the
+                    // chosen option fires no change event, which would read as
+                    // the second click doing nothing.
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) applyTaskTemplate(e.target.value);
+                    }}
+                    aria-label={t("apply_task_template")}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    <option value="">{t("apply_task_template")}</option>
+                    {taskTemplates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* ── BELONGS TO THE DOCUMENT-COLLECTION TASK ABOVE ──────────────────
+        {/* ── BELONGS TO THE DOCUMENT-COLLECTION TASK ABOVE ──────────────────
           Present only because that task is, and gone the moment it is deleted.
           This is the founder's correction in structural form: a document
           request template is not a section of engagement creation, it is how
           you fill in ONE task. */}
-      {step === "tasks" && docTaskIndex !== -1 && (
-        <>
+        {step === "tasks" && docTaskIndex !== -1 && (
+          <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">{t("section_template")}</CardTitle>
+                <CardTitle className="text-base">
+                  {t("section_template")}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div
@@ -2596,7 +2700,9 @@ export function EngagementBuilder({
                       name={localizedTemplateName(tmpl, locale)}
                       type={tmpl.type}
                       itemCount={tmpl.items.length}
-                      requiredCount={tmpl.items.filter((it) => it.required).length}
+                      requiredCount={
+                        tmpl.items.filter((it) => it.required).length
+                      }
                       preview={tmpl.items
                         .slice(0, 3)
                         .map((it) =>
@@ -2610,137 +2716,146 @@ export function EngagementBuilder({
                 </div>
               </CardContent>
             </Card>
-        </>
-      )}
+          </>
+        )}
 
-      {/* The checklist itself — also the document task's, on the same terms. */}
-      {step === "tasks" && docTaskIndex !== -1 && (
-        <>
-          <Card
-            className={
-              highlightEmptyChecklist
-                ? "ring-2 ring-destructive transition-shadow"
-                : "transition-shadow"
-            }
-          >
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">
-                {t("section_checklist")}{" "}
-                <span className="text-muted-foreground font-normal">
-                  ({items.length})
-                </span>
-              </CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                <Plus className="size-4" />
-                {t("add_item")}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {items.length === 0 ? (
-                <div
-                  className={
-                    "text-sm text-center py-8 " +
-                    (highlightEmptyChecklist
-                      ? "text-destructive font-medium"
-                      : "text-muted-foreground")
-                  }
+        {/* The checklist itself — also the document task's, on the same terms. */}
+        {step === "tasks" && docTaskIndex !== -1 && (
+          <>
+            <Card
+              className={
+                highlightEmptyChecklist
+                  ? "ring-2 ring-destructive transition-shadow"
+                  : "transition-shadow"
+              }
+            >
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">
+                  {t("section_checklist")}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({items.length})
+                  </span>
+                </CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addItem}
                 >
-                  {t("checklist_empty")}
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {items.map((item, idx) => (
-                    <li
-                      key={idx}
-                      className="rounded-lg border border-border bg-card p-3"
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="flex flex-col items-center pt-1 text-muted-foreground">
-                          <button
-                            type="button"
-                            onClick={() => moveItem(idx, -1)}
-                            disabled={idx === 0}
-                            className="hover:text-foreground disabled:opacity-30"
-                            aria-label={t("move_up")}
-                          >
-                            ↑
-                          </button>
-                          <GripVertical className="size-3" aria-hidden />
-                          <button
-                            type="button"
-                            onClick={() => moveItem(idx, 1)}
-                            disabled={idx === items.length - 1}
-                            className="hover:text-foreground disabled:opacity-30"
-                            aria-label={t("move_down")}
-                          >
-                            ↓
-                          </button>
-                        </div>
-                        <div className="flex-1 space-y-2">
-                          {/* One label for the whole site. We mirror it into both
-                              label_fr + label_en so the stored data + the client
-                              portal stay consistent in either language. */}
-                          <Input
-                            value={item.label_en || item.label_fr}
-                            onChange={(e) =>
-                              updateItem(idx, {
-                                label_fr: e.target.value,
-                                label_en: e.target.value,
-                              })
-                            }
-                            placeholder={t("label_placeholder")}
-                            aria-label={t("label_placeholder")}
-                          />
-                          <Textarea
-                            value={item.description_fr ?? ""}
-                            onChange={(e) =>
-                              updateItem(idx, {
-                                description_fr: e.target.value || null,
-                              })
-                            }
-                            placeholder={t("description_fr_placeholder")}
-                            rows={1}
-                            className="text-xs"
-                          />
-                          <div className="flex items-center gap-3 text-xs">
-                            <DocTypePicker
-                              value={item.doc_type}
-                              onChange={(dt) => updateItem(idx, { doc_type: dt })}
-                              className="h-8 w-[14rem] max-w-full text-xs"
-                              province={selectedProvince}
-                              includeQuebecForms={includeQuebecForms}
-                            />
-                            <label className="flex items-center gap-1.5 select-none cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={item.required}
-                                onChange={(e) =>
-                                  updateItem(idx, { required: e.target.checked })
-                                }
-                              />
-                              {t("required")}
-                            </label>
+                  <Plus className="size-4" />
+                  {t("add_item")}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {items.length === 0 ? (
+                  <div
+                    className={
+                      "text-sm text-center py-8 " +
+                      (highlightEmptyChecklist
+                        ? "text-destructive font-medium"
+                        : "text-muted-foreground")
+                    }
+                  >
+                    {t("checklist_empty")}
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {items.map((item, idx) => (
+                      <li
+                        key={idx}
+                        className="rounded-lg border border-border bg-card p-3"
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex flex-col items-center pt-1 text-muted-foreground">
                             <button
                               type="button"
-                              onClick={() => removeItem(idx)}
-                              className="ml-auto text-destructive hover:underline inline-flex items-center gap-1"
+                              onClick={() => moveItem(idx, -1)}
+                              disabled={idx === 0}
+                              className="hover:text-foreground disabled:opacity-30"
+                              aria-label={t("move_up")}
                             >
-                              <Trash2 className="size-3" />
-                              {tc("delete")}
+                              ↑
+                            </button>
+                            <GripVertical className="size-3" aria-hidden />
+                            <button
+                              type="button"
+                              onClick={() => moveItem(idx, 1)}
+                              disabled={idx === items.length - 1}
+                              className="hover:text-foreground disabled:opacity-30"
+                              aria-label={t("move_down")}
+                            >
+                              ↓
                             </button>
                           </div>
+                          <div className="flex-1 space-y-2">
+                            {/* One label for the whole site. We mirror it into both
+                              label_fr + label_en so the stored data + the client
+                              portal stay consistent in either language. */}
+                            <Input
+                              value={item.label_en || item.label_fr}
+                              onChange={(e) =>
+                                updateItem(idx, {
+                                  label_fr: e.target.value,
+                                  label_en: e.target.value,
+                                })
+                              }
+                              placeholder={t("label_placeholder")}
+                              aria-label={t("label_placeholder")}
+                            />
+                            <Textarea
+                              value={item.description_fr ?? ""}
+                              onChange={(e) =>
+                                updateItem(idx, {
+                                  description_fr: e.target.value || null,
+                                })
+                              }
+                              placeholder={t("description_fr_placeholder")}
+                              rows={1}
+                              className="text-xs"
+                            />
+                            <div className="flex items-center gap-3 text-xs">
+                              <DocTypePicker
+                                value={item.doc_type}
+                                onChange={(dt) =>
+                                  updateItem(idx, { doc_type: dt })
+                                }
+                                className="h-8 w-[14rem] max-w-full text-xs"
+                                province={selectedProvince}
+                                includeQuebecForms={includeQuebecForms}
+                              />
+                              <label className="flex items-center gap-1.5 select-none cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={item.required}
+                                  onChange={(e) =>
+                                    updateItem(idx, {
+                                      required: e.target.checked,
+                                    })
+                                  }
+                                />
+                                {t("required")}
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeItem(idx)}
+                                className="ml-auto text-destructive hover:underline inline-flex items-center gap-1"
+                              >
+                                <Trash2 className="size-3" />
+                                {tc("delete")}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
 
-      {/* The scope, priced and grouped by how often each line is billed —
+        {/* The scope, priced and grouped by how often each line is billed —
           Canopy's totals panel, and the thing that makes this step legible:
           "what does this client owe, and how often" cannot be read off a flat
           list of mixed frequencies.
@@ -2750,279 +2865,285 @@ export function EngagementBuilder({
           the drift CLAUDE.md's cohesion rule exists to stop, and it would be
           worse than usual here because these numbers are what a client agrees
           to pay. It is read-only in both places — the EDITOR is step 2. */}
-      {/* ── THE AUTOMATION STEP ──────────────────────────────────────────
+        {/* ── THE AUTOMATION STEP ──────────────────────────────────────────
           What this engagement will DO, before it exists: the flow inherited
           from the template, each stage as a plan line, the letter's status,
           and a per-engagement override that never touches the library. */}
-      {step === "automation" && workflowsOn && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {tAuto("flow_runs_label")}
-            </span>
-            <Select
-              value={flowPick?.automationId ?? "template"}
-              onValueChange={(v) => {
-                if (v === "template") {
-                  setFlowPick(null);
-                  // Reverting to the template re-applies ITS cadence (when
-                  // it has one) in the same gesture, like picking any flow.
-                  applyFlowReminders(templateFlow);
-                  return;
-                }
-                const a = automations.find((x) => x.id === v);
-                if (a?.definition) {
-                  setFlowPick({
-                    def: a.definition,
-                    automationId: a.id,
-                    customized: false,
-                  });
-                  applyFlowReminders(a.definition);
-                }
-              }}
-            >
-              <SelectTrigger className="h-9 w-72 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="template">
-                  {tAuto("flow_from_template")}
-                </SelectItem>
-                {automations.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.firmId === null && BUILTIN_NAME_KEYS[a.id]
-                      ? tAuto(BUILTIN_NAME_KEYS[a.id])
-                      : a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {flowPick?.customized && (
-              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
-                {tAuto("flow_customized_chip")}
+        {step === "automation" && workflowsOn && (
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {tAuto("flow_runs_label")}
               </span>
-            )}
-          </div>
+              <Select
+                value={flowPick?.automationId ?? "template"}
+                onValueChange={(v) => {
+                  if (v === "template") {
+                    setFlowPick(null);
+                    // Reverting to the template re-applies ITS cadence (when
+                    // it has one) in the same gesture, like picking any flow.
+                    applyFlowReminders(templateFlow);
+                    return;
+                  }
+                  const a = automations.find((x) => x.id === v);
+                  if (a?.definition) {
+                    setFlowPick({
+                      def: a.definition,
+                      automationId: a.id,
+                      customized: false,
+                    });
+                    applyFlowReminders(a.definition);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-9 w-72 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="template">
+                    {tAuto("flow_from_template")}
+                  </SelectItem>
+                  {automations.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.firmId === null && BUILTIN_NAME_KEYS[a.id]
+                        ? tAuto(BUILTIN_NAME_KEYS[a.id])
+                        : a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {flowPick?.customized && (
+                <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
+                  {tAuto("flow_customized_chip")}
+                </span>
+              )}
+            </div>
 
-          <div className="overflow-hidden rounded-xl border border-border">
-            {/* The journey BEFORE the flow — the founder: "it goes from
+            <div className="overflow-hidden rounded-xl border border-border">
+              {/* The journey BEFORE the flow — the founder: "it goes from
                 draft to sent to the client accepts, and then it can move
                 into collecting... but it doesn't display over here." Now it
                 does. The letter belongs to the SEND line (signing it is how
                 the client accepts), and the accept line only renders when
                 this engagement will actually hold for one — a plain
                 document request starts the moment it is sent. */}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
-              <span className="font-medium">{tAuto("plan_sent_title")}</span>
-              {letterMode && (
-                <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
-                  {tAuto("action_send_engagement_letter")}
-                </span>
-              )}
-              <span className="ml-auto text-xs text-muted-foreground">
-                {tAuto("plan_sent_note")}
-              </span>
-            </div>
-            {pickedServiceIds.length > 0 && (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
-                <span className="font-medium">
-                  {tAuto("plan_accept_title")}
-                </span>
+                <span className="font-medium">{tAuto("plan_sent_title")}</span>
+                {letterMode && (
+                  <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent">
+                    {tAuto("action_send_engagement_letter")}
+                  </span>
+                )}
                 <span className="ml-auto text-xs text-muted-foreground">
-                  {letterMode
-                    ? tAuto("plan_accept_note_letter")
-                    : tAuto("plan_accept_note")}
+                  {tAuto("plan_sent_note")}
                 </span>
               </div>
-            )}
-            {workflowPlan(activeFlow).map((line) => (
-              <div
-                key={line.stage}
-                className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-2.5 text-sm last:border-b-0"
-              >
-                <span className="font-medium">
-                  {tStage(`stage_${line.stage}`)}
-                </span>
-                {line.assignee != null && (
-                  <span className="text-xs text-muted-foreground">
-                    → {flowAssigneeName(line.assignee)}
+              {pickedServiceIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted/20 px-4 py-2.5 text-sm">
+                  <span className="font-medium">
+                    {tAuto("plan_accept_title")}
                   </span>
-                )}
-                {line.actions
-                  // The letter renders on the "Sent to the client" line
-                  // above — showing it here too would claim two sends.
-                  .filter((a) => a !== "send_engagement_letter")
-                  .map((a) => (
-                    <span
-                      key={a}
-                      className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent"
-                    >
-                      {tAuto(`action_${a}`)}
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {letterMode
+                      ? tAuto("plan_accept_note_letter")
+                      : tAuto("plan_accept_note")}
+                  </span>
+                </div>
+              )}
+              {workflowPlan(activeFlow).map((line) => (
+                <div
+                  key={line.stage}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-2.5 text-sm last:border-b-0"
+                >
+                  <span className="font-medium">
+                    {tStage(`stage_${line.stage}`)}
+                  </span>
+                  {line.assignee != null && (
+                    <span className="text-xs text-muted-foreground">
+                      → {flowAssigneeName(line.assignee)}
                     </span>
-                  ))}
-                {line.taskCount > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {tAuto("summary_tasks", { count: line.taskCount })}
-                  </span>
-                )}
-                {line.advance && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {tAuto(`condition_${line.advance.condition}`)} ·{" "}
-                    {tAuto(
-                      line.advance.mode === "confirm"
-                        ? "mode_confirm"
-                        : "mode_automatic",
-                    )}
-                  </span>
-                )}
-                {/* "Completed" said nothing about what completing DOES —
+                  )}
+                  {line.actions
+                    // The letter renders on the "Sent to the client" line
+                    // above — showing it here too would claim two sends.
+                    .filter((a) => a !== "send_engagement_letter")
+                    .map((a) => (
+                      <span
+                        key={a}
+                        className="rounded-full bg-accent-subtle px-2 py-0.5 text-[11px] text-accent"
+                      >
+                        {tAuto(`action_${a}`)}
+                      </span>
+                    ))}
+                  {line.taskCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {tAuto("summary_tasks", { count: line.taskCount })}
+                    </span>
+                  )}
+                  {line.advance && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {tAuto(`condition_${line.advance.condition}`)} ·{" "}
+                      {tAuto(
+                        line.advance.mode === "confirm"
+                          ? "mode_confirm"
+                          : "mode_automatic",
+                      )}
+                    </span>
+                  )}
+                  {/* "Completed" said nothing about what completing DOES —
                     the founder had to ask whether paid means done. */}
-                {line.stage === "completed" && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {tAuto("plan_completed_note")}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+                  {line.stage === "completed" && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {tAuto("plan_completed_note")}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
 
-          {/* The letter honesty block, keyed to the ONE service whose letter
+            {/* The letter honesty block, keyed to the ONE service whose letter
               actually rides the send (the first catalogue line, in proposal
               order — resolveServiceId's rule). Missing + allowed to fix =
               attach it RIGHT HERE (founder: "you can't attach the engagement
               letter you'd like to be automatically sent out"), via the SAME
               ServiceLetterSection the service builder mounts. */}
-          {letterMode &&
-            (pickedServiceIds.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letter_needs_service")}
-              </p>
-            ) : sendingServiceId &&
-              canUploadLetters &&
-              (sendingLetterMissing ||
-                attachedLetterServiceIds.includes(sendingServiceId)) ? (
-              // Stays mounted after the first upload (the attached-ids check)
-              // so the second language's PDF can go up — or a mis-pick come
-              // back down — without leaving the builder.
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.04] p-4">
+            {letterMode &&
+              (pickedServiceIds.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  {sendingLetterMissing
-                    ? tAuto("flow_letter_attach_here", {
-                        service: sendingServiceName ?? "",
-                      })
-                    : tAuto("flow_letter_ok_for", {
-                        service: sendingServiceName ?? "",
-                      })}
+                  {tAuto("flow_letter_needs_service")}
                 </p>
-                <div className="mt-2.5">
-                  <ServiceLetterSection
-                    key={sendingServiceId}
-                    serviceId={sendingServiceId}
-                    initial={[]}
-                    onRowsChange={(rows) =>
-                      setAttachedLetterServiceIds((prev) =>
-                        rows.length > 0
-                          ? [...new Set([...prev, sendingServiceId])]
-                          : prev.filter((x) => x !== sendingServiceId),
-                      )
-                    }
-                  />
+              ) : sendingServiceId &&
+                canUploadLetters &&
+                (sendingLetterMissing ||
+                  attachedLetterServiceIds.includes(sendingServiceId)) ? (
+                // Stays mounted after the first upload (the attached-ids check)
+                // so the second language's PDF can go up — or a mis-pick come
+                // back down — without leaving the builder.
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.04] p-4">
+                  <p className="text-xs text-muted-foreground">
+                    {sendingLetterMissing
+                      ? tAuto("flow_letter_attach_here", {
+                          service: sendingServiceName ?? "",
+                        })
+                      : tAuto("flow_letter_ok_for", {
+                          service: sendingServiceName ?? "",
+                        })}
+                  </p>
+                  <div className="mt-2.5">
+                    <ServiceLetterSection
+                      key={sendingServiceId}
+                      serviceId={sendingServiceId}
+                      initial={[]}
+                      onRowsChange={(rows) =>
+                        setAttachedLetterServiceIds((prev) =>
+                          rows.length > 0
+                            ? [...new Set([...prev, sendingServiceId])]
+                            : prev.filter((x) => x !== sendingServiceId),
+                        )
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
-            ) : sendingLetterMissing ? (
-              <p className="text-xs text-muted-foreground">
-                {tAuto("flow_letter_missing_for", {
-                  service: sendingServiceName ?? "",
-                })}
-              </p>
-            ) : (
-              // Keyed to the ONE service that sends — the old "every picked
-              // service has its letter" line claimed more than the send does.
-              <p className="text-xs text-muted-foreground">
-                {sendingServiceName
-                  ? tAuto("flow_letter_ok_for", { service: sendingServiceName })
-                  : tAuto("flow_letters_ok")}
-              </p>
-            ))}
+              ) : sendingLetterMissing ? (
+                <p className="text-xs text-muted-foreground">
+                  {tAuto("flow_letter_missing_for", {
+                    service: sendingServiceName ?? "",
+                  })}
+                </p>
+              ) : (
+                // Keyed to the ONE service that sends — the old "every picked
+                // service has its letter" line claimed more than the send does.
+                <p className="text-xs text-muted-foreground">
+                  {sendingServiceName
+                    ? tAuto("flow_letter_ok_for", {
+                        service: sendingServiceName,
+                      })
+                    : tAuto("flow_letters_ok")}
+                </p>
+              ))}
 
-          {/* NO placement switch (founder: "that shouldn't even be a button
+            {/* NO placement switch (founder: "that shouldn't even be a button
               ... the e-signing process will be automatic when they click
               create and send"). Letter mode opens SignWell's editor by
               itself; this line just says so, once. */}
-          {letterMode && signwellEditorOn && (
-            <p className="text-xs text-muted-foreground">
-              {tAuto("flow_letter_place_note")}
-            </p>
-          )}
+            {letterMode && signwellEditorOn && (
+              <p className="text-xs text-muted-foreground">
+                {tAuto("flow_letter_place_note")}
+              </p>
+            )}
 
-          <details className="rounded-xl border border-border p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              {tAuto("flow_customize")}
-            </summary>
-            <p className="mb-3 mt-1 text-xs text-muted-foreground">
-              {tAuto("flow_override_note")}
-            </p>
-            <AutomationEditor
-              value={activeFlow}
-              onChange={(def) =>
-                setFlowPick({
-                  def,
-                  automationId: flowPick?.automationId ?? null,
-                  customized: true,
-                })
-              }
-              members={members}
-              // Per-engagement document chasing is the Reminders card on
-              // THIS step (engagements.reminder_settings — what the
-              // scheduler reads). A second documents editor here would take
-              // edits that are dead for this engagement. Invoice stays: the
-              // snapshot's invoice cadence IS read at billing time.
-              hideDocumentReminders
-            />
-          </details>
-        </section>
-      )}
+            <details className="rounded-xl border border-border p-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                {tAuto("flow_customize")}
+              </summary>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                {tAuto("flow_override_note")}
+              </p>
+              <AutomationEditor
+                value={activeFlow}
+                onChange={(def) =>
+                  setFlowPick({
+                    def,
+                    automationId: flowPick?.automationId ?? null,
+                    customized: true,
+                  })
+                }
+                members={members}
+                // Per-engagement document chasing is the Reminders card on
+                // THIS step (engagements.reminder_settings — what the
+                // scheduler reads). A second documents editor here would take
+                // edits that are dead for this engagement. Invoice stays: the
+                // snapshot's invoice cadence IS read at billing time.
+                hideDocumentReminders
+              />
+            </details>
+          </section>
+        )}
 
-      {step === "billing" && serviceItems.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("details_services")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EngagementServicesPanel items={serviceItems} locale={locale} />
-          </CardContent>
-        </Card>
-      )}
+        {step === "billing" && serviceItems.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {t("details_services")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EngagementServicesPanel items={serviceItems} locale={locale} />
+            </CardContent>
+          </Card>
+        )}
 
-      {/* ── WHAT IT ALL COMES TO ─────────────────────────────────────────
+        {/* ── WHAT IT ALL COMES TO ─────────────────────────────────────────
           Canopy's totals readout, which Vylan had nowhere at all — the founder:
           "Theres no screen or way to view pricing and stuff like fully."
 
           The SAME component the template builder's Services tab renders, from
           the same computeBillingTotals, so the two can never disagree about
           what a set of lines adds up to. */}
-      {step === "billing" && billingTotals.groups.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("totals_section")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BillingTotalsPanel totals={billingTotals} locale={locale} />
-          </CardContent>
-        </Card>
-      )}
+        {step === "billing" && billingTotals.groups.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("totals_section")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <BillingTotalsPanel totals={billingTotals} locale={locale} />
+            </CardContent>
+          </Card>
+        )}
 
-      {/* ── WHAT THE CLIENT SEES, AND HOW THEY PAY ───────────────────────
+        {/* ── WHAT THE CLIENT SEES, AND HOW THEY PAY ───────────────────────
           Canopy's "Hide itemized rates on the proposal" plus their Payment
           settings block. The deposit lives HERE now rather than on the
           Proposal step: it is money, it belongs with the money, and having it
           in two conceptual places is how the two drift. */}
-      {step === "billing" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("payment_settings")}</CardTitle>
-          </CardHeader>
-          {/* ── ONE COLUMN, ONE RHYTHM ───────────────────────────────────
+        {step === "billing" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {t("payment_settings")}
+              </CardTitle>
+            </CardHeader>
+            {/* ── ONE COLUMN, ONE RHYTHM ───────────────────────────────────
               Canopy's Payment settings card: a checkbox, a labelled amount,
               and who pays it — every label at the same left edge, one gap
               between rows, no rules cutting the card into pieces.
@@ -3031,45 +3152,44 @@ export function EngagementBuilder({
               the two controls, and an amount box floating at half width. The
               founder: "clean up the billing screen its completely
               misalligned." */}
-          <CardContent className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="flex cursor-pointer items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={requirePaymentMethod}
-                  onChange={(e) => setRequirePaymentMethod(e.target.checked)}
+            <CardContent className="space-y-5">
+              <div className="space-y-1.5">
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={requirePaymentMethod}
+                    onChange={(e) => setRequirePaymentMethod(e.target.checked)}
+                  />
+                  {t("require_payment_method")}
+                </label>
+                <p className="pl-6 text-[11px] leading-relaxed text-muted-foreground">
+                  {t("require_payment_method_hint")}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="engagement-deposit" className="text-sm">
+                  {tTpl("require_deposit")}
+                </Label>
+                <MoneyInput
+                  id="engagement-deposit"
+                  valueCents={proposalDepositCents}
+                  onChangeCents={(cents) =>
+                    setProposalDeposit(cents == null ? "" : String(cents / 100))
+                  }
+                  placeholder={tTpl("deposit_placeholder")}
+                  className="max-w-[16rem]"
                 />
-                {t("require_payment_method")}
-              </label>
-              <p className="pl-6 text-[11px] leading-relaxed text-muted-foreground">
-                {t("require_payment_method_hint")}
-              </p>
-            </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {tTpl("require_deposit_hint")}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="engagement-deposit" className="text-sm">
-                {tTpl("require_deposit")}
-              </Label>
-              <MoneyInput
-                id="engagement-deposit"
-                valueCents={proposalDepositCents}
-                onChangeCents={(cents) =>
-                  setProposalDeposit(cents == null ? "" : String(cents / 100))
-                }
-                placeholder={tTpl("deposit_placeholder")}
-                className="max-w-[16rem]"
-              />
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {tTpl("require_deposit_hint")}
-              </p>
-            </div>
-
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── TWO QUESTIONS, ASKED SEPARATELY (founder ruling) ──────────────
+        {/* ── TWO QUESTIONS, ASKED SEPARATELY (founder ruling) ──────────────
           One dropdown that changed the meaning of the dropdown beneath it —
           sometimes "how often money moves", sometimes "how often work
           happens" — is what made this unreadable ("i'm not understanding
@@ -3077,7 +3197,7 @@ export function EngagementBuilder({
           own, and an annual job paid monthly is finally expressible. What
           made the combination dangerous is fixed in the engine, not by
           forbidding it. Unflagged firms keep the old single Repeat card. */}
-      {(workflowsOn ? step === "automation" : step === "billing") && (
+        {(workflowsOn ? step === "automation" : step === "billing") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-1.5 text-base">
@@ -3110,11 +3230,7 @@ export function EngagementBuilder({
                   value={repeatFrequency}
                   onValueChange={(value) => {
                     const next = value as
-                      | "off"
-                      | "monthly"
-                      | "quarterly"
-                      | "yearly"
-                      | "custom";
+                      "off" | "monthly" | "quarterly" | "yearly" | "custom";
                     setRepeatFrequency(next);
                     if (next === "custom" && repeatAnchorDay === "") {
                       setRepeatAnchorDay(String(new Date().getDate()));
@@ -3130,8 +3246,12 @@ export function EngagementBuilder({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="off">{t("repeat_off")}</SelectItem>
-                    <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
-                    <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
+                    <SelectItem value="monthly">
+                      {t("repeat_monthly")}
+                    </SelectItem>
+                    <SelectItem value="quarterly">
+                      {t("repeat_quarterly")}
+                    </SelectItem>
                     <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
                     <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
                   </SelectContent>
@@ -3194,11 +3314,7 @@ export function EngagementBuilder({
                       value={repeatFrequency}
                       onValueChange={(value) => {
                         const next = value as
-                          | "off"
-                          | "monthly"
-                          | "quarterly"
-                          | "yearly"
-                          | "custom";
+                          "off" | "monthly" | "quarterly" | "yearly" | "custom";
                         setRepeatFrequency(next);
                         if (next === "custom" && repeatAnchorDay === "") {
                           setRepeatAnchorDay(String(new Date().getDate()));
@@ -3284,20 +3400,20 @@ export function EngagementBuilder({
               )}
 
               {repeatFrequency !== "off" && (
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <span>{t("repeat_due_offset_label")}</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={365}
-                      value={repeatOffsetDays}
-                      onChange={(e) => setRepeatOffsetDays(e.target.value)}
-                      aria-label={t("repeat_due_offset_label")}
-                      className="h-8 w-20"
-                    />
-                    <span>{t("repeat_due_offset_suffix")}</span>
-                  </div>
-                )}
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>{t("repeat_due_offset_label")}</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={repeatOffsetDays}
+                    onChange={(e) => setRepeatOffsetDays(e.target.value)}
+                    aria-label={t("repeat_due_offset_label")}
+                    className="h-8 w-20"
+                  />
+                  <span>{t("repeat_due_offset_suffix")}</span>
+                </div>
+              )}
 
               {/* Invoice recurrence (Phase 4) — WITH Repeat, it's a property of
                   the series (founder spec). With an invoice timing chosen it's
@@ -3334,27 +3450,30 @@ export function EngagementBuilder({
               )}
             </CardContent>
           </Card>
-      )}
+        )}
 
-      {/* STEP — money. */}
-      {step === "billing" && (
-        <>
-          {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
+        {/* STEP — money. */}
+        {step === "billing" && (
+          <>
+            {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
               wrapper div is the scroll target of the Repeat card's "Set up the
               invoice" shortcut. Without Stripe Connect the card still shows, with
               the connect note, so the section isn't silently absent. */}
-          <div ref={invoiceSectionRef}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <Receipt className="size-4 text-muted-foreground" aria-hidden />
-                  {t("invoice_section_label")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {connectReady ? (
-                  <>
-                  {/* ONE OWNER FOR INVOICE TIMING (founder's merge ruling):
+            <div ref={invoiceSectionRef}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-1.5 text-base">
+                    <Receipt
+                      className="size-4 text-muted-foreground"
+                      aria-hidden
+                    />
+                    {t("invoice_section_label")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {connectReady ? (
+                    <>
+                      {/* ONE OWNER FOR INVOICE TIMING (founder's merge ruling):
                       when this engagement's flow raises the invoice itself,
                       asking the question again here would be a second owner
                       of the same decision — the server coerces it anyway, so
@@ -3362,264 +3481,289 @@ export function EngagementBuilder({
                       Automation step is where the timing now reads and where
                       it can be changed. Amount fields below stay: the flow
                       bills whatever is entered here. */}
-                  {workflowsOn && flowSendsInvoice(activeFlow) ? (
-                    <p className="text-xs text-muted-foreground">
-                      {tAuto("flow_owns_invoice_note")}
-                    </p>
-                  ) : (
-                  <>
-                  <p className="text-xs text-muted-foreground">
-                    {t("invoice_section_hint")}
-                  </p>
-                  <Select
-                    value={invoiceMode}
-                    onValueChange={(v) => setInvoiceMode(v as InvoiceTiming)}
-                  >
-                    <SelectTrigger className="max-w-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="off">{t("invoice_mode_off")}</SelectItem>
-                      <SelectItem value="now">{t("invoice_mode_now")}</SelectItem>
-                      <SelectItem value="on_acceptance">
-                        {t("invoice_mode_on_acceptance")}
-                      </SelectItem>
-                      <SelectItem value="on_completion">
-                        {t("invoice_mode_on_completion")}
-                      </SelectItem>
-                      <SelectItem value="delayed">
-                        {t("invoice_mode_delayed")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  </>
-                  )}
+                      {workflowsOn && flowSendsInvoice(activeFlow) ? (
+                        <p className="text-xs text-muted-foreground">
+                          {tAuto("flow_owns_invoice_note")}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            {t("invoice_section_hint")}
+                          </p>
+                          <Select
+                            value={invoiceMode}
+                            onValueChange={(v) =>
+                              setInvoiceMode(v as InvoiceTiming)
+                            }
+                          >
+                            <SelectTrigger className="max-w-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="off">
+                                {t("invoice_mode_off")}
+                              </SelectItem>
+                              <SelectItem value="now">
+                                {t("invoice_mode_now")}
+                              </SelectItem>
+                              <SelectItem value="on_acceptance">
+                                {t("invoice_mode_on_acceptance")}
+                              </SelectItem>
+                              <SelectItem value="on_completion">
+                                {t("invoice_mode_on_completion")}
+                              </SelectItem>
+                              <SelectItem value="delayed">
+                                {t("invoice_mode_delayed")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </>
+                      )}
 
-                  {!(workflowsOn && flowSendsInvoice(activeFlow)) &&
-                    invoiceMode === "delayed" && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">
-                        {t("invoice_delay_prefix")}
-                      </span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={365}
-                        value={invoiceDelayDays}
-                        onChange={(e) => setInvoiceDelayDays(e.target.value)}
-                        className="w-20"
-                        aria-label={t("invoice_delay_label")}
-                      />
-                      <span className="text-muted-foreground">
-                        {t("invoice_delay_suffix")}
-                      </span>
-                    </div>
-                  )}
+                      {!(workflowsOn && flowSendsInvoice(activeFlow)) &&
+                        invoiceMode === "delayed" && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground">
+                              {t("invoice_delay_prefix")}
+                            </span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={365}
+                              value={invoiceDelayDays}
+                              onChange={(e) =>
+                                setInvoiceDelayDays(e.target.value)
+                              }
+                              className="w-20"
+                              aria-label={t("invoice_delay_label")}
+                            />
+                            <span className="text-muted-foreground">
+                              {t("invoice_delay_suffix")}
+                            </span>
+                          </div>
+                        )}
 
-                  {invoiceMode !== "off" && (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">
-                        {t("invoice_amount_label")}
-                      </Label>
-                      {/* The saved-price choice only exists when there IS a saved
+                      {invoiceMode !== "off" && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">
+                            {t("invoice_amount_label")}
+                          </Label>
+                          {/* The saved-price choice only exists when there IS a saved
                           price. Before this, the first radio stayed on screen with
                           the label "No saved price for this service" and disabled —
                           a sentence of FACT dressed as an option, which reads as a
                           button that won't work (the founder reported exactly
                           that). With nothing to choose between, say why in one line
                           and let them type the amount. */}
-                      {hasSavedPrice ? (
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
-                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                            <input
-                              type="radio"
-                              name="invoice-amount-source"
-                              checked={invoiceUseDefault}
-                              onChange={() => setInvoiceUseDefault(true)}
-                            />
-                            {t("invoice_use_default", {
-                              amount: ((invoiceDefaultCents ?? 0) / 100).toFixed(2),
-                            })}
-                          </label>
-                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                            <input
-                              type="radio"
-                              name="invoice-amount-source"
-                              checked={!invoiceUseDefault}
-                              onChange={() => setInvoiceUseDefault(false)}
-                            />
-                            {t("invoice_custom")}
-                          </label>
-                        </div>
-                      ) : (
-                        // ...and only when there is nothing to calculate from.
-                        // "Enter the amount below" under a box that has already
-                        // filled itself in is an instruction to redo work.
-                        invoiceAutoAmount === "" && (
-                          <p className="text-xs leading-snug text-muted-foreground">
-                            {t("invoice_no_default_hint")}
-                          </p>
-                        )
-                      )}
-                      {(!invoiceUseDefault || !hasSavedPrice) && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm text-muted-foreground">$</span>
-                          <Input
-                            type="number"
-                            min={0.5}
-                            step={0.01}
-                            value={invoiceAmountValue}
-                            onChange={(e) => {
-                              setInvoiceAmountTouched(true);
-                              setInvoiceCustomAmount(e.target.value);
-                            }}
-                            placeholder="0.00"
-                            className="w-32"
-                            aria-label={t("invoice_amount_label")}
-                          />
-                        </div>
-                      )}
+                          {hasSavedPrice ? (
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+                              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="invoice-amount-source"
+                                  checked={invoiceUseDefault}
+                                  onChange={() => setInvoiceUseDefault(true)}
+                                />
+                                {t("invoice_use_default", {
+                                  amount: (
+                                    (invoiceDefaultCents ?? 0) / 100
+                                  ).toFixed(2),
+                                })}
+                              </label>
+                              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="invoice-amount-source"
+                                  checked={!invoiceUseDefault}
+                                  onChange={() => setInvoiceUseDefault(false)}
+                                />
+                                {t("invoice_custom")}
+                              </label>
+                            </div>
+                          ) : (
+                            // ...and only when there is nothing to calculate from.
+                            // "Enter the amount below" under a box that has already
+                            // filled itself in is an instruction to redo work.
+                            invoiceAutoAmount === "" && (
+                              <p className="text-xs leading-snug text-muted-foreground">
+                                {t("invoice_no_default_hint")}
+                              </p>
+                            )
+                          )}
+                          {(!invoiceUseDefault || !hasSavedPrice) && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm text-muted-foreground">
+                                $
+                              </span>
+                              <Input
+                                type="number"
+                                min={0.5}
+                                step={0.01}
+                                value={invoiceAmountValue}
+                                onChange={(e) => {
+                                  setInvoiceAmountTouched(true);
+                                  setInvoiceCustomAmount(e.target.value);
+                                }}
+                                placeholder="0.00"
+                                className="w-32"
+                                aria-label={t("invoice_amount_label")}
+                              />
+                            </div>
+                          )}
 
-                      {/* Where the number came from, and the way back to it.
+                          {/* Where the number came from, and the way back to it.
                           A field that fills itself has to say so, or it reads
                           as something you left behind on a previous visit. */}
-                      {(!invoiceUseDefault || !hasSavedPrice) &&
-                        invoiceAutoAmount !== "" &&
-                        (invoiceAmountTouched ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setInvoiceAmountTouched(false);
-                              setInvoiceCustomAmount("");
-                            }}
-                            className="text-xs text-accent underline-offset-2 hover:underline"
-                          >
-                            {t("invoice_amount_reset", {
-                              amount: invoiceAutoAmount,
-                            })}
-                          </button>
-                        ) : (
-                          <p className="text-xs leading-snug text-muted-foreground">
-                            {t("invoice_amount_from_services")}
-                          </p>
-                        ))}
-                    </div>
-                  )}
+                          {(!invoiceUseDefault || !hasSavedPrice) &&
+                            invoiceAutoAmount !== "" &&
+                            (invoiceAmountTouched ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInvoiceAmountTouched(false);
+                                  setInvoiceCustomAmount("");
+                                }}
+                                className="text-xs text-accent underline-offset-2 hover:underline"
+                              >
+                                {t("invoice_amount_reset", {
+                                  amount: invoiceAutoAmount,
+                                })}
+                              </button>
+                            ) : (
+                              <p className="text-xs leading-snug text-muted-foreground">
+                                {t("invoice_amount_from_services")}
+                              </p>
+                            ))}
+                        </div>
+                      )}
 
-                  {/* Optional description + the deliverables lock (migration 0610).
+                      {/* Optional description + the deliverables lock (migration 0610).
                       The lock is captured here; it gates the Final documents section
                       in a later phase. */}
-                  {invoiceMode !== "off" && (
-                    <div className="space-y-3 border-t border-border/60 pt-3">
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="invoice-description"
-                          className="text-xs text-muted-foreground"
-                        >
-                          {t("request_payment_description")}
-                        </Label>
-                        <Textarea
-                          id="invoice-description"
-                          value={invoiceDescription}
-                          onChange={(e) => setInvoiceDescription(e.target.value)}
-                          rows={2}
-                          maxLength={500}
-                          placeholder={t("request_payment_description_ph")}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="automated-invoice-attachment"
-                          className="text-xs text-muted-foreground"
-                        >
-                          {t("invoice_attachment")}
-                        </Label>
-                        <label
-                          htmlFor="automated-invoice-attachment"
-                          className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50"
-                        >
-                          <Upload className="size-4" aria-hidden />
-                          {invoiceAttachment?.name ?? t("invoice_attachment_choose")}
-                        </label>
-                        <input
-                          id="automated-invoice-attachment"
-                          type="file"
-                          accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
-                          className="sr-only"
-                          onChange={(event) =>
-                            setInvoiceAttachment(event.target.files?.[0] ?? null)
-                          }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {t("invoice_attachment_hint")}
-                        </p>
-                      </div>
-                      <label className="flex items-start gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={invoiceLock}
-                          onChange={(e) => setInvoiceLock(e.target.checked)}
-                        />
-                        <span>
-                          <span className="block">{t("invoice_lock_label")}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {t("invoice_lock_hint")}
-                          </span>
-                        </span>
-                      </label>
-                    </div>
+                      {invoiceMode !== "off" && (
+                        <div className="space-y-3 border-t border-border/60 pt-3">
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="invoice-description"
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("request_payment_description")}
+                            </Label>
+                            <Textarea
+                              id="invoice-description"
+                              value={invoiceDescription}
+                              onChange={(e) =>
+                                setInvoiceDescription(e.target.value)
+                              }
+                              rows={2}
+                              maxLength={500}
+                              placeholder={t("request_payment_description_ph")}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label
+                              htmlFor="automated-invoice-attachment"
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t("invoice_attachment")}
+                            </Label>
+                            <label
+                              htmlFor="automated-invoice-attachment"
+                              className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50"
+                            >
+                              <Upload className="size-4" aria-hidden />
+                              {invoiceAttachment?.name ??
+                                t("invoice_attachment_choose")}
+                            </label>
+                            <input
+                              id="automated-invoice-attachment"
+                              type="file"
+                              accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                              className="sr-only"
+                              onChange={(event) =>
+                                setInvoiceAttachment(
+                                  event.target.files?.[0] ?? null,
+                                )
+                              }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t("invoice_attachment_hint")}
+                            </p>
+                          </div>
+                          <label className="flex items-start gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={invoiceLock}
+                              onChange={(e) => setInvoiceLock(e.target.checked)}
+                            />
+                            <span>
+                              <span className="block">
+                                {t("invoice_lock_label")}
+                              </span>
+                              <span className="block text-xs text-muted-foreground">
+                                {t("invoice_lock_hint")}
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                      {t("invoice_auto_needs_connect")}
+                    </p>
                   )}
-                  </>
-                ) : (
-                  <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                    {t("invoice_auto_needs_connect")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
 
-      {/* STEP 4 — chasing. Canopy has no equivalent step; Vylan does, because Vylan chases the documents from step 2 on your behalf. */}
-      {/* ONE card, two homes — never a copy: its own step for unflagged
+        {/* STEP 4 — chasing. Canopy has no equivalent step; Vylan does, because Vylan chases the documents from step 2 on your behalf. */}
+        {/* ONE card, two homes — never a copy: its own step for unflagged
           firms, folded into the Automation step when flows are on (the
           founder: "the reminder thing will also be there"). */}
-      {(step === "reminders" || (workflowsOn && step === "automation")) && (
-        <>
-          {/* Automatic reminders — its own top-level card. */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-1.5 text-base">
-                <BellRing className="size-4 text-muted-foreground" aria-hidden />
-                {t("reminder_section_label")}
-              </CardTitle>
-              <Switch
-                id="automatic-reminders"
-                checked={reminderSettings.enabled}
-                onCheckedChange={(enabled) =>
-                  setReminderSettings((current) => ({ ...current, enabled }))
-                }
-                ariaLabel={t("reminder_section_label")}
-              />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {t("reminder_section_hint")}
-              </p>
-              {selectedClient && !selectedClient.email && (
-                <p className="text-xs font-medium text-destructive">
-                  {t("reminder_missing_email")}
+        {(step === "reminders" || (workflowsOn && step === "automation")) && (
+          <>
+            {/* Automatic reminders — its own top-level card. */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-1.5 text-base">
+                  <BellRing
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t("reminder_section_label")}
+                </CardTitle>
+                <Switch
+                  id="automatic-reminders"
+                  checked={reminderSettings.enabled}
+                  onCheckedChange={(enabled) =>
+                    setReminderSettings((current) => ({ ...current, enabled }))
+                  }
+                  ariaLabel={t("reminder_section_label")}
+                />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  {t("reminder_section_hint")}
                 </p>
-              )}
+                {selectedClient && !selectedClient.email && (
+                  <p className="text-xs font-medium text-destructive">
+                    {t("reminder_missing_email")}
+                  </p>
+                )}
 
                 {reminderSettings.enabled && (
                   <>
                     {reminderDefaultSettings ||
                     (workflowsOn && activeFlow?.reminders?.documents) ? (
                       <div className="grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-[10rem_1fr] sm:items-center">
-                        <Label htmlFor="reminder-preset" className="text-xs text-muted-foreground">
+                        <Label
+                          htmlFor="reminder-preset"
+                          className="text-xs text-muted-foreground"
+                        >
                           {t("reminder_preset_label")}
                         </Label>
                         <Select
@@ -3630,7 +3774,10 @@ export function EngagementBuilder({
                             )
                           }
                         >
-                          <SelectTrigger id="reminder-preset" className="max-w-sm">
+                          <SelectTrigger
+                            id="reminder-preset"
+                            className="max-w-sm"
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -3666,7 +3813,12 @@ export function EngagementBuilder({
                         <p className="text-xs text-muted-foreground">
                           {t("reminder_no_default_hint")}
                         </p>
-                        <Button type="button" variant="outline" size="sm" asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          asChild
+                        >
                           <Link href="/settings?tab=automation">
                             {t("reminder_create_default")}
                           </Link>
@@ -3743,7 +3895,9 @@ export function EngagementBuilder({
                                     value={step.repeatCount}
                                     disabled={!step.enabled}
                                     onCommit={(repeatCount) =>
-                                      updateReminderStep(step.tone, { repeatCount })
+                                      updateReminderStep(step.tone, {
+                                        repeatCount,
+                                      })
                                     }
                                     aria-label={t("reminder_repeat_label")}
                                     className="h-8 w-16"
@@ -3773,10 +3927,13 @@ export function EngagementBuilder({
                                     maxLength={160}
                                     onChange={(event) =>
                                       updateReminderStep(step.tone, {
-                                        customSubject: event.target.value || null,
+                                        customSubject:
+                                          event.target.value || null,
                                       })
                                     }
-                                    placeholder={t("reminder_subject_placeholder")}
+                                    placeholder={t(
+                                      "reminder_subject_placeholder",
+                                    )}
                                   />
                                 </div>
                                 <div className="space-y-1.5 sm:row-span-2">
@@ -3789,10 +3946,13 @@ export function EngagementBuilder({
                                     rows={4}
                                     onChange={(event) =>
                                       updateReminderStep(step.tone, {
-                                        customMessage: event.target.value || null,
+                                        customMessage:
+                                          event.target.value || null,
                                       })
                                     }
-                                    placeholder={t("reminder_message_placeholder")}
+                                    placeholder={t(
+                                      "reminder_message_placeholder",
+                                    )}
                                   />
                                 </div>
                                 <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
@@ -3806,20 +3966,19 @@ export function EngagementBuilder({
                     )}
                   </>
                 )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+              </CardContent>
+            </Card>
+          </>
+        )}
 
-
-      {/* STEP 5 — THE AGREEMENT ITSELF.
+        {/* STEP 5 — THE AGREEMENT ITSELF.
           Every engagement carries a proposal now, not just the ones built from
           a template — the founder: "make it so all engagements are a proposal
           wtf not only templates". These fields used to exist ONLY on a
           template, which meant an engagement built from scratch got defaults it
           could not see, let alone change. */}
-      {step === "proposal" && (
-        <>
+        {step === "proposal" && (
+          <>
             {/* ── WHEN IT RUNS ─────────────────────────────────────────── */}
             <Card>
               <CardHeader>
@@ -3940,7 +4099,8 @@ export function EngagementBuilder({
                               onClick={() =>
                                 startTransition(async () => {
                                   const res = await saveFirmDefaultTermsAction({
-                                    terms: termsToPlainText(termsSections).trim(),
+                                    terms:
+                                      termsToPlainText(termsSections).trim(),
                                   });
                                   setTermsSaved(res.ok);
                                 })
@@ -3960,11 +4120,9 @@ export function EngagementBuilder({
                 </ToggleRow>
               </CardContent>
             </Card>
-
-        </>
-      )}
-
-    </TemplateBuilderShell>
+          </>
+        )}
+      </TemplateBuilderShell>
     </>
   );
 }

@@ -3272,7 +3272,9 @@
     "agreement_mode_letter_kicker": "E-signature",
     "agreement_mode_letter": "They sign your engagement letter",
     "agreement_mode_proposal_hint": "The client opens their portal, reads the proposal you're building here, and taps Accept. Nothing to sign.",
-    "agreement_mode_letter_hint": "Your own engagement letter goes out for signature the moment you send, and signing it records their acceptance. They won't see the proposal document, so there's no preview to build."
+    "agreement_mode_letter_hint": "Your own engagement letter goes out for signature the moment you send, and signing it records their acceptance. They won't see the proposal document, so there's no preview to build.",
+    "wizard_step_start": "Start",
+    "wizard_step_desc_start": "Template or blank"
   },
   "Attention": {
     "metric_active": "Active",
