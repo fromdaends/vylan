@@ -1171,25 +1171,53 @@ export default async function ClientDetailPage({
           list lives on the Work → Time timesheet. */}
       {tab === "overview" && timeEnabled && (
         <Panel
-          className="min-h-[90px] min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
+          // `self-start` is the other half of the founder's complaint. The
+          // overview grid stretches by default and this is the LAST panel in
+          // its column, so it was absorbing every spare pixel of its row —
+          // a 300px-tall card holding one short line, which is what "so off
+          // compared to everything else" was pointing at. Its siblings earn
+          // their height with lists; this one should be as tall as a stat.
+          className="min-h-[90px] self-start min-[880px]:col-start-2 min-[880px]:row-start-5 min-[1180px]:col-start-3 min-[1180px]:row-start-3"
           title={t("time_title")}
         >
-          <p className="py-3 text-sm text-muted-foreground">
-            {clientTimeMinutesThisYear > 0
-              ? tTime("client_stat", {
-                  duration: formatMinutes(clientTimeMinutesThisYear),
-                }) + (clientTimeValueCents != null
-                  ? " · " +
-                    tTime("client_stat_value", {
-                      amount: formatCurrency(
-                        clientTimeValueCents / 100,
-                        locale,
-                        { fractionDigits: 0 },
-                      ),
-                    })
-                  : "")
-              : tTime("client_stat_empty")}
-          </p>
+          {/* ── A STAT, DRAWN LIKE ONE ────────────────────────────────────
+              Founder: "make time fit better with the client page, it's so off
+              compared to everything else."
+
+              It was one small grey sentence — "12h this year · $1,894 value" —
+              left-aligned at the top of a card, while every panel beside it
+              draws structured rows or a centred empty state. It read as a line
+              somebody forgot to finish rather than as a section.
+
+              So it uses the vocabulary this product already has for a number
+              worth looking at (the capacity board's stats bar): the figure
+              large and tabular, its meaning small and quiet underneath. Two
+              cells where value is visible, one where it is not — and the empty
+              state is the same centred `py-6` line the Files and Tasks panels
+              beside it use, so all three agree about what "nothing here" looks
+              like. */}
+          {clientTimeMinutesThisYear > 0 ? (
+            <div className="flex flex-wrap gap-x-10 gap-y-3 py-1">
+              <Stat
+                value={formatMinutes(clientTimeMinutesThisYear)}
+                label={tTime("client_stat_hours_label")}
+              />
+              {/* Money only where the billing RLS answered — a viewer without
+                  rates sees the hours alone, never a blank or a zero. */}
+              {clientTimeValueCents != null && (
+                <Stat
+                  value={formatCurrency(clientTimeValueCents / 100, locale, {
+                    fractionDigits: 0,
+                  })}
+                  label={tTime("client_stat_value_label")}
+                />
+              )}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {tTime("client_stat_empty")}
+            </p>
+          )}
         </Panel>
       )}
 
@@ -1543,3 +1571,23 @@ function DetailRow({
   );
 }
 
+/**
+ * One number and what it means.
+ *
+ * The same shape the capacity board's stats bar uses — figure first and
+ * tabular so digits line up between clients, meaning underneath in the quiet
+ * uppercase — same 0.1em as the Panel title above it — that this page's
+ * table headers already wear. Local to this page for now; if a
+ * third surface wants it, lift it into ui/ rather than copying it a second
+ * time.
+ */
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div>
+      <p className="text-xl font-semibold tabular-nums leading-tight">{value}</p>
+      <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </p>
+    </div>
+  );
+}
