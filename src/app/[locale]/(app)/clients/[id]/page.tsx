@@ -48,7 +48,6 @@ import { listDocuments } from "@/lib/db/documents";
 // The SAME browser /files renders. Not a client-scoped copy of it — see the
 // Files tab below and the repo's Cohesion rule.
 import { BrowseTab } from "@/components/files/browse-tab";
-import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import { ClientNameMenu } from "@/components/clients/client-name-menu";
@@ -675,7 +674,6 @@ export default async function ClientDetailPage({
   const tWl = await getTranslations("Dashboard");
   const tStage = await getTranslations("Stage");
   const tHome = await getTranslations("Home");
-  const tArchive = await getTranslations("Archive");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
   // The Bookkeeping tab renders the firm-wide bookkeeping components, so it
@@ -1365,21 +1363,10 @@ export default async function ClientDetailPage({
           and a titled box around a file manager is a second frame. */}
             {tab === "files" && (
               <div className="space-y-4">
-                {/* The one thing the retired archive page had that the browser
-              doesn't: give me everything, as a zip. It handles its own empty
-              case, so it needs no file count to decide whether to render —
-              which is a whole archive load saved on every visit to this tab. */}
-                <div className="flex justify-end">
-                  <ArchiveDownloadZipButton
-                    endpoint={`/api/clients/${client.id}/archive`}
-                    label={tArchive("download_everything")}
-                    preparingLabel={tArchive("preparing")}
-                    emptyLabel={tArchive("download_empty")}
-                    failedLabel={tArchive("download_failed")}
-                    tooLargeLabel={tArchive("download_too_large")}
-                    variant="outline"
-                  />
-                </div>
+                {/* Download-everything moved INTO the browser's own toolbar
+                    (BrowseTab -> PathBar trailing): it used to sit here on its
+                    own right-aligned line above the header, which is the
+                    "weird spot" the founder called out. */}
                 <BrowseTab
                   locale={locale}
                   sp={sp}

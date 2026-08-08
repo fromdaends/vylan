@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { FilesToolbar } from "@/components/files/files-toolbar";
 import { FileBrowser, type BrowserEntry } from "@/components/files/file-browser";
 import { PathBar } from "@/components/files/path-bar";
+import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { FilesPagination } from "@/components/files/files-pagination";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
@@ -92,6 +93,7 @@ export async function BrowseTab({
   hostedChrome?: boolean;
 }) {
   const t = await getTranslations("Files");
+  const tArchive = await getTranslations("Archive");
 
   const clientId = lockedClientId ?? sp.client?.trim() ?? null;
   const folderId = sp.folder?.trim() || null;
@@ -328,6 +330,28 @@ export async function BrowseTab({
         // drilled into and their profile is genuinely elsewhere.
         clientProfileId={lockedClientId ? null : (clientHeader?.id ?? null)}
         trailing={
+          <>
+          {/* DOWNLOAD-EVERYTHING lives on the path row, beside the folder it
+              zips — founder: "move download somewhere else it's in a weird
+              spot." It used to float on its own right-aligned line ABOVE this
+              header, orphaned from the toolbar it belongs to. Sized to match
+              the Sort trigger so the two read as one control group, and left
+              outline so the blue "+ New" stays the screen's single filled
+              button. Only inside a client: there is no "everything" to zip at
+              the firm root. */}
+          {clientId && (
+            <ArchiveDownloadZipButton
+              endpoint={`/api/clients/${clientId}/archive`}
+              label={tArchive("download_everything")}
+              preparingLabel={tArchive("preparing")}
+              emptyLabel={tArchive("download_empty")}
+              failedLabel={tArchive("download_failed")}
+              tooLargeLabel={tArchive("download_too_large")}
+              variant="outline"
+              size="sm"
+              className="h-[34px] rounded-lg px-3 text-[13px] font-medium"
+            />
+          )}
           <FilesToolbar
             search={search}
             sort={sp.sort ?? "date"}
@@ -342,6 +366,7 @@ export async function BrowseTab({
             // writing the same ?q= param.
             hideSearch={hostedChrome}
           />
+          </>
         }
       />
 
