@@ -145,7 +145,9 @@
     "total_week": "Week total:",
     "total_month": "Month total:",
     "edit_failed": "Couldn't save that duration. Put back what it was.",
-    "stop_failed": "Couldn't stop the timer. It's still running."
+    "stop_failed": "Couldn't stop the timer. It's still running.",
+    "client_stat_hint": "Time your firm has logged against this client since January 1. Only entries saved to a timesheet count — a timer still running is not included yet.",
+    "client_stat_hint_value": "Time your firm has logged against this client since January 1, and what those hours are worth at your team's billing rates. That value is not what you have invoiced or been paid — it is the cost of the work."
   },
   "Archive": {
     "title": "Document archive",

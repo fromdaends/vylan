@@ -72,6 +72,7 @@ import {
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Plus, Lock, FileText, Clock } from "lucide-react";
+import { InfoHint } from "@/components/ui/info-hint";
 import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -883,6 +884,18 @@ export default async function ClientDetailPage({
                     </span>
                   </>
                 )}
+                {/* What the two numbers actually mean. Two strings, not one
+                    with a conditional clause spliced in: a reader who cannot
+                    see money must not be told a dollar figure is there. */}
+                <InfoHint
+                  text={
+                    clientTimeValueCents != null
+                      ? tTime("client_stat_hint_value")
+                      : tTime("client_stat_hint")
+                  }
+                  className="-mr-1"
+                  iconClassName="size-3.5"
+                />
               </div>
             )}
 
