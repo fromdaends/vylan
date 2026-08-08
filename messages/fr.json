@@ -3272,9 +3272,7 @@
     "agreement_mode_letter_kicker": "Signature électronique",
     "agreement_mode_letter": "Il signe votre lettre de mission",
     "agreement_mode_proposal_hint": "Le client ouvre son portail, lit la proposition que vous bâtissez ici et appuie sur Accepter. Rien à signer.",
-    "agreement_mode_letter_hint": "Votre lettre de mission part pour signature dès l'envoi, et sa signature enregistre l'acceptation. Le client ne verra pas la proposition : il n'y a donc pas d'aperçu à préparer.",
-    "wizard_step_start": "Départ",
-    "wizard_step_desc_start": "Modèle ou vierge"
+    "agreement_mode_letter_hint": "Votre lettre de mission part pour signature dès l'envoi, et sa signature enregistre l'acceptation. Le client ne verra pas la proposition : il n'y a donc pas d'aperçu à préparer."
   },
   "Attention": {
     "metric_active": "Actifs",

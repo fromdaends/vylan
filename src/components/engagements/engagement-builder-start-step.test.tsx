@@ -3,19 +3,18 @@ import { render, cleanup, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 
-// THE OPENING QUESTION IS THE WIZARD'S FIRST STEP.
+// THE OPENING QUESTION IS A BLANK CARD.
 //
-// Founder, with two screenshots side by side: "have this tab and the other be
-// the same thing instead of two separate steps, they transition into one
-// another, just have the create from template or start from scratch be in the
-// same card as creating an engagement. So it doesn't look weird."
+// Founder: "have the entire page be blank with no start. Because if they
+// choose template there would be no steps to go through. So make the page
+// blank with no client preview, then have the client preview appear when they
+// select one or the other."
 //
-// It used to be a bare dialog with a lone Next button, which then vanished and
-// was replaced by the three-column wizard — two different objects for one
-// continuous act. What follows pins the parts of "one card" that a screenshot
-// would show: the rail is there while the question is asked, the question is
-// step 1 of the same run, there is only one button that moves you forward, and
-// pressing it lands on Engagement details rather than opening something new.
+// The steps are a CONSEQUENCE of the answer, so the screen that asks the
+// question shows no rail, no counter, no Back and no preview — it is the
+// question and nothing else. Answering it lights the preview; Continue opens
+// the wizard proper. What follows pins each of those, because they are exactly
+// what a screenshot would show and the founder has now sent three.
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
@@ -75,74 +74,80 @@ function continueButton() {
 
 afterEach(cleanup);
 
-describe("Starting an engagement is one card, not two", () => {
-  it("asks the question inside the wizard — the steps rail is already there", () => {
+/** The right-hand panel, identified by the label the shell puts on it. */
+function previewPanel() {
+  return screen.queryByText(en.Templates.preview_sample_label);
+}
+
+describe("The opening question is a blank card", () => {
+  it("shows the question and nothing else — no rail, no counter, no Back", () => {
     mountFresh();
     expect(screen.getByText(en.Engagements.start_title)).toBeTruthy();
-    // The rail the OLD chooser dialog did not have. Its presence is the whole
-    // difference the founder was pointing at.
-    // getAllBy: the active step's name is drawn twice on purpose — once in the
-    // rail and once as the heading over the content.
+    // The wizard's steps are a consequence of the answer, so none of them are
+    // named yet.
+    expect(screen.queryByText(en.Engagements.wizard_step_details)).toBeNull();
+    expect(screen.queryByText(en.Engagements.wizard_step_proposal)).toBeNull();
+    expect(screen.queryByText(/^Step \d+ of \d+$/)).toBeNull();
     expect(
-      screen.getAllByText(en.Engagements.wizard_step_start).length,
-    ).toBeGreaterThan(0);
+      screen
+        .getAllByRole("button")
+        .some((b) => b.textContent?.trim() === en.Templates.back),
+    ).toBe(false);
+  });
+
+  it("shows no client preview until something is chosen", () => {
+    mountFresh();
+    expect(previewPanel()).toBeNull();
+  });
+
+  it("cannot continue while the question is unanswered", () => {
+    mountFresh();
+    const go = continueButton();
+    expect(go).toBeTruthy();
+    expect(go).toBeDisabled();
+  });
+
+  it("brings the preview in when a card is picked", () => {
+    mountFresh();
+    fireEvent.click(screen.getByText(en.Engagements.start_from_scratch));
+    expect(previewPanel()).toBeTruthy();
+    // And the way forward opens with it.
+    expect(continueButton()).not.toBeDisabled();
+  });
+
+  it("picking the other card works the same way", () => {
+    mountFresh();
+    fireEvent.click(screen.getByText(en.Engagements.start_with_template));
+    expect(previewPanel()).toBeTruthy();
+    expect(continueButton()).not.toBeDisabled();
+  });
+
+  it("opens the wizard on Continue — rail and counter arrive together", () => {
+    mountFresh();
+    fireEvent.click(screen.getByText(en.Engagements.start_from_scratch));
+    fireEvent.click(continueButton()!);
+
+    expect(screen.queryByText(en.Engagements.start_title)).toBeNull();
+    expect(screen.getByText(en.Engagements.field_title)).toBeTruthy();
+    // Numbered from the first REAL step, because the question was never one.
+    expect(
+      screen.getByText(
+        en.Templates.step_of.replace("{n}", "1").replace("{total}", "6"),
+      ),
+    ).toBeTruthy();
     expect(
       screen.getAllByText(en.Engagements.wizard_step_details).length,
     ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(en.Engagements.wizard_step_proposal).length,
-    ).toBeGreaterThan(0);
   });
 
-  it("counts the question as step 1 of the same run, not a prologue to it", () => {
+  it("fills the form from the template that was picked", () => {
     mountFresh();
-    // 6 wizard steps with workflows on (reminders folds into automation), plus
-    // the question itself = 7. The point is that it is numbered WITH them.
-    expect(
-      screen.getByText(en.Templates.step_of.replace("{n}", "1").replace("{total}", "7")),
-    ).toBeTruthy();
-  });
-
-  it("offers exactly one way forward — the wizard's own Continue", () => {
-    mountFresh();
-    // The chooser's private Next is gone. Two primary buttons in one card,
-    // inches apart, is what "it looks weird" was describing.
-    expect(screen.queryByText(en.Engagements.start_next)).toBeNull();
-    expect(continueButton()).toBeTruthy();
-  });
-
-  it("transitions into the details step rather than opening something new", () => {
-    mountFresh();
-    expect(screen.queryByText(en.Engagements.field_title)).toBeNull();
-    fireEvent.click(continueButton()!);
-    // Same card, next step: the details form is now here and the question is
-    // not.
-    expect(screen.getByText(en.Engagements.field_title)).toBeTruthy();
-    expect(screen.queryByText(en.Engagements.start_title)).toBeNull();
-  });
-
-  it("walks back into the question, and Continue does not re-apply the same answer", () => {
-    mountFresh();
-    fireEvent.click(continueButton()!);
-    const title = screen.getByLabelText(
-      en.Engagements.field_title,
-    ) as HTMLInputElement;
-    fireEvent.change(title, { target: { value: "Typed by hand" } });
-
-    const back = screen
-      .getAllByRole("button")
-      .find((b) => b.textContent?.trim() === en.Templates.back);
-    fireEvent.click(back!);
-    expect(screen.getByText(en.Engagements.start_title)).toBeTruthy();
-
-    // Forward again with the answer unchanged. Re-applying the template here
-    // would silently overwrite what was typed — the reason the commit is
-    // guarded rather than unconditional.
+    fireEvent.click(screen.getByText(en.Engagements.start_with_template));
     fireEvent.click(continueButton()!);
     expect(
       (screen.getByLabelText(en.Engagements.field_title) as HTMLInputElement)
         .value,
-    ).toBe("Typed by hand");
+    ).toBe("Corporate return");
   });
 
   it("skips the question when a template was already chosen elsewhere", () => {
@@ -158,12 +163,7 @@ describe("Starting an engagement is one card, not two", () => {
         />
       </NextIntlClientProvider>,
     );
-    // Asked and answered before the builder opened, so the rail must not grow
-    // a step nobody used.
     expect(screen.queryByText(en.Engagements.start_title)).toBeNull();
-    expect(screen.queryAllByText(en.Engagements.wizard_step_start)).toHaveLength(
-      0,
-    );
     expect(screen.getByText(en.Engagements.field_title)).toBeTruthy();
   });
 });

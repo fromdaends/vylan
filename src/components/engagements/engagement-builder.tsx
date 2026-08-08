@@ -268,7 +268,6 @@ type PlaceholderKey =
   | "placeholder_firmname";
 
 type WizardStepKey =
-  | "wizard_step_start"
   | "wizard_step_details"
   | "wizard_step_services"
   | "wizard_step_tasks"
@@ -279,7 +278,6 @@ type WizardStepKey =
 
 // The one line under each step's name in the wizard's steps box.
 type WizardStepDescKey =
-  | "wizard_step_desc_start"
   | "wizard_step_desc_details"
   | "wizard_step_desc_services"
   | "wizard_step_desc_tasks"
@@ -1055,10 +1053,13 @@ export function EngagementBuilder({
   // Its answer lives here rather than inside the chooser because the SHELL's
   // Continue is what commits it now. The chooser draws the question and
   // reports what was picked; it no longer owns a button.
-  const [startMode, setStartMode] = useState<"template" | "scratch">(
-    // Scratch when there is nothing to pick — leading with "use a template" on
-    // a firm that has none is a dead end.
-    engagementTemplates.length > 0 ? "template" : "scratch",
+  // NULL until they answer, and that is the point. Founder: "have the entire
+  // page be blank with no start... then have the client preview appear when
+  // they select one or the other." Pre-selecting a card would answer the
+  // question on their behalf and light the preview before they had chosen
+  // anything to preview.
+  const [startMode, setStartMode] = useState<"template" | "scratch" | null>(
+    null,
   );
   const [startTemplateId, setStartTemplateId] = useState<string>(
     engagementTemplates[0]?.id ?? "",
@@ -1067,10 +1068,6 @@ export function EngagementBuilder({
   // re-apply — otherwise stepping Back to look at the question and pressing
   // Continue silently wipes everything typed since.
   const [appliedStart, setAppliedStart] = useState<string | null>(null);
-
-  // The question was asked iff no template was preselected — the same
-  // condition that seeds `started`.
-  const showStartStep = initialEngagementTemplate == null;
 
   function commitStart(target: WizardStep) {
     const choice =
@@ -1883,61 +1880,51 @@ export function EngagementBuilder({
         kicker={t("kicker_engagement")}
         title={t("new_title")}
         explainer={t("wizard_explainer")}
-        tabs={[
-          // Only when the question was asked. Opening straight from a template
-          // never showed it, so its rail must not grow a step nobody used.
-          ...(showStartStep
-            ? [
-                {
-                  key: "start",
-                  label: t("wizard_step_start"),
-                  description: t("wizard_step_desc_start"),
-                } satisfies BuilderTab,
+        // ── THE QUESTION IS A BLANK CARD, NOT A STEP ───────────────────
+        // Founder: "have the entire page be blank with no start. Because if
+        // they choose template there would be no steps to go through."
+        //
+        // Exactly right: the steps are a CONSEQUENCE of the answer, so listing
+        // seven of them beside an unanswered question promises a road nobody
+        // has chosen yet. ONE tab puts the shell in its single-card mode — the
+        // same one the quick-create sheets use — which draws no rail, no
+        // counter and no Back, so the screen is the question and nothing else.
+        tabs={
+          !started
+            ? [{ key: "start", label: t("new_title") }]
+            : [
+                ...WIZARD_STEPS.filter(
+                  // No switch, no step — the wizard reads exactly as before for
+                  // unflagged firms, and a stale deep link to the step falls to details.
+                  // With the switch, the standalone Reminders step disappears instead:
+                  // the founder's ruling is that reminders live INSIDE the automations,
+                  // so the same card renders on the Automation step and nowhere else.
+                  // And in LETTER mode the Proposal step goes with the preview: it
+                  // builds the intro, terms and acceptance block of a document this
+                  // client will never open — their engagement letter carries all of
+                  // that. A step that composes something nobody reads is exactly the
+                  // kind of useless surface this wizard keeps being cleared of.
+                  (k) =>
+                    (workflowsOn ? k !== "reminders" : k !== "automation") &&
+                    !(letterMode && k === "proposal"),
+                ).map((k): BuilderTab => ({
+                  key: k,
+                  label: t(`wizard_step_${k}` as WizardStepKey),
+                  description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
+                  // The red mark means "required and not answered yet" — the same thing
+                  // the rail's asterisk-plus-empty-circle used to say, in the template
+                  // builders' vocabulary. Only the two that actually stop you sending.
+                  incomplete:
+                    (k === "details" || k === "tasks") && !stepComplete[k],
+                })),
               ]
-            : []),
-          ...WIZARD_STEPS.filter(
-            // No switch, no step — the wizard reads exactly as before for
-            // unflagged firms, and a stale deep link to the step falls to details.
-            // With the switch, the standalone Reminders step disappears instead:
-            // the founder's ruling is that reminders live INSIDE the automations,
-            // so the same card renders on the Automation step and nowhere else.
-            // And in LETTER mode the Proposal step goes with the preview: it
-            // builds the intro, terms and acceptance block of a document this
-            // client will never open — their engagement letter carries all of
-            // that. A step that composes something nobody reads is exactly the
-            // kind of useless surface this wizard keeps being cleared of.
-            (k) =>
-              (workflowsOn ? k !== "reminders" : k !== "automation") &&
-              !(letterMode && k === "proposal"),
-          ).map((k): BuilderTab => ({
-            key: k,
-            label: t(`wizard_step_${k}` as WizardStepKey),
-            description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
-            // The red mark means "required and not answered yet" — the same thing
-            // the rail's asterisk-plus-empty-circle used to say, in the template
-            // builders' vocabulary. Only the two that actually stop you sending.
-            incomplete: (k === "details" || k === "tasks") && !stepComplete[k],
-          })),
-        ]}
+        }
         // Derived, not stored: while the question is unanswered the wizard is ON
         // it, and `step` keeps pointing at where Continue will land. That is what
         // lets Back walk into the question and out again without a second piece
         // of state that could disagree with this one.
         activeTab={started ? step : "start"}
-        onTabChange={(k) => {
-          // Back, into the question. The answer is kept, so returning and
-          // pressing Continue unchanged does nothing to the form.
-          if (k === "start") {
-            setStarted(false);
-            return;
-          }
-          // Continue, out of it — this is the click that applies a template.
-          if (!started) {
-            commitStart(k as WizardStep);
-            return;
-          }
-          setStep(k as WizardStep);
-        }}
+        onTabChange={(k) => setStep(k as WizardStep)}
         onClose={() => router.push("/engagements")}
         // Save draft keeps a half-finished engagement; Save as template keeps its
         // SHAPE. Both were in the old split button, and both survive — they are
@@ -1965,11 +1952,23 @@ export function EngagementBuilder({
         }
         // On the Proposal step — the last one — Continue becomes the send. It is
         // the only thing left to do there, and a greyed-out Next said nothing.
-        finalAction={{
-          label: t("create_and_send"),
-          disabled: pending,
-          onClick: () => submit(true),
-        }}
+        finalAction={
+          !started
+            ? {
+                // Dead until they answer. There is nothing to continue INTO
+                // while the question is open, and a live button would pick
+                // for them.
+                label: tTpl("continue_step"),
+                disabled: startMode == null,
+                icon: "arrow" as const,
+                onClick: () => commitStart("details"),
+              }
+            : {
+                label: t("create_and_send"),
+                disabled: pending,
+                onClick: () => submit(true),
+              }
+        }
         previewLabel={
           selectedClient
             ? t("preview_for_client", { name: selectedClient.display_name })
@@ -1987,7 +1986,10 @@ export function EngagementBuilder({
         // seeing it — they're not using it, they're only getting their own
         // engagement letter." The whole pane goes, not just the document.
         preview={
-          letterMode ? null : (
+          // Nothing chosen, nothing to preview. The panel appears the moment
+          // they pick a card — the founder's "then have the client preview
+          // appear when they select one or the other".
+          (!started && startMode == null) || letterMode ? null : (
             <div className="w-full space-y-4">
               <ProposalPreview
                 data={proposalData}
