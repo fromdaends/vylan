@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { ExternalLink } from "lucide-react";
+import { PortalDoorLink } from "@/components/portal/portal-door-link";
 
 // Canopy's "Client View" tab — what the other side of this engagement sees.
 //
@@ -39,21 +39,13 @@ export async function EngagementClientViewPanel({
   return (
     <div className="space-y-3 py-6 text-center">
       <p className="text-sm text-muted-foreground">{t("client_view_intro")}</p>
-      <a
-        href={`/r/${magicToken}`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
-      >
-        {t("client_view_open")}
-        <ExternalLink className="size-3.5" aria-hidden />
-      </a>
-      {/* Said out loud because opening a client's magic link is not a neutral
-          act — it is the same URL they use, and anything done in it is done as
-          them. */}
-      <p className="text-xs text-muted-foreground">
-        {t("client_view_warning")}
-      </p>
+      {/* The warning travels with the link — see PortalDoorLink for why it is
+          not this component's to remember. */}
+      <PortalDoorLink
+        token={magicToken}
+        label={t("client_view_open")}
+        warning={t("client_view_warning")}
+      />
     </div>
   );
 }
