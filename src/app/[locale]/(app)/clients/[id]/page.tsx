@@ -19,6 +19,8 @@ import { WorklistBrowser } from "@/components/dashboard/worklist-browser";
 import { FilterLinks } from "@/components/ui/filter-links";
 import { deriveEngagementStatus } from "@/lib/attention";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { findClientPortalDoor } from "@/lib/db/portal";
+import { PortalDoorLink } from "@/components/portal/portal-door-link";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -71,6 +73,7 @@ import {
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Plus, Lock, FileText, Clock } from "lucide-react";
+import { InfoHint } from "@/components/ui/info-hint";
 import { BackLink } from "@/components/ui/back-link";
 import { Panel } from "@/components/ui/panel";
 import { ProfileTabs } from "@/components/ui/profile-tabs";
@@ -235,6 +238,7 @@ export default async function ClientDetailPage({
     recentFiles,
     bookkeeping,
     clientTimeEntries,
+    portalDoor,
   ] = await Promise.all([
     // Relationships card data: this client's live links, plus the firm roster
     // of clients — archived included so a link's NAME still resolves even when
@@ -462,6 +466,12 @@ export default async function ClientDetailPage({
       if (!isTimeInsightsEnabled(currentFirm)) return [];
       return listEntriesForClient(id, 1000);
     })(),
+    // OVERVIEW ONLY: the Portal access card is the only reader, and this is a
+    // service-role query — no reason to run it while someone browses Files.
+    // The client's OWN firm, not the viewer's — `firm` is destructured out of
+    // this same Promise.all and cannot be read from inside it. Same value
+    // either way: RLS already refused to hand us a client from another firm.
+    tab === "overview" ? findClientPortalDoor(client.id, client.firm_id) : null,
   ]);
 
   const [relationships, allClients] = relationshipData;
@@ -881,6 +891,18 @@ export default async function ClientDetailPage({
                     </span>
                   </>
                 )}
+                {/* What the two numbers actually mean. Two strings, not one
+                    with a conditional clause spliced in: a reader who cannot
+                    see money must not be told a dollar figure is there. */}
+                <InfoHint
+                  text={
+                    clientTimeValueCents != null
+                      ? tTime("client_stat_hint_value")
+                      : tTime("client_stat_hint")
+                  }
+                  className="-mr-1"
+                  iconClassName="size-3.5"
+                />
               </div>
             )}
 
@@ -1077,6 +1099,35 @@ export default async function ClientDetailPage({
                 clientId={client.id}
                 initialEnabled={client.portal_pin_enabled === true}
               />
+              {/* ── THE DOOR, WHERE THE LOCK ALREADY IS ────────────────────
+                  Founder asked for the portal to be openable from the client's
+                  page, in this section. It belongs beside the access code for
+                  the obvious reason: this card is already the answer to "how
+                  does this client get in", and the code and the link are two
+                  halves of that one question.
+
+                  It appears only when there IS a portal — that is not a
+                  setting but a consequence of having a live sent engagement
+                  (see findClientPortalDoor). No portal, no link: a "View
+                  portal" button that opens nothing is precisely the dead
+                  control the founder has asked twice not to ship.
+
+                  When the access code is on, the firm meets the same gate the
+                  client does — so the warning says so rather than letting a
+                  code prompt look like a bug. */}
+              {portalDoor && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <PortalDoorLink
+                    token={portalDoor.token}
+                    label={t("portal_open")}
+                    warning={
+                      client.portal_pin_enabled === true
+                        ? t("portal_open_warning_pin")
+                        : t("portal_open_warning")
+                    }
+                  />
+                </div>
+              )}
             </Panel>
 
             {/* Portal access — the optional 6-digit code that gates this client's

@@ -298,35 +298,35 @@ export async function deleteFolderAction(input: {
     }
   }
 
-  // Then sub-folders, up one level.
-  {
-    const { error } = await sb
-      .from("document_folders")
-      .update({ parent_id: self.parentId })
-      .eq("parent_id", input.folderId);
-    if (error) {
-      console.error("[folders] reparent subfolders failed:", error.code, error.message);
-      return { ok: false, error: "error" };
-    }
-  }
-
-  // THE WRITE THAT SETS deleted_at GOES THROUGH THE SERVICE ROLE.
+  // ── THE FOLDER GOES BEFORE ITS CHILDREN ──────────────────────────────────
   //
-  // Through the session client this fails with 42501, "new row violates
-  // row-level security policy" — observed, not assumed. The policy's own
-  // clauses reference deleted_at, so the row it is being asked to write is one
-  // the policy will not accept, and the update is refused even though the
-  // caller may plainly see and edit the folder.
+  // Deleting a folder promotes its sub-folders one level up. If a child
+  // shares the folder's NAME — "2026" inside "2026", which is exactly what
+  // the year-filing habit produces — promoting it while the parent is still
+  // live puts two "2026"s side by side, and document_folders_unique_root
+  // rejects it with 23505. The delete then failed with "That didn't work",
+  // and the folder could never be removed by any amount of retrying.
   //
-  // Authorization is NOT skipped here: listClientFolders above read this folder
-  // through RLS, so the caller has already proven they can see it, and that
-  // read applied the firm scope and the private-client rule. This is the same
-  // discipline the rest of the codebase uses when the service role is needed
-  // for a write the policy cannot express — prove scope first, then act.
+  // Both unique indexes are PARTIAL (`where deleted_at is null`), so a
+  // soft-deleted parent stops occupying the name. Marking it deleted FIRST
+  // makes room for its own child. Observed against production, not reasoned
+  // about: the reparent step returned 23505 on precisely this shape.
   //
-  // Note also there is no .select(): once deleted_at is set the row stops
-  // satisfying its own SELECT policy, so RETURNING would come back empty on
-  // SUCCESS and read as "not found".
+  // Ordering cost: if the reparent below fails now, the folder is already
+  // marked deleted and its children are stranded under it. That is the
+  // lesser harm — and the retry is idempotent, since the update below
+  // targets children by parent_id and can simply be run again.
+  //
+  // THIS WRITE GOES THROUGH THE SERVICE ROLE. Through the session client it
+  // fails with 42501, "new row violates row-level security policy" —
+  // observed, not assumed. Authorization is NOT skipped: listClientFolders
+  // above read this folder through RLS, so the caller has already proven
+  // they can see it, and that read applied the firm scope and the
+  // private-client rule. Prove scope first, then act.
+  //
+  // No .select(): once deleted_at is set the row stops satisfying its own
+  // SELECT policy, so RETURNING would come back empty on SUCCESS and read
+  // as "not found".
   const { error: delErr } = await getServiceRoleSupabase()
     .from("document_folders")
     .update({ deleted_at: new Date().toISOString() })
@@ -337,6 +337,18 @@ export async function deleteFolderAction(input: {
   if (delErr) {
     console.error("[folders] soft delete failed:", delErr.code, delErr.message);
     return { ok: false, error: isSchemaMissing(delErr) ? "unavailable" : "error" };
+  }
+
+  // Then sub-folders, up one level — now that the name is free.
+  {
+    const { error } = await sb
+      .from("document_folders")
+      .update({ parent_id: self.parentId })
+      .eq("parent_id", input.folderId);
+    if (error) {
+      console.error("[folders] reparent subfolders failed:", error.code, error.message);
+      return { ok: false, error: "error" };
+    }
   }
 
   await logUserActivity(firm.id, null, "folder_deleted", {

@@ -145,7 +145,9 @@
     "total_week": "Total de la semaine :",
     "total_month": "Total du mois :",
     "edit_failed": "Impossible d'enregistrer cette durée. Valeur précédente rétablie.",
-    "stop_failed": "Impossible d'arrêter le minuteur. Il tourne toujours."
+    "stop_failed": "Impossible d'arrêter le minuteur. Il tourne toujours.",
+    "client_stat_hint": "Le temps que votre cabinet a enregistré pour ce client depuis le 1er janvier. Seules les entrées enregistrées dans une feuille de temps comptent — un chronomètre encore en marche n'est pas encore inclus.",
+    "client_stat_hint_value": "Le temps que votre cabinet a enregistré pour ce client depuis le 1er janvier, et la valeur de ces heures selon les taux de facturation de votre équipe. Cette valeur n'est pas ce que vous avez facturé ni encaissé — c'est le coût du travail."
   },
   "Archive": {
     "title": "Archives de documents",
@@ -2309,7 +2311,10 @@
     "import_card_footnote": "Colonnes recherchées : nom, courriel, téléphone. Vous réviserez chaque ligne avant qu'un client soit créé.",
     "import_drop_title": "Déposez un CSV ici, ou parcourez",
     "import_drop_hint": "Les exports de QuickBooks, Xero et Excel fonctionnent tous.",
-    "import_drop_ready": "Prêt à réviser. Choisissez un autre fichier si ce n'est pas le bon."
+    "import_drop_ready": "Prêt à réviser. Choisissez un autre fichier si ce n'est pas le bon.",
+    "portal_open": "Voir le portail",
+    "portal_open_warning": "Ouvre le même lien que votre client — tout ce que vous y faites est enregistré comme si c'était lui.",
+    "portal_open_warning_pin": "Ouvre le même lien que votre client, donc le code d'accès vous sera aussi demandé. Tout ce que vous y faites est enregistré comme si c'était lui."
   },
   "Engagements": {
     "stages_earlier": "{count, plural, one {# étape passée} other {# étapes passées}}",
