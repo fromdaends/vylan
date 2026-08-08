@@ -348,6 +348,17 @@ export default async function TeamPage({
                       firm.clients_private_by_default === true
                     }
                     notifyOnAssignment={firm.notify_on_assignment !== false}
+                    // The surrounding tab is gated on team.manage, but
+                    // setInvitePolicy hard-requires the OWNER — so this asks
+                    // the narrower question rather than showing a manager a
+                    // radio the server will refuse.
+                    invitePolicy={
+                      user.role === "owner"
+                        ? firm.invite_policy === "members"
+                          ? "members"
+                          : "owner"
+                        : null
+                    }
                   />
                 </>
               )}

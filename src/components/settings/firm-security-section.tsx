@@ -21,8 +21,17 @@ import { setInvitePolicy } from "@/app/actions/team";
 
 export function FirmSecuritySection({
   invitePolicy,
+  showHeading = true,
 }: {
   invitePolicy: "owner" | "members";
+  /**
+   * False when this block is nested under a heading that already says whose
+   * settings these are — it now also renders inside the Team block (founder:
+   * "your firm should be in team setting"), where its own "Your firm" h2 would
+   * sit directly beneath "Team" and read as two titles for one card.
+   * A VARIANT on this component, deliberately, rather than a second copy.
+   */
+  showHeading?: boolean;
 }) {
   const t = useTranslations("Settings");
   const router = useRouter();
@@ -54,7 +63,9 @@ export function FirmSecuritySection({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold">{t("security_firm_title")}</h2>
+      {showHeading && (
+        <h2 className="text-sm font-semibold">{t("security_firm_title")}</h2>
+      )}
       <p className="mt-1 text-xs text-muted-foreground">
         {t("security_firm_hint")}
       </p>

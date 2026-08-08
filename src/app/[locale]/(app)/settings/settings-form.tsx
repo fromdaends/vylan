@@ -19,7 +19,6 @@ import {
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
 import { isOwnerOnlySettingsSection } from "@/lib/settings/owner-sections";
-import { FirmSecuritySection } from "@/components/settings/firm-security-section";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -330,10 +329,10 @@ export function SettingsShell({
         {section === "security" && (
           <div className="space-y-12">
             <MfaSection initialEnabled={mfaEnabled} />
-            {/* Yours above, the firm's below. Owner-only: these settings decide
-                what other people may do, so deciding them cannot be one of the
-                things other people may do. */}
-            {isOwner && <FirmSecuritySection invitePolicy={invitePolicy} />}
+            {/* "Your firm" (who may invite) MOVED to the Team section on the
+                founder's ruling — "your firm should be in team setting". This
+                page is about YOUR sign-in; who may add teammates is a team
+                fact. Security keeps your MFA and the firm's data controls. */}
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
@@ -355,6 +354,9 @@ export function SettingsShell({
               <TeamSettings
                 clientsPrivateByDefault={teamSettings.clientsPrivateByDefault}
                 notifyOnAssignment={teamSettings.notifyOnAssignment}
+                // Owner-only: setInvitePolicy refuses anyone else, and a
+                // control that always errors is worse than none.
+                invitePolicy={isOwner ? invitePolicy : null}
               />
             </div>
           </section>
