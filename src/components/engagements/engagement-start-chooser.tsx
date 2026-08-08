@@ -14,13 +14,19 @@
 // "are you sure you want to replace this?" is a worse conversation than asking
 // "which of these are you starting from?" before anything exists.
 //
-// It renders INSTEAD of the builder rather than over it, so there is nothing
-// underneath to overwrite and no dismiss-by-accident.
+// IT IS THE WIZARD'S FIRST STEP, NOT A DOORWAY INTO IT. Founder: "have this
+// tab and the other be the same thing instead of two separate steps, they
+// transition into one another... so it doesn't look weird." It used to render
+// in a bare dialog of its own, which then vanished and was replaced by the
+// three-column builder — two different objects for one continuous act. Now it
+// renders inside that same card, and only the middle of it changes.
+//
+// So it is CONTROLLED and buttonless: the builder holds the answer, and the
+// shell's own Continue is what commits it. A Next button here would be a
+// second one in the same card, six pixels from the real one.
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, FilePlus2, LayoutTemplate } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
 export type StartTemplate = {
@@ -32,31 +38,34 @@ export type StartTemplate = {
 
 export function EngagementStartChooser({
   templates,
-  onStart,
+  mode,
+  templateId,
+  onModeChange,
+  onTemplateChange,
 }: {
   templates: StartTemplate[];
-  /** null = from scratch. */
-  onStart: (templateId: string | null) => void;
+  /** NULL until they answer — neither card starts chosen. */
+  mode: "template" | "scratch" | null;
+  templateId: string;
+  onModeChange: (mode: "template" | "scratch") => void;
+  onTemplateChange: (id: string) => void;
 }) {
   const t = useTranslations("Engagements");
-  const [mode, setMode] = useState<"template" | "scratch">(
-    // Scratch when there is nothing to pick — offering "with template" first
-    // on a firm with no templates leads with a dead end.
-    templates.length > 0 ? "template" : "scratch",
-  );
-  const [picked, setPicked] = useState<string>(templates[0]?.id ?? "");
+  const picked = templateId;
 
   const team = templates.filter((x) => x.access === "team");
   const mine = templates.filter((x) => x.access === "private");
 
   return (
-    // Fills the box and centres itself in it. The shell is now ONE fixed size
-    // for every step (founder: "it should be consistent throughout the entire
-    // engagement creating process"), which means this short question sits in a
-    // tall box — so it centres rather than clinging to the top edge, where it
-    // read as content that had failed to fill the panel.
-    <div className="mx-auto flex h-full max-w-xl flex-col justify-center gap-5 py-4">
-      <div>
+    // Centred in the middle of the card, and that is the whole design.
+    // Founder: "minimalist in the middle. Just how do you want it? And then
+    // it's those two things in the middle. That's it. Plain and simple."
+    //
+    // The card is the wizard's full size and holds one question, so the
+    // question sits in the middle of it. The shell centres it vertically (a
+    // single-tab card does that for its content); this centres it across.
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+      <div className="text-center">
         <h2 className="text-lg font-semibold tracking-tight">
           {t("start_title")}
         </h2>
@@ -76,14 +85,14 @@ export function EngagementStartChooser({
               ? t("start_no_templates")
               : t("start_with_template_hint")
           }
-          onSelect={() => setMode("template")}
+          onSelect={() => onModeChange("template")}
         />
         <ModeCard
           active={mode === "scratch"}
           icon={FilePlus2}
           title={t("start_from_scratch")}
           hint={t("start_from_scratch_hint")}
-          onSelect={() => setMode("scratch")}
+          onSelect={() => onModeChange("scratch")}
         />
       </div>
 
@@ -98,7 +107,7 @@ export function EngagementStartChooser({
           <select
             id="start-template"
             value={picked}
-            onChange={(e) => setPicked(e.target.value)}
+            onChange={(e) => onTemplateChange(e.target.value)}
             className="mt-1 h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {/* Grouped exactly as the reference does — the firm's, then yours.
@@ -125,17 +134,6 @@ export function EngagementStartChooser({
           </select>
         </div>
       )}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          onClick={() =>
-            onStart(mode === "template" && picked !== "" ? picked : null)
-          }
-        >
-          {t("start_next")}
-        </Button>
-      </div>
     </div>
   );
 }
@@ -166,7 +164,8 @@ function ModeCard({
         active
           ? "border-accent bg-accent/5"
           : "border-border/60 hover:border-border hover:bg-muted/40",
-        disabled && "cursor-not-allowed opacity-55 hover:border-border/60 hover:bg-transparent",
+        disabled &&
+          "cursor-not-allowed opacity-55 hover:border-border/60 hover:bg-transparent",
       )}
     >
       {active && (

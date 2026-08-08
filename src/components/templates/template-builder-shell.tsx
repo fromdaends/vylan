@@ -83,6 +83,13 @@ export type BuilderFinalAction = {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /**
+   * The tick is right for a card that FINISHES ("Create client") and wrong for
+   * one that hands you on to something else — a single-card screen whose only
+   * job is to ask a question before the real wizard starts. Defaults to the
+   * tick, so every existing caller is unchanged.
+   */
+  icon?: "check" | "arrow";
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -102,6 +109,7 @@ export function TemplateBuilderShell({
   preview,
   previewLabel,
   previewOpen,
+  size = "auto",
   error,
   children,
 }: {
@@ -136,6 +144,14 @@ export function TemplateBuilderShell({
    *  reads as a real engagement rather than a sample. */
   previewLabel?: string;
   previewOpen?: boolean;
+  /**
+   * "auto" sizes the card to its content: a one-step sheet shrinks to 560px.
+   * "wizard" keeps the full setup-card footprint even with one step — for a
+   * screen that OPENS a wizard and must not change size when it does.
+   * Founder: "have the floating card where it appears on the same size as the
+   * regular card... same size everything."
+   */
+  size?: "auto" | "wizard";
   error?: string | null;
   children: React.ReactNode;
 }) {
@@ -172,7 +188,9 @@ export function TemplateBuilderShell({
         aria-label={title}
         className={cn(
           "wizard-card flex overflow-hidden rounded-2xl bg-card",
-          single ? "wizard-card-single" : "wizard-card-setup",
+          single && size === "auto"
+            ? "wizard-card-single"
+            : "wizard-card-setup",
         )}
       >
         <BuilderChrome
@@ -347,6 +365,13 @@ export function BuilderChrome({
             key={activeTab}
             className={cn(
               "px-[22px] pb-[26px] pt-5",
+              // A ONE-SCREEN CARD CENTRES ITS CONTENT. A wizard step fills its
+              // card and belongs at the top; a card that asks a single question
+              // does not, and top-aligning three lines in a 1040px box leaves
+              // them stranded against the ceiling with a field of white below.
+              // `min-h-full` rather than `h-full`: content taller than the card
+              // must still be able to scroll.
+              !showSteps && "flex min-h-full flex-col justify-center",
               progress.direction >= 0
                 ? "wizard-step-forward"
                 : "wizard-step-back",
@@ -390,8 +415,13 @@ export function BuilderChrome({
                 onClick={finalAction.onClick}
                 className="h-[34px]"
               >
-                <Check className="size-3.5" />
+                {finalAction.icon === "arrow" ? null : (
+                  <Check className="size-3.5" />
+                )}
                 {finalAction.label}
+                {finalAction.icon === "arrow" && (
+                  <ArrowRight className="size-3.5" />
+                )}
               </Button>
             )
           ) : (
@@ -570,8 +600,7 @@ function useStepProgress(index: number) {
     setState((s) => ({
       // Moving FORWARD marks the step you left as done — including a jump,
       // because passing a step is passing a step however you did it.
-      done:
-        index > from && !s.done.includes(from) ? [...s.done, from] : s.done,
+      done: index > from && !s.done.includes(from) ? [...s.done, from] : s.done,
       maxVisited: Math.max(s.maxVisited, index),
       direction: index > from ? 1 : -1,
     }));
