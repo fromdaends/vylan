@@ -109,6 +109,7 @@ export function TemplateBuilderShell({
   preview,
   previewLabel,
   previewOpen,
+  size = "auto",
   error,
   children,
 }: {
@@ -143,6 +144,14 @@ export function TemplateBuilderShell({
    *  reads as a real engagement rather than a sample. */
   previewLabel?: string;
   previewOpen?: boolean;
+  /**
+   * "auto" sizes the card to its content: a one-step sheet shrinks to 560px.
+   * "wizard" keeps the full setup-card footprint even with one step — for a
+   * screen that OPENS a wizard and must not change size when it does.
+   * Founder: "have the floating card where it appears on the same size as the
+   * regular card... same size everything."
+   */
+  size?: "auto" | "wizard";
   error?: string | null;
   children: React.ReactNode;
 }) {
@@ -179,7 +188,9 @@ export function TemplateBuilderShell({
         aria-label={title}
         className={cn(
           "wizard-card flex overflow-hidden rounded-2xl bg-card",
-          single ? "wizard-card-single" : "wizard-card-setup",
+          single && size === "auto"
+            ? "wizard-card-single"
+            : "wizard-card-setup",
         )}
       >
         <BuilderChrome
