@@ -2311,7 +2311,10 @@
     "import_card_footnote": "Colonnes recherchées : nom, courriel, téléphone. Vous réviserez chaque ligne avant qu'un client soit créé.",
     "import_drop_title": "Déposez un CSV ici, ou parcourez",
     "import_drop_hint": "Les exports de QuickBooks, Xero et Excel fonctionnent tous.",
-    "import_drop_ready": "Prêt à réviser. Choisissez un autre fichier si ce n'est pas le bon."
+    "import_drop_ready": "Prêt à réviser. Choisissez un autre fichier si ce n'est pas le bon.",
+    "portal_open": "Voir le portail",
+    "portal_open_warning": "Ouvre le même lien que votre client — tout ce que vous y faites est enregistré comme si c'était lui.",
+    "portal_open_warning_pin": "Ouvre le même lien que votre client, donc le code d'accès vous sera aussi demandé. Tout ce que vous y faites est enregistré comme si c'était lui."
   },
   "Engagements": {
     "stages_earlier": "{count, plural, one {# étape passée} other {# étapes passées}}",

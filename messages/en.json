@@ -2311,7 +2311,10 @@
     "import_card_footnote": "Columns we'll look for: name, email, phone. You'll review every row before anything is created.",
     "import_drop_title": "Drop a CSV here, or browse",
     "import_drop_hint": "Exports from QuickBooks, Xero and Excel all work.",
-    "import_drop_ready": "Ready to review. Choose a different file if that's not the one."
+    "import_drop_ready": "Ready to review. Choose a different file if that's not the one.",
+    "portal_open": "View portal",
+    "portal_open_warning": "Opens the same link your client uses — anything you do in it is recorded as them.",
+    "portal_open_warning_pin": "Opens the same link your client uses, so you will be asked for the access code too. Anything you do in it is recorded as them."
   },
   "Engagements": {
     "stages_earlier": "{count, plural, one {# earlier stage} other {# earlier stages}}",

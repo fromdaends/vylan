@@ -541,9 +541,10 @@ export async function loadPortalContext(
   let firmLogoForProposal: string | null = null;
   const introHrefByPath = new Map<string, string>();
   {
-    const snap = (engagement as Record<string, unknown>).proposal as
-      | Record<string, unknown>
-      | null;
+    const snap = (engagement as Record<string, unknown>).proposal as Record<
+      string,
+      unknown
+    > | null;
     const introPaths = [snap?.videoPath, snap?.documentPath].filter(
       (x): x is string => typeof x === "string" && x.trim().length > 0,
     );
@@ -658,7 +659,10 @@ export async function loadPortalContext(
       const e = engagement as Record<string, unknown>;
       if (e.requires_acceptance !== true) return null;
       if (e.accepted_at != null) return null;
-      const data = readProposalSnapshot(e.proposal, (client as Client).display_name);
+      const data = readProposalSnapshot(
+        e.proposal,
+        (client as Client).display_name,
+      );
       if (!proposalIsPresentable(data)) return null;
       return {
         // The uploaded intro video / document, made openable.
@@ -780,7 +784,7 @@ export async function findEngagementForToken(token: string): Promise<{
 export async function listClientPortalEngagements(
   clientId: string,
   firmId: string,
-): Promise<{ id: string; title: string; status: string }[]> {
+): Promise<{ id: string; title: string; status: string; token: string }[]> {
   const sb = getServiceRoleSupabase();
   const { data } = await sb
     .from("engagements")
@@ -802,7 +806,35 @@ export async function listClientPortalEngagements(
       id: e.id as string,
       title: e.title as string,
       status: e.status as string,
+      token: e.magic_token as string,
     }));
+}
+
+// Does this client have a portal you can actually open, and what is its URL?
+//
+// "Active portal" is not a flag anywhere — it is a CONSEQUENCE: the client has
+// at least one engagement that was sent (so it has a magic token), is still
+// live, is not archived or deleted, and whose token has not expired. That is
+// exactly the filter above, which is why this reads through it rather than
+// writing a second query that could drift from the switcher's idea of which
+// portals exist.
+//
+// Returns the newest one. A client with several live engagements has ONE
+// portal — the switcher inside it hops between them on the same token — so the
+// door only needs one key, and the newest is the one they were most recently
+// invited through.
+export async function findClientPortalDoor(
+  clientId: string,
+  firmId: string,
+): Promise<{ token: string; engagementId: string; total: number } | null> {
+  const live = await listClientPortalEngagements(clientId, firmId);
+  const newest = live[0];
+  if (!newest) return null;
+  return {
+    token: newest.token,
+    engagementId: newest.id,
+    total: live.length,
+  };
 }
 
 // The security guard behind the switcher: given the CURRENT token and a TARGET
