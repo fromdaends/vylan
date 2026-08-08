@@ -145,9 +145,7 @@
     "total_week": "Week total:",
     "total_month": "Month total:",
     "edit_failed": "Couldn't save that duration. Put back what it was.",
-    "stop_failed": "Couldn't stop the timer. It's still running.",
-    "client_stat_hours_label": "This year",
-    "client_stat_value_label": "Value"
+    "stop_failed": "Couldn't stop the timer. It's still running."
   },
   "Archive": {
     "title": "Document archive",

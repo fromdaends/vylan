@@ -145,9 +145,7 @@
     "total_week": "Total de la semaine :",
     "total_month": "Total du mois :",
     "edit_failed": "Impossible d'enregistrer cette durée. Valeur précédente rétablie.",
-    "stop_failed": "Impossible d'arrêter le minuteur. Il tourne toujours.",
-    "client_stat_hours_label": "Cette année",
-    "client_stat_value_label": "Valeur"
+    "stop_failed": "Impossible d'arrêter le minuteur. Il tourne toujours."
   },
   "Archive": {
     "title": "Archives de documents",
