@@ -331,6 +331,15 @@ export function InvoicesTable({
           <DialogHeader>
             <DialogTitle>{t("void_title")}</DialogTitle>
             <DialogDescription>{t("void_body")}</DialogDescription>
+            {/* THE MONEY SENTENCE, rescued from the deleted Billing settings
+                tab and moved to the moment it actually protects someone: an
+                invoice with a part-payment on it can be voided, and "nothing
+                is owed" reads to most people as "they got their money back".
+                It did not. Stating it in a card two clicks away was already
+                weak; stating it here is the point. */}
+            <DialogDescription className="text-xs">
+              {t("settings_refunds_note")}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button

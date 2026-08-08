@@ -12,7 +12,7 @@
 // segments carry no HTML, so nothing here can inject markup from a comment.
 
 import { cn } from "@/lib/cn";
-import { memberTextClass } from "@/lib/members/color";
+import { memberColorMap, memberTextClass } from "@/lib/members/color";
 import { splitBodyMentions, type MentionMember } from "@/lib/members/mentions";
 
 export function MentionText({
@@ -28,13 +28,20 @@ export function MentionText({
   className?: string;
 }) {
   const segments = splitBodyMentions(body, members, mentioned);
+  // DISTINCT across the roster, not merely hashed — two teammates whose ids
+  // hash to the same slot would otherwise share a colour, which is the one
+  // thing this feature exists to prevent.
+  const colors = memberColorMap(members);
   return (
     <span className={className}>
       {segments.map((seg, i) =>
         seg.kind === "mention" ? (
           <span
             key={i}
-            className={cn("font-medium", memberTextClass(seg.userId))}
+            className={cn(
+              "font-medium",
+              memberTextClass(colors.get(seg.userId) ?? "member-blue"),
+            )}
             // The name is already visible; the title repeats it for a reader
             // who cannot resolve the colour (and for anyone colour-blind, the
             // weight change carries the same signal).

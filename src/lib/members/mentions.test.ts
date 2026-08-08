@@ -31,6 +31,28 @@ describe("splitBodyMentions", () => {
     ]);
   });
 
+  it("does not paint @Marie inside @Marie-Claude (the hyphen case)", () => {
+    // The exact mis-attribution the composer's own lookahead prevents: Marie
+    // is legitimately in `mentions` from her own mention earlier in the body.
+    const roster = [{ id: "u-marie", name: "Marie" }];
+    const out = splitBodyMentions(
+      "@Marie can you loop in @Marie-Claude?",
+      roster,
+      ["u-marie"],
+    );
+    expect(out.filter((s) => s.kind === "mention")).toHaveLength(1);
+    expect(out.map((s) => s.text).join("")).toBe(
+      "@Marie can you loop in @Marie-Claude?",
+    );
+  });
+
+  it("does not paint a name followed by a dot-suffixed longer name", () => {
+    const roster = [{ id: "u-jo", name: "Jo" }];
+    expect(
+      splitBodyMentions("@Jo.Smith filed it", roster, ["u-jo"]),
+    ).toEqual([{ kind: "text", text: "@Jo.Smith filed it" }]);
+  });
+
   it("respects the word boundary — @Sammy is nobody", () => {
     expect(splitBodyMentions("@Sammy hi", MEMBERS, ALL)).toEqual([
       { kind: "text", text: "@Sammy hi" },

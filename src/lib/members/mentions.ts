@@ -15,9 +15,12 @@
 // the most specific name always wins its span.
 //
 // AND THE BOUNDARY: a match only counts when the character after the name is
-// not a word character, so "@Sam" does not light up inside "@Sammy". This is
-// the same rule the composer applies in reverse when it decides which picked
-// members actually survived into the body (comment-thread-core's submit).
+// not a name character, so "@Sam" does not light up inside "@Sammy". The class
+// is [\p{L}\p{N}._-] — CHARACTER FOR CHARACTER the composer's negative
+// lookahead (comment-thread-core's submit), and the hyphen is the reason that
+// matters: with a plain \w rule, "@Marie" would paint inside "@Marie-Claude"
+// and hand one teammate's colour to another's name. In a Quebec firm,
+// Marie/Marie-Claude and Jean/Jean-Pierre are the norm, not the exception.
 //
 // ONLY REAL MENTIONS ARE PAINTED. A member is eligible when their id is in the
 // row's `mentions` array — the ids the server sanitized at write time. Someone
@@ -72,7 +75,7 @@ export function splitBodyMentions(
         if (!rest.startsWith(m.name)) return false;
         const after = rest.charAt(m.name.length);
         // End of string, or a non-word character, is a clean boundary.
-        return after === "" || !/[\p{L}\p{N}_]/u.test(after);
+        return after === "" || !/[\p{L}\p{N}._-]/u.test(after);
       });
       if (hit) {
         flush();

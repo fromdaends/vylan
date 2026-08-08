@@ -101,12 +101,18 @@ export function splitPresence(
 
 // ── COLOUR ───────────────────────────────────────────────────────────────────
 //
-// MOVED to lib/members/color.ts and re-exported here, unchanged in palette and
-// in algorithm, so every presence ring keeps the exact colour it had. The move
-// is the founder's ruling that a teammate's colour is ONE fact used everywhere
-// ("every member on the team has a distinct colour"), not a presence detail —
-// @mentions now paint from the same function, and two private copies of this
-// idea in team-chat and the messages tab can retire onto it too.
+// MOVED to lib/members/color.ts and re-exported here. A teammate's colour is
+// ONE fact used everywhere (the founder's ruling), not a presence detail —
+// @mentions paint from the same function.
+//
+// ⚠️ THE RING COLOURS SHIFTED SLIGHTLY, deliberately and once: the shared
+// palette moved onto --member-* tokens, which are the same hues at a lightness
+// that also clears WCAG AA as 13px TEXT (the --icon-* set did not, amber
+// worst). A ring is forgiving about a tenth of a lightness step; a name is not,
+// and one palette that works for both beats two that drift.
+//
+// Two more private copies of this idea still exist, in team-chat and the
+// messages tab. They are NOT retired yet — say so rather than implying it.
 //
 // The aliases stay because presence's own call sites and tests read better in
 // its vocabulary; they are the same values, not a second palette.

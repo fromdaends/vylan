@@ -76,6 +76,21 @@
   --icon-cyan: oklch(0.56 0.13 215);
   --icon-rose: oklch(0.58 0.2 14);
 
+  /* MEMBER COLOURS — a teammate's identity, used for @mentions and presence.
+     Deliberately NOT the --icon-* hues at their own lightness: those are tuned
+     for icon fills and shapes, and several (amber at L .62 especially) land
+     around 3:1 on white — below WCAG AA for 13px body text. These are the same
+     eight hues pulled down to L .45-.48, which clears 4.5:1 on the app's
+     background while staying recognisably the same colour family. */
+  --member-blue: oklch(0.48 0.18 255);
+  --member-indigo: oklch(0.46 0.2 285);
+  --member-purple: oklch(0.46 0.21 305);
+  --member-emerald: oklch(0.45 0.14 162);
+  --member-amber: oklch(0.45 0.13 70);
+  --member-cyan: oklch(0.46 0.11 215);
+  --member-teal: oklch(0.45 0.12 190);
+  --member-magenta: oklch(0.47 0.2 330);
+
   /* Engagement workflow stages. Their own token set rather than reusing the
      icon hues: these six carry MEANING (a stage chip's colour is how the
      accountant reads position at a glance), so they need to be tunable per
@@ -168,6 +183,18 @@
   --icon-cyan: oklch(0.77 0.13 205);
   --icon-rose: oklch(0.72 0.19 12);
 
+  /* Member colours, bright enough to read on near-black — the same job the
+     --icon-* dark values do, kept as their own tokens so text contrast can be
+     tuned without moving every icon in the app. */
+  --member-blue: oklch(0.74 0.16 252);
+  --member-indigo: oklch(0.75 0.18 286);
+  --member-purple: oklch(0.75 0.19 305);
+  --member-emerald: oklch(0.78 0.15 162);
+  --member-amber: oklch(0.83 0.14 80);
+  --member-cyan: oklch(0.80 0.12 205);
+  --member-teal: oklch(0.79 0.12 190);
+  --member-magenta: oklch(0.76 0.18 330);
+
   /* Stage hues, lifted for the near-black surface (see the light block). */
   --stage-collecting: oklch(0.70 0.17 252);   /* blue */
   --stage-review: oklch(0.82 0.14 85);        /* amber */
@@ -224,6 +251,15 @@
   --color-icon-amber: var(--icon-amber);
   --color-icon-cyan: var(--icon-cyan);
   --color-icon-rose: var(--icon-rose);
+
+  --color-member-blue: var(--member-blue);
+  --color-member-indigo: var(--member-indigo);
+  --color-member-purple: var(--member-purple);
+  --color-member-emerald: var(--member-emerald);
+  --color-member-amber: var(--member-amber);
+  --color-member-cyan: var(--member-cyan);
+  --color-member-teal: var(--member-teal);
+  --color-member-magenta: var(--member-magenta);
 
   --color-stage-collecting: var(--stage-collecting);
   --color-stage-review: var(--stage-review);
