@@ -14,6 +14,7 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   BookOpen,
   BookOpenCheck,
+  Briefcase,
   Building2,
   ChartSpline,
   FileText,
@@ -227,16 +228,30 @@ export function AppShell({
       // has five of them; two need the second line.
       panel: {
         title: labels.work,
+        // ENGAGEMENT LIST IS THE ROUND BUTTON, the rest are rows — the
+        // founder's call, and their reason: "engagement list is kind of like
+        // the home page… have engagement be a circle as well", pointing at the
+        // Create panel's strip. Same shape as Create: what you reach for most
+        // as a button, the rest underneath.
+        //
+        // ⚠️ THIS PANEL HAS FLIPPED SHAPE BEFORE — rows, then two circles
+        // (#1260), then back to rows when Canopy's plain-row Work sidebar was
+        // open beside it. This is neither of those: ONE circle plus rows, so
+        // the prominent destination is prominent and the others keep the
+        // one-line hints a button cannot carry. Do not "tidy" it back to a
+        // uniform list.
+        actions: [
+          {
+            href: "/engagements",
+            label: labels.workEngagements,
+            icon: Briefcase,
+          },
+        ],
         items: [
           {
             href: "/work",
             label: labels.workTasks,
             description: labels.workTasksHint,
-          },
-          {
-            href: "/engagements",
-            label: labels.workEngagements,
-            description: labels.workEngagementsHint,
           },
           // Canopy's fifth row, and the only one of their three we could
           // build: Resolution Cases and Tax Organizers have no home here.
