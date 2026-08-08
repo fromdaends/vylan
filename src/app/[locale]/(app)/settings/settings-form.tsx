@@ -47,6 +47,7 @@ import type { FirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
 import { InvoiceChaseDefaults } from "@/components/settings/invoice-chase-defaults";
+import { PaymentTermsDefaults } from "@/components/settings/payment-terms-defaults";
 import type { ChaseSettings } from "@/lib/invoices/chase-settings";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import type { NotificationSettingsBundle } from "@/lib/db/notification-settings";
@@ -125,6 +126,7 @@ export function SettingsShell({
   invoiceDefaultDelayDays,
   reminderDefaultSettings,
   chaseDefaults,
+  defaultDueDays,
   aiUsage,
   isOwner,
   billingSlot,
@@ -158,6 +160,8 @@ export function SettingsShell({
   invoiceDefaultDelayDays: number | null;
   reminderDefaultSettings: ReminderSettings | null;
   chaseDefaults: ChaseSettings;
+  /** The firm's payment terms, for the Automation section. Null = no terms set. */
+  defaultDueDays: number | null;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -435,6 +439,12 @@ export function SettingsShell({
                 action still gates on money.view — narrowing the UI to
                 owners would strand members behind the read-only window's
                 "manage in Settings" link. */}
+            {/* Payment terms — MOVED from Billing → Settings, where it was the
+                ONLY editor of default_due_days in the repo. Above reminders on
+                purpose: the chase schedule counts FROM this date, so the two
+                read in the order they happen. Outside the owner gate for the
+                same reason InvoiceChaseDefaults is (money.view, not owner). */}
+            <PaymentTermsDefaults initialDays={defaultDueDays} />
             <InvoiceChaseDefaults chase={chaseDefaults} />
             {isOwner && (
               <>

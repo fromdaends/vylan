@@ -297,9 +297,19 @@ export default async function SettingsPage({
   const servicePrices = isOwner ? (firm.service_prices ?? {}) : null;
   // Firm-wide recent payments for the Payments settings list (owner-only).
   const paymentsList = isOwner ? await listFirmPaymentsWithNames() : null;
-  // Firm invoice settings for the Invoicing section (owner-only). Null until
-  // the owner first saves it (or pre-0750) — the section renders defaults.
-  const invoiceSettings = isOwner ? await getFirmInvoiceSettings() : null;
+  // Firm invoice settings. Read for EVERYONE (it is RLS-scoped to the firm),
+  // because two Automation controls that money.view members may edit —
+  // PaymentTermsDefaults and InvoiceChaseDefaults — are seeded from it.
+  //
+  // ⚠️ THIS FIXES A REAL BUG rather than merely enabling the move: the fetch
+  // used to be owner-only while chaseDefaults was derived from it regardless,
+  // so a non-owner opening Automation saw the SHIPPED reminder defaults
+  // instead of their firm's, and saving wrote those wrong values back over the
+  // firm's real ones.
+  const firmInvoiceSettings = await getFirmInvoiceSettings();
+  // The Invoicing SECTION stays owner-only — that is a permission, not a data
+  // question, so it keeps its own null-for-staff variable.
+  const invoiceSettings = isOwner ? firmInvoiceSettings : null;
 
   return (
     // 814px = 190px sub-nav + 64px gutter + 560px content column.
@@ -340,7 +350,8 @@ export default async function SettingsPage({
         invoiceDefaultDelayDays={firm.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}
         // The invoice-chase defaults, MOVED here from Billing → Settings.
-        chaseDefaults={chaseSettingsFrom(invoiceSettings)}
+        chaseDefaults={chaseSettingsFrom(firmInvoiceSettings)}
+        defaultDueDays={firmInvoiceSettings?.default_due_days ?? null}
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
