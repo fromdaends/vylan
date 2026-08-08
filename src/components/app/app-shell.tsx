@@ -238,13 +238,6 @@ export function AppShell({
             label: labels.workEngagements,
             description: labels.workEngagementsHint,
           },
-          // Canopy's fifth row, and the only one of their three we could
-          // build: Resolution Cases and Tax Organizers have no home here.
-          {
-            href: "/work/overview",
-            label: labels.workDashboard,
-            description: labels.workDashboardHint,
-          },
           // Every logged hour. The route moved from /work/time to /time when
           // the page was redesigned (week / day / month); the old path still
           // resolves, so nothing bookmarked breaks — see its redirect.

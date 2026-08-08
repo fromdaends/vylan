@@ -162,7 +162,7 @@ export async function runKpiAlerts(now = new Date()): Promise<SweepResult> {
             note: a.message ?? null,
             value,
             threshold: Number(a.threshold),
-            href: "/work/overview",
+            href: "/work",
           },
         });
         fired++;
