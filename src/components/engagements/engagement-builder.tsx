@@ -1085,34 +1085,12 @@ export function EngagementBuilder({
     setStep(target);
   }
 
-  // A tick means "this step has what it NEEDS", not "you have been here".
-  // Rewarding a visit would put a tick on an empty Documents step, which is the
-  // one thing that actually blocks sending.
-  const stepComplete: Record<WizardStep, boolean> = {
-    details: clientId != null && title.trim().length > 0,
-    // Optional on purpose. An engagement with no priced scope is exactly what
-    // every engagement in Vylan was until now, and refusing to send one would
-    // break the existing flow for a field nobody has filled in yet.
-    services: true,
-    // The flow always HAS an answer (template's copy or the family preset),
-    // so this step can never block a send — visiting it is optional, the
-    // default is honest.
-    automation: true,
-    // Titled work, or a checklist with something in it. Either alone is a real
-    // answer: "meet the client, then file" needs no documents, and a plain
-    // document request needs no other task.
-    tasks: meaningfulTasks(tasks).length > 0 || items.length > 0,
-    // Money and chasing are genuinely optional — a draft with neither is a
-    // valid engagement — so they are complete by definition. They still get a
-    // tick rather than nothing, because an empty circle beside a step you were
-    // never required to fill reads as an error.
-    billing: true,
-    reminders: true,
-    // Always ticked: an engagement with no terms and nobody signing is still a
-    // valid engagement — plenty of firms send work without a formal agreement,
-    // and refusing to let them would break the existing flow.
-    proposal: true,
-  };
+  // NOTE: `stepComplete` lived here and fed the rail's red "not answered yet"
+  // dot. The founder removed the dot ("no need for the red dots"), and nothing
+  // else read this map — the rail's green ticks are the shell's own, and the
+  // send button does its own checking — so it went with it rather than sitting
+  // here as a computed value with no consumer.
+  //
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
   const [pending, startTransition] = useTransition();
@@ -1916,11 +1894,6 @@ export function EngagementBuilder({
                   key: k,
                   label: t(`wizard_step_${k}` as WizardStepKey),
                   description: t(`wizard_step_desc_${k}` as WizardStepDescKey),
-                  // The red mark means "required and not answered yet" — the same thing
-                  // the rail's asterisk-plus-empty-circle used to say, in the template
-                  // builders' vocabulary. Only the two that actually stop you sending.
-                  incomplete:
-                    (k === "details" || k === "tasks") && !stepComplete[k],
                 })),
               ]
         }
@@ -3106,6 +3079,12 @@ export function EngagementBuilder({
                 // edits that are dead for this engagement. Invoice stays: the
                 // snapshot's invoice cadence IS read at billing time.
                 hideDocumentReminders
+                // Same reason, one card up: the agreement choice decides
+                // whether a letter goes out, and the save above forces the
+                // flow's flag to match it. Offering the switch here would take
+                // an answer and discard it — and on a proposal-only engagement
+                // it offered to sign a document that does not exist.
+                hideLetterToggle
               />
             </details>
           </section>

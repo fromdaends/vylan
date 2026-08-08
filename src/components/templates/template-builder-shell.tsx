@@ -61,7 +61,6 @@ export type BuilderTab = {
    *  step called "Pricing" does not need to be told it is about pricing. */
   description?: string;
   /** Canopy's red mark on a step whose required fields are empty. */
-  incomplete?: boolean;
 };
 
 export type BuilderAction = {
@@ -545,15 +544,20 @@ function StepsBox({
                         : "text-muted-foreground",
                     )}
                   >
+                    {/* NO "not done yet" MARK BESIDE THE LABEL.
+                        Founder, on the engagement wizard: "no need for the red
+                        dots."
+
+                        There was a small red dot on any step that was required
+                        and unanswered. It landed next to a step that ALSO had a
+                        green tick — the tick means "this step has what it
+                        needs" and the dot meant the opposite — so the rail said
+                        two contradictory things about one step at the same
+                        time. Nothing was gated on it: the send button does its
+                        own checking, and it rings the checklist when that is
+                        what is missing. So the dot was decoration that read as
+                        an error. */}
                     {tab.label}
-                    {/* Said in TEXT too, not colour alone — a red dot is
-                        invisible to anyone who cannot see red. */}
-                    {tab.incomplete && (
-                      <span
-                        className="ml-1.5 inline-block size-1.5 rounded-full bg-destructive align-middle"
-                        aria-label={t("tab_incomplete")}
-                      />
-                    )}
                   </span>
                 </span>
               </button>
