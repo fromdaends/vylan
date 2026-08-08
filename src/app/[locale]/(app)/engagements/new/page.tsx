@@ -169,6 +169,9 @@ export default async function NewEngagementPage({
             rateType: svc.rateType,
             billingFrequency: svc.billingFrequency,
             taxPct: svc.taxPct,
+            // How long it usually takes (1790), so picking the service fills
+            // the line's Hours box the same way it fills the rate (1820).
+            budgetMinutes: svc.budgetMinutes,
             work: tpl
               ? {
                   templateId: tpl.id,

@@ -72,6 +72,20 @@ export type EngagementItem = {
   billingTiming?: BillingTiming | null;
   /** Only read when billingTiming is 'custom_date'. ISO date. */
   billingStartDate?: string | null;
+  /**
+   * How long this line is expected to take, in minutes (migration 1820).
+   *
+   * Seeded from the picked catalogue service's own duration and editable
+   * afterwards — the same copy-not-link rule the rate follows, and for the same
+   * reason: "this T1 takes two hours for most clients and six for this one" is
+   * the ordinary case, not an exception.
+   *
+   * NULL = nobody has said, and it contributes NOTHING to an engagement's
+   * budget rather than zero. Before this existed only CATALOGUE lines could
+   * carry hours at all, so a hand-typed line silently contributed 0h to the
+   * capacity board while its tracked time still counted against it.
+   */
+  budgetMinutes?: number | null;
 };
 
 /**

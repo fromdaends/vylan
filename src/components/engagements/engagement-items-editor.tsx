@@ -21,6 +21,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HoursInput } from "@/components/ui/hours-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,6 +53,14 @@ export type CatalogueService = {
   rateType: RateType;
   billingFrequency: BillingFrequency;
   taxPct: number | null;
+  /**
+   * How long this service usually takes, in minutes (1790).
+   *
+   * Copied onto the line when the service is picked, exactly as the rate is —
+   * so the hours the template already knew stop being invisible on the
+   * engagement that uses it.
+   */
+  budgetMinutes?: number | null;
 };
 
 type FreqKey =
@@ -136,6 +145,12 @@ export function EngagementItemsEditor({
       // catalogue's value is only a starting point.
       billingFrequency: svc.billingFrequency,
       taxPct: item.taxPct ?? svc.taxPct,
+      // Same rule as the rate: what the accountant already typed WINS, and the
+      // catalogue only fills a blank. Before 1820 this value had nowhere to
+      // land, so a service's hours reached the capacity board by being looked
+      // up THROUGH the line — which worked right up until the line was
+      // hand-typed, and then contributed zero with nothing on screen saying so.
+      budgetMinutes: item.budgetMinutes ?? svc.budgetMinutes ?? null,
     });
     // The work comes with it, automatically — the founder's call: "there
     // should be no prompt. It should happen automatically when the tasks get
@@ -290,6 +305,33 @@ export function EngagementItemsEditor({
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* ── HOW LONG IT TAKES, BESIDE WHAT IT COSTS ──────────
+                        Founder, comparing a service template with the
+                        engagement built from it: "you see hours it usually
+                        takes, rate, you know, things like that, which it does
+                        show on when creating engagement, just not fully."
+
+                        They were right, and the gap was not cosmetic. The
+                        catalogue held hours; the LINE did not. So the capacity
+                        board reached through each line to the service it came
+                        from — fine for a picked service, zero for a hand-typed
+                        one, invisibly. The line owns its hours now (1820), and
+                        picking a service seeds them. */}
+                    <div>
+                      <Label htmlFor={`item-hours-${idx}`} className="text-xs">
+                        {t("item_hours")}
+                      </Label>
+                      <HoursInput
+                        id={`item-hours-${idx}`}
+                        valueMinutes={item.budgetMinutes ?? null}
+                        onChangeMinutes={(minutes) =>
+                          patch(idx, { budgetMinutes: minutes })
+                        }
+                        placeholder={t("item_hours_placeholder")}
+                        className="mt-1"
+                      />
                     </div>
 
                     <div className={hideFrequency ? "hidden" : undefined}>

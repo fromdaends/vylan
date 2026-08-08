@@ -14,8 +14,6 @@
 // to answer "what does this client owe and how often" and it is not enough for
 // a proposal, because a frequency alone cannot say:
 //
-//   - WHEN a one-time charge falls due — on acceptance, or on completion
-//   - WHEN a recurring charge starts — at the engagement start, or a set date
 //   - whether the client sees the lines or only the block's total
 //   - what note to show them beside it
 //
@@ -23,6 +21,48 @@
 // rule and the items sit inside it; each item still carries its own rate, and
 // on save it inherits the block's frequency, which keeps toInvoiceLineItems and
 // the whole invoice path working unchanged.
+//
+// ── A BLOCK NO LONGER SAYS *WHEN* THE MONEY IS TAKEN ───────────────────────
+//
+// It used to. A block carried a `timing` — on acceptance / on completion /
+// engagement start / a date — and flattenBlocks wrote it onto every line.
+//
+// Founder: "You cannot decide a time when it's paid on service items. That just
+// does not happen. It cannot happen. Only have it be in billing and payments,
+// and if the automation does it, then it's in the automation section. It's one
+// or the other."
+//
+// They were describing a real fault, and they were more right than the code
+// looked. Two things were wrong at once:
+//
+// 1. THE QUESTION WAS ASKED TWICE. The engagement's Billing and payments step
+//    already answers it, in an overlapping vocabulary — `invoice_auto_mode` is
+//    off / on_acceptance / on_completion / delayed. Two controls, half the
+//    words identical, different scopes, nothing on screen saying which wins.
+//
+// 2. THE PICKER NEVER WROTE ANYTHING. 1740 added the column, taught this file
+//    to carry the block's timing down onto each line, and taught the insert in
+//    db/engagements.ts to persist it — but the engagement builder's payload
+//    mapper, the ONLY producer of `service_items` in the app, never included
+//    the field. So `it.billing_timing` was always undefined, the conditional
+//    spread never fired, and no engagement_items row has ever had a timing.
+//    No migration backfilled one either. acceptance-lines' query has therefore
+//    always matched exactly zero rows.
+//
+// Which means the founder's "I don't think it does anything" was literally
+// true: they picked an option, nothing happened, and the fix for that is to
+// remove the control rather than to finish wiring a second answer.
+//
+// The timing is GONE from the authoring shape — not hidden, absent, so no
+// screen can offer it and no save can invent one. Lines go out with
+// billingTiming NULL, which is not a new state: it is the documented pre-1740
+// default and already means "the firm's invoice settings decide" (see
+// EngagementItem.billingTiming). One question, one place.
+//
+// The READERS are left alone (acceptance-lines, start-schedules). They match
+// nothing today and handle NULL correctly, so they are harmless; unpicking them
+// means touching the acceptance and invoice paths, which is real money and a
+// separate job from removing a control that never worked.
 
 import {
   hasStatableTotal,
@@ -34,17 +74,6 @@ import {
 /** One-time, or on a repeating schedule. Canopy's first choice in a block. */
 export const BILLING_TYPES = ["one_time", "recurring"] as const;
 export type BillingType = (typeof BILLING_TYPES)[number];
-
-/**
- * When the charge lands. The options differ by type, which is why this is one
- * union rather than a shared enum — "on completion" is meaningless for a
- * recurring block, and "engagement start" is meaningless for a one-off.
- */
-export const ONE_TIME_TIMINGS = ["on_acceptance", "on_completion"] as const;
-export const RECURRING_TIMINGS = ["engagement_start", "custom_date"] as const;
-export type BlockTiming =
-  | (typeof ONE_TIME_TIMINGS)[number]
-  | (typeof RECURRING_TIMINGS)[number];
 
 /** The repeat, for a recurring block. `once` is not offered — a block that
  *  bills once is a one-time block, and allowing both would be two ways to say
@@ -59,7 +88,6 @@ export type BlockFrequency = (typeof BLOCK_FREQUENCIES)[number];
 
 export type BillingBlock = {
   billingType: BillingType;
-  timing: BlockTiming;
   /** Only read when billingType is "recurring". */
   frequency: BlockFrequency;
   /** Canopy's "Combine items" — show the client one line for the block rather
@@ -67,14 +95,6 @@ export type BillingBlock = {
   combineItems: boolean;
   /** A note shown to the client beside this block. */
   clientNote: string;
-  /**
-   * First charge date, only when timing is "custom_date" (1740).
-   *
-   * The picker offered "from a date you pick" with nowhere to pick one, so it
-   * silently meant "from the engagement start". ISO date; null falls back to
-   * exactly that old behaviour.
-   */
-  startDate?: string | null;
   items: EngagementItemDraft[];
 };
 
@@ -100,44 +120,30 @@ export function defaultPriceVisibility(): PriceVisibility {
 export function emptyBlock(billingType: BillingType = "one_time"): BillingBlock {
   return {
     billingType,
-    timing: billingType === "one_time" ? "on_acceptance" : "engagement_start",
     frequency: "monthly",
     combineItems: false,
     clientNote: "",
-    startDate: null,
     items: [],
   };
 }
 
 /**
- * The timings this block may offer.
+ * Change a block's type.
  *
- * Used by the picker so it can never present a combination the block cannot
- * hold — the same reason `availableKinds` exists for tasks.
- */
-export function timingsFor(billingType: BillingType): readonly BlockTiming[] {
-  return billingType === "one_time" ? ONE_TIME_TIMINGS : RECURRING_TIMINGS;
-}
-
-/**
- * Change a block's type and keep it COHERENT.
- *
- * Switching one-time → recurring leaves the timing pointing at "on_completion",
- * which the new type has no meaning for. Rather than let that sit and be read
- * later as something it is not, the timing resets to the new type's first
- * option. Everything else — the items, the note, the frequency — survives,
- * because none of it becomes wrong.
+ * This used to exist to keep a block COHERENT: switching one-time → recurring
+ * left the timing pointing at "on_completion", which the new type had no
+ * meaning for, so the timing was reset. With the timing gone there is nothing
+ * left to become wrong — the items, the note and the frequency all survive any
+ * switch — so this is now a plain setter. It is kept as a function because the
+ * template builder's type pills call it, and because a block growing another
+ * type-dependent field later should have one place to handle that.
  */
 export function withBillingType(
   block: BillingBlock,
   billingType: BillingType,
 ): BillingBlock {
   if (block.billingType === billingType) return block;
-  return {
-    ...block,
-    billingType,
-    timing: timingsFor(billingType)[0],
-  };
+  return { ...block, billingType };
 }
 
 /** The frequency each item in this block inherits when it is written out. */
@@ -225,21 +231,19 @@ export function flattenBlocks(
       out.push({
         ...item,
         billingFrequency,
-        // ── THE TIMING RIDES ALONG TOO (1740) ──────────────────────────────
+        // ── NO TIMING IS WRITTEN, ON PURPOSE (1820) ────────────────────────
         //
-        // This used to carry ONLY the frequency, so a block saying "$4,000, one
-        // time, ON ACCEPTANCE" was flattened into a line that knew it was a
-        // one-off and had no idea when it fell due. The block's own `timing`
-        // was dropped here and the frozen proposal kept no copy, which is why
-        // "on acceptance" charged nothing and the client's contract never said
-        // when the money was owed.
+        // 1740 made the block's `timing` ride along here beside the frequency.
+        // The block no longer has one — see the header — so every line now goes
+        // out with these NULL, and the engagement's Billing and payments step
+        // is the only thing that decides when money is taken.
         //
-        // Inherited exactly as frequency is, so a block stays losslessly
-        // reconstructable from its lines and nothing downstream learns a new
-        // concept.
-        billingTiming: block.timing,
-        billingStartDate:
-          block.timing === "custom_date" ? (block.startDate ?? null) : null,
+        // Set explicitly rather than omitted. `item` is spread above and a
+        // draft reconstructed from an older engagement can still be carrying a
+        // timing; letting that survive the flatten would put back the invisible
+        // second answer this removed.
+        billingTiming: null,
+        billingStartDate: null,
       });
     }
   }

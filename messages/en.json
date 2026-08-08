@@ -3032,6 +3032,8 @@
     "item_name_placeholder": "Monthly bookkeeping",
     "item_rate": "Rate",
     "item_rate_placeholder": "Leave blank if not set yet",
+    "item_hours": "Hours",
+    "item_hours_placeholder": "e.g. 2",
     "item_rate_type": "Per",
     "item_rate_item": "Item",
     "item_rate_hour": "Hour",

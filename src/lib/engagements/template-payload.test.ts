@@ -373,26 +373,44 @@ describe("readPayload — billing blocks", () => {
     expect(p.billingBlocks).toHaveLength(1);
   });
 
-  it("keeps a valid type and timing pair", () => {
-    const p = readPayload({
-      billingBlocks: [{ billingType: "one_time", timing: "on_completion" }],
-    });
+  it("keeps a valid type", () => {
+    const p = readPayload({ billingBlocks: [{ billingType: "one_time" }] });
     expect(p.billingBlocks[0].billingType).toBe("one_time");
-    expect(p.billingBlocks[0].timing).toBe("on_completion");
   });
 
-  it("REPAIRS a timing that does not belong to the type rather than dropping the block", () => {
-    // Losing the block loses its services; a visibly-wrong rule can be fixed.
+  // Every template saved before 1820 has a timing on every block. Reading one
+  // must not resurrect it: a block no longer says when money is taken, and the
+  // key coming back here would put the second answer back on screen.
+  it("DISCARDS the timing an older template still carries", () => {
     const p = readPayload({
-      billingBlocks: [{ billingType: "recurring", timing: "on_completion" }],
+      billingBlocks: [
+        { billingType: "one_time", timing: "on_completion", startDate: "2026-01-01" },
+      ],
     });
-    expect(p.billingBlocks[0].timing).toBe("engagement_start");
+    expect(p.billingBlocks[0].billingType).toBe("one_time");
+    expect(p.billingBlocks[0]).not.toHaveProperty("timing");
+    expect(p.billingBlocks[0]).not.toHaveProperty("startDate");
+  });
+
+  it("keeps the block's SERVICES when it discards the timing", () => {
+    // The whole reason this parser repairs rather than drops: losing a block
+    // loses what the firm sells.
+    const p = readPayload({
+      billingBlocks: [
+        {
+          billingType: "recurring",
+          timing: "custom_date",
+          items: [{ name: "Bookkeeping", rateCents: 50_000 }],
+        },
+      ],
+    });
+    expect(p.billingBlocks[0].items).toHaveLength(1);
+    expect(p.billingBlocks[0].items[0].name).toBe("Bookkeeping");
   });
 
   it("falls back to one-time for an unrecognised type", () => {
     const p = readPayload({ billingBlocks: [{ billingType: "quarterly_ish" }] });
     expect(p.billingBlocks[0].billingType).toBe("one_time");
-    expect(p.billingBlocks[0].timing).toBe("on_acceptance");
   });
 
   it("falls back to monthly for an unrecognised frequency", () => {

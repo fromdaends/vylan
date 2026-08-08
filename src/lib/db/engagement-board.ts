@@ -59,9 +59,15 @@ export async function loadBoardNumbers(
     // actually sells — the founder's ruling over a number typed per job. The
     // nested select reaches the catalogue's duration in one round trip rather
     // than one per engagement.
+    // `*` for the row's own columns, for the same reason as the engagements
+    // query above: naming budget_minutes here would make this FAIL on a
+    // database where 1820 has not run, and `items` would arrive undefined —
+    // every engagement's budget would read as null and the board's whole
+    // Budget column would blank out. The embed is still named, because an
+    // embed is a join and cannot be starred alongside the parent's own star.
     sb
       .from("engagement_items")
-      .select("engagement_id, service_id, firm_services(budget_minutes)")
+      .select("*, firm_services(budget_minutes)")
       .in("engagement_id", engagementIds),
     ]);
 
@@ -84,6 +90,8 @@ export async function loadBoardNumbers(
   for (const raw of (items ?? []) as unknown[]) {
     const it = raw as {
       engagement_id?: string | null;
+      /** The line's OWN duration (1820). Absent pre-migration. */
+      budget_minutes?: number | null;
       // PostgREST returns an OBJECT for a many-to-one embed, but the generated
       // types say array. Both are handled rather than cast away, because the
       // wrong guess here silently gives every engagement a null budget.
@@ -97,7 +105,19 @@ export async function loadBoardNumbers(
       ? it.firm_services[0]
       : it.firm_services;
     const list = serviceMinutes.get(it.engagement_id) ?? [];
-    list.push(numberOrNull(svc?.budget_minutes));
+    // ── THE LINE'S OWN HOURS WIN (1820) ──────────────────────────────────
+    //
+    // This used to read ONLY through the embed, so a line's budget was
+    // whatever catalogue entry it pointed at. Two consequences, both bad:
+    // a hand-typed line ("Not from your catalogue") pointed at nothing and
+    // contributed null while its tracked time still counted against the job,
+    // and editing a service in the catalogue retroactively re-planned every
+    // engagement that had ever used it.
+    //
+    // The line carries its own duration now, seeded from the service when one
+    // is picked. Falling back to the embed keeps every row written before 1820
+    // reading exactly as it did, so nothing re-plans on deploy.
+    list.push(numberOrNull(it.budget_minutes) ?? numberOrNull(svc?.budget_minutes));
     serviceMinutes.set(it.engagement_id, list);
   }
 

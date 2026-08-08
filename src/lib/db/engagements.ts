@@ -152,9 +152,16 @@ export async function listEngagementItems(
   const supabase = await getServerSupabase();
   const { data, error } = await supabase
     .from("engagement_items")
-    .select(
-      "id, name, description, service_id, rate_cents, rate_type, billing_frequency, tax_pct, billing_timing, billing_start_date, order_index",
-    )
+    // `*`, NOT a column list — the lesson firm-services.ts already wrote down.
+    //
+    // A named list makes every future column addition a silent outage window:
+    // between the code deploying and the migration running, the select errors
+    // on the column that does not exist yet, and this function's own fail-soft
+    // below then reads that as "no priced lines". An engagement's whole scope
+    // would vanish from its page until the SQL was run. Star simply omits what
+    // is not there yet, which is exactly the degradation the mapper underneath
+    // is already written to survive.
+    .select("*")
     .eq("engagement_id", engagementId)
     .order("order_index", { ascending: true });
   if (error) {
@@ -186,6 +193,10 @@ export async function listEngagementItems(
         ? row.billing_timing
         : null,
       billingStartDate: (row.billing_start_date as string | null) ?? null,
+      // How long this line is expected to take (1820). Absent before the
+      // migration lands, which reads as "nobody has said" — the same thing the
+      // column's own NULL means, so no reader needs a second case.
+      budgetMinutes: (row.budget_minutes as number | null) ?? null,
     };
   });
 }
@@ -435,6 +446,8 @@ export type CreateEngagementInput = {
       | "custom_date"
       | null;
     billing_start_date?: string | null;
+    /** How long it is expected to take, in minutes (1820). */
+    budget_minutes?: number | null;
   }[];
   reminder_settings: ReminderSettings;
   // Who the work belongs to from the moment it exists. Absent (or null) keeps
@@ -732,6 +745,13 @@ export async function createEngagementWithItems(
           : {}),
         ...(it.billing_start_date != null
           ? { billing_start_date: it.billing_start_date }
+          : {}),
+        // How long the line is expected to take (1820). Rides the same
+        // newest-column-first ladder: dropped by the retry below on a database
+        // where 1820 has not landed, so the prices still save and only the
+        // hours wait for the migration.
+        ...(it.budget_minutes != null
+          ? { budget_minutes: it.budget_minutes }
           : {}),
       })),
     );

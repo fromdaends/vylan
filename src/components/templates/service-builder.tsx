@@ -34,6 +34,7 @@ import { useRouter } from "@/i18n/navigation";
 import { CornerDownRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { HoursInput } from "@/components/ui/hours-input";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Textarea } from "@/components/ui/textarea";
@@ -144,14 +145,19 @@ export function ServiceBuilder({
    *  — they become a real task template on save. */
   const [newWorkSteps, setNewWorkSteps] = useState<string[]>([]);
   /**
-   * How long this service usually takes, as TYPED — hours, in a text box.
+   * How long this service usually takes, in MINUTES — the unit it is stored in.
    *
-   * Stored in minutes (1790) but asked for in hours, because "6" is what an
-   * accountant says and "360" is what a database wants. The conversion happens
-   * once, on save, rather than making the field fight the person using it.
+   * It used to be held here as typed text and converted on save with a
+   * hand-rolled `Number(x) * 60`, which accepted a bare number and nothing
+   * else. The engagement's service items needed the same field (1820), so the
+   * box became a shared component: HoursInput owns the keystrokes and the
+   * hours→minutes conversion, using the same parser the timer's manual entry
+   * uses. One duration vocabulary across the product — "2", "2.5", "2h30",
+   * "90m" and "1:30" all mean what they look like, in every box that takes a
+   * duration.
    */
-  const [budgetHours, setBudgetHours] = useState<string>(
-    initial?.budgetMinutes != null ? String(initial.budgetMinutes / 60) : "",
+  const [budgetMinutes, setBudgetMinutes] = useState<number | null>(
+    initial?.budgetMinutes ?? null,
   );
 
   const canSave = name.trim().length > 0;
@@ -184,13 +190,9 @@ export function ServiceBuilder({
         newWorkSteps,
         // Blank stays NULL, never 0. "Nobody has timed this service" and "this
         // service takes no time" are different claims, and only one of them is
-        // safe to add into a capacity board's totals.
-        budgetMinutes: (() => {
-          const h = Number(budgetHours.replace(",", "."));
-          return budgetHours.trim() === "" || !Number.isFinite(h) || h < 0
-            ? null
-            : Math.round(h * 60);
-        })(),
+        // safe to add into a capacity board's totals. HoursInput holds that
+        // line for us — its parser returns null for blank AND for "0".
+        budgetMinutes,
       };
       const res = initial
         ? await updateFirmServiceAction(initial.id, payload)
@@ -358,11 +360,10 @@ export function ServiceBuilder({
               htmlFor="svc-budget"
               hint={tT("service_budget_hours_hint")}
             >
-              <Input
+              <HoursInput
                 id="svc-budget"
-                inputMode="decimal"
-                value={budgetHours}
-                onChange={(e) => setBudgetHours(e.target.value)}
+                valueMinutes={budgetMinutes}
+                onChangeMinutes={setBudgetMinutes}
                 placeholder={tT("service_budget_hours_placeholder")}
               />
             </Field>

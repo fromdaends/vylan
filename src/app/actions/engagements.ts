@@ -218,6 +218,11 @@ const CreateSchema = z
             ])
             .nullish(),
           billing_start_date: z.string().trim().min(1).max(20).nullish(),
+          // How long the line is expected to take, in minutes (1820).
+          // Nullish for the same deploy-skew reason as the two above, and
+          // capped rather than unbounded: a duration is minutes, and 100_000
+          // is already 69 days of work on one line.
+          budget_minutes: z.number().int().min(0).max(100_000).nullish(),
         }),
       )
       .max(50)
