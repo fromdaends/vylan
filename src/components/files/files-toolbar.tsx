@@ -4,23 +4,10 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import {
-  ArrowUpDown,
-  CalendarDays,
-  Check,
-  FileType2,
-  Info,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowUpDown, CalendarDays, Check, FileType2, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { InfoHint } from "@/components/ui/info-hint";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -121,36 +108,36 @@ export function FilesToolbar({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {!hideSearch && (
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            scope === "folders"
-              ? t("search_clients_placeholder")
-              : t("search_documents_placeholder")
-          }
-          aria-label={
-            scope === "folders"
-              ? t("search_clients_placeholder")
-              : t("search_documents_placeholder")
-          }
-          className="w-full pl-8 sm:w-80"
-        />
-        {pending && (
-          <span
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70"
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
-          >
-            …
-          </span>
-        )}
-      </div>
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              scope === "folders"
+                ? t("search_clients_placeholder")
+                : t("search_documents_placeholder")
+            }
+            aria-label={
+              scope === "folders"
+                ? t("search_clients_placeholder")
+                : t("search_documents_placeholder")
+            }
+            className="w-full pl-8 sm:w-80"
+          />
+          {pending && (
+            <span
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70"
+              aria-hidden
+            >
+              …
+            </span>
+          )}
+        </div>
       )}
       {/* What the search can and cannot see. Content search only covers
           documents the AI has read (new portal uploads — capture is
@@ -158,22 +145,13 @@ export function FilesToolbar({
           honest gap reads as "search is broken" the first time a word inside
           an old file comes up empty. */}
       {!hideSearch && scope === "documents" && (
-        <TooltipProvider delayDuration={150}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={t("search_scope_hint")}
-                className="-ml-2 inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Info className="size-4" aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-72">
-              {t("search_scope_hint")}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <InfoHint
+          text={t("search_scope_hint")}
+          side="bottom"
+          className="-ml-2 size-7 justify-center"
+          iconClassName="size-4"
+          contentClassName="max-w-72"
+        />
       )}
 
       {/* Sort renders at EVERY level, including the client list. A file
@@ -267,7 +245,10 @@ function SortFilterMenu({
     scope === "folders" ? 0 : [docType, year, status].filter(Boolean).length;
 
   const check = (on: boolean) => (
-    <Check className={cn("size-4", on ? "opacity-100" : "opacity-0")} aria-hidden />
+    <Check
+      className={cn("size-4", on ? "opacity-100" : "opacity-0")}
+      aria-hidden
+    />
   );
 
   return (
@@ -295,7 +276,9 @@ function SortFilterMenu({
           <DropdownMenuItem
             key={f.key}
             className="gap-2"
-            onSelect={() => setParam("sort", paramFor(f.key, defaultAscFor(f.key)))}
+            onSelect={() =>
+              setParam("sort", paramFor(f.key, defaultAscFor(f.key)))
+            }
           >
             {check(field === f.key)}
             {f.label}
@@ -324,83 +307,101 @@ function SortFilterMenu({
             there is nothing to filter by — a client has no doc type. */}
         {scope === "documents" && (
           <>
-          <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2">
-              <FileType2 className="size-4 text-muted-foreground" aria-hidden />
-              {t("filter_type")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
-              <DropdownMenuItem className="gap-2" onSelect={() => setParam("type", null)}>
-                {check(!docType)}
-                {t("filter_type_all")}
-              </DropdownMenuItem>
-              {docTypes.map((d) => (
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="gap-2">
+                <FileType2
+                  className="size-4 text-muted-foreground"
+                  aria-hidden
+                />
+                {t("filter_type")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
                 <DropdownMenuItem
-                  key={d.code}
                   className="gap-2"
-                  onSelect={() => setParam("type", d.code)}
+                  onSelect={() => setParam("type", null)}
                 >
-                  {check(docType === d.code)}
-                  {d.label}
+                  {check(!docType)}
+                  {t("filter_type_all")}
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2">
-              <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
-              {t("filter_year")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-h-80 w-44 overflow-y-auto">
-              <DropdownMenuItem className="gap-2" onSelect={() => setParam("year", null)}>
-                {check(!year)}
-                {t("filter_year_all")}
-              </DropdownMenuItem>
-              {years.map((y) => (
+                {docTypes.map((d) => (
+                  <DropdownMenuItem
+                    key={d.code}
+                    className="gap-2"
+                    onSelect={() => setParam("type", d.code)}
+                  >
+                    {check(docType === d.code)}
+                    {d.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="gap-2">
+                <CalendarDays
+                  className="size-4 text-muted-foreground"
+                  aria-hidden
+                />
+                {t("filter_year")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-80 w-44 overflow-y-auto">
                 <DropdownMenuItem
-                  key={y}
                   className="gap-2"
-                  onSelect={() => setParam("year", String(y))}
+                  onSelect={() => setParam("year", null)}
                 >
-                  {check(year === String(y))}
-                  {y}
+                  {check(!year)}
+                  {t("filter_year_all")}
                 </DropdownMenuItem>
-              ))}
-              {/* "unsorted" is a real, selectable bucket, not the absence of a
+                {years.map((y) => (
+                  <DropdownMenuItem
+                    key={y}
+                    className="gap-2"
+                    onSelect={() => setParam("year", String(y))}
+                  >
+                    {check(year === String(y))}
+                    {y}
+                  </DropdownMenuItem>
+                ))}
+                {/* "unsorted" is a real, selectable bucket, not the absence of a
                   filter — a firm needs to be able to go straight to the pile
                   that still needs a year. */}
-              <DropdownMenuItem
-                className="gap-2"
-                onSelect={() => setParam("year", "unsorted")}
-              >
-                {check(year === "unsorted")}
-                {t("unsorted")}
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2">
-              <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
-              {t("filter_status")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-48">
-              <DropdownMenuItem className="gap-2" onSelect={() => setParam("status", null)}>
-                {check(!status)}
-                {t("filter_status_all")}
-              </DropdownMenuItem>
-              {(["approved", "pending", "rejected"] as const).map((s) => (
                 <DropdownMenuItem
-                  key={s}
                   className="gap-2"
-                  onSelect={() => setParam("status", s)}
+                  onSelect={() => setParam("year", "unsorted")}
                 >
-                  {check(status === s)}
-                  {t(`status_${s}`)}
+                  {check(year === "unsorted")}
+                  {t("unsorted")}
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="gap-2">
+                <ShieldCheck
+                  className="size-4 text-muted-foreground"
+                  aria-hidden
+                />
+                {t("filter_status")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-48">
+                <DropdownMenuItem
+                  className="gap-2"
+                  onSelect={() => setParam("status", null)}
+                >
+                  {check(!status)}
+                  {t("filter_status_all")}
+                </DropdownMenuItem>
+                {(["approved", "pending", "rejected"] as const).map((s) => (
+                  <DropdownMenuItem
+                    key={s}
+                    className="gap-2"
+                    onSelect={() => setParam("status", s)}
+                  >
+                    {check(status === s)}
+                    {t(`status_${s}`)}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </>
         )}
       </DropdownMenuContent>
